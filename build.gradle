@@ -6,7 +6,7 @@ plugins {
 
 group = 'com.marmitt'
 version = '0.0.1-SNAPSHOT'
-description = 'Demo project for Spring Boot'
+description = 'CTrace - Cryptocurrency Trading Application'
 
 java {
 	toolchain {

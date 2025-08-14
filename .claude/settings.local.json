@@ -9,7 +9,11 @@
       "WebFetch(domain:services.gradle.org)",
       "Bash(chmod:*)",
       "Bash(./gradlew:*)",
-      "Bash(docker-compose:*)"
+      "Bash(docker-compose:*)",
+      "Bash(find:*)",
+      "Bash(mv:*)",
+      "Bash(rm:*)",
+      "Bash(sed:*)"
     ],
     "defaultMode": "acceptEdits"
   }

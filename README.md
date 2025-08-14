@@ -1,4 +1,4 @@
-# Cripto Trade
+# Ctrade
 
 Aplicação de trading de criptomoedas desenvolvida com Spring Boot e arquitetura hexagonal. O sistema permite gerenciar ordens de compra e venda de criptomoedas com uma arquitetura robusta e bem testada.
 
@@ -38,8 +38,8 @@ O projeto segue a **Arquitetura Hexagonal** com clara separação de responsabil
 ```
 src/
 ├── main/
-│   ├── java/com/marmitt/cripto_trade/
-│   │   ├── CriptoTradeApplication.java
+│   ├── java/com/marmitt/ctrade/
+│   │   ├── CtradeApplication.java
 │   │   ├── controller/
 │   │   │   ├── TradingController.java
 │   │   │   ├── HealthController.java
@@ -65,7 +65,7 @@ src/
 │   └── resources/
 │       └── application.yml
 └── test/
-    └── java/com/marmitt/cripto_trade/
+    └── java/com/marmitt/ctrade/
         ├── controller/
         │   ├── TradingControllerIntegrationTest.java
         │   └── HealthControllerIntegrationTest.java
@@ -81,7 +81,7 @@ src/
         │   └── MockExchangeAdapterTest.java
         ├── integration/
         │   └── TradingWorkflowIntegrationTest.java
-        └── CriptoTradeApplicationTests.java
+        └── CtradeApplicationTests.java
 ```
 
 ## 🔧 Funcionalidades Implementadas
