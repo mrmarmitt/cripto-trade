@@ -167,4 +167,76 @@ class TradingControllerIntegrationTest {
                 .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().is4xxClientError());
     }
+
+    @Test
+    @DisplayName("Should handle multiple trading pairs price lookup")
+    void shouldHandleMultipleTradingPairsPriceLookup() throws Exception {
+        // Test BTC/USD price
+        mockMvc.perform(get("/api/trading/price/{baseCurrency}/{quoteCurrency}", "BTC", "USD"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tradingPair").value("BTC/USD"));
+
+        // Test ETH/USD price
+        mockMvc.perform(get("/api/trading/price/{baseCurrency}/{quoteCurrency}", "ETH", "USD"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tradingPair").value("ETH/USD"));
+    }
+
+    @Test
+    @DisplayName("Should validate different order types and validation scenarios")
+    void shouldValidateDifferentOrderTypesAndValidationScenarios() throws Exception {
+        // Test with zero price
+        OrderRequest zeroPrice = new OrderRequest("BTC/USD", new BigDecimal("0.1"), BigDecimal.ZERO);
+        
+        mockMvc.perform(post("/api/trading/orders/buy")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(zeroPrice)))
+                .andExpect(status().isBadRequest());
+
+        // Test with null quantity  
+        OrderRequest nullQuantity = new OrderRequest("BTC/USD", null, new BigDecimal("50000"));
+        
+        mockMvc.perform(post("/api/trading/orders/buy")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(nullQuantity)))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    @DisplayName("Should handle complex order workflow with multiple operations")
+    void shouldHandleComplexOrderWorkflowWithMultipleOperations() throws Exception {
+        // 1. Check current price first
+        mockMvc.perform(get("/api/trading/price/{baseCurrency}/{quoteCurrency}", "BTC", "USD"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.tradingPair").value("BTC/USD"))
+                .andExpect(jsonPath("$.price").exists());
+
+        // 2. Place multiple orders
+        OrderRequest order1 = new OrderRequest("BTC/USD", new BigDecimal("0.1"), new BigDecimal("48000"));
+        OrderRequest order2 = new OrderRequest("ETH/USD", new BigDecimal("1.0"), new BigDecimal("2900"));
+
+        MvcResult result1 = mockMvc.perform(post("/api/trading/orders/buy")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(order1)))
+                .andExpect(status().isCreated())
+                .andReturn();
+
+        mockMvc.perform(post("/api/trading/orders/buy")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(objectMapper.writeValueAsString(order2)))
+                .andExpect(status().isCreated());
+
+        // 3. Check active orders (may contain orders from this test)
+        mockMvc.perform(get("/api/trading/orders/active"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$").isArray());
+
+        // 4. Get specific order status
+        OrderResponse orderResponse = objectMapper.readValue(
+                result1.getResponse().getContentAsString(), OrderResponse.class);
+        
+        mockMvc.perform(get("/api/trading/orders/{orderId}", orderResponse.getId()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.id").value(orderResponse.getId()));
+    }
 }
