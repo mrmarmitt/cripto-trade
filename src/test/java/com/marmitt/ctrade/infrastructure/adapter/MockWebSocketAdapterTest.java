@@ -1,17 +1,29 @@
 package com.marmitt.ctrade.infrastructure.adapter;
 
+import com.marmitt.ctrade.infrastructure.config.WebSocketProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.scheduling.TaskScheduler;
+
+import java.time.Duration;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 
 class MockWebSocketAdapterTest {
     
     private MockWebSocketAdapter adapter;
+    private WebSocketProperties properties;
+    private TaskScheduler taskScheduler;
     
     @BeforeEach
     void setUp() {
-        adapter = new MockWebSocketAdapter();
+        properties = new WebSocketProperties();
+        properties.setUrl("ws://localhost:8080/test");
+        properties.setConnectionTimeout(Duration.ofSeconds(5));
+        properties.setMaxRetries(1);
+        taskScheduler = mock(TaskScheduler.class);
+        adapter = new MockWebSocketAdapter(properties, taskScheduler);
     }
     
     @Test

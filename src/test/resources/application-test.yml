@@ -10,14 +10,13 @@ spring:
   
   h2:
     console:
-      enabled: true
-      path: /h2-console
+      enabled: false
   
   jpa:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
       ddl-auto: create-drop
-    show-sql: true
+    show-sql: false
 
 trading:
   price-cache:
@@ -26,14 +25,16 @@ trading:
     cleanup-interval-minutes: 10
 
 websocket:
-  url: wss://stream.binance.com:9443/ws/btcusdt@ticker
-  connection-timeout: 30s
-  read-timeout: 10s
-  max-retries: 3
-  retry-interval: 5s
-  auto-reconnect: true
+  url: ws://localhost:8080/test-ws
+  connection-timeout: 5s
+  read-timeout: 3s
+  max-retries: 1
+  retry-interval: 1s
+  auto-reconnect: false
 
 logging:
   level:
-    com.marmitt.ctrade: DEBUG
-    org.springframework.web: DEBUG
+    com.marmitt.ctrade: WARN
+    org.springframework: WARN
+    org.hibernate: WARN
+    root: WARN

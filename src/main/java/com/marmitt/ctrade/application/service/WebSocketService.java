@@ -5,20 +5,36 @@ import com.marmitt.ctrade.domain.dto.PriceUpdateMessage;
 import com.marmitt.ctrade.domain.listener.OrderUpdateListener;
 import com.marmitt.ctrade.domain.listener.PriceUpdateListener;
 import com.marmitt.ctrade.domain.port.WebSocketPort;
-import lombok.RequiredArgsConstructor;
+import com.marmitt.ctrade.infrastructure.adapter.MockWebSocketAdapter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+import jakarta.annotation.PostConstruct;
 import java.util.List;
 
 @Service
-@RequiredArgsConstructor
 @Slf4j
 public class WebSocketService {
     
     private final WebSocketPort webSocketPort;
     private final List<PriceUpdateListener> priceUpdateListeners;
     private final List<OrderUpdateListener> orderUpdateListeners;
+    
+    public WebSocketService(WebSocketPort webSocketPort, 
+                           List<PriceUpdateListener> priceUpdateListeners,
+                           List<OrderUpdateListener> orderUpdateListeners) {
+        this.webSocketPort = webSocketPort;
+        this.priceUpdateListeners = priceUpdateListeners;
+        this.orderUpdateListeners = orderUpdateListeners;
+    }
+    
+    @PostConstruct
+    public void init() {
+        if (webSocketPort instanceof MockWebSocketAdapter mockAdapter) {
+            mockAdapter.setWebSocketService(this);
+            log.info("WebSocketService reference set in MockWebSocketAdapter");
+        }
+    }
     
     public void startConnection() {
         log.info("Starting WebSocket connection");
