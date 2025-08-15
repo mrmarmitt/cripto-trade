@@ -14,7 +14,7 @@ import java.util.Collection;
 @RequestMapping("/api/metrics")
 @RequiredArgsConstructor
 @Slf4j
-public class MetricsController {
+public class PriceMetricsController {
     
     private final PriceMetricsService priceMetricsService;
     

@@ -18,7 +18,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @ActiveProfiles("test")
-class MetricsControllerIntegrationTest {
+class PriceMetricsControllerIntegrationTest {
     
     @Autowired
     private WebApplicationContext webApplicationContext;

@@ -13,7 +13,7 @@ import java.util.List;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class AlertPriceListener implements PriceUpdateListener {
+public class PriceAlertListener implements PriceUpdateListener {
     
     private final PriceAlertService priceAlertService;
     

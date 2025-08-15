@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class MetricsPriceListener implements PriceUpdateListener {
+public class PriceMetricsListener implements PriceUpdateListener {
     
     private final PriceMetricsService priceMetricsService;
     

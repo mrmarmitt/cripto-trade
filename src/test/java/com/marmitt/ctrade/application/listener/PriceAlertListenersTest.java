@@ -29,16 +29,16 @@ class PriceAlertListenersTest {
     private PriceMetricsService priceMetricsService;
     
     @InjectMocks
-    private AlertPriceListener alertPriceListener;
+    private PriceAlertListener alertPriceListener;
     
     @InjectMocks
-    private MetricsPriceListener metricsPriceListener;
+    private PriceMetricsListener metricsPriceListener;
     
-    private LoggingPriceListener loggingPriceListener;
+    private PriceLoggingListener loggingPriceListener;
     
     @BeforeEach
     void setUp() {
-        loggingPriceListener = new LoggingPriceListener();
+        loggingPriceListener = new PriceLoggingListener();
     }
     
     @Test
