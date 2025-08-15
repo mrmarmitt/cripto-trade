@@ -19,6 +19,12 @@ spring:
       ddl-auto: create-drop
     show-sql: true
 
+trading:
+  price-cache:
+    ttl-minutes: 5
+    max-history-size: 100
+    cleanup-interval-minutes: 10
+
 logging:
   level:
     com.marmitt.ctrade: DEBUG
