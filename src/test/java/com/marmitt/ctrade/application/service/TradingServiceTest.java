@@ -1,6 +1,7 @@
 package com.marmitt.ctrade.application.service;
 
 import com.marmitt.ctrade.domain.entity.Order;
+import com.marmitt.ctrade.domain.entity.TradingAuditLog;
 import com.marmitt.ctrade.domain.entity.TradingPair;
 import com.marmitt.ctrade.domain.port.ExchangePort;
 import com.marmitt.ctrade.domain.valueobject.Price;
@@ -9,6 +10,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
+import org.mockito.InjectMocks;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
@@ -25,7 +27,11 @@ class TradingServiceTest {
 
     @Mock
     private ExchangePort exchangePort;
+    
+    @Mock
+    private TradingAuditService auditService;
 
+    @InjectMocks
     private TradingService tradingService;
     private TradingPair tradingPair;
     private BigDecimal quantity;
@@ -33,7 +39,6 @@ class TradingServiceTest {
 
     @BeforeEach
     void setUp() {
-        tradingService = new TradingService(exchangePort);
         tradingPair = new TradingPair("BTC", "USD");
         quantity = new BigDecimal("0.5");
         price = new BigDecimal("50000");
@@ -57,6 +62,15 @@ class TradingServiceTest {
             order.getQuantity().equals(quantity) &&
             order.getPrice().equals(price)
         ));
+        verify(auditService).logOrderPlacement(
+            eq(TradingAuditLog.ActionType.PLACE_BUY_ORDER),
+            eq(tradingPair),
+            eq(Order.OrderType.LIMIT),
+            eq(Order.OrderSide.BUY),
+            eq(quantity),
+            eq(price),
+            eq(expectedOrder)
+        );
     }
 
     @Test

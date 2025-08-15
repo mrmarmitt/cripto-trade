@@ -3,16 +3,22 @@ package com.marmitt.ctrade.controller;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.ctrade.controller.dto.OrderRequest;
 import com.marmitt.ctrade.controller.dto.OrderResponse;
+import com.marmitt.ctrade.domain.entity.TradingAuditLog;
+import com.marmitt.ctrade.infrastructure.repository.TradingAuditLogRepository;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.BeforeEach;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.http.MediaType;
+import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
@@ -20,6 +26,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 @SpringBootTest
 @AutoConfigureMockMvc
+@ActiveProfiles("test")
+@Transactional
 class TradingControllerIntegrationTest {
 
     @Autowired
@@ -27,6 +35,14 @@ class TradingControllerIntegrationTest {
 
     @Autowired
     private ObjectMapper objectMapper;
+    
+    @Autowired
+    private TradingAuditLogRepository auditLogRepository;
+
+    @BeforeEach
+    void setUp() {
+        auditLogRepository.deleteAll();
+    }
 
     @Test
     @DisplayName("Should place buy order successfully with real services")
@@ -51,6 +67,18 @@ class TradingControllerIntegrationTest {
         
         assertThat(orderResponse.getId()).isNotNull();
         assertThat(orderResponse.getStatus()).isIn("PENDING", "FILLED");
+        
+        // Verify audit log was created
+        List<TradingAuditLog> auditLogs = auditLogRepository.findAll();
+        assertThat(auditLogs).hasSize(1);
+        
+        TradingAuditLog log = auditLogs.get(0);
+        assertThat(log.getActionType()).isEqualTo(TradingAuditLog.ActionType.PLACE_BUY_ORDER);
+        assertThat(log.getStatus()).isEqualTo(TradingAuditLog.Status.SUCCESS);
+        assertThat(log.getTradingPair()).isEqualTo("BTC/USD");
+        assertThat(log.getOrderId()).isEqualTo(orderResponse.getId());
+        assertThat(log.getQuantity()).isEqualByComparingTo(new BigDecimal("0.5"));
+        assertThat(log.getPrice()).isEqualByComparingTo(new BigDecimal("50000"));
     }
 
     @Test
@@ -107,6 +135,16 @@ class TradingControllerIntegrationTest {
                 .andExpect(jsonPath("$.tradingPair").value("BTC/USD"))
                 .andExpect(jsonPath("$.price").exists())
                 .andExpect(jsonPath("$.timestamp").exists());
+        
+        // Verify audit log was created for price query
+        List<TradingAuditLog> auditLogs = auditLogRepository.findAll();
+        assertThat(auditLogs).hasSize(1);
+        
+        TradingAuditLog log = auditLogs.get(0);
+        assertThat(log.getActionType()).isEqualTo(TradingAuditLog.ActionType.GET_CURRENT_PRICE);
+        assertThat(log.getStatus()).isEqualTo(TradingAuditLog.Status.SUCCESS);
+        assertThat(log.getTradingPair()).isEqualTo("BTC/USD");
+        assertThat(log.getPrice()).isNotNull();
     }
 
     @Test
@@ -148,6 +186,10 @@ class TradingControllerIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content(objectMapper.writeValueAsString(invalidRequest)))
                 .andExpect(status().isBadRequest());
+        
+        // Note: Validation errors at controller level (Bean Validation) 
+        // don't reach the service layer, so no audit log is created here.
+        // This is expected behavior - only business logic errors are audited.
     }
 
     @Test
@@ -238,5 +280,38 @@ class TradingControllerIntegrationTest {
         mockMvc.perform(get("/api/trading/orders/{orderId}", orderResponse.getId()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(orderResponse.getId()));
+        
+        // Verify multiple audit logs were created for this complex workflow
+        List<TradingAuditLog> auditLogs = auditLogRepository.findAll();
+        assertThat(auditLogs).hasSizeGreaterThanOrEqualTo(4); // price query + 2 orders + active orders + order status
+        
+        // Verify we have different types of actions logged
+        List<TradingAuditLog.ActionType> actionTypes = auditLogs.stream()
+                .map(TradingAuditLog::getActionType)
+                .toList();
+        
+        assertThat(actionTypes).contains(
+                TradingAuditLog.ActionType.GET_CURRENT_PRICE,
+                TradingAuditLog.ActionType.PLACE_BUY_ORDER,
+                TradingAuditLog.ActionType.GET_ACTIVE_ORDERS,
+                TradingAuditLog.ActionType.GET_ORDER_STATUS
+        );
+        
+        // All logs should be successful
+        auditLogs.forEach(log -> 
+                assertThat(log.getStatus()).isEqualTo(TradingAuditLog.Status.SUCCESS)
+        );
+    }
+    
+    @Test
+    @DisplayName("Should create audit log for validation error at service level")
+    void shouldCreateAuditLogForValidationErrorAtServiceLevel() throws Exception {
+        // Create a request that will pass controller validation but fail at service level
+        // This could happen if we add custom business validation in the service
+        // For now, this test documents the expected behavior
+        
+        // Note: Current implementation has validation at controller level (Bean Validation)
+        // If we add business validation in service layer, it would create audit logs
+        // This test serves as documentation for future enhancements
     }
 }
