@@ -56,16 +56,17 @@ class PriceCacheHistoryServiceTest {
         LocalDateTime now = LocalDateTime.now();
         
         // Adicionar mais entradas do que o limite máximo (10)
+        // Usar timestamps válidos (dentro do TTL de 5 minutos)
         for (int i = 0; i < 15; i++) {
             BigDecimal price = new BigDecimal(50000 + i * 100);
-            cacheService.updatePrice(tradingPair, price, now.minusMinutes(15 - i));
+            cacheService.updatePrice(tradingPair, price, now.minusSeconds(i * 10)); // 10 segundos de diferença entre cada entrada
         }
         
         List<PriceCacheService.PriceCacheEntry> history = cacheService.getPriceHistory(tradingPair);
         
         assertThat(history).hasSize(10); // Limitado a 10 entradas
         
-        // Deve manter as 10 mais recentes
+        // Deve manter as 10 mais recentes (entradas 5 até 14)
         assertThat(history.get(0).price()).isEqualByComparingTo(new BigDecimal("50500")); // Entry 5
         assertThat(history.get(9).price()).isEqualByComparingTo(new BigDecimal("51400")); // Entry 14
     }
