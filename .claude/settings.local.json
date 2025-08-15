@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(gh project view:*)",
+      "Bash(git checkout:*)",
+      "Bash(gh project item-list:*)",
+      "Bash(gh project:*)",
+      "Bash(curl:*)",
+      "WebFetch(domain:services.gradle.org)",
+      "Bash(chmod:*)",
+      "Bash(./gradlew:*)",
+      "Bash(docker-compose:*)",
+      "Bash(find:*)",
+      "Bash(mv:*)",
+      "Bash(rm:*)",
+      "Bash(sed:*)"
+    ],
+    "defaultMode": "acceptEdits"
+  }
+}
