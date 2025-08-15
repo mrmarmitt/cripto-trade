@@ -256,6 +256,27 @@ public class TradingService {
         }
     }
 
+    public void processOrderStatusUpdate(String orderId, Order.OrderStatus newStatus, String reason) {
+        try {
+            if (orderId == null || orderId.trim().isEmpty()) {
+                throw new IllegalArgumentException("Order ID cannot be null or empty");
+            }
+            if (newStatus == null) {
+                throw new IllegalArgumentException("New status cannot be null");
+            }
+            
+            log.info("Processing order status update: {} -> {}", orderId, newStatus);
+            
+            // Aqui poderia atualizar em um repository local se tivéssemos
+            // Por enquanto apenas logamos a atualização
+            log.info("Order {} updated to status: {} (reason: {})", orderId, newStatus, reason);
+            
+        } catch (Exception e) {
+            log.error("Error processing order status update for order {}: {}", orderId, e.getMessage(), e);
+            throw e;
+        }
+    }
+
     private void validateOrderParameters(BigDecimal quantity, BigDecimal price) {
         if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Quantity must be positive");

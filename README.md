@@ -9,7 +9,8 @@ Aplicação de trading de criptomoedas desenvolvida com Spring Boot e arquitetur
 - **Build Tool**: Gradle
 - **Arquitetura**: Hexagonal (Ports and Adapters)
 - **Containerização**: Docker & Docker Compose
-- **Banco de Dados**: H2 (desenvolvimento)
+- **Banco de Dados**: H2 (desenvolvimento), JPA/Hibernate
+- **Documentação**: Swagger/OpenAPI 3
 - **Testes**: JUnit 5, Mockito, Spring Test, AssertJ
 
 ## 🏗️ Arquitetura
@@ -50,18 +51,24 @@ src/
 │   │   │       └── PriceResponse.java
 │   │   ├── application/
 │   │   │   └── service/
-│   │   │       └── TradingService.java
+│   │   │       ├── TradingService.java
+│   │   │       └── TradingAuditService.java
 │   │   ├── domain/
 │   │   │   ├── entity/
 │   │   │   │   ├── TradingPair.java
-│   │   │   │   └── Order.java
+│   │   │   │   ├── Order.java
+│   │   │   │   └── TradingAuditLog.java
 │   │   │   ├── valueobject/
 │   │   │   │   └── Price.java
 │   │   │   └── port/
 │   │   │       └── ExchangePort.java
+│   │   ├── config/
+│   │   │   └── OpenApiConfig.java
 │   │   └── infrastructure/
-│   │       └── adapter/
-│   │           └── MockExchangeAdapter.java
+│   │       ├── adapter/
+│   │       │   └── MockExchangeAdapter.java
+│   │       └── repository/
+│   │           └── TradingAuditLogRepository.java
 │   └── resources/
 │       └── application.yml
 └── test/
@@ -70,7 +77,8 @@ src/
         │   ├── TradingControllerIntegrationTest.java
         │   └── HealthControllerIntegrationTest.java
         ├── application/service/
-        │   └── TradingServiceTest.java
+        │   ├── TradingServiceTest.java
+        │   └── TradingAuditServiceTest.java
         ├── domain/
         │   ├── entity/
         │   │   ├── TradingPairTest.java
@@ -108,6 +116,20 @@ src/
 - ✅ Tratamento global de exceções
 - ✅ Respostas de erro padronizadas
 - ✅ Validações de regras de negócio
+
+### Sistema de Auditoria de Trading
+- ✅ Logs detalhados de todas as operações de trading
+- ✅ Rastreamento de ordens com ID único de request
+- ✅ Auditoria de ações (criação, cancelamento, consultas)
+- ✅ Registro de erros e validações com contexto
+- ✅ Persistência em banco de dados com JPA
+- ✅ Logs estruturados para análise e compliance
+
+### Documentação da API
+- ✅ Swagger/OpenAPI 3 integrado
+- ✅ Interface interativa para testes
+- ✅ Documentação automática dos endpoints
+- ✅ Exemplos de request/response
 
 ## 🧪 Testes
 
@@ -164,6 +186,15 @@ docker-compose down
 ```
 
 ## 📡 Exemplos de Uso da API
+
+### Documentação Interativa (Swagger UI)
+```bash
+# Acesse a documentação interativa da API
+http://localhost:8080/swagger-ui/index.html
+
+# Endpoint da especificação OpenAPI
+http://localhost:8080/v3/api-docs
+```
 
 ### Consultar Preço Atual
 ```bash
@@ -251,6 +282,19 @@ curl -X DELETE http://localhost:8080/api/trading/orders/{orderId}
 - [x] TradingController completo
 - [x] DTOs de request/response
 - [x] Tratamento de exceções
+
+**[Sistema de Auditoria e Compliance]**
+- [x] TradingAuditLog entity com JPA
+- [x] TradingAuditService para logs de auditoria
+- [x] TradingAuditLogRepository para persistência
+- [x] Rastreamento completo de todas as operações
+- [x] Logs de erros e validações com contexto
+
+**[Documentação da API]**
+- [x] OpenApiConfig com Swagger/OpenAPI 3
+- [x] Interface Swagger UI interativa
+- [x] Documentação automática dos endpoints
+- [x] Especificação OpenAPI acessível via REST
 
 **[Testes Abrangentes]**
 - [x] 84 testes unitários e integração

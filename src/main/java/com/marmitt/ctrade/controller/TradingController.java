@@ -1,5 +1,6 @@
 package com.marmitt.ctrade.controller;
 
+import com.marmitt.ctrade.application.service.PriceCacheService;
 import com.marmitt.ctrade.application.service.TradingService;
 import com.marmitt.ctrade.controller.dto.OrderRequest;
 import com.marmitt.ctrade.controller.dto.OrderResponse;
@@ -21,6 +22,7 @@ import java.util.List;
 public class TradingController {
 
     private final TradingService tradingService;
+    private final PriceCacheService priceCacheService;
 
     @PostMapping("/orders/buy")
     public ResponseEntity<OrderResponse> placeBuyOrder(@Valid @RequestBody OrderRequest request) {
@@ -69,5 +71,15 @@ public class TradingController {
         TradingPair pair = new TradingPair(baseCurrency, quoteCurrency);
         Price price = tradingService.getCurrentPrice(pair);
         return ResponseEntity.ok(new PriceResponse(pair.getSymbol(), price.getValue()));
+    }
+    
+    @GetMapping("/price/cached/{baseCurrency}/{quoteCurrency}")
+    public ResponseEntity<PriceResponse> getCachedPrice(@PathVariable String baseCurrency, @PathVariable String quoteCurrency) {
+        TradingPair pair = new TradingPair(baseCurrency, quoteCurrency);
+        String tradingPairSymbol = pair.getSymbol();
+        
+        return priceCacheService.getLatestPrice(tradingPairSymbol)
+            .map(price -> ResponseEntity.ok(new PriceResponse(tradingPairSymbol, price)))
+            .orElse(ResponseEntity.notFound().build());
     }
 }
