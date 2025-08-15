@@ -1,4 +1,4 @@
-package com.marmitt.ctrade.infrastructure.adapter;
+package com.marmitt.ctrade.infrastructure.exchange.mock;
 
 import com.marmitt.ctrade.domain.dto.PriceUpdateMessage;
 import com.marmitt.ctrade.domain.dto.OrderUpdateMessage;
@@ -9,6 +9,7 @@ import com.marmitt.ctrade.infrastructure.config.WebSocketProperties;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
 
@@ -21,6 +22,7 @@ import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 
 @Component
+@ConditionalOnProperty(name = "websocket.exchange", havingValue = "MOCK", matchIfMissing = true)
 @Slf4j
 public class MockWebSocketAdapter implements WebSocketPort {
     

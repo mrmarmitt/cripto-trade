@@ -26,7 +26,8 @@ trading:
     cleanup-interval-minutes: 10
 
 websocket:
-  url: wss://stream.binance.com:9443/ws/btcusdt@ticker
+  exchange: BINANCE
+  url: wss://stream.binance.com:9443/ws/!ticker@arr
   connection-timeout: 30s
   read-timeout: 10s
   max-retries: 3

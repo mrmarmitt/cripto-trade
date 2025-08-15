@@ -30,10 +30,13 @@ The application follows hexagonal architecture with these main components:
 - **Application Services**: Business use cases implementation
 
 ### Infrastructure Layer
-- **MockExchangeAdapter**: Exchange integration adapter
+- **Exchange Adapters**: Modular exchange integrations organized by provider
+  - **Mock Package**: `MockExchangeAdapter`, `MockWebSocketAdapter` for development/testing
+  - **Binance Package**: `BinanceWebSocketAdapter`, `BinanceWebSocketListener` for real trading
+- **WebSocket Infrastructure**: `ReconnectionStrategy`, `WebSocketCircuitBreaker` for resilience
 - **Database Configuration**: Data persistence layer
-- **REST Controllers**: HTTP API endpoints
-- **Scheduling System**: Automated task execution
+- **REST Controllers**: HTTP API endpoints for trading, health, and metrics
+- **Configuration System**: WebSocket properties and environment-specific settings
 
 ### Additional Components
 - **Backtesting Engine**: Historical strategy validation
@@ -116,6 +119,26 @@ gh project view 3 --owner mrmarmitt --format json
 **Phase 5 - Operations:**
 - [5.1] Sistema de configuração
 - [5.2] Logging estruturado
+
+## Package Organization
+
+The project follows a well-organized package structure for exchange integrations:
+
+### Exchange Packages
+- **`infrastructure.exchange.mock`**: Mock implementations for development and testing
+  - Contains `MockExchangeAdapter` and `MockWebSocketAdapter`
+  - Provides automated simulators for price updates
+  - See [Mock Package README](src/main/java/com/marmitt/ctrade/infrastructure/exchange/mock/README.md)
+
+- **`infrastructure.exchange.binance`**: Real Binance exchange integration
+  - Contains `BinanceWebSocketAdapter`, `BinanceWebSocketListener`, and DTOs
+  - Implements exponential backoff and circuit breaker patterns
+  - See [Binance Package README](src/main/java/com/marmitt/ctrade/infrastructure/exchange/binance/README.md)
+
+### WebSocket Configuration
+- Use `websocket.exchange=BINANCE` to activate Binance adapter
+- Use `websocket.exchange=MOCK` (default) to use mock adapter  
+- Both adapters implement the same interfaces for seamless switching
 
 ## Security Considerations
 

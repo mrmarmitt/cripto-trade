@@ -5,7 +5,8 @@ import com.marmitt.ctrade.domain.dto.PriceUpdateMessage;
 import com.marmitt.ctrade.domain.listener.OrderUpdateListener;
 import com.marmitt.ctrade.domain.listener.PriceUpdateListener;
 import com.marmitt.ctrade.domain.port.WebSocketPort;
-import com.marmitt.ctrade.infrastructure.adapter.MockWebSocketAdapter;
+import com.marmitt.ctrade.infrastructure.exchange.binance.BinanceWebSocketAdapter;
+import com.marmitt.ctrade.infrastructure.exchange.mock.MockWebSocketAdapter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -32,8 +33,14 @@ public class WebSocketService {
     public void init() {
         if (webSocketPort instanceof MockWebSocketAdapter mockAdapter) {
             mockAdapter.setWebSocketService(this);
+            startConnection();
             log.info("WebSocketService reference set in MockWebSocketAdapter");
+        } else if (webSocketPort instanceof BinanceWebSocketAdapter binanceAdapter) {
+            binanceAdapter.setWebSocketService(this);
+            startConnection();
+            log.info("WebSocketService reference set in BinanceWebSocketAdapter");
         }
+
     }
     
     public void startConnection() {

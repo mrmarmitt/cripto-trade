@@ -29,9 +29,12 @@ O projeto segue a **Arquitetura Hexagonal** com clara separação de responsabil
 - **Coordenação**: Entre domínio e infraestrutura
 
 ### Camada de Infraestrutura
-- **Adapters**: `MockExchangeAdapter` (simulação de exchange)
-- **Controllers REST**: API endpoints para trading
-- **Configuração**: Exception handlers, validação
+- **Exchange Adapters**: Implementações específicas por exchange
+  - **Mock**: `MockExchangeAdapter`, `MockWebSocketAdapter` (simulação para desenvolvimento)
+  - **Binance**: `BinanceWebSocketAdapter`, `BinanceWebSocketListener` (integração real)
+- **WebSocket System**: Sistema de notificações em tempo real com Observer pattern
+- **Controllers REST**: API endpoints para trading, health check e métricas
+- **Configuração**: Exception handlers, validação, propriedades
 - **Persistência**: Configuração H2 para desenvolvimento
 
 ## 📁 Estrutura do Projeto
@@ -52,7 +55,10 @@ src/
 │   │   ├── application/
 │   │   │   └── service/
 │   │   │       ├── TradingService.java
-│   │   │       └── TradingAuditService.java
+│   │   │       ├── TradingAuditService.java
+│   │   │       ├── WebSocketService.java
+│   │   │       ├── PriceCacheService.java
+│   │   │       └── HealthCheckService.java
 │   │   ├── domain/
 │   │   │   ├── entity/
 │   │   │   │   ├── TradingPair.java
@@ -60,13 +66,33 @@ src/
 │   │   │   │   └── TradingAuditLog.java
 │   │   │   ├── valueobject/
 │   │   │   │   └── Price.java
-│   │   │   └── port/
-│   │   │       └── ExchangePort.java
+│   │   │   ├── port/
+│   │   │   │   ├── ExchangePort.java
+│   │   │   │   ├── WebSocketPort.java
+│   │   │   │   └── ExchangeWebSocketAdapter.java
+│   │   │   ├── dto/
+│   │   │   │   ├── PriceUpdateMessage.java
+│   │   │   │   └── OrderUpdateMessage.java
+│   │   │   └── listener/
+│   │   │       ├── PriceUpdateListener.java
+│   │   │       └── OrderUpdateListener.java
 │   │   ├── config/
 │   │   │   └── OpenApiConfig.java
 │   │   └── infrastructure/
-│   │       ├── adapter/
-│   │       │   └── MockExchangeAdapter.java
+│   │       ├── exchange/
+│   │       │   ├── mock/
+│   │       │   │   ├── MockExchangeAdapter.java
+│   │       │   │   └── MockWebSocketAdapter.java
+│   │       │   └── binance/
+│   │       │       ├── BinanceWebSocketAdapter.java
+│   │       │       ├── BinanceWebSocketListener.java
+│   │       │       └── dto/
+│   │       │           └── BinanceTickerMessage.java
+│   │       ├── websocket/
+│   │       │   ├── ReconnectionStrategy.java
+│   │       │   └── WebSocketCircuitBreaker.java
+│   │       ├── config/
+│   │       │   └── WebSocketProperties.java
 │   │       └── repository/
 │   │           └── TradingAuditLogRepository.java
 │   └── resources/
@@ -75,18 +101,31 @@ src/
     └── java/com/marmitt/ctrade/
         ├── controller/
         │   ├── TradingControllerIntegrationTest.java
-        │   └── HealthControllerIntegrationTest.java
+        │   ├── HealthControllerIntegrationTest.java
+        │   ├── SystemHealthControllerIntegrationTest.java
+        │   ├── MetricsControllerIntegrationTest.java
+        │   └── PriceAlertControllerIntegrationTest.java
         ├── application/service/
         │   ├── TradingServiceTest.java
-        │   └── TradingAuditServiceTest.java
+        │   ├── TradingAuditServiceTest.java
+        │   ├── PriceCacheServiceTest.java
+        │   ├── PriceCacheHistoryServiceTest.java
+        │   ├── PriceCacheServiceTTLTest.java
+        │   ├── HealthCheckServiceTest.java
+        │   └── PriceListenersUnitTest.java
         ├── domain/
         │   ├── entity/
         │   │   ├── TradingPairTest.java
         │   │   └── OrderTest.java
         │   └── valueobject/
         │       └── PriceTest.java
-        ├── infrastructure/adapter/
-        │   └── MockExchangeAdapterTest.java
+        ├── infrastructure/
+        │   └── exchange/
+        │       ├── mock/
+        │       │   └── MockWebSocketAdapterTest.java
+        │       │   └── MockExchangeAdapterTest.java        
+        │       └── binance/
+        │           └── BinanceWebSocketListenerTest.java
         ├── integration/
         │   └── TradingWorkflowIntegrationTest.java
         └── CtradeApplicationTests.java
@@ -110,6 +149,10 @@ src/
 - ✅ **GET** `/api/trading/orders/active` - Listar ordens ativas
 - ✅ **GET** `/api/trading/price/{baseCurrency}/{quoteCurrency}` - Preço atual
 - ✅ **GET** `/health` - Health check
+- ✅ **GET** `/api/system/health` - Health check detalhado com cache e WebSocket
+- ✅ **GET** `/api/metrics/summary` - Métricas do sistema em tempo real
+- ✅ **GET** `/api/metrics/prices` - Histórico de preços em cache
+- ✅ **POST** `/api/prices/alerts` - Criar alertas de preço
 
 ### Validação e Tratamento de Erros
 - ✅ Validação de entrada com Bean Validation
@@ -125,6 +168,17 @@ src/
 - ✅ Persistência em banco de dados com JPA
 - ✅ Logs estruturados para análise e compliance
 
+### Sistema WebSocket e Notificações em Tempo Real
+- ✅ **WebSocket Service**: Gerenciamento de conexões WebSocket com Observer pattern
+- ✅ **Price Cache**: Cache histórico de preços com TTL e limpeza automática
+- ✅ **Mock WebSocket Adapter**: Simulação para desenvolvimento com preços automáticos
+- ✅ **Binance WebSocket Adapter**: Integração real com Binance usando OkHttp
+- ✅ **Exponential Backoff**: Estratégia de reconexão automática resiliente
+- ✅ **Circuit Breaker**: Prevenção de falhas cascata em conexões WebSocket
+- ✅ **Price Update Listeners**: Sistema de notificação automática para mudanças de preço
+- ✅ **Order Update Listeners**: Notificações de status de ordens em tempo real
+- ✅ **Health Monitoring**: Monitoramento de status do sistema (cache + WebSocket)
+
 ### Documentação da API
 - ✅ Swagger/OpenAPI 3 integrado
 - ✅ Interface interativa para testes
@@ -133,7 +187,7 @@ src/
 
 ## 🧪 Testes
 
-O projeto possui **84 testes** cobrindo todas as camadas:
+O projeto possui **100+ testes** cobrindo todas as camadas:
 
 ### Testes Unitários
 - **Domain Layer**: Entidades, Value Objects, validações
@@ -296,10 +350,19 @@ curl -X DELETE http://localhost:8080/api/trading/orders/{orderId}
 - [x] Documentação automática dos endpoints
 - [x] Especificação OpenAPI acessível via REST
 
+**[Sistema WebSocket e Notificações Tempo Real]**
+- [x] WebSocketService com Observer pattern e auto-discovery de listeners
+- [x] PriceCacheService com histórico, TTL e limpeza automática
+- [x] MockWebSocketAdapter com simuladores automáticos para desenvolvimento
+- [x] BinanceWebSocketAdapter com OkHttp, Exponential Backoff e Circuit Breaker
+- [x] Sistema de Health Check detalhado para cache e WebSocket
+- [x] REST endpoints para métricas do sistema e histórico de preços
+- [x] Notificações automáticas de price/order updates via listeners
+
 **[Testes Abrangentes]**
-- [x] 84 testes unitários e integração
-- [x] Cobertura completa de todas as camadas
-- [x] Cenários de sucesso e erro
+- [x] 100+ testes unitários e integração
+- [x] Cobertura completa de todas as camadas incluindo WebSocket
+- [x] Cenários de sucesso e erro com mocks apropriados
 
 ### 🔄 Próximos Passos
 

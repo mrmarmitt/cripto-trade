@@ -1,0 +1,26 @@
+# Configuration for Binance WebSocket Real Connection
+# Copy to src/main/resources/application-binance.yml to use
+
+spring:
+  profiles:
+    active: binance
+
+websocket:
+  url: wss://stream.binance.com:9443/ws/!ticker@arr  # All symbols ticker stream
+  connection-timeout: 30s
+  read-timeout: 10s
+  max-retries: 10
+  retry-interval: 5s
+  auto-reconnect: true
+  real:
+    enabled: true  # Enable real Binance WebSocket
+
+logging:
+  level:
+    com.marmitt.ctrade.infrastructure.adapter.BinanceWebSocketAdapter: DEBUG
+    com.marmitt.ctrade.infrastructure.websocket: DEBUG
+    okhttp3: INFO
+
+# For testnet (if available)
+# websocket:
+#   url: wss://testnet.binance.vision/ws/!ticker@arr

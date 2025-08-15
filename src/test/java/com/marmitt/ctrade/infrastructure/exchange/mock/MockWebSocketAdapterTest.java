@@ -1,4 +1,4 @@
-package com.marmitt.ctrade.infrastructure.adapter;
+package com.marmitt.ctrade.infrastructure.exchange.mock;
 
 import com.marmitt.ctrade.infrastructure.config.WebSocketProperties;
 import org.junit.jupiter.api.BeforeEach;

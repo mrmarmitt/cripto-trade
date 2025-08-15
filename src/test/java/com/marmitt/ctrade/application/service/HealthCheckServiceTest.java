@@ -1,8 +1,7 @@
 package com.marmitt.ctrade.application.service;
 
 import com.marmitt.ctrade.controller.dto.HealthCheckResponse;
-import com.marmitt.ctrade.domain.port.WebSocketPort;
-import com.marmitt.ctrade.infrastructure.adapter.MockWebSocketAdapter;
+import com.marmitt.ctrade.infrastructure.exchange.mock.MockWebSocketAdapter;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
