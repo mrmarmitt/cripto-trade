@@ -27,7 +27,7 @@ trading:
 
 websocket:
   exchange: BINANCE
-  url: wss://stream.binance.com:9443/ws/!ticker@arr
+  url: wss://stream.binance.com:9443/stream?streams=!ticker@arr/!bookTicker@arr
   connection-timeout: 30s
   read-timeout: 10s
   max-retries: 3

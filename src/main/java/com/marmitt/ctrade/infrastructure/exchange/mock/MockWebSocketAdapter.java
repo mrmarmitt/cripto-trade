@@ -3,11 +3,10 @@ package com.marmitt.ctrade.infrastructure.exchange.mock;
 import com.marmitt.ctrade.domain.dto.PriceUpdateMessage;
 import com.marmitt.ctrade.domain.dto.OrderUpdateMessage;
 import com.marmitt.ctrade.domain.entity.Order;
-import com.marmitt.ctrade.application.service.WebSocketService;
 import com.marmitt.ctrade.domain.port.WebSocketPort;
 import com.marmitt.ctrade.infrastructure.config.WebSocketProperties;
+import com.marmitt.ctrade.infrastructure.websocket.AbstractWebSocketAdapter;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.TaskScheduler;
@@ -24,12 +23,10 @@ import java.util.concurrent.ScheduledFuture;
 @Component
 @ConditionalOnProperty(name = "websocket.exchange", havingValue = "MOCK", matchIfMissing = true)
 @Slf4j
-public class MockWebSocketAdapter implements WebSocketPort {
+public class MockWebSocketAdapter extends AbstractWebSocketAdapter implements WebSocketPort {
     
     private final WebSocketProperties webSocketProperties;
     private final TaskScheduler taskScheduler;
-    @Setter
-    private WebSocketService webSocketService;
     private boolean connected = false;
     private final Set<String> subscribedPairs = new HashSet<>();
     @Getter
@@ -96,7 +93,7 @@ public class MockWebSocketAdapter implements WebSocketPort {
     }
     
     private void startSimulators() {
-        if (taskScheduler != null && webSocketService != null) {
+        if (taskScheduler != null) {
             priceUpdateTask = taskScheduler.scheduleWithFixedDelay(
                 this::simulatePriceUpdate, 
                 java.time.Duration.ofSeconds(2)
@@ -121,7 +118,7 @@ public class MockWebSocketAdapter implements WebSocketPort {
     }
     
     private void simulatePriceUpdate() {
-        if (!subscribedPairs.isEmpty() && webSocketService != null) {
+        if (!subscribedPairs.isEmpty()) {
             String[] pairs = subscribedPairs.toArray(new String[0]);
             String randomPair = pairs[random.nextInt(pairs.length)];
             
@@ -135,12 +132,12 @@ public class MockWebSocketAdapter implements WebSocketPort {
             message.setTimestamp(LocalDateTime.now());
             
             log.debug("Simulating price update: {} -> {}", randomPair, newPrice);
-            webSocketService.handlePriceUpdate(message);
+            onPriceUpdate(message); // Publica evento ao invés de chamar WebSocketService
         }
     }
     
     private void simulateOrderUpdate() {
-        if (orderUpdatesSubscribed && webSocketService != null) {
+        if (orderUpdatesSubscribed) {
             String[] orderIds = {"ORD001", "ORD002", "ORD003", "ORD004", "ORD005"};
             Order.OrderStatus[] statuses = {Order.OrderStatus.FILLED, Order.OrderStatus.CANCELLED, Order.OrderStatus.PARTIALLY_FILLED};
             
@@ -153,7 +150,7 @@ public class MockWebSocketAdapter implements WebSocketPort {
             message.setTimestamp(LocalDateTime.now());
             
             log.debug("Simulating order update: {} -> {}", orderId, status);
-            webSocketService.handleOrderUpdate(message);
+            onOrderUpdate(message); // Publica evento ao invés de chamar WebSocketService
         }
     }
     
@@ -164,6 +161,11 @@ public class MockWebSocketAdapter implements WebSocketPort {
             case "BNB/USD", "BNBUSD" -> BigDecimal.valueOf(300 + random.nextInt(100));
             default -> BigDecimal.valueOf(100 + random.nextInt(900));
         };
+    }
+    
+    @Override
+    protected String getExchangeName() {
+        return "MOCK";
     }
 
 }

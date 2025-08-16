@@ -1,14 +1,15 @@
 package com.marmitt.ctrade.infrastructure.exchange.binance;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.marmitt.ctrade.application.service.WebSocketService;
 import com.marmitt.ctrade.domain.port.ExchangeWebSocketAdapter;
 import com.marmitt.ctrade.infrastructure.config.WebSocketProperties;
+import com.marmitt.ctrade.infrastructure.exchange.binance.parser.BinanceStreamParser;
+import com.marmitt.ctrade.infrastructure.websocket.AbstractWebSocketAdapter;
 import com.marmitt.ctrade.infrastructure.websocket.ReconnectionStrategy;
 import com.marmitt.ctrade.infrastructure.websocket.WebSocketCircuitBreaker;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
-import okhttp3.*;
+import okhttp3.OkHttpClient;
+import okhttp3.Request;
+import okhttp3.WebSocket;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
@@ -23,17 +24,14 @@ import java.util.concurrent.atomic.AtomicLong;
 @Component
 @ConditionalOnProperty(name = "websocket.exchange", havingValue = "BINANCE", matchIfMissing = false)
 @Slf4j
-public class BinanceWebSocketAdapter implements ExchangeWebSocketAdapter {
+public class BinanceWebSocketAdapter extends AbstractWebSocketAdapter implements ExchangeWebSocketAdapter {
     
     private final WebSocketProperties properties;
     private final TaskScheduler taskScheduler;
     private final ReconnectionStrategy reconnectionStrategy;
     private final WebSocketCircuitBreaker circuitBreaker;
-    private final ObjectMapper objectMapper;
+    private final BinanceStreamParser streamParser;
     private final OkHttpClient okHttpClient;
-    
-    @Setter
-    private WebSocketService webSocketService;
     private WebSocket webSocket;
     private ConnectionStatus status = ConnectionStatus.DISCONNECTED;
     private final Set<String> subscribedPairs = ConcurrentHashMap.newKeySet();
@@ -53,20 +51,20 @@ public class BinanceWebSocketAdapter implements ExchangeWebSocketAdapter {
                                  TaskScheduler taskScheduler,
                                  ReconnectionStrategy reconnectionStrategy,
                                  WebSocketCircuitBreaker circuitBreaker,
-                                 ObjectMapper objectMapper) {
+                                 BinanceStreamParser streamParser) {
         this.properties = properties;
         this.taskScheduler = taskScheduler;
         this.reconnectionStrategy = reconnectionStrategy;
         this.circuitBreaker = circuitBreaker;
-        this.objectMapper = objectMapper;
+        this.streamParser = streamParser;
         this.okHttpClient = new OkHttpClient.Builder()
                 .readTimeout(Duration.ZERO) // No read timeout for WebSocket
                 .build();
     }
-
+    
     @Override
     public String getExchangeName() {
-        return "binance";
+        return "BINANCE";
     }
     
     @Override
@@ -195,8 +193,7 @@ public class BinanceWebSocketAdapter implements ExchangeWebSocketAdapter {
     
     private BinanceWebSocketListener createWebSocketListener() {
         return new BinanceWebSocketListener(
-            objectMapper,
-            webSocketService,
+            streamParser,
             subscribedPairs,
             reconnectionStrategy,
             circuitBreaker,
@@ -209,7 +206,11 @@ public class BinanceWebSocketAdapter implements ExchangeWebSocketAdapter {
             // Last message at updater
             time -> this.lastMessageAt = time,
             // Schedule reconnection callback
-            () -> scheduleReconnection(reconnectionStrategy.getNextDelay())
+            () -> scheduleReconnection(reconnectionStrategy.getNextDelay()),
+            // Price update callback - publica evento
+            this::onPriceUpdate,
+            // Order update callback - publica evento  
+            this::onOrderUpdate
         );
     }
 }

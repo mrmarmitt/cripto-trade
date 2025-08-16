@@ -1,11 +1,9 @@
 package com.marmitt.ctrade.infrastructure.exchange.binance;
 
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.marmitt.ctrade.application.service.WebSocketService;
+import com.marmitt.ctrade.domain.dto.OrderUpdateMessage;
 import com.marmitt.ctrade.domain.dto.PriceUpdateMessage;
 import com.marmitt.ctrade.domain.port.ExchangeWebSocketAdapter;
-import com.marmitt.ctrade.infrastructure.exchange.binance.dto.BinanceTickerMessage;
+import com.marmitt.ctrade.infrastructure.exchange.binance.parser.BinanceStreamParser;
 import com.marmitt.ctrade.infrastructure.websocket.ReconnectionStrategy;
 import com.marmitt.ctrade.infrastructure.websocket.WebSocketCircuitBreaker;
 import lombok.RequiredArgsConstructor;
@@ -16,7 +14,7 @@ import okhttp3.WebSocketListener;
 import org.jetbrains.annotations.NotNull;
 
 import java.time.LocalDateTime;
-import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Consumer;
@@ -25,8 +23,7 @@ import java.util.function.Consumer;
 @Slf4j
 public class BinanceWebSocketListener extends WebSocketListener {
     
-    private final ObjectMapper objectMapper;
-    private final WebSocketService webSocketService;
+    private final BinanceStreamParser streamParser;
     private final Set<String> subscribedPairs;
     private final ReconnectionStrategy reconnectionStrategy;
     private final WebSocketCircuitBreaker circuitBreaker;
@@ -40,6 +37,10 @@ public class BinanceWebSocketListener extends WebSocketListener {
     private final Consumer<LocalDateTime> lastConnectedAtUpdater;
     private final Consumer<LocalDateTime> lastMessageAtUpdater;
     private final Runnable scheduleReconnectionCallback;
+    
+    // Message processing callbacks
+    private final Consumer<PriceUpdateMessage> onPriceUpdate;
+    private final Consumer<OrderUpdateMessage> onOrderUpdate;
     
     @Override
     public void onOpen(@NotNull WebSocket webSocket, @NotNull Response response) {
@@ -59,28 +60,10 @@ public class BinanceWebSocketListener extends WebSocketListener {
             
             log.debug("Received message from Binance: {}", text.substring(0, Math.min(100, text.length())));
             
-            // Parse Binance ticker message array
-            List<BinanceTickerMessage> binanceMessages = objectMapper.readValue(text, new TypeReference<List<BinanceTickerMessage>>() {});
-            
-            // Process each ticker message in the array
-            for (BinanceTickerMessage binanceMessage : binanceMessages) {
-                if ("24hrTicker".equals(binanceMessage.getEventType())) {
-                    String tradingPair = binanceMessage.getSymbol();
-                    
-                    // Only process if we're subscribed to this pair or processing all
-                    if (subscribedPairs.isEmpty() || subscribedPairs.contains(tradingPair)) {
-                        PriceUpdateMessage priceUpdate = new PriceUpdateMessage();
-                        priceUpdate.setTradingPair(tradingPair);
-                        priceUpdate.setPrice(binanceMessage.getCurrentPrice());
-                        priceUpdate.setTimestamp(LocalDateTime.now());
-                        
-                        if (webSocketService != null) {
-                            webSocketService.handlePriceUpdate(priceUpdate);
-                        }
-                    }
-                }
-            }
-            
+            // Delegar processamento para o parser strategy com callbacks
+            Optional<PriceUpdateMessage> priceUpdateMessage = streamParser.parseMessage(text);
+            priceUpdateMessage.ifPresent(onPriceUpdate);
+
         } catch (Exception e) {
             totalErrors.incrementAndGet();
             log.error("Error processing Binance WebSocket message: {}", e.getMessage(), e);
