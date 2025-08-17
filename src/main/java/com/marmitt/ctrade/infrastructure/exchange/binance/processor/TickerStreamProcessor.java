@@ -3,9 +3,9 @@ package com.marmitt.ctrade.infrastructure.exchange.binance.processor;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.marmitt.ctrade.domain.dto.OrderUpdateMessage;
 import com.marmitt.ctrade.domain.dto.PriceUpdateMessage;
 import com.marmitt.ctrade.infrastructure.exchange.binance.dto.BinanceTickerMessage;
+import com.marmitt.ctrade.infrastructure.websocket.processor.StreamProcessor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -13,7 +13,6 @@ import org.springframework.stereotype.Component;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
-import java.util.function.Consumer;
 
 /**
  * Processor específico para streams de ticker da Binance.
@@ -22,7 +21,7 @@ import java.util.function.Consumer;
 @Component
 @RequiredArgsConstructor
 @Slf4j
-public class TickerStreamProcessor implements BinanceStreamProcessor<PriceUpdateMessage> {
+public class TickerStreamProcessor implements StreamProcessor<PriceUpdateMessage> {
     
     private final ObjectMapper objectMapper;
     

@@ -3,123 +3,119 @@ package com.marmitt.ctrade.infrastructure.exchange.mock;
 import com.marmitt.ctrade.domain.dto.PriceUpdateMessage;
 import com.marmitt.ctrade.domain.dto.OrderUpdateMessage;
 import com.marmitt.ctrade.domain.entity.Order;
-import com.marmitt.ctrade.domain.port.WebSocketPort;
 import com.marmitt.ctrade.infrastructure.config.WebSocketProperties;
 import com.marmitt.ctrade.infrastructure.websocket.AbstractWebSocketAdapter;
-import lombok.Getter;
+import com.marmitt.ctrade.infrastructure.websocket.ReconnectionStrategy;
+import com.marmitt.ctrade.infrastructure.websocket.WebSocketCircuitBreaker;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.scheduling.TaskScheduler;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
-import java.util.HashSet;
 import java.util.Random;
-import java.util.Set;
 import java.util.concurrent.ScheduledFuture;
 
 @Component
 @ConditionalOnProperty(name = "websocket.exchange", havingValue = "MOCK", matchIfMissing = true)
 @Slf4j
-public class MockWebSocketAdapter extends AbstractWebSocketAdapter implements WebSocketPort {
+public class MockWebSocketAdapter extends AbstractWebSocketAdapter {
     
-    private final WebSocketProperties webSocketProperties;
-    private final TaskScheduler taskScheduler;
-    private boolean connected = false;
-    private final Set<String> subscribedPairs = new HashSet<>();
-    @Getter
-    private boolean orderUpdatesSubscribed = false;
+    // Mock-specific dependencies
     private final Random random = new Random();
     private ScheduledFuture<?> priceUpdateTask;
     private ScheduledFuture<?> orderUpdateTask;
     
-    public MockWebSocketAdapter(WebSocketProperties webSocketProperties, TaskScheduler taskScheduler) {
-        this.webSocketProperties = webSocketProperties;
-        this.taskScheduler = taskScheduler;
+    public MockWebSocketAdapter(WebSocketProperties webSocketProperties,
+                               ReconnectionStrategy reconnectionStrategy,
+                               WebSocketCircuitBreaker circuitBreaker) {
+        super(webSocketProperties, reconnectionStrategy, circuitBreaker);
     }
 
     @Override
-    public void connect() {
-        log.info("Mock WebSocket connecting to: {}", webSocketProperties.getUrl());
+    protected void doConnect() {
         log.info("Connection timeout: {}, Max retries: {}", 
-                webSocketProperties.getConnectionTimeout(), 
-                webSocketProperties.getMaxRetries());
-        connected = true;
+                properties.getConnectionTimeout(), 
+                properties.getMaxRetries());
+        updateConnectionStatus(ConnectionStatus.CONNECTED);
+        statsTracker.updateLastConnectedAt(LocalDateTime.now());
         startSimulators();
-        log.info("Mock WebSocket connected successfully");
     }
     
     @Override
-    public void disconnect() {
-        log.info("Mock WebSocket disconnecting...");
+    protected void doDisconnect() {
         stopSimulators();
-        connected = false;
-        subscribedPairs.clear();
-        orderUpdatesSubscribed = false;
-        log.info("Mock WebSocket disconnected");
+    }
+    
+    
+    @Override
+    protected void doSubscribeToPrice(String tradingPair) {
+        // No additional logic needed for mock - subscription is handled by parent
     }
     
     @Override
-    public boolean isConnected() {
-        return connected;
+    protected void doSubscribeToOrderUpdates() {
+        // No additional logic needed for mock - subscription is handled by parent
     }
     
-    @Override
-    public void subscribeToPrice(String tradingPair) {
-        if (!connected) {
-            log.warn("Cannot subscribe to {}: WebSocket not connected", tradingPair);
-            return;
-        }
-        
-        subscribedPairs.add(tradingPair);
-        log.info("Mock WebSocket subscribed to price updates for: {}", tradingPair);
-    }
-    
-    @Override
-    public void subscribeToOrderUpdates() {
-        if (!connected) {
-            log.warn("Cannot subscribe to order updates: WebSocket not connected");
-            return;
-        }
-        
-        orderUpdatesSubscribed = true;
-        log.info("Mock WebSocket subscribed to order updates");
-    }
-    
-    public Set<String> getSubscribedPairs() {
-        return new HashSet<>(subscribedPairs);
-    }
     
     private void startSimulators() {
-        if (taskScheduler != null) {
-            priceUpdateTask = taskScheduler.scheduleWithFixedDelay(
-                this::simulatePriceUpdate, 
-                java.time.Duration.ofSeconds(2)
-            );
-            orderUpdateTask = taskScheduler.scheduleWithFixedDelay(
-                this::simulateOrderUpdate, 
-                java.time.Duration.ofSeconds(5)
-            );
+        // Usar um TaskScheduler injetado pelo Spring
+        if (connectionManager != null) {
+            // Para o mock, vamos usar um approach mais simples com threads
+            startPriceUpdateSimulator();
+            startOrderUpdateSimulator();
             log.info("Started message simulators");
         }
     }
     
+    private void startPriceUpdateSimulator() {
+        Thread priceSimulator = new Thread(() -> {
+            while (isConnected()) {
+                try {
+                    simulatePriceUpdate();
+                    Thread.sleep(2000); // 2 seconds
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                } catch (Exception e) {
+                    log.error("Error in price simulator: {}", e.getMessage(), e);
+                }
+            }
+        });
+        priceSimulator.setDaemon(true);
+        priceSimulator.setName("mock-price-simulator");
+        priceSimulator.start();
+    }
+    
+    private void startOrderUpdateSimulator() {
+        Thread orderSimulator = new Thread(() -> {
+            while (isConnected()) {
+                try {
+                    simulateOrderUpdate();
+                    Thread.sleep(5000); // 5 seconds
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    break;
+                } catch (Exception e) {
+                    log.error("Error in order simulator: {}", e.getMessage(), e);
+                }
+            }
+        });
+        orderSimulator.setDaemon(true);
+        orderSimulator.setName("mock-order-simulator");
+        orderSimulator.start();
+    }
+    
     private void stopSimulators() {
-        if (priceUpdateTask != null && !priceUpdateTask.isCancelled()) {
-            priceUpdateTask.cancel(false);
-            log.info("Stopped price update simulator");
-        }
-        if (orderUpdateTask != null && !orderUpdateTask.isCancelled()) {
-            orderUpdateTask.cancel(false);
-            log.info("Stopped order update simulator");
-        }
+        // Os simulators param automaticamente quando isConnected() retorna false
+        log.info("Simulators will stop when connection status changes");
     }
     
     private void simulatePriceUpdate() {
-        if (!subscribedPairs.isEmpty()) {
-            String[] pairs = subscribedPairs.toArray(new String[0]);
+        if (!getSubscribedPairs().isEmpty()) {
+            String[] pairs = getSubscribedPairs().toArray(new String[0]);
             String randomPair = pairs[random.nextInt(pairs.length)];
             
             BigDecimal basePrice = getBasePriceForPair(randomPair);
@@ -132,12 +128,12 @@ public class MockWebSocketAdapter extends AbstractWebSocketAdapter implements We
             message.setTimestamp(LocalDateTime.now());
             
             log.debug("Simulating price update: {} -> {}", randomPair, newPrice);
-            onPriceUpdate(message); // Publica evento ao invés de chamar WebSocketService
+            onPriceUpdate(message); // Publica evento e atualiza stats automaticamente
         }
     }
     
     private void simulateOrderUpdate() {
-        if (orderUpdatesSubscribed) {
+        if (isOrderUpdatesSubscribed()) {
             String[] orderIds = {"ORD001", "ORD002", "ORD003", "ORD004", "ORD005"};
             Order.OrderStatus[] statuses = {Order.OrderStatus.FILLED, Order.OrderStatus.CANCELLED, Order.OrderStatus.PARTIALLY_FILLED};
             
@@ -150,7 +146,7 @@ public class MockWebSocketAdapter extends AbstractWebSocketAdapter implements We
             message.setTimestamp(LocalDateTime.now());
             
             log.debug("Simulating order update: {} -> {}", orderId, status);
-            onOrderUpdate(message); // Publica evento ao invés de chamar WebSocketService
+            onOrderUpdate(message); // Publica evento e atualiza stats automaticamente
         }
     }
     
@@ -164,7 +160,7 @@ public class MockWebSocketAdapter extends AbstractWebSocketAdapter implements We
     }
     
     @Override
-    protected String getExchangeName() {
+    public String getExchangeName() {
         return "MOCK";
     }
 

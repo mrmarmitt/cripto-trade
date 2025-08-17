@@ -1,4 +1,4 @@
-package com.marmitt.ctrade.infrastructure.exchange.binance.processor;
+package com.marmitt.ctrade.infrastructure.websocket.processor;
 
 import com.fasterxml.jackson.databind.JsonNode;
 
@@ -11,7 +11,7 @@ import java.util.Optional;
  * 
  * Usa callbacks ao invés de dependência direta em WebSocketService para eliminar acoplamento.
  */
-public interface BinanceStreamProcessor<T> {
+public interface StreamProcessor<T> {
     
     /**
      * Verifica se este processor pode processar o stream especificado.

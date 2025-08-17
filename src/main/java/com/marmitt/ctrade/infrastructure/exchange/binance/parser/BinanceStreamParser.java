@@ -1,12 +1,10 @@
 package com.marmitt.ctrade.infrastructure.exchange.binance.parser;
 
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.ctrade.domain.dto.PriceUpdateMessage;
-import com.marmitt.ctrade.infrastructure.exchange.binance.dto.BinanceTickerMessage;
 import com.marmitt.ctrade.infrastructure.exchange.binance.dto.StreamWrapper;
-import com.marmitt.ctrade.infrastructure.exchange.binance.processor.BinanceStreamProcessor;
+import com.marmitt.ctrade.infrastructure.websocket.processor.StreamProcessor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -25,7 +23,7 @@ import java.util.Optional;
 public class BinanceStreamParser {
     
     private final ObjectMapper objectMapper;
-    private final List<BinanceStreamProcessor> processors;
+    private final List<StreamProcessor> processors;
     
     /**
      * Processa uma mensagem WebSocket da Binance usando callbacks.
@@ -66,7 +64,7 @@ public class BinanceStreamParser {
         
         log.debug("Processing multiplexed stream: {}", wrapper.getStream());
         
-        BinanceStreamProcessor<PriceUpdateMessage> processor = findProcessor(wrapper.getStream());
+        StreamProcessor<PriceUpdateMessage> processor = findProcessor(wrapper.getStream());
         if (processor != null) {
             return processor.process(wrapper.getData());
         } else {
@@ -82,7 +80,7 @@ public class BinanceStreamParser {
         JsonNode wrapper = objectMapper.readValue(jsonMessage, JsonNode.class);
         log.debug("Processing single stream ticker array messages");
         
-        BinanceStreamProcessor<PriceUpdateMessage> tickerProcessor = findProcessor("!ticker@arr");
+        StreamProcessor<PriceUpdateMessage> tickerProcessor = findProcessor("!ticker@arr");
         if (tickerProcessor != null) {
             return tickerProcessor.process(wrapper);
         } else {
@@ -94,7 +92,7 @@ public class BinanceStreamParser {
     /**
      * Encontra o processor apropriado para o stream especificado.
      */
-    private BinanceStreamProcessor findProcessor(String streamName) {
+    private StreamProcessor findProcessor(String streamName) {
         return processors.stream()
                 .filter(processor -> processor.canProcess(streamName))
                 .findFirst()

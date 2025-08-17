@@ -1,9 +1,7 @@
 package com.marmitt.ctrade.infrastructure.exchange.binance.parser;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.marmitt.ctrade.domain.dto.OrderUpdateMessage;
-import com.marmitt.ctrade.domain.dto.PriceUpdateMessage;
-import com.marmitt.ctrade.infrastructure.exchange.binance.processor.BinanceStreamProcessor;
+import com.marmitt.ctrade.infrastructure.websocket.processor.StreamProcessor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -11,7 +9,6 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.util.List;
-import java.util.function.Consumer;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
@@ -20,14 +17,14 @@ import static org.mockito.Mockito.*;
 class BinanceStreamParserTest {
     
     @Mock
-    private BinanceStreamProcessor tickerProcessor;
+    private StreamProcessor tickerProcessor;
 
     private BinanceStreamParser parser;
     
     @BeforeEach
     void setUp() {
         ObjectMapper objectMapper = new ObjectMapper();
-        List<BinanceStreamProcessor> processors = List.of(tickerProcessor);
+        List<StreamProcessor> processors = List.of(tickerProcessor);
         parser = new BinanceStreamParser(objectMapper, processors);
     }
     

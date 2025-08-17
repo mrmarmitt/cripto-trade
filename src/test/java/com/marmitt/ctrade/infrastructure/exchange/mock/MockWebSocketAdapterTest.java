@@ -1,9 +1,10 @@
 package com.marmitt.ctrade.infrastructure.exchange.mock;
 
 import com.marmitt.ctrade.infrastructure.config.WebSocketProperties;
+import com.marmitt.ctrade.infrastructure.websocket.ReconnectionStrategy;
+import com.marmitt.ctrade.infrastructure.websocket.WebSocketCircuitBreaker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-import org.springframework.scheduling.TaskScheduler;
 
 import java.time.Duration;
 
@@ -14,7 +15,8 @@ class MockWebSocketAdapterTest {
     
     private MockWebSocketAdapter adapter;
     private WebSocketProperties properties;
-    private TaskScheduler taskScheduler;
+    private ReconnectionStrategy reconnectionStrategy;
+    private WebSocketCircuitBreaker circuitBreaker;
     
     @BeforeEach
     void setUp() {
@@ -22,8 +24,9 @@ class MockWebSocketAdapterTest {
         properties.setUrl("ws://localhost:8080/test");
         properties.setConnectionTimeout(Duration.ofSeconds(5));
         properties.setMaxRetries(1);
-        taskScheduler = mock(TaskScheduler.class);
-        adapter = new MockWebSocketAdapter(properties, taskScheduler);
+        reconnectionStrategy = mock(ReconnectionStrategy.class);
+        circuitBreaker = mock(WebSocketCircuitBreaker.class);
+        adapter = new MockWebSocketAdapter(properties, reconnectionStrategy, circuitBreaker);
     }
     
     @Test
