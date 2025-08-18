@@ -10,11 +10,7 @@ websocket:
   retry-interval: 5s
   auto-reconnect: true
 
-logging:
-  level:
-    com.marmitt.ctrade.infrastructure.adapter.BinanceWebSocketAdapter: DEBUG
-    com.marmitt.ctrade.infrastructure.websocket: DEBUG
-    okhttp3: INFO
+
 
 # For testnet (if available)
 # websocket:

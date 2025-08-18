@@ -29,12 +29,19 @@ O projeto segue a **Arquitetura Hexagonal** com clara separação de responsabil
 - **Coordenação**: Entre domínio e infraestrutura
 
 ### Camada de Infraestrutura
-- **Exchange Adapters**: Implementações específicas por exchange
+- **Exchange Adapters**: Implementações modulares por exchange
   - **Mock**: `MockExchangeAdapter`, `MockWebSocketAdapter` (simulação para desenvolvimento)
   - **Binance**: `BinanceWebSocketAdapter`, `BinanceWebSocketListener` (integração real)
-- **WebSocket System**: Sistema de notificações em tempo real com Observer pattern
+- **Stream Processing**: Sistema modular de processamento de streams
+  - **Strategy Pattern**: `StreamProcessingStrategy` para diferentes exchanges
+  - **Binance Strategy**: `BinanceStreamProcessingStrategy` com `TickerStreamProcessor`
+  - **Flexibilidade**: Suporte a streams individuais (@ticker) e arrays (!ticker@arr)
+- **WebSocket Infrastructure**: Arquitetura resiliente para conexões em tempo real
+  - **Connection Management**: `ConnectionManager`, `ReconnectionStrategy`
+  - **Circuit Breaker**: `WebSocketCircuitBreaker` para prevenção de falhas
+  - **Observer Pattern**: Notificações automáticas com listeners
 - **Controllers REST**: API endpoints para trading, health check e métricas
-- **Configuração**: Exception handlers, validação, propriedades
+- **Configuração**: Exception handlers, validação, propriedades por profile
 - **Persistência**: Configuração H2 para desenvolvimento
 
 ## 📁 Estrutura do Projeto
@@ -86,17 +93,26 @@ src/
 │   │       │   └── binance/
 │   │       │       ├── BinanceWebSocketAdapter.java
 │   │       │       ├── BinanceWebSocketListener.java
+│   │       │       ├── strategy/
+│   │       │       │   ├── BinanceStreamProcessingStrategy.java
+│   │       │       │   └── processor/
+│   │       │       │       └── TickerStreamProcessor.java
 │   │       │       └── dto/
 │   │       │           └── BinanceTickerMessage.java
 │   │       ├── websocket/
+│   │       │   ├── AbstractWebSocketAdapter.java
+│   │       │   ├── AbstractWebSocketListener.java
+│   │       │   ├── ConnectionManager.java
 │   │       │   ├── ReconnectionStrategy.java
-│   │       │   └── WebSocketCircuitBreaker.java
+│   │       │   ├── WebSocketCircuitBreaker.java
+│   │       │   └── WebSocketConnectionHandler.java
 │   │       ├── config/
 │   │       │   └── WebSocketProperties.java
 │   │       └── repository/
 │   │           └── TradingAuditLogRepository.java
 │   └── resources/
-│       └── application.yml
+│       ├── application.yml
+│       └── application-binance.yml
 └── test/
     └── java/com/marmitt/ctrade/
         ├── controller/
@@ -125,7 +141,12 @@ src/
         │       │   └── MockWebSocketAdapterTest.java
         │       │   └── MockExchangeAdapterTest.java        
         │       └── binance/
-        │           └── BinanceWebSocketListenerTest.java
+        │           ├── BinanceWebSocketAdapterTest.java
+        │           ├── BinanceWebSocketAdapterIntegrationTest.java
+        │           ├── BinanceWebSocketListenerTest.java
+        │           ├── processor/
+        │           │   └── TickerStreamProcessorTest.java
+        │           └── strategy/
         ├── integration/
         │   └── TradingWorkflowIntegrationTest.java
         └── CtradeApplicationTests.java
@@ -139,6 +160,12 @@ src/
 - ✅ Cálculo de valores totais e validações
 - ✅ Sistema de status de ordens (PENDING, FILLED, CANCELLED)
 - ✅ Value Object para preços com aritmética decimal segura
+
+### Stream Processing Architecture
+- ✅ **Strategy Pattern**: Sistema modular para diferentes exchanges
+- ✅ **Stream Processors**: Processadores especializados por tipo de stream
+- ✅ **Flexible Parsing**: Suporte a streams únicos e arrays da Binance
+- ✅ **Domain Integration**: Conversão automática para `PriceUpdateMessage`
 
 ### API REST
 - ✅ **POST** `/api/trading/orders/buy` - Criar ordem de compra
@@ -169,12 +196,16 @@ src/
 - ✅ Logs estruturados para análise e compliance
 
 ### Sistema WebSocket e Notificações em Tempo Real
-- ✅ **WebSocket Service**: Gerenciamento de conexões WebSocket com Observer pattern
+- ✅ **WebSocket Infrastructure**: Arquitetura robusta com classes abstratas
+- ✅ **Connection Management**: `ConnectionManager` para gerenciamento centralizado
+- ✅ **Resilient Reconnection**: `ReconnectionStrategy` com backoff exponencial
+- ✅ **Circuit Breaker**: `WebSocketCircuitBreaker` para prevenção de falhas
 - ✅ **Price Cache**: Cache histórico de preços com TTL e limpeza automática
 - ✅ **Mock WebSocket Adapter**: Simulação para desenvolvimento com preços automáticos
 - ✅ **Binance WebSocket Adapter**: Integração real com Binance usando OkHttp
-- ✅ **Exponential Backoff**: Estratégia de reconexão automática resiliente
-- ✅ **Circuit Breaker**: Prevenção de falhas cascata em conexões WebSocket
+- ✅ **Stream Processing**: Sistema modular com strategy pattern para diferentes exchanges
+- ✅ **Flexible Ticker Processing**: Suporte a streams individuais (@ticker) e arrays (!ticker@arr)
+- ✅ **Profile Configuration**: Configuração específica por ambiente (mock/binance)
 - ✅ **Price Update Listeners**: Sistema de notificação automática para mudanças de preço
 - ✅ **Order Update Listeners**: Notificações de status de ordens em tempo real
 - ✅ **Health Monitoring**: Monitoramento de status do sistema (cache + WebSocket)
@@ -219,12 +250,26 @@ O projeto possui **100+ testes** cobrindo todas as camadas:
 # Executar testes
 ./gradlew test
 
-# Executar a aplicação
+# Executar a aplicação (profile padrão - mock)
 ./gradlew bootRun
+
+# Executar com profile Binance
+./gradlew bootRun --args='--spring.profiles.active=binance'
 
 # Gerar JAR
 ./gradlew bootJar
 ```
+
+### Configuração de Profiles
+
+#### Profile Mock (padrão)
+- Usa `MockWebSocketAdapter` com simulação automática de preços
+- Ideal para desenvolvimento e testes
+
+#### Profile Binance
+- Usa `BinanceWebSocketAdapter` com conexão real à Binance
+- Configure no IntelliJ: VM options `-Dspring.profiles.active=binance`
+- Configuração em `application-binance.yml`
 
 ### Com Docker Compose
 

@@ -82,7 +82,7 @@ class TickerStreamProcessorTest {
     
     @Test
     void shouldReturnCorrectStreamName() {
-        assertThat(processor.getStreamName()).isEqualTo("!ticker@arr");
+        assertThat(processor.getStreamName()).isEqualTo("ticker");
     }
     
 }

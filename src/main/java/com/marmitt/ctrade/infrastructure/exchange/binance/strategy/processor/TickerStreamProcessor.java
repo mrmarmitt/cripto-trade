@@ -50,7 +50,7 @@ public class TickerStreamProcessor implements StreamProcessor<PriceUpdateMessage
     
     @Override
     public String getStreamName() {
-        return "!ticker@arr";
+        return "ticker";
     }
     
     /**

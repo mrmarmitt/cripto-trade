@@ -25,16 +25,8 @@ trading:
     max-history-size: 100
     cleanup-interval-minutes: 10
 
-websocket:
-  exchange: BINANCE
-  url: wss://stream.binance.com:9443/stream?streams=!ticker@arr/!bookTicker@arr
-  connection-timeout: 30s
-  read-timeout: 10s
-  max-retries: 3
-  retry-interval: 5s
-  auto-reconnect: true
-
 logging:
   level:
     com.marmitt.ctrade: DEBUG
     org.springframework.web: DEBUG
+    okhttp3: INFO
