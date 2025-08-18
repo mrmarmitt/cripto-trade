@@ -1,11 +1,13 @@
 package com.marmitt.ctrade.infrastructure.websocket;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 
+@Getter
 @Component
 @Slf4j
 public class WebSocketCircuitBreaker {
@@ -24,24 +26,17 @@ public class WebSocketCircuitBreaker {
     }
     
     public synchronized boolean canConnect() {
-        switch (state) {
-            case CLOSED:
-                return true;
-                
-            case OPEN:
+        return switch (state) {
+            case CLOSED, HALF_OPEN -> true;
+            case OPEN -> {
                 if (shouldAttemptReset()) {
                     state = State.HALF_OPEN;
                     log.info("Circuit breaker moving to HALF_OPEN state");
-                    return true;
+                    yield true;
                 }
-                return false;
-                
-            case HALF_OPEN:
-                return true;
-                
-            default:
-                return false;
-        }
+                yield false;
+            }
+        };
     }
     
     public synchronized void recordSuccess() {
@@ -74,19 +69,7 @@ public class WebSocketCircuitBreaker {
         return lastFailureTime != null && 
                ChronoUnit.MINUTES.between(lastFailureTime, LocalDateTime.now()) >= TIMEOUT_MINUTES;
     }
-    
-    public State getState() {
-        return state;
-    }
-    
-    public int getFailureCount() {
-        return failureCount;
-    }
-    
-    public LocalDateTime getLastFailureTime() {
-        return lastFailureTime;
-    }
-    
+
     public boolean isOpen() {
         return state == State.OPEN;
     }

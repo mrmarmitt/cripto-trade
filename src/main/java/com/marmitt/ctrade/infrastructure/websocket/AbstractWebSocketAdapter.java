@@ -21,27 +21,25 @@ import java.util.Set;
  * - Delegação de responsabilidades para serviços dedicados
  */
 @Slf4j
-public abstract class AbstractWebSocketAdapter implements WebSocketPort, ExchangeWebSocketAdapter {
-    
+public abstract class AbstractWebSocketAdapter implements ExchangeWebSocketAdapter {
+
     // Specialized services
-    @Autowired
-    protected WebSocketEventPublisher eventPublisher;
-    @Autowired 
-    protected ConnectionManager connectionManager;
-    @Autowired
-    protected ConnectionStatsTracker statsTracker;
+    private final  WebSocketEventPublisher eventPublisher;
+    protected final  ConnectionManager connectionManager;
+    protected final  ConnectionStatsTracker statsTracker;
     
     // Infrastructure dependencies
     protected final WebSocketProperties properties;
-    protected final ReconnectionStrategy reconnectionStrategy;
-    protected final WebSocketCircuitBreaker circuitBreaker;
-    
-    protected AbstractWebSocketAdapter(WebSocketProperties properties,
-                                     ReconnectionStrategy reconnectionStrategy,
-                                     WebSocketCircuitBreaker circuitBreaker) {
+
+    protected AbstractWebSocketAdapter(WebSocketEventPublisher eventPublisher,
+                                       ConnectionManager connectionManager,
+                                       ConnectionStatsTracker statsTracker,
+                                       WebSocketProperties properties) {
+
+        this.eventPublisher = eventPublisher;
+        this.connectionManager = connectionManager;
+        this.statsTracker = statsTracker;
         this.properties = properties;
-        this.reconnectionStrategy = reconnectionStrategy;
-        this.circuitBreaker = circuitBreaker;
     }
     
     /**
@@ -66,7 +64,7 @@ public abstract class AbstractWebSocketAdapter implements WebSocketPort, Exchang
      * Retorna o nome da exchange para identificação nos eventos.
      * Deve ser implementado pelas classes filhas.
      */
-    public abstract String getExchangeName();
+    public abstract String getExchangeName(); //TODO: isso parece estar repetido dento do ExchangeWebSocketAdapter
     
     // ========== ExchangeWebSocketAdapter Implementation ==========
     
@@ -94,8 +92,6 @@ public abstract class AbstractWebSocketAdapter implements WebSocketPort, Exchang
     public void forceReconnect() {
         connectionManager.forceReconnect(
             Duration.ofSeconds(1),
-            reconnectionStrategy,
-            statsTracker,
             this::doDisconnect,
             this::doConnect,
             getExchangeName()
@@ -112,11 +108,8 @@ public abstract class AbstractWebSocketAdapter implements WebSocketPort, Exchang
     /**
      * Agenda reconexão usando o ConnectionManager.
      */
-    protected void scheduleReconnection(Duration delay) {
-        connectionManager.scheduleReconnection(
-            delay,
-            reconnectionStrategy,
-            statsTracker,
+    protected void scheduleReconnection() {
+        connectionManager.scheduleReconnectionBasedOnStrategy(
             this::doConnect,
             getExchangeName()
         );
@@ -165,7 +158,7 @@ public abstract class AbstractWebSocketAdapter implements WebSocketPort, Exchang
     
     @Override
     public final void connect() {
-        if (!connectionManager.canConnect(circuitBreaker)) {
+        if (!connectionManager.canConnect()) {
             log.warn("Circuit breaker is OPEN, cannot connect to {} WebSocket", getExchangeName());
             return;
         }

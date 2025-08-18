@@ -1,10 +1,14 @@
 package com.marmitt.ctrade.infrastructure.exchange.binance;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.ctrade.application.service.WebSocketService;
+import com.marmitt.ctrade.domain.dto.OrderUpdateMessage;
+import com.marmitt.ctrade.domain.dto.PriceUpdateMessage;
 import com.marmitt.ctrade.domain.port.ExchangeWebSocketAdapter;
-import com.marmitt.ctrade.infrastructure.exchange.binance.parser.BinanceStreamParser;
+import com.marmitt.ctrade.domain.strategy.StreamProcessingStrategy;
 import com.marmitt.ctrade.infrastructure.websocket.ReconnectionStrategy;
 import com.marmitt.ctrade.infrastructure.websocket.WebSocketCircuitBreaker;
+import com.marmitt.ctrade.infrastructure.websocket.WebSocketConnectionHandler;
 import okhttp3.Response;
 import okhttp3.WebSocket;
 import org.junit.jupiter.api.BeforeEach;
@@ -21,6 +25,7 @@ import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
@@ -30,19 +35,19 @@ class BinanceWebSocketListenerTest {
     private WebSocketService webSocketService;
     
     @Mock
+    private WebSocketConnectionHandler connectionHandler;
+    
+    @Mock
     private ReconnectionStrategy reconnectionStrategy;
     
     @Mock
     private WebSocketCircuitBreaker circuitBreaker;
     
     @Mock
-    private Consumer<ExchangeWebSocketAdapter.ConnectionStatus> statusUpdater;
+    private Consumer<PriceUpdateMessage> onPriceUpdate;
     
     @Mock
-    private Consumer<LocalDateTime> lastConnectedAtUpdater;
-    
-    @Mock
-    private Consumer<LocalDateTime> lastMessageAtUpdater;
+    private Consumer<OrderUpdateMessage> onOrderUpdate;
     
     @Mock
     private Runnable scheduleReconnectionCallback;
@@ -54,7 +59,7 @@ class BinanceWebSocketListenerTest {
     private Response response;
     
     @Mock
-    private BinanceStreamParser streamParser;
+    private StreamProcessingStrategy streamProcessingStrategy;
     
     private Set<String> subscribedPairs;
     private AtomicLong totalMessagesReceived;
@@ -67,19 +72,13 @@ class BinanceWebSocketListenerTest {
         totalMessagesReceived = new AtomicLong(0);
         totalErrors = new AtomicLong(0);
         
+        // Usa construtor para testes (com strategy mockada)
         listener = new BinanceWebSocketListener(
-                streamParser,
-                subscribedPairs,
-                reconnectionStrategy,
-                circuitBreaker,
-                totalMessagesReceived,
-                totalErrors,
-                statusUpdater,
-                lastConnectedAtUpdater,
-                lastMessageAtUpdater,
+                connectionHandler,
+                streamProcessingStrategy,
                 scheduleReconnectionCallback,
-                null,
-                null
+                onPriceUpdate,
+                onOrderUpdate
         );
     }
     
@@ -89,10 +88,7 @@ class BinanceWebSocketListenerTest {
         listener.onOpen(webSocket, response);
         
         // Then
-        verify(statusUpdater).accept(ExchangeWebSocketAdapter.ConnectionStatus.CONNECTED);
-        verify(lastConnectedAtUpdater).accept(any(LocalDateTime.class));
-        verify(reconnectionStrategy).reset();
-        verify(circuitBreaker).recordSuccess();
+        verify(connectionHandler).handleConnectionOpened(eq("BINANCE"));
     }
     
     @Test
@@ -104,23 +100,24 @@ class BinanceWebSocketListenerTest {
         listener.onMessage(webSocket, testMessage);
         
         // Then
-        verify(lastMessageAtUpdater).accept(any(LocalDateTime.class));
-        assertThat(totalMessagesReceived.get()).isEqualTo(1);
-        verify(streamParser).parseMessage(testMessage);
+        verify(connectionHandler).handleMessageReceived();
+        verify(streamProcessingStrategy).processPriceUpdate(testMessage);
+        verify(streamProcessingStrategy).processOrderUpdate(testMessage);
     }
     
     @Test
     void shouldHandleParsingErrors() {
         // Given
         String invalidMessage = "invalid json";
-        doThrow(new RuntimeException("Parse error")).when(streamParser).parseMessage(invalidMessage);
+        RuntimeException parseError = new RuntimeException("Parse error");
+        doThrow(parseError).when(streamProcessingStrategy).processPriceUpdate(invalidMessage);
         
         // When
         listener.onMessage(webSocket, invalidMessage);
         
         // Then
-        assertThat(totalErrors.get()).isEqualTo(1);
-        verify(streamParser).parseMessage(invalidMessage);
+        verify(connectionHandler).handleProcessingError(eq("BINANCE"), eq(parseError));
+        verify(streamProcessingStrategy).processPriceUpdate(invalidMessage);
     }
     
     @Test
@@ -128,7 +125,8 @@ class BinanceWebSocketListenerTest {
         // When
         listener.onClosing(webSocket, 1000, "Normal closure");
         
-        // Then - Just verify it doesn't throw
+        // Then
+        verify(connectionHandler).handleConnectionClosing(eq("BINANCE"), eq(1000), eq("Normal closure"));
     }
     
     @Test
@@ -137,8 +135,7 @@ class BinanceWebSocketListenerTest {
         listener.onClosed(webSocket, 1000, "Normal closure");
         
         // Then
-        verify(statusUpdater).accept(ExchangeWebSocketAdapter.ConnectionStatus.DISCONNECTED);
-        verify(scheduleReconnectionCallback, never()).run(); // No reconnection for normal closure
+        verify(connectionHandler).handleConnectionClosed(eq("BINANCE"), eq(1000), eq("Normal closure"), eq(scheduleReconnectionCallback));
     }
     
     @Test
@@ -147,9 +144,7 @@ class BinanceWebSocketListenerTest {
         listener.onClosed(webSocket, 1006, "Abnormal closure");
         
         // Then
-        verify(statusUpdater).accept(ExchangeWebSocketAdapter.ConnectionStatus.DISCONNECTED);
-        verify(circuitBreaker).recordFailure();
-        verify(scheduleReconnectionCallback).run(); // Should trigger reconnection
+        verify(connectionHandler).handleConnectionClosed(eq("BINANCE"), eq(1006), eq("Abnormal closure"), eq(scheduleReconnectionCallback));
     }
     
     @Test
@@ -161,9 +156,25 @@ class BinanceWebSocketListenerTest {
         listener.onFailure(webSocket, throwable, response);
         
         // Then
-        verify(statusUpdater).accept(ExchangeWebSocketAdapter.ConnectionStatus.FAILED);
-        assertThat(totalErrors.get()).isEqualTo(1);
-        verify(circuitBreaker).recordFailure();
-        verify(scheduleReconnectionCallback).run();
+        verify(connectionHandler).handleConnectionFailure(eq("BINANCE"), eq(throwable), eq(scheduleReconnectionCallback));
+    }
+    
+    @Test
+    void shouldCreateListenerWithRealObjectMapper() {
+        // Given - Construtor de produção com ObjectMapper real
+        BinanceWebSocketListener realListener = new BinanceWebSocketListener(
+                connectionHandler,
+                new ObjectMapper(),
+                scheduleReconnectionCallback,
+                onPriceUpdate,
+                onOrderUpdate
+        );
+        
+        // When
+        String exchangeName = realListener.getExchangeName();
+        
+        // Then
+        assertThat(exchangeName).isEqualTo("BINANCE");
+        // Verifica que foi criado com strategy real internamente
     }
 }

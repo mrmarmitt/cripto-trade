@@ -23,13 +23,13 @@ public class WebSocketConnectionHandler {
     
     private final ConnectionManager connectionManager;
     private final ConnectionStatsTracker statsTracker;
+    private final WebSocketCircuitBreaker circuitBreaker;
+    private final ReconnectionStrategy reconnectionStrategy;
     
     /**
      * Manipula evento de conexão bem-sucedida.
      */
-    public void handleConnectionOpened(String exchangeName, 
-                                     ReconnectionStrategy reconnectionStrategy,
-                                     WebSocketCircuitBreaker circuitBreaker) {
+    public void handleConnectionOpened(String exchangeName) {
         
         connectionManager.updateStatus(ConnectionStatus.CONNECTED);
         statsTracker.updateLastConnectedAt(LocalDateTime.now());
@@ -68,7 +68,6 @@ public class WebSocketConnectionHandler {
     public boolean handleConnectionClosed(String exchangeName, 
                                         int code, 
                                         String reason,
-                                        WebSocketCircuitBreaker circuitBreaker,
                                         Runnable scheduleReconnectionCallback) {
         
         connectionManager.updateStatus(ConnectionStatus.DISCONNECTED);
@@ -89,7 +88,6 @@ public class WebSocketConnectionHandler {
      */
     public void handleConnectionFailure(String exchangeName,
                                       Throwable error,
-                                      WebSocketCircuitBreaker circuitBreaker,
                                       Runnable scheduleReconnectionCallback) {
         
         connectionManager.updateStatus(ConnectionStatus.FAILED);

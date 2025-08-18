@@ -1,11 +1,11 @@
 package com.marmitt.ctrade.infrastructure.exchange.binance;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.ctrade.domain.dto.OrderUpdateMessage;
 import com.marmitt.ctrade.domain.dto.PriceUpdateMessage;
-import com.marmitt.ctrade.infrastructure.exchange.binance.parser.BinanceStreamParser;
+import com.marmitt.ctrade.domain.strategy.StreamProcessingStrategy;
+import com.marmitt.ctrade.infrastructure.exchange.binance.strategy.BinanceStreamProcessingStrategy;
 import com.marmitt.ctrade.infrastructure.websocket.AbstractWebSocketListener;
-import com.marmitt.ctrade.infrastructure.websocket.ReconnectionStrategy;
-import com.marmitt.ctrade.infrastructure.websocket.WebSocketCircuitBreaker;
 import com.marmitt.ctrade.infrastructure.websocket.WebSocketConnectionHandler;
 import lombok.extern.slf4j.Slf4j;
 import org.jetbrains.annotations.NotNull;
@@ -15,23 +15,41 @@ import java.util.function.Consumer;
 
 @Slf4j
 public class BinanceWebSocketListener extends AbstractWebSocketListener {
-    
+
     // Binance-specific dependencies
-    private final BinanceStreamParser streamParser;
+    private final StreamProcessingStrategy streamProcessingStrategy;
     
     // Message processing callbacks
     private final Consumer<PriceUpdateMessage> onPriceUpdate;
     private final Consumer<OrderUpdateMessage> onOrderUpdate;
     
+    /**
+     * Construtor para produção - cria strategy real internamente.
+     */
     public BinanceWebSocketListener(WebSocketConnectionHandler connectionHandler,
-                                    BinanceStreamParser streamParser,
-                                    ReconnectionStrategy reconnectionStrategy,
-                                    WebSocketCircuitBreaker circuitBreaker,
+                                    ObjectMapper objectMapper,
                                     Runnable scheduleReconnectionCallback,
                                     Consumer<PriceUpdateMessage> onPriceUpdate,
                                     Consumer<OrderUpdateMessage> onOrderUpdate) {
-        super(connectionHandler, reconnectionStrategy, circuitBreaker, scheduleReconnectionCallback);
-        this.streamParser = streamParser;
+        super(connectionHandler, scheduleReconnectionCallback);
+
+        // Cria a strategy específica do Binance internamente
+        this.streamProcessingStrategy = new BinanceStreamProcessingStrategy(objectMapper);
+        this.onPriceUpdate = onPriceUpdate;
+        this.onOrderUpdate = onOrderUpdate;
+    }
+    
+    /**
+     * Construtor para testes - permite injetar strategy mockada.
+     */
+    BinanceWebSocketListener(WebSocketConnectionHandler connectionHandler,
+                            StreamProcessingStrategy streamProcessingStrategy,
+                            Runnable scheduleReconnectionCallback,
+                            Consumer<PriceUpdateMessage> onPriceUpdate,
+                            Consumer<OrderUpdateMessage> onOrderUpdate) {
+        super(connectionHandler, scheduleReconnectionCallback);
+
+        this.streamProcessingStrategy = streamProcessingStrategy;
         this.onPriceUpdate = onPriceUpdate;
         this.onOrderUpdate = onOrderUpdate;
     }
@@ -43,11 +61,12 @@ public class BinanceWebSocketListener extends AbstractWebSocketListener {
     
     @Override
     protected void processMessage(@NotNull String messageText) {
-        // Delegar processamento para o parser strategy específico do Binance
-        Optional<PriceUpdateMessage> priceUpdateMessage = streamParser.parseMessage(messageText);
+        // Processa price updates usando a estratégia específica do Binance
+        Optional<PriceUpdateMessage> priceUpdateMessage = streamProcessingStrategy.processPriceUpdate(messageText);
         priceUpdateMessage.ifPresent(onPriceUpdate);
         
-        // Aqui poderia processar outros tipos de mensagem do Binance
-        // Ex: Order updates, account updates, etc.
+        // Processa order updates usando a estratégia específica do Binance
+        Optional<OrderUpdateMessage> orderUpdateMessage = streamProcessingStrategy.processOrderUpdate(messageText);
+        orderUpdateMessage.ifPresent(onOrderUpdate);
     }
 }

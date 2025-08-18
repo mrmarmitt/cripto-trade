@@ -1,4 +1,4 @@
-package com.marmitt.ctrade.infrastructure.websocket.processor;
+package com.marmitt.ctrade.domain.strategy.processor;
 
 import com.fasterxml.jackson.databind.JsonNode;
 

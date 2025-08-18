@@ -25,8 +25,7 @@ class MockWebSocketAdapterTest {
         properties.setConnectionTimeout(Duration.ofSeconds(5));
         properties.setMaxRetries(1);
         reconnectionStrategy = mock(ReconnectionStrategy.class);
-        circuitBreaker = mock(WebSocketCircuitBreaker.class);
-        adapter = new MockWebSocketAdapter(properties, reconnectionStrategy, circuitBreaker);
+        adapter = new MockWebSocketAdapter(properties, reconnectionStrategy);
     }
     
     @Test

@@ -1,11 +1,13 @@
 package com.marmitt.ctrade.infrastructure.websocket;
 
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
 
+@Getter
 @Component
 @Slf4j
 public class ReconnectionStrategy {
@@ -55,16 +57,9 @@ public class ReconnectionStrategy {
     public boolean isMaxAttemptsReached() {
         return currentAttempt >= MAX_ATTEMPTS;
     }
-    
-    public int getCurrentAttempt() {
-        return currentAttempt;
-    }
-    
+
     public int getMaxAttempts() {
         return MAX_ATTEMPTS;
     }
-    
-    public LocalDateTime getLastAttempt() {
-        return lastAttempt;
-    }
+
 }

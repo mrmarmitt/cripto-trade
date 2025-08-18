@@ -1,14 +1,13 @@
-package com.marmitt.ctrade.infrastructure.exchange.binance.processor;
+package com.marmitt.ctrade.infrastructure.exchange.binance.strategy.processor;
 
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.ctrade.domain.dto.PriceUpdateMessage;
 import com.marmitt.ctrade.infrastructure.exchange.binance.dto.BinanceTickerMessage;
-import com.marmitt.ctrade.infrastructure.websocket.processor.StreamProcessor;
+import com.marmitt.ctrade.domain.strategy.processor.StreamProcessor;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.stereotype.Component;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -16,9 +15,8 @@ import java.util.Optional;
 
 /**
  * Processor específico para streams de ticker da Binance.
- * Processa dados de 24hr ticker statistics (!ticker@arr).
+ * Processa dados de 24hr ticker statistics via subscrição direta de símbolos.
  */
-@Component
 @RequiredArgsConstructor
 @Slf4j
 public class TickerStreamProcessor implements StreamProcessor<PriceUpdateMessage> {
@@ -39,6 +37,8 @@ public class TickerStreamProcessor implements StreamProcessor<PriceUpdateMessage
             
             for (BinanceTickerMessage binanceMessage : tickerMessages) {
                 if ("24hrTicker".equals(binanceMessage.getEventType())) {
+                    String symbol = binanceMessage.getSymbol();
+                    log.debug("Processing symbol: {}", symbol);
                     return Optional.of(createPriceUpdate(binanceMessage));
                 }
             }
@@ -55,10 +55,17 @@ public class TickerStreamProcessor implements StreamProcessor<PriceUpdateMessage
     
     /**
      * Converte os dados recebidos para lista de BinanceTickerMessage.
-     * Suporta tanto JsonNode (streams multiplexados) quanto List (streams diretos).
+     * Suporta tanto array (streams !ticker@arr) quanto objeto único (streams individuais @ticker).
      */
     private List<BinanceTickerMessage> parseTickerData(JsonNode data) throws Exception {
-        return objectMapper.convertValue(data, new TypeReference<List<BinanceTickerMessage>>() {});
+        if (data.isArray()) {
+            // Caso de array: !ticker@arr ou múltiplos streams
+            return objectMapper.convertValue(data, new TypeReference<List<BinanceTickerMessage>>() {});
+        } else {
+            // Caso de objeto único: stream individual como btcusdc@ticker
+            BinanceTickerMessage tickerMessage = objectMapper.convertValue(data, BinanceTickerMessage.class);
+            return List.of(tickerMessage);
+        }
     }
     
     /**

@@ -28,9 +28,11 @@ public class MockWebSocketAdapter extends AbstractWebSocketAdapter {
     private ScheduledFuture<?> orderUpdateTask;
     
     public MockWebSocketAdapter(WebSocketProperties webSocketProperties,
-                               ReconnectionStrategy reconnectionStrategy,
-                               WebSocketCircuitBreaker circuitBreaker) {
-        super(webSocketProperties, reconnectionStrategy, circuitBreaker);
+                               ReconnectionStrategy reconnectionStrategy) {
+        super(null,
+                null,
+                null,
+                null);
     }
 
     @Override

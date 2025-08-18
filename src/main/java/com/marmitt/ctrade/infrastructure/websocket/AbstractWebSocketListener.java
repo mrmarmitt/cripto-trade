@@ -21,17 +21,11 @@ public abstract class AbstractWebSocketListener extends WebSocketListener {
     
     private final WebSocketConnectionHandler connectionHandler;
     
-    private final ReconnectionStrategy reconnectionStrategy;
-    private final WebSocketCircuitBreaker circuitBreaker;
     private final Runnable scheduleReconnectionCallback;
     
     protected AbstractWebSocketListener(WebSocketConnectionHandler connectionHandler,
-                                        ReconnectionStrategy reconnectionStrategy,
-                                        WebSocketCircuitBreaker circuitBreaker,
                                         Runnable scheduleReconnectionCallback) {
         this.connectionHandler = connectionHandler;
-        this.reconnectionStrategy = reconnectionStrategy;
-        this.circuitBreaker = circuitBreaker;
         this.scheduleReconnectionCallback = scheduleReconnectionCallback;
     }
     
@@ -48,7 +42,7 @@ public abstract class AbstractWebSocketListener extends WebSocketListener {
     
     @Override
     public final void onOpen(@NotNull WebSocket webSocket, @NotNull Response response) {
-        connectionHandler.handleConnectionOpened(getExchangeName(), reconnectionStrategy, circuitBreaker);
+        connectionHandler.handleConnectionOpened(getExchangeName());
         onConnectionEstablished(webSocket, response);
     }
     
@@ -79,7 +73,6 @@ public abstract class AbstractWebSocketListener extends WebSocketListener {
             getExchangeName(), 
             code, 
             reason, 
-            circuitBreaker,
             scheduleReconnectionCallback
         );
         
@@ -91,7 +84,6 @@ public abstract class AbstractWebSocketListener extends WebSocketListener {
         connectionHandler.handleConnectionFailure(
             getExchangeName(),
             t,
-            circuitBreaker,
             scheduleReconnectionCallback
         );
         

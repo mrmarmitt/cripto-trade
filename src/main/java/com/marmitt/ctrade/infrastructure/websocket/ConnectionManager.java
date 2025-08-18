@@ -1,6 +1,7 @@
 package com.marmitt.ctrade.infrastructure.websocket;
 
 import com.marmitt.ctrade.domain.port.ExchangeWebSocketAdapter.ConnectionStatus;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.TaskScheduler;
@@ -23,17 +24,30 @@ import java.util.concurrent.ScheduledFuture;
 public class ConnectionManager {
     
     private final TaskScheduler taskScheduler;
-    
+    private final ConnectionStatsTracker statsTracker;
+    private final WebSocketCircuitBreaker circuitBreaker;
+    private final ReconnectionStrategy reconnectionStrategy;
+
+    /**
+     * -- GETTER --
+     *  Retorna o status atual da conexão.
+     */
     // Connection state
+    @Getter
     private volatile ConnectionStatus status = ConnectionStatus.DISCONNECTED;
     private final Set<String> subscribedPairs = ConcurrentHashMap.newKeySet();
+    /**
+     * -- GETTER --
+     *  Verifica se order updates estão subscritas.
+     */
+    @Getter
     private volatile boolean orderUpdatesSubscribed = false;
     private volatile ScheduledFuture<?> reconnectionTask;
     
     /**
      * Verifica se pode conectar baseado no circuit breaker.
      */
-    public boolean canConnect(WebSocketCircuitBreaker circuitBreaker) {
+    public boolean canConnect() {
         boolean canConnect = circuitBreaker.canConnect();
         if (!canConnect) {
             log.warn("Circuit breaker is OPEN, cannot connect");
@@ -58,14 +72,7 @@ public class ConnectionManager {
             log.debug("Connection status changed from {} to {}", oldStatus, newStatus);
         }
     }
-    
-    /**
-     * Retorna o status atual da conexão.
-     */
-    public ConnectionStatus getStatus() {
-        return status;
-    }
-    
+
     /**
      * Verifica se está conectado.
      */
@@ -95,14 +102,7 @@ public class ConnectionManager {
     public Set<String> getSubscribedPairs() {
         return Set.copyOf(subscribedPairs);
     }
-    
-    /**
-     * Verifica se order updates estão subscritas.
-     */
-    public boolean isOrderUpdatesSubscribed() {
-        return orderUpdatesSubscribed;
-    }
-    
+
     /**
      * Reseta todas as subscrições.
      */
@@ -115,33 +115,10 @@ public class ConnectionManager {
     /**
      * Agenda reconexão automática.
      */
-    public void scheduleReconnection(Duration delay, 
-                                   ReconnectionStrategy reconnectionStrategy,
-                                   ConnectionStatsTracker statsTracker,
-                                   Runnable connectAction,
-                                   String exchangeName) {
-        
-        if (reconnectionStrategy.shouldReconnect()) {
-            updateStatus(ConnectionStatus.RECONNECTING);
-            
-            reconnectionTask = taskScheduler.schedule(() -> {
-                try {
-                    reconnectionStrategy.recordAttempt();
-                    statsTracker.recordReconnection();
-                    connectAction.run();
-                } catch (Exception e) {
-                    log.error("Error during reconnection for {}: {}", exchangeName, e.getMessage(), e);
-                    updateStatus(ConnectionStatus.FAILED);
-                }
-            }, java.time.Instant.now().plus(delay));
-            
-            log.info("Reconnection scheduled in {} for {}", delay, exchangeName);
-        } else {
-            updateStatus(ConnectionStatus.FAILED);
-            log.error("Max reconnection attempts reached for {}, marking as FAILED", exchangeName);
-        }
+    public void scheduleReconnectionBasedOnStrategy(Runnable connectAction, String exchangeName) {
+        scheduleReconnection(reconnectionStrategy.getNextDelay(), connectAction, exchangeName);
     }
-    
+
     /**
      * Cancela task de reconexão pendente.
      */
@@ -157,14 +134,36 @@ public class ConnectionManager {
      * Força uma reconexão imediata.
      */
     public void forceReconnect(Duration delay,
-                              ReconnectionStrategy reconnectionStrategy,
-                              ConnectionStatsTracker statsTracker,
                               Runnable disconnectAction,
                               Runnable connectAction,
                               String exchangeName) {
         
         log.info("Force reconnection requested for {}", exchangeName);
         disconnectAction.run();
-        scheduleReconnection(delay, reconnectionStrategy, statsTracker, connectAction, exchangeName);
+        scheduleReconnection(delay, connectAction, exchangeName);
     }
+
+    private void scheduleReconnection(Duration delay, Runnable connectAction, String exchangeName) {
+
+        if (reconnectionStrategy.shouldReconnect()) {
+            updateStatus(ConnectionStatus.RECONNECTING);
+
+            reconnectionTask = taskScheduler.schedule(() -> {
+                try {
+                    reconnectionStrategy.recordAttempt();
+                    statsTracker.recordReconnection();
+                    connectAction.run();
+                } catch (Exception e) {
+                    log.error("Error during reconnection for {}: {}", exchangeName, e.getMessage(), e);
+                    updateStatus(ConnectionStatus.FAILED);
+                }
+            }, java.time.Instant.now().plus(delay));
+
+            log.info("Reconnection scheduled in {} for {}", delay, exchangeName);
+        } else {
+            updateStatus(ConnectionStatus.FAILED);
+            log.error("Max reconnection attempts reached for {}, marking as FAILED", exchangeName);
+        }
+    }
+
 }

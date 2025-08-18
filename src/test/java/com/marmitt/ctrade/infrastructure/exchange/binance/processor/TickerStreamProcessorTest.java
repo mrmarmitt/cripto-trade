@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.ctrade.domain.dto.OrderUpdateMessage;
 import com.marmitt.ctrade.domain.dto.PriceUpdateMessage;
+import com.marmitt.ctrade.infrastructure.exchange.binance.strategy.processor.TickerStreamProcessor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -11,7 +12,6 @@ import org.mockito.junit.jupiter.MockitoExtension;
 
 import java.math.BigDecimal;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -68,27 +68,21 @@ class TickerStreamProcessorTest {
             """;
         
         JsonNode jsonNode = objectMapper.readTree(tickerJson);
-        
-        // Capture callbacks
-        AtomicReference<PriceUpdateMessage> capturedPriceUpdate = new AtomicReference<>();
-        AtomicReference<OrderUpdateMessage> capturedOrderUpdate = new AtomicReference<>();
 
         // When
-        processor.process(jsonNode);
+        var result = processor.process(jsonNode);
         
         // Then
-        PriceUpdateMessage capturedMessage = capturedPriceUpdate.get();
-        assertThat(capturedMessage).isNotNull();
-        assertThat(capturedMessage.getTradingPair()).isEqualTo("BTCUSD");
-        assertThat(capturedMessage.getPrice()).isEqualTo(new BigDecimal("50000.00"));
-        assertThat(capturedMessage.getTimestamp()).isNotNull();
-        
-        // Order update should not be called for ticker processor
-        assertThat(capturedOrderUpdate.get()).isNull();
+        assertThat(result).isPresent();
+        PriceUpdateMessage priceUpdate = result.get();
+        assertThat(priceUpdate.getTradingPair()).isEqualTo("BTCUSD");
+        assertThat(priceUpdate.getPrice()).isEqualTo(new BigDecimal("50000.00"));
+        assertThat(priceUpdate.getTimestamp()).isNotNull();
     }
     
     @Test
     void shouldReturnCorrectStreamName() {
         assertThat(processor.getStreamName()).isEqualTo("!ticker@arr");
     }
+    
 }
