@@ -2,6 +2,7 @@ package com.marmitt.ctrade.infrastructure.exchange.binance;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.ctrade.domain.dto.PriceUpdateMessage;
+import com.marmitt.ctrade.domain.port.TradingPairProvider;
 import com.marmitt.ctrade.infrastructure.config.WebSocketProperties;
 import com.marmitt.ctrade.infrastructure.exchange.binance.strategy.BinanceStreamProcessingStrategy;
 import com.marmitt.ctrade.infrastructure.websocket.ConnectionManager;
@@ -14,6 +15,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -40,6 +42,9 @@ class BinanceWebSocketAdapterIntegrationTest {
     
     @Mock
     private WebSocketEventPublisher eventPublisher;
+    
+    @Mock
+    private TradingPairProvider tradingPairProvider;
 
     private ObjectMapper objectMapper;
     private BinanceWebSocketAdapter adapter;
@@ -55,6 +60,7 @@ class BinanceWebSocketAdapterIntegrationTest {
                 connectionManager,
                 statsTracker,
                 eventPublisher,
+                tradingPairProvider,
                 objectMapper  // ObjectMapper real → cria BinanceStreamProcessingStrategy real + listeners reais
         );
     }

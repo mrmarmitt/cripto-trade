@@ -2,20 +2,16 @@
 # Copy to src/main/resources/application-binance.yml to use
 
 websocket:
-  exchange: BINANCE
-  url: wss://stream.binance.com:9443/stream  # Base URL - streams will be added dynamically
-  connection-timeout: 30s
-  read-timeout: 10s
-  max-retries: 10
-  retry-interval: 5s
+  exchange: MOCK
+  url: ws://localhost:8080/mock
+  connection-timeout: 5s
+  max-retries: 3
   auto-reconnect: true
 
 trading:
   pairs:
     active:
       - BTCUSDT
-      - BTCUSDC
-      - USDCUSDT
       - ETHUSDT
       - ADAUSDT
     stream-format: ticker

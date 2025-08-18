@@ -1,5 +1,6 @@
 package com.marmitt.ctrade.infrastructure.exchange.binance;
 
+import com.marmitt.ctrade.domain.port.TradingPairProvider;
 import com.marmitt.ctrade.infrastructure.config.WebSocketProperties;
 import com.marmitt.ctrade.infrastructure.websocket.ConnectionManager;
 import com.marmitt.ctrade.infrastructure.websocket.ConnectionStatsTracker;
@@ -34,6 +35,9 @@ class BinanceWebSocketAdapterTest {
     private WebSocketEventPublisher eventPublisher;
     
     @Mock
+    private TradingPairProvider tradingPairProvider;
+    
+    @Mock
     private OkHttpClient okHttpClient;
     
     @Mock
@@ -49,6 +53,7 @@ class BinanceWebSocketAdapterTest {
                 connectionManager,
                 statsTracker,
                 eventPublisher,
+                tradingPairProvider,
                 okHttpClient,
                 binanceWebSocketListener
         );

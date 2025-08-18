@@ -1,6 +1,7 @@
 package com.marmitt.ctrade.infrastructure.exchange.binance;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.marmitt.ctrade.domain.port.TradingPairProvider;
 import com.marmitt.ctrade.infrastructure.config.WebSocketProperties;
 import com.marmitt.ctrade.infrastructure.websocket.*;
 import lombok.extern.slf4j.Slf4j;
@@ -20,8 +21,9 @@ public class BinanceWebSocketAdapter extends AbstractWebSocketAdapter {
 
     // Binance-specific dependencies
     private final OkHttpClient okHttpClient;
-
+    private final TradingPairProvider tradingPairProvider;
     private final BinanceWebSocketListener binanceWebSocketListener;
+    
     // Binance-specific connection
     private WebSocket webSocket;
 
@@ -35,6 +37,7 @@ public class BinanceWebSocketAdapter extends AbstractWebSocketAdapter {
                                    ConnectionManager connectionManager,
                                    ConnectionStatsTracker statsTracker,
                                    WebSocketEventPublisher eventPublisher,
+                                   TradingPairProvider tradingPairProvider,
                                    ObjectMapper objectMapper) {
 
         super(eventPublisher,
@@ -42,6 +45,7 @@ public class BinanceWebSocketAdapter extends AbstractWebSocketAdapter {
                 statsTracker,
                 properties);
 
+        this.tradingPairProvider = tradingPairProvider;
         this.binanceWebSocketListener = createWebSocketListener(connectionHandler, objectMapper);
 
         this.okHttpClient = new OkHttpClient.Builder()
@@ -57,6 +61,7 @@ public class BinanceWebSocketAdapter extends AbstractWebSocketAdapter {
                             ConnectionManager connectionManager,
                             ConnectionStatsTracker statsTracker,
                             WebSocketEventPublisher eventPublisher,
+                            TradingPairProvider tradingPairProvider,
                             OkHttpClient okHttpClient,
                             BinanceWebSocketListener binanceWebSocketListener) {
         super(eventPublisher,
@@ -64,6 +69,7 @@ public class BinanceWebSocketAdapter extends AbstractWebSocketAdapter {
                 statsTracker,
                 properties);
 
+        this.tradingPairProvider = tradingPairProvider;
         this.binanceWebSocketListener = binanceWebSocketListener;
         this.okHttpClient = okHttpClient;
     }
@@ -75,11 +81,43 @@ public class BinanceWebSocketAdapter extends AbstractWebSocketAdapter {
 
     @Override
     protected void doConnect() {
+        String streamUrl = buildStreamUrl();
+        log.info("Connecting to Binance WebSocket with URL: {}", streamUrl);
+        
         Request request = new Request.Builder()
-                .url(properties.getUrl())
+                .url(streamUrl)
                 .build();
 
         webSocket = okHttpClient.newWebSocket(request, binanceWebSocketListener);
+    }
+    
+    /**
+     * Constrói a URL do stream com base nos trading pairs configurados.
+     * Usa base URL das propriedades e adiciona os streams dos trading pairs ativos.
+     */
+    private String buildStreamUrl() {
+        String baseUrl = properties.getUrl();
+        String streamList = tradingPairProvider.getFormattedStreamList();
+        
+        if (streamList.isEmpty()) {
+            log.warn("No trading pairs configured, using base URL: {}", baseUrl);
+            return baseUrl;
+        }
+        
+        // Se a URL base já contém parâmetros de stream, substitui
+        // Se não, adiciona como parâmetro streams
+        if (baseUrl.contains("?streams=")) {
+            String streamUrl = baseUrl.replaceAll("\\?streams=.*$", "?streams=" + streamList);
+            log.debug("Replaced streams in URL: {} -> {}", baseUrl, streamUrl);
+            return streamUrl;
+        } else if (baseUrl.contains("/stream")) {
+            String streamUrl = baseUrl + "?streams=" + streamList;
+            log.debug("Added streams to URL: {} -> {}", baseUrl, streamUrl);
+            return streamUrl;
+        } else {
+            log.debug("Using base URL unchanged: {}", baseUrl);
+            return baseUrl;
+        }
     }
 
     @Override
