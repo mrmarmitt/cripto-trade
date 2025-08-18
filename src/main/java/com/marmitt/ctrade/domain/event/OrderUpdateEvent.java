@@ -12,12 +12,12 @@ import org.springframework.context.ApplicationEvent;
 public class OrderUpdateEvent extends ApplicationEvent {
     
     private final OrderUpdateMessage orderUpdate;
-    private final String source; // Nome da exchange ou adapter (ex: "BINANCE", "MOCK")
+    private final String exchangeSource; // Nome da exchange ou adapter (ex: "BINANCE", "MOCK")
     
     public OrderUpdateEvent(Object source, OrderUpdateMessage orderUpdate, String exchangeSource) {
         super(source);
         this.orderUpdate = orderUpdate;
-        this.source = exchangeSource;
+        this.exchangeSource = exchangeSource;
     }
     
     /**

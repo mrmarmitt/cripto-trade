@@ -15,7 +15,8 @@
       "Bash(rm:*)",
       "Bash(sed:*)",
       "Bash(mkdir:*)",
-      "Bash(cp:*)"
+      "Bash(cp:*)",
+      "Bash(grep:*)"
     ],
     "defaultMode": "acceptEdits"
   }

@@ -12,12 +12,12 @@ import org.springframework.context.ApplicationEvent;
 public class PriceUpdateEvent extends ApplicationEvent {
     
     private final PriceUpdateMessage priceUpdate;
-    private final String source; // Nome da exchange ou adapter (ex: "BINANCE", "MOCK")
+    private final String exchangeSource; // Nome da exchange ou adapter (ex: "BINANCE", "MOCK")
     
     public PriceUpdateEvent(Object source, PriceUpdateMessage priceUpdate, String exchangeSource) {
         super(source);
         this.priceUpdate = priceUpdate;
-        this.source = exchangeSource;
+        this.exchangeSource = exchangeSource;
     }
     
     /**

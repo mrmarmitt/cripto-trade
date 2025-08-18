@@ -28,8 +28,12 @@ public class WebSocketHandler {
     @EventListener
     public void handlePriceUpdateEvent(PriceUpdateEvent event) {
         PriceUpdateMessage message = event.getPriceUpdate();
-        log.info("Price update event received from {}: {} = {}",
-                event.getSource(), message.getTradingPair(), message.getPrice());
+        if (message != null) {
+            log.info("Price update event received from {}: {} = {}",
+                    event.getExchangeSource(), message.getTradingPair(), message.getPrice());
+        } else {
+            log.warn("Received price update event from {} with null message", event.getExchangeSource());
+        }
 
         priceUpdateListeners.forEach(listener -> {
             try {
@@ -48,8 +52,12 @@ public class WebSocketHandler {
     @EventListener
     public void handleOrderUpdateEvent(OrderUpdateEvent event) {
         OrderUpdateMessage message = event.getOrderUpdate();
-        log.info("Order update event received from {}: {} status: {}",
-                event.getSource(), message.getOrderId(), message.getStatus());
+        if (message != null) {
+            log.info("Order update event received from {}: {} status: {}",
+                    event.getExchangeSource(), message.getOrderId(), message.getStatus());
+        } else {
+            log.warn("Received order update event from {} with null message", event.getExchangeSource());
+        }
 
         orderUpdateListeners.forEach(listener -> {
             try {

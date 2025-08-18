@@ -26,9 +26,15 @@ public class WebSocketEventPublisher {
      * Publica evento de atualização de preço.
      */
     public void publishPriceUpdate(Object source, PriceUpdateMessage priceUpdate, String exchangeName) {
-        log.debug("Publishing price update event for {}: {}", priceUpdate.getTradingPair(), priceUpdate.getPrice());
+        if (priceUpdate != null) {
+            log.debug("Publishing price update event for {}: {}", priceUpdate.getTradingPair(), priceUpdate.getPrice());
+        } else {
+            log.debug("Publishing null price update event from {}", exchangeName);
+        }
         
-        PriceUpdateEvent event = PriceUpdateEvent.of(source, priceUpdate, exchangeName);
+        // ApplicationEvent não aceita source null, usar um placeholder
+        Object eventSource = source != null ? source : "UNKNOWN_SOURCE";
+        PriceUpdateEvent event = PriceUpdateEvent.of(eventSource, priceUpdate, exchangeName);
         eventPublisher.publishEvent(event);
     }
     
@@ -36,9 +42,15 @@ public class WebSocketEventPublisher {
      * Publica evento de atualização de ordem.
      */
     public void publishOrderUpdate(Object source, OrderUpdateMessage orderUpdate, String exchangeName) {
-        log.debug("Publishing order update event for order {}: {}", orderUpdate.getOrderId(), orderUpdate.getStatus());
+        if (orderUpdate != null) {
+            log.debug("Publishing order update event for order {}: {}", orderUpdate.getOrderId(), orderUpdate.getStatus());
+        } else {
+            log.debug("Publishing null order update event from {}", exchangeName);
+        }
         
-        OrderUpdateEvent event = OrderUpdateEvent.of(source, orderUpdate, exchangeName);
+        // ApplicationEvent não aceita source null, usar um placeholder
+        Object eventSource = source != null ? source : "UNKNOWN_SOURCE";
+        OrderUpdateEvent event = OrderUpdateEvent.of(eventSource, orderUpdate, exchangeName);
         eventPublisher.publishEvent(event);
     }
 }

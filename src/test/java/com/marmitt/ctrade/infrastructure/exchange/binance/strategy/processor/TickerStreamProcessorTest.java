@@ -1,4 +1,4 @@
-package com.marmitt.ctrade.infrastructure.exchange.binance.processor;
+package com.marmitt.ctrade.infrastructure.exchange.binance.strategy.processor;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
