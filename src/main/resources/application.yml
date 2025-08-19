@@ -24,23 +24,6 @@ trading:
     ttl-minutes: 5
     max-history-size: 100
     cleanup-interval-minutes: 10
-  
-  strategies:
-    auto-register: true
-    max-concurrent-strategies: 10
-    strategies:
-      pair-trading-strategy:
-        enabled: false
-        priority: 1
-        max-order-value: 1000
-        min-order-value: 10
-        parameters:
-          pair1: "BTC/USDT"
-          pair2: "ETH/USDT"
-          upperThreshold: 2.0
-          lowerThreshold: -2.0
-          maxHistorySize: 50
-          tradingAmount: 100.0
 
 logging:
   level:

@@ -3,10 +3,13 @@ package com.marmitt.ctrade.application.service;
 import com.marmitt.ctrade.domain.entity.MarketData;
 import com.marmitt.ctrade.domain.entity.Order;
 import com.marmitt.ctrade.domain.entity.Portfolio;
+import com.marmitt.ctrade.domain.entity.Trade;
 import com.marmitt.ctrade.domain.entity.TradingPair;
 import com.marmitt.ctrade.domain.port.ExchangePort;
 import com.marmitt.ctrade.domain.port.TradingStrategy;
+import com.marmitt.ctrade.domain.valueobject.SignalType;
 import com.marmitt.ctrade.domain.valueobject.StrategySignal;
+import com.marmitt.ctrade.domain.valueobject.TradeType;
 import com.marmitt.ctrade.infrastructure.config.StrategyProperties;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +31,8 @@ public class TradingOrchestrator {
     private final StrategyRegistry strategyRegistry;
     private final ExchangePort exchangePort;
     private final StrategyProperties strategyProperties;
+    private final TradeMatchingService tradeMatchingService;
+    private final StrategyPerformanceTracker performanceTracker;
     
     private final ExecutorService executorService = Executors.newFixedThreadPool(5);
     private Portfolio currentPortfolio = new Portfolio();
@@ -98,8 +103,13 @@ public class TradingOrchestrator {
                     order.getSide(), order.getQuantity(), order.getTradingPair().getSymbol(), 
                     order.getPrice(), signal.getStrategyName());
             
+            // Execute order through exchange
             exchangePort.placeOrder(order);
             
+            // Track trade for P&L calculation
+            trackTradeExecution(signal, order);
+            
+            // Update portfolio
             updatePortfolioForOrder(order);
             
         } catch (Exception e) {
@@ -143,7 +153,7 @@ public class TradingOrchestrator {
     }
     
     private Order createOrderFromSignal(StrategySignal signal) {
-        Order.OrderSide orderSide = signal.getType() == com.marmitt.ctrade.domain.valueobject.SignalType.BUY ? 
+        Order.OrderSide orderSide = signal.getType() == SignalType.BUY ? 
                 Order.OrderSide.BUY : Order.OrderSide.SELL;
         
         return new Order(
@@ -153,6 +163,61 @@ public class TradingOrchestrator {
                 signal.getQuantity(),
                 signal.getPrice()
         );
+    }
+    
+    /**
+     * Tracks trade execution for P&L calculation
+     */
+    private void trackTradeExecution(StrategySignal signal, Order order) {
+        try {
+            String strategyName = signal.getStrategyName();
+            TradingPair tradingPair = signal.getPair();
+            BigDecimal price = signal.getPrice();
+            BigDecimal quantity = signal.getQuantity();
+            String orderId = order.getId() != null ? order.getId() : generateOrderId();
+            
+            if (signal.getType() == SignalType.BUY) {
+                // Opening a position (or adding to existing position)
+                TradeType tradeType = TradeType.LONG; // Assuming buy signals are LONG positions
+                
+                Trade trade = tradeMatchingService.openTrade(
+                        strategyName, tradingPair, tradeType, price, quantity, orderId);
+                
+                log.info("Opened trade {} for strategy '{}': {} {} {} at {}", 
+                        trade.getId(), strategyName, tradeType, quantity, 
+                        tradingPair.getSymbol(), price);
+                
+            } else if (signal.getType() == SignalType.SELL) {
+                // Closing position(s)
+                if (tradeMatchingService.hasOpenTrades(strategyName, tradingPair)) {
+                    TradeMatchingService.MatchingResult result = tradeMatchingService.closeTrade(
+                            strategyName, tradingPair, price, quantity, orderId);
+                    
+                    log.info("Closed trades for strategy '{}': matched {} {}, realized P&L: {}", 
+                            strategyName, result.getTotalMatchedQuantity(), 
+                            tradingPair.getSymbol(), result.getTotalRealizedPnL());
+                    
+                    if (result.isPartialMatch()) {
+                        log.warn("Partial match only for strategy '{}': remaining quantity: {}", 
+                                strategyName, result.getRemainingQuantity());
+                    }
+                } else {
+                    log.warn("Sell signal from strategy '{}' but no open trades found for pair '{}'", 
+                            strategyName, tradingPair.getSymbol());
+                }
+            }
+            
+        } catch (Exception e) {
+            log.error("Error tracking trade execution for strategy {}: {}", 
+                    signal.getStrategyName(), e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Generates a unique order ID if not provided by the Order
+     */
+    private String generateOrderId() {
+        return "ORDER_" + System.currentTimeMillis() + "_" + System.nanoTime() % 1000;
     }
     
     private void updatePortfolioForOrder(Order order) {
@@ -200,5 +265,72 @@ public class TradingOrchestrator {
     
     public List<TradingStrategy> getActiveStrategies() {
         return strategyRegistry.getActiveStrategies();
+    }
+    
+    /**
+     * Updates unrealized P&L for all open trades
+     */
+    public void updateUnrealizedPnL() {
+        try {
+            log.debug("Updating unrealized P&L for all open trades");
+            performanceTracker.updateUnrealizedPnL();
+        } catch (Exception e) {
+            log.error("Error updating unrealized P&L: {}", e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Gets strategy performance metrics
+     */
+    public com.marmitt.ctrade.domain.valueobject.StrategyMetrics getStrategyMetrics(String strategyName) {
+        try {
+            return performanceTracker.calculateMetrics(strategyName);
+        } catch (Exception e) {
+            log.error("Error calculating metrics for strategy {}: {}", strategyName, e.getMessage(), e);
+            return null;
+        }
+    }
+    
+    /**
+     * Gets total P&L across all strategies
+     */
+    public BigDecimal getTotalPnL() {
+        try {
+            return performanceTracker.getTotalPnL();
+        } catch (Exception e) {
+            log.error("Error calculating total P&L: {}", e.getMessage(), e);
+            return BigDecimal.ZERO;
+        }
+    }
+    
+    /**
+     * Forces closure of all open trades for a strategy
+     */
+    public void forceCloseAllTrades(String strategyName, TradingPair tradingPair, BigDecimal exitPrice) {
+        try {
+            TradeMatchingService.MatchingResult result = tradeMatchingService.forceCloseAllTrades(
+                    strategyName, tradingPair, exitPrice);
+            
+            log.info("Force closed all trades for strategy '{}': matched {} {}, realized P&L: {}", 
+                    strategyName, result.getTotalMatchedQuantity(), 
+                    tradingPair.getSymbol(), result.getTotalRealizedPnL());
+            
+        } catch (Exception e) {
+            log.error("Error force closing trades for strategy {}: {}", strategyName, e.getMessage(), e);
+        }
+    }
+    
+    /**
+     * Checks if a strategy has open trades
+     */
+    public boolean hasOpenTrades(String strategyName, TradingPair tradingPair) {
+        return tradeMatchingService.hasOpenTrades(strategyName, tradingPair);
+    }
+    
+    /**
+     * Gets total open quantity for a strategy and trading pair
+     */
+    public BigDecimal getTotalOpenQuantity(String strategyName, TradingPair tradingPair) {
+        return tradeMatchingService.getTotalOpenQuantity(strategyName, tradingPair);
     }
 }

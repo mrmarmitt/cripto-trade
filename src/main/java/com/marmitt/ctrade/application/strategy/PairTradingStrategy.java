@@ -15,7 +15,6 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
-@Component
 public class PairTradingStrategy extends AbstractTradingStrategy {
     
     private static final String STRATEGY_NAME = "PairTradingStrategy";

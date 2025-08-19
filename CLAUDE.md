@@ -93,32 +93,14 @@ gh pr list
 gh project view 3 --owner mrmarmitt --format json
 ```
 
-## Project Tasks (from GitHub Project Board)
+## Project Management
 
-**Phase 1 - Foundation:**
-- [1.0] Criação da aplicação Spring Boot com Gradle e Docker Compose
-- [1.1] Estrutura base Spring Boot hexagonal
-- [1.2] Modelar entidades do domínio  
-- [1.3] Definir portas do domínio
+Para acompanhar o progresso completo do projeto, status de implementação e roadmap detalhado:
 
-**Phase 2 - Application Layer:**
-- [2.1] TradingOrchestrator
-- [2.2] Sistema modular de estratégias
-- [2.3] Services de aplicação
+📋 **[Estratégia de Implementação](docs/STRATEGY-PL-IMPLEMENTATION.md)** - Status completo do projeto  
+🎯 **[Próximos Passos](docs/NEXT-STEPS-PL-IMPLEMENTATION.md)** - Roadmap detalhado de implementação
 
-**Phase 3 - Infrastructure:**
-- [3.1] MockExchangeAdapter
-- [3.2] Configuração de banco de dados
-- [3.3] Sistema de agendamento
-- [3.4] Controllers REST
-
-**Phase 4 - Analysis:**
-- [4.1] Engine de backtesting
-- [4.2] Gerador de dados históricos
-
-**Phase 5 - Operations:**
-- [5.1] Sistema de configuração
-- [5.2] Logging estruturado
+O sistema segue desenvolvimento incremental com foco atual no sistema de P&L e performance tracking.
 
 ## Package Organization
 

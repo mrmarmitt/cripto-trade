@@ -14,6 +14,11 @@ import java.util.HashMap;
 public class Portfolio {
     private Map<String, BigDecimal> holdings = new HashMap<>();
     private BigDecimal totalValue = BigDecimal.ZERO;
+    
+    public Portfolio(Map<String, BigDecimal> holdings) {
+        this.holdings = new HashMap<>(holdings);
+        this.totalValue = BigDecimal.ZERO;
+    }
 
     public BigDecimal getBalance(String currency) {
         return holdings.getOrDefault(currency, BigDecimal.ZERO);

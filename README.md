@@ -262,8 +262,8 @@ O projeto possui **100+ testes** cobrindo todas as camadas:
 ### Configuração de Profiles
 
 #### Profile via Env
-- SPRING_PROFILES_ACTIVE=binance
-- SPRING_PROFILES_ACTIVE=mock
+- SPRING_PROFILES_ACTIVE=binance,strategies
+- SPRING_PROFILES_ACTIVE=mock,strategies
 
 #### Profile Mock (padrão)
 - Usa `MockWebSocketAdapter` com simulação automática de preços
@@ -299,38 +299,248 @@ http://localhost:8080/v3/api-docs
 ```
 
 
+## 📈 Sistema de Estratégias de Trading
+
+O sistema de estratégias permite automatizar decisões de trading baseadas em dados de mercado em tempo real. As estratégias são executadas automaticamente sempre que novos dados de preço chegam via WebSocket.
+
+### Como Funciona a Execução de uma Estratégia
+
+#### 1. **Fluxo de Execução**
+
+```
+WebSocket (Price Update) → TradingStrategyListener → TradingOrchestrator → Estratégias Ativas → Geração de Sinais → Execução de Ordens
+```
+
+1. **Recepção de Dados**: O `BinanceWebSocketListener` ou `MockWebSocketAdapter` recebe atualizações de preço
+2. **Conversão**: O `TradingStrategyListener` converte `PriceUpdateMessage` em `MarketData`
+3. **Orquestração**: O `TradingOrchestrator` executa todas as estratégias ativas
+4. **Análise**: Cada estratégia analisa os dados de mercado e o portfólio atual
+5. **Geração de Sinais**: As estratégias geram sinais de BUY, SELL ou HOLD
+6. **Validação**: Sinais são validados (preço, quantidade, limites)
+7. **Execução**: Ordens válidas são enviadas para a exchange
+
+#### 2. **Componentes Principais**
+
+- **`TradingStrategy`**: Interface que define o contrato das estratégias
+- **`StrategyRegistry`**: Gerencia registro e ativação de estratégias
+- **`TradingOrchestrator`**: Coordena a execução das estratégias
+- **`StrategyAutoConfiguration`**: Registra estratégias automaticamente em memoria
+- **`TradingStrategyListener`**: Conecta WebSocket às estratégias
+
+### Parâmetros e Configuração
+
+#### **StrategySignal** (Sinal Gerado pela Estratégia)
+
+```java
+public class StrategySignal {
+    private SignalType type;           // BUY, SELL, HOLD
+    private TradingPair pair;          // Par de trading (ex: BTC/USDT)
+    private BigDecimal quantity;       // Quantidade a negociar
+    private BigDecimal price;          // Preço limite
+    private String reason;             // Motivo do sinal
+    private String strategyName;       // Nome da estratégia
+    private LocalDateTime timestamp;   // Timestamp do sinal
+}
+```
+
+#### **Parâmetros de Configuração** (`application-strategies.yml`)
+
+```yaml
+strategies:
+  auto-register: true  # Ativa registro automático
+  
+  pair-trading:
+    enabled: true
+    parameters:
+      correlation-threshold: 0.8     # Correlação mínima entre pares
+      spread-threshold: 0.02         # Spread mínimo para trade
+      stop-loss: 0.05               # Stop loss (5%)
+      take-profit: 0.10             # Take profit (10%)
+      lookback-period: 20           # Períodos para análise
+    max-order-value: 1000.00        # Valor máximo por ordem
+    min-order-value: 10.00          # Valor mínimo por ordem
+    risk-limit: 0.02                # Limite de risco (2% do portfólio)
+```
+
+#### **Parâmetros Explicados**
+
+- **`enabled`**: Ativa/desativa a estratégia
+- **`correlation-threshold`**: Correlação mínima entre ativos para pair trading
+- **`spread-threshold`**: Diferença mínima de preço para executar trade
+- **`stop-loss`**: Percentual de perda máxima antes de fechar posição
+- **`take-profit`**: Percentual de lucro para fechar posição
+- **`lookback-period`**: Número de períodos históricos para análise
+- **`max-order-value`**: Valor máximo de uma ordem individual
+- **`min-order-value`**: Valor mínimo de uma ordem individual
+- **`risk-limit`**: Percentual máximo do portfólio em risco
+
+### Como Adicionar uma Nova Estratégia
+
+#### **Passo 1: Implementar a Interface TradingStrategy**
+
+```java
+@Component
+public class MinhaEstrategia implements TradingStrategy {
+    
+    private final StrategyProperties.StrategyConfig config;
+    
+    public MinhaEstrategia(StrategyProperties.StrategyConfig config) {
+        this.config = config;
+    }
+    
+    @Override
+    public String getStrategyName() {
+        return "minha-estrategia";
+    }
+    
+    @Override
+    public StrategySignal analyze(MarketData marketData, Portfolio portfolio) {
+        // 1. Obter dados de preço
+        TradingPair pair = new TradingPair("BTC", "USDT");
+        BigDecimal currentPrice = marketData.getPriceFor(pair);
+        
+        // 2. Implementar lógica da estratégia
+        if (deveComprar(currentPrice, portfolio)) {
+            return StrategySignal.builder()
+                .type(SignalType.BUY)
+                .pair(pair)
+                .quantity(calcularQuantidade(portfolio))
+                .price(currentPrice)
+                .reason("Condição de compra atendida")
+                .strategyName(getStrategyName())
+                .timestamp(LocalDateTime.now())
+                .build();
+        }
+        
+        // 3. Retornar null ou sinal HOLD se não houver ação
+        return null;
+    }
+    
+    private boolean deveComprar(BigDecimal price, Portfolio portfolio) {
+        // Implementar lógica específica
+        BigDecimal threshold = config.getParameters().get("price-threshold");
+        return price.compareTo(threshold) < 0;
+    }
+    
+    private BigDecimal calcularQuantidade(Portfolio portfolio) {
+        // Calcular quantidade baseada no portfólio e configurações
+        BigDecimal balance = portfolio.getBalance("USDT");
+        BigDecimal riskLimit = config.getRiskLimit();
+        return balance.multiply(riskLimit);
+    }
+}
+```
+
+#### **Passo 2: Registrar no StrategyAutoConfiguration**
+
+```java
+// Em StrategyAutoConfiguration.java, método createStrategyInstance()
+private TradingStrategy createStrategyInstance(String strategyName, StrategyProperties.StrategyConfig config) {
+    switch (strategyName.toLowerCase()) {
+        case "pairtradingstrategy":
+        case "pair-trading":
+            return new PairTradingStrategy(config);
+            
+        case "minhaestrategia":
+        case "minha-estrategia":
+            return new MinhaEstrategia(config);
+        
+        default:
+            log.warn("Unknown strategy type in configuration: {}", strategyName);
+            return null;
+    }
+}
+```
+
+#### **Passo 3: Adicionar Configuração**
+
+```yaml
+# application-strategies.yml
+strategies:
+  auto-register: true
+  
+  minha-estrategia:
+    enabled: true
+    parameters:
+      price-threshold: 45000.00
+      custom-param: 0.15
+    max-order-value: 500.00
+    min-order-value: 10.00
+    risk-limit: 0.01
+```
+
+#### **Passo 4: Criar Testes Unitários**
+
+```java
+@ExtendWith(MockitoExtension.class)
+class MinhaEstrategiaTest {
+    
+    @Test
+    void shouldGenerateBuySignalWhenPriceBelowThreshold() {
+        // Given
+        StrategyProperties.StrategyConfig config = createConfig();
+        MinhaEstrategia strategy = new MinhaEstrategia(config);
+        
+        MarketData marketData = createMarketDataWithPrice(new BigDecimal("40000"));
+        Portfolio portfolio = createPortfolioWithBalance(new BigDecimal("1000"));
+        
+        // When
+        StrategySignal signal = strategy.analyze(marketData, portfolio);
+        
+        // Then
+        assertNotNull(signal);
+        assertEquals(SignalType.BUY, signal.getType());
+        assertEquals("minha-estrategia", signal.getStrategyName());
+    }
+}
+```
+
+#### **Passo 5: Ativação Automática**
+
+A estratégia será automaticamente:
+1. **Registrada** pelo `StrategyAutoConfiguration` na inicialização
+2. **Ativada** se `enabled: true` na configuração
+3. **Executada** sempre que chegarem dados de preço via WebSocket
+
+### Monitoramento e Logs
+
+```bash
+# Logs de execução de estratégias
+2024-01-15 10:30:15 [INFO] TradingOrchestrator - Executing 3 active strategies
+2024-01-15 10:30:15 [INFO] TradingOrchestrator - Strategy minha-estrategia generated signal: BUY for pair BTCUSDT
+2024-01-15 10:30:15 [INFO] TradingOrchestrator - Submitting order: BUY 0.01 BTCUSDT at 45000
+```
+
+### APIs para Gerenciamento
+
+```bash
+# Ativar estratégia
+POST /api/strategies/minha-estrategia/enable
+
+# Desativar estratégia  
+POST /api/strategies/minha-estrategia/disable
+
+# Listar estratégias ativas
+GET /api/strategies/active
+```
+
 ## 🎯 Status do Projeto
 
-### 🔄 Próximos Passos
+O projeto está em desenvolvimento ativo com sistema de trading automatizado baseado em estratégias modulares. 
 
-**[2.2] Sistema modular de estratégias**
-- [ ] Interface de estratégias de trading
-- [ ] Implementação de estratégias básicas
+### 📊 **Funcionalidades Principais Implementadas:**
+- Sistema de estratégias de trading em tempo real
+- WebSocket integration com Binance e mock adapters  
+- Arquitetura hexagonal com separação clara de responsabilidades
+- APIs REST para operações de trading e monitoramento
+- Sistema de auditoria e logging estruturado
+- Documentação completa de APIs com Swagger
 
-**[3.2] Configuração de banco de dados**
-- [ ] Entidades JPA
-- [ ] Repositories
-- [ ] Migrations
+### 🚀 **Próximos Desenvolvimentos:**
+Para detalhes completos sobre funcionalidades implementadas, em desenvolvimento e roadmap futuro, consulte:
 
-**[3.3] Sistema de agendamento**
-- [ ] Jobs para processamento de ordens
-- [ ] Monitoramento de preços
-
-**[4.1] Engine de backtesting**
-- [ ] Simulação histórica
-- [ ] Métricas de performance
-
-**[4.2] Gerador de dados históricos**
-- [ ] Simulação de dados de mercado
-- [ ] Integração com APIs reais
-
-**[5.1] Sistema de configuração**
-- [ ] Configurações dinâmicas
-- [ ] Profiles avançados
-
-**[5.2] Logging estruturado**
-- [ ] Logs estruturados JSON
-- [ ] Métricas e observabilidade
+- **[📋 Estratégia de Implementação P&L](docs/STRATEGY-PL-IMPLEMENTATION.md)** - Plano detalhado e status atual
+- **[🎯 Próximos Passos](docs/NEXT-STEPS-PL-IMPLEMENTATION.md)** - Roadmap de implementação
 
 ## 🤝 Contribuição
 

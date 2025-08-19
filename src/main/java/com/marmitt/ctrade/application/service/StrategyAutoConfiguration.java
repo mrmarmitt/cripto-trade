@@ -79,8 +79,7 @@ public class StrategyAutoConfiguration {
     
     private TradingStrategy createStrategyInstance(String strategyName, StrategyProperties.StrategyConfig config) {
         switch (strategyName.toLowerCase()) {
-            case "pairtradingstrategy":
-            case "pair-trading":
+            case "pair-trading-strategy":
                 return new PairTradingStrategy(config);
             
             default:
