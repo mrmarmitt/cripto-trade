@@ -16,6 +16,8 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -27,8 +29,10 @@ import static org.junit.jupiter.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class TradingOrchestratorTest {
 
     @Mock
@@ -56,8 +60,8 @@ class TradingOrchestratorTest {
         marketData = new MarketData(tradingPair, new BigDecimal("50000"), LocalDateTime.now());
         portfolio = new Portfolio();
         
-        when(mockStrategy.getStrategyName()).thenReturn("TestStrategy");
-        when(strategyRegistry.getRegisteredCount()).thenReturn(1);
+        lenient().when(mockStrategy.getStrategyName()).thenReturn("TestStrategy");
+        lenient().when(strategyRegistry.getRegisteredCount()).thenReturn(1);
     }
 
     @Test
@@ -118,7 +122,6 @@ class TradingOrchestratorTest {
     void shouldSkipNonActionableSignal() throws InterruptedException {
         StrategySignal signal = mock(StrategySignal.class);
         when(signal.isActionable()).thenReturn(false);
-        when(signal.getStrategyName()).thenReturn("TestStrategy");
         
         when(strategyRegistry.getActiveStrategies()).thenReturn(Collections.singletonList(mockStrategy));
         when(mockStrategy.analyze(any(MarketData.class), any(Portfolio.class))).thenReturn(signal);
@@ -325,8 +328,6 @@ class TradingOrchestratorTest {
     private StrategySignal createInvalidSignal() {
         StrategySignal signal = mock(StrategySignal.class);
         when(signal.isActionable()).thenReturn(true);
-        when(signal.getStrategyName()).thenReturn("TestStrategy");
-        when(signal.getType()).thenReturn(SignalType.BUY);
         when(signal.getPair()).thenReturn(null); // Invalid - null pair
         when(signal.getQuantity()).thenReturn(new BigDecimal("1"));
         when(signal.getPrice()).thenReturn(new BigDecimal("100"));

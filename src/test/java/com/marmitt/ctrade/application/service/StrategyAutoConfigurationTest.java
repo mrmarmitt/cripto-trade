@@ -9,6 +9,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationContext;
 
 import java.util.HashMap;
@@ -18,8 +20,10 @@ import java.util.Optional;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
+import static org.mockito.Mockito.lenient;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 class StrategyAutoConfigurationTest {
 
     @Mock
@@ -39,7 +43,7 @@ class StrategyAutoConfigurationTest {
 
     @BeforeEach
     void setUp() {
-        when(mockStrategy.getStrategyName()).thenReturn("TestStrategy");
+        lenient().when(mockStrategy.getStrategyName()).thenReturn("TestStrategy");
     }
 
     @Test

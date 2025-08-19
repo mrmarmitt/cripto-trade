@@ -141,14 +141,13 @@ src/
         │       │   └── MockWebSocketAdapterTest.java
         │       │   └── MockExchangeAdapterTest.java        
         │       └── binance/
+        │           ├── strategy/
+        │           │   ├── processor/
+        │           │   │   └── BinanceStreamProcessingStrategyTest.java
+        │           │   └── BinanceWebSocketAdapterIntegrationTest.java
         │           ├── BinanceWebSocketAdapterTest.java
         │           ├── BinanceWebSocketAdapterIntegrationTest.java
         │           ├── BinanceWebSocketListenerTest.java
-        │           ├── processor/
-        │           │   └── TickerStreamProcessorTest.java
-        │           └── strategy/
-        ├── integration/
-        │   └── TradingWorkflowIntegrationTest.java
         └── CtradeApplicationTests.java
 ```
 
@@ -301,71 +300,6 @@ http://localhost:8080/v3/api-docs
 
 
 ## 🎯 Status do Projeto
-
-### ✅ Implementado
-
-**[1.0] Criação da aplicação Spring Boot com Gradle e Docker Compose**
-- [x] Estrutura básica Spring Boot
-- [x] Configuração Gradle  
-- [x] Docker e Docker Compose
-- [x] Endpoint de health check
-
-**[1.1] Estrutura base Spring Boot hexagonal**
-- [x] Arquitetura hexagonal implementada
-- [x] Separação clara de camadas
-- [x] Inversão de dependências
-
-**[1.2] Modelar entidades do domínio**
-- [x] TradingPair entity
-- [x] Order entity com enums
-- [x] Price value object
-- [x] Validações de domínio
-
-**[1.3] Definir portas do domínio**  
-- [x] ExchangePort interface
-- [x] Contratos bem definidos
-
-**[2.1] Sistema de Trading**
-- [x] TradingService implementado
-- [x] Operações de compra/venda
-- [x] Gerenciamento de ordens
-
-**[3.1] MockExchangeAdapter**
-- [x] Simulação de exchange
-- [x] Preços dinâmicos
-- [x] Processamento de ordens
-
-**[3.4] Controllers REST**
-- [x] TradingController completo
-- [x] DTOs de request/response
-- [x] Tratamento de exceções
-
-**[Sistema de Auditoria e Compliance]**
-- [x] TradingAuditLog entity com JPA
-- [x] TradingAuditService para logs de auditoria
-- [x] TradingAuditLogRepository para persistência
-- [x] Rastreamento completo de todas as operações
-- [x] Logs de erros e validações com contexto
-
-**[Documentação da API]**
-- [x] OpenApiConfig com Swagger/OpenAPI 3
-- [x] Interface Swagger UI interativa
-- [x] Documentação automática dos endpoints
-- [x] Especificação OpenAPI acessível via REST
-
-**[Sistema WebSocket e Notificações Tempo Real]**
-- [x] WebSocketService com Observer pattern e auto-discovery de listeners
-- [x] PriceCacheService com histórico, TTL e limpeza automática
-- [x] MockWebSocketAdapter com simuladores automáticos para desenvolvimento
-- [x] BinanceWebSocketAdapter com OkHttp, Exponential Backoff e Circuit Breaker
-- [x] Sistema de Health Check detalhado para cache e WebSocket
-- [x] REST endpoints para métricas do sistema e histórico de preços
-- [x] Notificações automáticas de price/order updates via listeners
-
-**[Testes Abrangentes]**
-- [x] 100+ testes unitários e integração
-- [x] Cobertura completa de todas as camadas incluindo WebSocket
-- [x] Cenários de sucesso e erro com mocks apropriados
 
 ### 🔄 Próximos Passos
 

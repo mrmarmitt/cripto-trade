@@ -168,6 +168,16 @@ The following types of classes **MUST** have integration tests:
 - Test coverage should aim for minimum 80% line coverage for unit-tested classes
 - Tests should be placed in the corresponding package structure under `src/test/java`
 
+## Documentation Requirements
+
+### Project Structure Updates
+When creating new classes, **MUST** update the project structure tree in the README.md file to reflect the new additions. This ensures the documentation stays current and helps team members understand the codebase organization.
+
+- Add new classes to the appropriate section in the project tree
+- Include brief descriptions for new packages or significant architectural changes
+- Update any relevant architecture diagrams or documentation sections
+- Maintain consistency with existing documentation format
+
 ## Security Considerations
 
 - Never commit API keys, private keys, or sensitive credentials

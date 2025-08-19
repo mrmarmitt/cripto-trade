@@ -15,6 +15,12 @@ public class MarketData {
     private Map<TradingPair, BigDecimal> currentPrices;
     private Map<TradingPair, BigDecimal> volumes24h;
     private LocalDateTime timestamp;
+    
+    public MarketData(TradingPair tradingPair, BigDecimal price, LocalDateTime timestamp) {
+        this.currentPrices = Map.of(tradingPair, price);
+        this.volumes24h = Map.of();
+        this.timestamp = timestamp;
+    }
 
     public BigDecimal getPriceFor(TradingPair pair) {
         return currentPrices.get(pair);
