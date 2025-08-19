@@ -58,9 +58,17 @@ public interface TradeRepository extends JpaRepository<Trade, Long> {
     @Query("SELECT t FROM Trade t WHERE t.strategyName = :strategyName " +
            "AND t.pair = :pair AND t.status = com.marmitt.ctrade.domain.valueobject.TradeStatus.OPEN " +
            "ORDER BY t.entryTime ASC")
-    Optional<Trade> findFirstOpenTrade(
+    List<Trade> findFirstOpenTradeList(
             @Param("strategyName") String strategyName,
-            @Param("pair") TradingPair pair);
+            @Param("pair") TradingPair pair,
+            Pageable pageable);
+    
+    // Método wrapper para retornar Optional<Trade>
+    default Optional<Trade> findFirstOpenTrade(String strategyName, TradingPair pair) {
+        List<Trade> trades = findFirstOpenTradeList(strategyName, pair, 
+                org.springframework.data.domain.PageRequest.of(0, 1));
+        return trades.isEmpty() ? Optional.empty() : Optional.of(trades.get(0));
+    }
     
     // Contar trades
     Long countByStrategyName(String strategyName);

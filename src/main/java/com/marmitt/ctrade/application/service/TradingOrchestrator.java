@@ -41,6 +41,27 @@ public class TradingOrchestrator {
     public void initialize() {
         log.info("TradingOrchestrator initialized with {} registered strategies", 
                 strategyRegistry.getRegisteredCount());
+        
+        // Initialize portfolio with demo balances for development
+        initializeDemoPortfolio();
+    }
+    
+    /**
+     * Initializes portfolio with demo balances for development and testing
+     */
+    private void initializeDemoPortfolio() {
+        try {
+            // Add demo balances
+            currentPortfolio.updateBalance("USDT", new BigDecimal("10000.00")); // 10,000 USDT
+            currentPortfolio.updateBalance("BTC", new BigDecimal("0.1"));       // 0.1 BTC
+            currentPortfolio.updateBalance("ETH", new BigDecimal("2.0"));       // 2.0 ETH
+            currentPortfolio.updateBalance("BNB", new BigDecimal("50.0"));      // 50 BNB
+            
+            log.info("Demo portfolio initialized with balances: USDT=10000, BTC=0.1, ETH=2.0, BNB=50");
+            
+        } catch (Exception e) {
+            log.error("Error initializing demo portfolio: {}", e.getMessage(), e);
+        }
     }
     
     public void executeStrategies(MarketData marketData) {
@@ -149,7 +170,51 @@ public class TradingOrchestrator {
             return false;
         }
         
+        // Validate portfolio balance
+        if (!validatePortfolioBalance(signal)) {
+            return false;
+        }
+        
         return true;
+    }
+    
+    /**
+     * Validates if portfolio has sufficient balance for the signal
+     */
+    private boolean validatePortfolioBalance(StrategySignal signal) {
+        try {
+            String requiredCurrency;
+            BigDecimal requiredAmount;
+            
+            if (signal.getType() == SignalType.BUY) {
+                // For BUY signals, need quote currency (e.g., USDT)
+                requiredCurrency = signal.getPair().getQuoteCurrency();
+                requiredAmount = signal.getQuantity().multiply(signal.getPrice());
+            } else {
+                // For SELL signals, need base currency (e.g., BTC)
+                requiredCurrency = signal.getPair().getBaseCurrency();
+                requiredAmount = signal.getQuantity();
+            }
+            
+            BigDecimal currentBalance = currentPortfolio.getBalance(requiredCurrency);
+            
+            if (currentBalance.compareTo(requiredAmount) < 0) {
+                log.warn("Signal validation failed: Insufficient {} balance. Required: {}, Available: {}", 
+                        requiredCurrency, requiredAmount, currentBalance);
+                
+                log.debug("Current portfolio balances: {}", currentPortfolio.getHoldings());
+                return false;
+            }
+            
+            log.debug("Portfolio balance validation passed: {} {} available (need {})", 
+                    currentBalance, requiredCurrency, requiredAmount);
+            
+            return true;
+            
+        } catch (Exception e) {
+            log.error("Error validating portfolio balance: {}", e.getMessage(), e);
+            return false;
+        }
     }
     
     private Order createOrderFromSignal(StrategySignal signal) {

@@ -166,20 +166,6 @@ src/
 - ✅ **Flexible Parsing**: Suporte a streams únicos e arrays da Binance
 - ✅ **Domain Integration**: Conversão automática para `PriceUpdateMessage`
 
-### API REST
-- ✅ **POST** `/api/trading/orders/buy` - Criar ordem de compra
-- ✅ **POST** `/api/trading/orders/sell` - Criar ordem de venda  
-- ✅ **POST** `/api/trading/orders/market-buy` - Ordem de compra a mercado
-- ✅ **DELETE** `/api/trading/orders/{orderId}` - Cancelar ordem
-- ✅ **GET** `/api/trading/orders/{orderId}` - Status da ordem
-- ✅ **GET** `/api/trading/orders/active` - Listar ordens ativas
-- ✅ **GET** `/api/trading/price/{baseCurrency}/{quoteCurrency}` - Preço atual
-- ✅ **GET** `/health` - Health check
-- ✅ **GET** `/api/system/health` - Health check detalhado com cache e WebSocket
-- ✅ **GET** `/api/metrics/summary` - Métricas do sistema em tempo real
-- ✅ **GET** `/api/metrics/prices` - Histórico de preços em cache
-- ✅ **POST** `/api/prices/alerts` - Criar alertas de preço
-
 ### Validação e Tratamento de Erros
 - ✅ Validação de entrada com Bean Validation
 - ✅ Tratamento global de exceções
@@ -557,3 +543,8 @@ Este projeto está sob a licença MIT. Veja o arquivo [LICENSE](LICENSE) para ma
 ---
 
 **Desenvolvido com ❤️ usando Arquitetura Hexagonal e boas práticas de desenvolvimento**
+
+
+Parece que a documentação para a strategy esta em dois README.md. No principal e no src/main/java/com/marmitt/ctrade/application/strategy/README.md. Pode mover toda a documentação sobre implementação de novas estrategias, parametros, funcionamentos mais especificos  para o
+src/main/java/com/marmitt/ctrade/application/strategy/README.md. Após isso, referenciar o o src/main/java/com/marmitt/ctrade/application/strategy/README.md no README.md principal. Referenciar o src/main/java/com/marmitt/ctrade/application/strategy/PairTradingStrategy-README.md no README.md principal      
+tmb
