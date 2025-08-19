@@ -1,7 +1,7 @@
 spring:
   application:
     name: ctrade
-  
+
   datasource:
     url: jdbc:h2:mem:testdb
     driver-class-name: org.h2.Driver
@@ -25,15 +25,8 @@ trading:
     max-history-size: 100
     cleanup-interval-minutes: 10
 
-websocket:
-  url: wss://stream.binance.com:9443/ws/btcusdt@ticker
-  connection-timeout: 30s
-  read-timeout: 10s
-  max-retries: 3
-  retry-interval: 5s
-  auto-reconnect: true
-
 logging:
   level:
     com.marmitt.ctrade: DEBUG
     org.springframework.web: DEBUG
+    okhttp3: INFO

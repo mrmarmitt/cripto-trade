@@ -13,7 +13,10 @@
       "Bash(find:*)",
       "Bash(mv:*)",
       "Bash(rm:*)",
-      "Bash(sed:*)"
+      "Bash(sed:*)",
+      "Bash(mkdir:*)",
+      "Bash(cp:*)",
+      "Bash(grep:*)"
     ],
     "defaultMode": "acceptEdits"
   }

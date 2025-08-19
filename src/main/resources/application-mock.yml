@@ -1,0 +1,23 @@
+# Configuration for Binance WebSocket Real Connection
+# Copy to src/main/resources/application-binance.yml to use
+
+websocket:
+  exchange: MOCK
+  url: ws://localhost:8080/mock
+  connection-timeout: 5s
+  max-retries: 3
+  auto-reconnect: true
+
+trading:
+  pairs:
+    active:
+      - BTCUSDT
+      - ETHUSDT
+      - ADAUSDT
+    stream-format: ticker
+
+
+
+# For testnet (if available)
+# websocket:
+#   url: wss://testnet.binance.vision/ws/!ticker@arr

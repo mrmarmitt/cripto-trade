@@ -29,9 +29,19 @@ O projeto segue a **Arquitetura Hexagonal** com clara separação de responsabil
 - **Coordenação**: Entre domínio e infraestrutura
 
 ### Camada de Infraestrutura
-- **Adapters**: `MockExchangeAdapter` (simulação de exchange)
-- **Controllers REST**: API endpoints para trading
-- **Configuração**: Exception handlers, validação
+- **Exchange Adapters**: Implementações modulares por exchange
+  - **Mock**: `MockExchangeAdapter`, `MockWebSocketAdapter` (simulação para desenvolvimento)
+  - **Binance**: `BinanceWebSocketAdapter`, `BinanceWebSocketListener` (integração real)
+- **Stream Processing**: Sistema modular de processamento de streams
+  - **Strategy Pattern**: `StreamProcessingStrategy` para diferentes exchanges
+  - **Binance Strategy**: `BinanceStreamProcessingStrategy` com `TickerStreamProcessor`
+  - **Flexibilidade**: Suporte a streams individuais (@ticker) e arrays (!ticker@arr)
+- **WebSocket Infrastructure**: Arquitetura resiliente para conexões em tempo real
+  - **Connection Management**: `ConnectionManager`, `ReconnectionStrategy`
+  - **Circuit Breaker**: `WebSocketCircuitBreaker` para prevenção de falhas
+  - **Observer Pattern**: Notificações automáticas com listeners
+- **Controllers REST**: API endpoints para trading, health check e métricas
+- **Configuração**: Exception handlers, validação, propriedades por profile
 - **Persistência**: Configuração H2 para desenvolvimento
 
 ## 📁 Estrutura do Projeto
@@ -52,7 +62,10 @@ src/
 │   │   ├── application/
 │   │   │   └── service/
 │   │   │       ├── TradingService.java
-│   │   │       └── TradingAuditService.java
+│   │   │       ├── TradingAuditService.java
+│   │   │       ├── WebSocketService.java
+│   │   │       ├── PriceCacheService.java
+│   │   │       └── HealthCheckService.java
 │   │   ├── domain/
 │   │   │   ├── entity/
 │   │   │   │   ├── TradingPair.java
@@ -60,33 +73,80 @@ src/
 │   │   │   │   └── TradingAuditLog.java
 │   │   │   ├── valueobject/
 │   │   │   │   └── Price.java
-│   │   │   └── port/
-│   │   │       └── ExchangePort.java
+│   │   │   ├── port/
+│   │   │   │   ├── ExchangePort.java
+│   │   │   │   ├── WebSocketPort.java
+│   │   │   │   └── ExchangeWebSocketAdapter.java
+│   │   │   ├── dto/
+│   │   │   │   ├── PriceUpdateMessage.java
+│   │   │   │   └── OrderUpdateMessage.java
+│   │   │   └── listener/
+│   │   │       ├── PriceUpdateListener.java
+│   │   │       └── OrderUpdateListener.java
 │   │   ├── config/
 │   │   │   └── OpenApiConfig.java
 │   │   └── infrastructure/
-│   │       ├── adapter/
-│   │       │   └── MockExchangeAdapter.java
+│   │       ├── exchange/
+│   │       │   ├── mock/
+│   │       │   │   ├── MockExchangeAdapter.java
+│   │       │   │   └── MockWebSocketAdapter.java
+│   │       │   └── binance/
+│   │       │       ├── BinanceWebSocketAdapter.java
+│   │       │       ├── BinanceWebSocketListener.java
+│   │       │       ├── strategy/
+│   │       │       │   ├── BinanceStreamProcessingStrategy.java
+│   │       │       │   └── processor/
+│   │       │       │       └── TickerStreamProcessor.java
+│   │       │       └── dto/
+│   │       │           └── BinanceTickerMessage.java
+│   │       ├── websocket/
+│   │       │   ├── AbstractWebSocketAdapter.java
+│   │       │   ├── AbstractWebSocketListener.java
+│   │       │   ├── ConnectionManager.java
+│   │       │   ├── ReconnectionStrategy.java
+│   │       │   ├── WebSocketCircuitBreaker.java
+│   │       │   └── WebSocketConnectionHandler.java
+│   │       ├── config/
+│   │       │   └── WebSocketProperties.java
 │   │       └── repository/
 │   │           └── TradingAuditLogRepository.java
 │   └── resources/
-│       └── application.yml
+│       ├── application.yml
+│       └── application-binance.yml
 └── test/
     └── java/com/marmitt/ctrade/
         ├── controller/
         │   ├── TradingControllerIntegrationTest.java
-        │   └── HealthControllerIntegrationTest.java
+        │   ├── HealthControllerIntegrationTest.java
+        │   ├── SystemHealthControllerIntegrationTest.java
+        │   ├── MetricsControllerIntegrationTest.java
+        │   └── PriceAlertControllerIntegrationTest.java
         ├── application/service/
         │   ├── TradingServiceTest.java
-        │   └── TradingAuditServiceTest.java
+        │   ├── TradingAuditServiceTest.java
+        │   ├── PriceCacheServiceTest.java
+        │   ├── PriceCacheHistoryServiceTest.java
+        │   ├── PriceCacheServiceTTLTest.java
+        │   ├── HealthCheckServiceTest.java
+        │   └── PriceListenersUnitTest.java
         ├── domain/
         │   ├── entity/
         │   │   ├── TradingPairTest.java
         │   │   └── OrderTest.java
         │   └── valueobject/
         │       └── PriceTest.java
-        ├── infrastructure/adapter/
-        │   └── MockExchangeAdapterTest.java
+        ├── infrastructure/
+        │   └── exchange/
+        │       ├── mock/
+        │       │   └── MockWebSocketAdapterTest.java
+        │       │   └── MockExchangeAdapterTest.java        
+        │       └── binance/
+        │           ├── BinanceWebSocketAdapterTest.java
+        │           ├── BinanceWebSocketAdapterIntegrationTest.java
+        │           ├── BinanceWebSocketListenerTest.java
+        │           ├── processor/
+        │           │   └── TickerStreamProcessorTest.java
+        │           └── strategy/
         ├── integration/
         │   └── TradingWorkflowIntegrationTest.java
         └── CtradeApplicationTests.java
@@ -101,6 +161,12 @@ src/
 - ✅ Sistema de status de ordens (PENDING, FILLED, CANCELLED)
 - ✅ Value Object para preços com aritmética decimal segura
 
+### Stream Processing Architecture
+- ✅ **Strategy Pattern**: Sistema modular para diferentes exchanges
+- ✅ **Stream Processors**: Processadores especializados por tipo de stream
+- ✅ **Flexible Parsing**: Suporte a streams únicos e arrays da Binance
+- ✅ **Domain Integration**: Conversão automática para `PriceUpdateMessage`
+
 ### API REST
 - ✅ **POST** `/api/trading/orders/buy` - Criar ordem de compra
 - ✅ **POST** `/api/trading/orders/sell` - Criar ordem de venda  
@@ -110,6 +176,10 @@ src/
 - ✅ **GET** `/api/trading/orders/active` - Listar ordens ativas
 - ✅ **GET** `/api/trading/price/{baseCurrency}/{quoteCurrency}` - Preço atual
 - ✅ **GET** `/health` - Health check
+- ✅ **GET** `/api/system/health` - Health check detalhado com cache e WebSocket
+- ✅ **GET** `/api/metrics/summary` - Métricas do sistema em tempo real
+- ✅ **GET** `/api/metrics/prices` - Histórico de preços em cache
+- ✅ **POST** `/api/prices/alerts` - Criar alertas de preço
 
 ### Validação e Tratamento de Erros
 - ✅ Validação de entrada com Bean Validation
@@ -125,6 +195,21 @@ src/
 - ✅ Persistência em banco de dados com JPA
 - ✅ Logs estruturados para análise e compliance
 
+### Sistema WebSocket e Notificações em Tempo Real
+- ✅ **WebSocket Infrastructure**: Arquitetura robusta com classes abstratas
+- ✅ **Connection Management**: `ConnectionManager` para gerenciamento centralizado
+- ✅ **Resilient Reconnection**: `ReconnectionStrategy` com backoff exponencial
+- ✅ **Circuit Breaker**: `WebSocketCircuitBreaker` para prevenção de falhas
+- ✅ **Price Cache**: Cache histórico de preços com TTL e limpeza automática
+- ✅ **Mock WebSocket Adapter**: Simulação para desenvolvimento com preços automáticos
+- ✅ **Binance WebSocket Adapter**: Integração real com Binance usando OkHttp
+- ✅ **Stream Processing**: Sistema modular com strategy pattern para diferentes exchanges
+- ✅ **Flexible Ticker Processing**: Suporte a streams individuais (@ticker) e arrays (!ticker@arr)
+- ✅ **Profile Configuration**: Configuração específica por ambiente (mock/binance)
+- ✅ **Price Update Listeners**: Sistema de notificação automática para mudanças de preço
+- ✅ **Order Update Listeners**: Notificações de status de ordens em tempo real
+- ✅ **Health Monitoring**: Monitoramento de status do sistema (cache + WebSocket)
+
 ### Documentação da API
 - ✅ Swagger/OpenAPI 3 integrado
 - ✅ Interface interativa para testes
@@ -133,7 +218,7 @@ src/
 
 ## 🧪 Testes
 
-O projeto possui **84 testes** cobrindo todas as camadas:
+O projeto possui **100+ testes** cobrindo todas as camadas:
 
 ### Testes Unitários
 - **Domain Layer**: Entidades, Value Objects, validações
@@ -165,12 +250,30 @@ O projeto possui **84 testes** cobrindo todas as camadas:
 # Executar testes
 ./gradlew test
 
-# Executar a aplicação
+# Executar a aplicação (profile padrão - mock)
 ./gradlew bootRun
+
+# Executar com profile Binance
+./gradlew bootRun --args='--spring.profiles.active=binance'
 
 # Gerar JAR
 ./gradlew bootJar
 ```
+
+### Configuração de Profiles
+
+#### Profile via Env
+- SPRING_PROFILES_ACTIVE=binance
+- SPRING_PROFILES_ACTIVE=mock
+
+#### Profile Mock (padrão)
+- Usa `MockWebSocketAdapter` com simulação automática de preços
+- Ideal para desenvolvimento e testes
+
+#### Profile Binance
+- Usa `BinanceWebSocketAdapter` com conexão real à Binance
+- Configure no IntelliJ: VM options `-Dspring.profiles.active=binance`
+- Configuração em `application-binance.yml`
 
 ### Com Docker Compose
 
@@ -196,52 +299,6 @@ http://localhost:8080/swagger-ui/index.html
 http://localhost:8080/v3/api-docs
 ```
 
-### Consultar Preço Atual
-```bash
-curl -X GET http://localhost:8080/api/trading/price/BTC/USD
-```
-
-### Criar Ordem de Compra
-```bash
-curl -X POST http://localhost:8080/api/trading/orders/buy \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tradingPair": "BTC/USD",
-    "quantity": 0.1,
-    "price": 50000
-  }'
-```
-
-### Criar Ordem de Venda
-```bash
-curl -X POST http://localhost:8080/api/trading/orders/sell \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tradingPair": "BTC/USD", 
-    "quantity": 0.05,
-    "price": 52000
-  }'
-```
-
-### Ordem a Mercado
-```bash
-curl -X POST http://localhost:8080/api/trading/orders/market-buy \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tradingPair": "BTC/USD",
-    "quantity": 0.01
-  }'
-```
-
-### Listar Ordens Ativas
-```bash
-curl -X GET http://localhost:8080/api/trading/orders/active
-```
-
-### Cancelar Ordem
-```bash
-curl -X DELETE http://localhost:8080/api/trading/orders/{orderId}
-```
 
 ## 🎯 Status do Projeto
 
@@ -296,10 +353,19 @@ curl -X DELETE http://localhost:8080/api/trading/orders/{orderId}
 - [x] Documentação automática dos endpoints
 - [x] Especificação OpenAPI acessível via REST
 
+**[Sistema WebSocket e Notificações Tempo Real]**
+- [x] WebSocketService com Observer pattern e auto-discovery de listeners
+- [x] PriceCacheService com histórico, TTL e limpeza automática
+- [x] MockWebSocketAdapter com simuladores automáticos para desenvolvimento
+- [x] BinanceWebSocketAdapter com OkHttp, Exponential Backoff e Circuit Breaker
+- [x] Sistema de Health Check detalhado para cache e WebSocket
+- [x] REST endpoints para métricas do sistema e histórico de preços
+- [x] Notificações automáticas de price/order updates via listeners
+
 **[Testes Abrangentes]**
-- [x] 84 testes unitários e integração
-- [x] Cobertura completa de todas as camadas
-- [x] Cenários de sucesso e erro
+- [x] 100+ testes unitários e integração
+- [x] Cobertura completa de todas as camadas incluindo WebSocket
+- [x] Cenários de sucesso e erro com mocks apropriados
 
 ### 🔄 Próximos Passos
 

@@ -1,4 +1,4 @@
-package com.marmitt.ctrade.infrastructure.adapter;
+package com.marmitt.ctrade.infrastructure.exchange.mock;
 
 import com.marmitt.ctrade.domain.entity.Order;
 import com.marmitt.ctrade.domain.entity.TradingPair;

@@ -1,8 +1,9 @@
 package com.marmitt.ctrade.application.service;
 
 import com.marmitt.ctrade.controller.dto.HealthCheckResponse;
+import com.marmitt.ctrade.domain.port.ExchangeWebSocketAdapter;
 import com.marmitt.ctrade.domain.port.WebSocketPort;
-import com.marmitt.ctrade.infrastructure.adapter.MockWebSocketAdapter;
+import com.marmitt.ctrade.infrastructure.exchange.mock.MockWebSocketAdapter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -68,8 +69,11 @@ public class HealthCheckService {
             int subscribedPairs = 0;
             boolean orderUpdatesSubscribed = false;
             
-            // Se for MockWebSocketAdapter, conseguimos mais detalhes
-            if (webSocketPort instanceof MockWebSocketAdapter mockAdapter) {
+            // Se for ExchangeWebSocketAdapter (incluindo Binance), conseguimos mais detalhes
+            if (webSocketPort instanceof ExchangeWebSocketAdapter exchangeAdapter) {
+                subscribedPairs = exchangeAdapter.getSubscribedPairs().size();
+                orderUpdatesSubscribed = exchangeAdapter.isOrderUpdatesSubscribed();
+            } else if (webSocketPort instanceof MockWebSocketAdapter mockAdapter) {
                 subscribedPairs = mockAdapter.getSubscribedPairs().size();
                 orderUpdatesSubscribed = mockAdapter.isOrderUpdatesSubscribed();
             }

@@ -26,7 +26,7 @@ public class TradingPair {
     }
 
     public String getSymbol() {
-        return baseCurrency + "/" + quoteCurrency;
+        return baseCurrency + quoteCurrency;
     }
 
     @Override

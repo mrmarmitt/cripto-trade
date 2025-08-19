@@ -1,0 +1,45 @@
+# Test configuration
+spring:
+  application:
+    name: ctrade-test
+  
+  datasource:
+    url: jdbc:h2:mem:testdb
+    driver-class-name: org.h2.Driver
+    username: sa
+    password: 
+  
+  h2:
+    console:
+      enabled: false  # Disable for tests
+  
+  jpa:
+    database-platform: org.hibernate.dialect.H2Dialect
+    hibernate:
+      ddl-auto: create-drop
+    show-sql: false  # Reduce noise in test output
+
+websocket:
+  exchange: MOCK
+  url: ws://localhost:8080/mock-test
+  connection-timeout: 1s
+  max-retries: 1
+  auto-reconnect: false
+
+trading:
+  price-cache:
+    ttl-minutes: 1
+    max-history-size: 10
+    cleanup-interval-minutes: 1
+  pairs:
+    active:
+      - BTCUSDT
+      - ETHUSDT
+    stream-format: ticker
+
+logging:
+  level:
+    com.marmitt.ctrade: WARN  # Reduce logging noise in tests
+    org.springframework.web: WARN
+    okhttp3: WARN
+    org.hibernate: WARN
