@@ -19,9 +19,3 @@ trading:
       - ETHUSDT
       - ADAUSDT
     stream-format: ticker
-
-
-
-# For testnet (if available)
-# websocket:
-#   url: wss://testnet.binance.vision/ws/!ticker@arr

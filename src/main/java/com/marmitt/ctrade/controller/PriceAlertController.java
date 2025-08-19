@@ -1,6 +1,7 @@
 package com.marmitt.ctrade.controller;
 
 import com.marmitt.ctrade.application.service.PriceAlertService;
+import com.marmitt.ctrade.controller.dto.ActivePriceAlertRequest;
 import com.marmitt.ctrade.controller.dto.CreatePriceAlertRequest;
 import com.marmitt.ctrade.domain.entity.PriceAlert;
 import lombok.RequiredArgsConstructor;
@@ -57,7 +58,7 @@ public class PriceAlertController {
             return ResponseEntity.notFound().build();
         }
     }
-    
+
     @DeleteMapping("/inactive")
     public ResponseEntity<Void> clearInactiveAlerts() {
         priceAlertService.clearInactiveAlerts();

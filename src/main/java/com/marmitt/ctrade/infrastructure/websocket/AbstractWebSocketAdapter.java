@@ -64,7 +64,7 @@ public abstract class AbstractWebSocketAdapter implements ExchangeWebSocketAdapt
      * Retorna o nome da exchange para identificação nos eventos.
      * Deve ser implementado pelas classes filhas.
      */
-    public abstract String getExchangeName(); //TODO: isso parece estar repetido dento do ExchangeWebSocketAdapter
+    public abstract String getExchangeName();
     
     // ========== ExchangeWebSocketAdapter Implementation ==========
     

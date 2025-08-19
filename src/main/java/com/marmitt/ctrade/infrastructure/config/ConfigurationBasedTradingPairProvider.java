@@ -1,6 +1,7 @@
 package com.marmitt.ctrade.infrastructure.config;
 
 import com.marmitt.ctrade.domain.port.TradingPairProvider;
+import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.context.properties.ConfigurationProperties;
@@ -16,6 +17,7 @@ import java.util.stream.Collectors;
  * Permite configurar os trading pairs via application.yml e facilita
  * migração futura para implementação baseada em banco de dados.
  */
+@Getter
 @Component
 @ConfigurationProperties(prefix = "trading.pairs")
 @RequiredArgsConstructor
@@ -75,20 +77,12 @@ public class ConfigurationBasedTradingPairProvider implements TradingPairProvide
     }
     
     // Getters e Setters para @ConfigurationProperties
-    
-    public List<String> getActive() {
-        return active;
-    }
-    
+
     public void setActive(List<String> active) {
         this.active = active;
         log.info("Updated active trading pairs: {}", active);
     }
-    
-    public String getStreamFormat() {
-        return streamFormat;
-    }
-    
+
     public void setStreamFormat(String streamFormat) {
         this.streamFormat = streamFormat;
         log.info("Updated stream format: {}", streamFormat);

@@ -24,7 +24,16 @@ public class PriceAlertService {
                 alert.getAlertType(), 
                 alert.getThreshold());
     }
-    
+
+    public PriceAlert activeAlerts(String id, String tradingPair) {
+        return alertsByPair.getOrDefault(tradingPair, List.of())
+                .stream()
+                .filter(priceAlert -> priceAlert.getId().equals(id))
+                .peek(priceAlert -> priceAlert.setActive(true))
+                .findFirst()
+                .orElse(null);
+    }
+
     public List<PriceAlert> getActiveAlerts(String tradingPair) {
         return alertsByPair.getOrDefault(tradingPair, List.of())
                           .stream()
@@ -41,19 +50,18 @@ public class PriceAlertService {
     
     public List<PriceAlert> checkAndTriggerAlerts(String tradingPair, BigDecimal currentPrice) {
         List<PriceAlert> activeAlerts = getActiveAlerts(tradingPair);
-        List<PriceAlert> triggeredAlerts = activeAlerts.stream()
+
+        return activeAlerts.stream()
                 .filter(alert -> alert.shouldTrigger(currentPrice))
                 .peek(alert -> {
                     alert.trigger();
-                    log.warn("PRICE ALERT TRIGGERED! {} {} {} - Current: {}", 
-                            alert.getTradingPair(), 
-                            alert.getAlertType(), 
+                    log.warn("PRICE ALERT TRIGGERED! {} {} {} - Current: {}",
+                            alert.getTradingPair(),
+                            alert.getAlertType(),
                             alert.getThreshold(),
                             currentPrice);
                 })
                 .collect(Collectors.toList());
-        
-        return triggeredAlerts;
     }
     
     public boolean removeAlert(String alertId) {
@@ -72,4 +80,6 @@ public class PriceAlertService {
             alerts.removeIf(alert -> !alert.isActive()));
         log.info("Inactive alerts cleared");
     }
+
+
 }

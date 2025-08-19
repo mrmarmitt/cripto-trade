@@ -262,6 +262,10 @@ O projeto possui **100+ testes** cobrindo todas as camadas:
 
 ### Configuração de Profiles
 
+#### Profile via Env
+- SPRING_PROFILES_ACTIVE=binance
+- SPRING_PROFILES_ACTIVE=mock
+
 #### Profile Mock (padrão)
 - Usa `MockWebSocketAdapter` com simulação automática de preços
 - Ideal para desenvolvimento e testes
@@ -295,52 +299,6 @@ http://localhost:8080/swagger-ui/index.html
 http://localhost:8080/v3/api-docs
 ```
 
-### Consultar Preço Atual
-```bash
-curl -X GET http://localhost:8080/api/trading/price/BTC/USD
-```
-
-### Criar Ordem de Compra
-```bash
-curl -X POST http://localhost:8080/api/trading/orders/buy \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tradingPair": "BTC/USD",
-    "quantity": 0.1,
-    "price": 50000
-  }'
-```
-
-### Criar Ordem de Venda
-```bash
-curl -X POST http://localhost:8080/api/trading/orders/sell \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tradingPair": "BTC/USD", 
-    "quantity": 0.05,
-    "price": 52000
-  }'
-```
-
-### Ordem a Mercado
-```bash
-curl -X POST http://localhost:8080/api/trading/orders/market-buy \
-  -H "Content-Type: application/json" \
-  -d '{
-    "tradingPair": "BTC/USD",
-    "quantity": 0.01
-  }'
-```
-
-### Listar Ordens Ativas
-```bash
-curl -X GET http://localhost:8080/api/trading/orders/active
-```
-
-### Cancelar Ordem
-```bash
-curl -X DELETE http://localhost:8080/api/trading/orders/{orderId}
-```
 
 ## 🎯 Status do Projeto
 
