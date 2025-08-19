@@ -36,6 +36,22 @@ trading:
       - BTCUSDT
       - ETHUSDT
     stream-format: ticker
+  strategies:
+    auto-register: true
+    max-concurrent-strategies: 5
+    strategies:
+      pairtradingstrategy:
+        enabled: false
+        priority: 1
+        max-order-value: 100
+        min-order-value: 1
+        parameters:
+          pair1: "BTC/USDT"
+          pair2: "ETH/USDT"
+          upperThreshold: 2.0
+          lowerThreshold: -2.0
+          maxHistorySize: 10
+          tradingAmount: 10.0
 
 logging:
   level:

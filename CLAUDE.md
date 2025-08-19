@@ -140,6 +140,34 @@ The project follows a well-organized package structure for exchange integrations
 - Use `websocket.exchange=MOCK` (default) to use mock adapter  
 - Both adapters implement the same interfaces for seamless switching
 
+## Testing Requirements
+
+### Unit Testing Requirements
+All classes in the following categories **MUST** have comprehensive unit tests:
+
+- **Services**: All classes ending with `Service` (e.g., `TradingService`, `StrategyService`)
+- **Listeners**: All event listeners and message handlers (e.g., `BinanceWebSocketListener`)
+- **Strategies**: All trading strategy implementations and strategy-related classes
+- **Domain Entities**: All domain model classes and value objects
+- **Domain Ports**: All interfaces defining domain contracts
+- **Generic Abstractions**: All abstract classes and utility classes with business logic
+
+### Integration Testing Requirements
+The following types of classes **MUST** have integration tests:
+
+- **REST Controllers**: All `@RestController` and `@Controller` classes
+- **WebServices**: Classes that serve as primary integration points (e.g., `WebSocketService`)
+- **External Integrations**: Classes that communicate with external APIs or services
+- **Database Repositories**: All repository implementations
+- **Configuration Classes**: Classes marked with `@Configuration` that wire critical components
+
+### Testing Standards
+- Unit tests should use mocking for external dependencies
+- Integration tests should test the full stack interaction and **MUST NOT** mock any services
+- All tests must follow the naming convention: `ClassNameTest.java` for unit tests, `ClassNameIntegrationTest.java` for integration tests
+- Test coverage should aim for minimum 80% line coverage for unit-tested classes
+- Tests should be placed in the corresponding package structure under `src/test/java`
+
 ## Security Considerations
 
 - Never commit API keys, private keys, or sensitive credentials

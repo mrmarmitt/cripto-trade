@@ -26,6 +26,10 @@ public class TradingPair {
     }
 
     public String getSymbol() {
+        return baseCurrency + "/" + quoteCurrency;
+    }
+
+    public String getExchangeSymbol() {
         return baseCurrency + quoteCurrency;
     }
 
