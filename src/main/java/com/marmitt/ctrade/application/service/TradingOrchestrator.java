@@ -97,13 +97,14 @@ public class TradingOrchestrator {
             StrategySignal signal = strategy.analyze(marketData, currentPortfolio);
             
             if (signal != null && signal.isActionable()) {
-                log.info("Strategy {} generated signal: {} for pair {} - Reason: {}", 
+                log.info("ORDER_VALIDATION: strategy={} signal={} pair={} price={} quantity={} reason={}", 
                         strategy.getStrategyName(), signal.getType(), 
-                        signal.getPair().getSymbol(), signal.getReason());
+                        signal.getPair().getSymbol(), signal.getPrice(), signal.getQuantity(), signal.getReason());
                 
                 processSignal(signal);
             } else {
-                log.debug("Strategy {} generated HOLD signal", strategy.getStrategyName());
+                String holdReason = (signal != null) ? signal.getReason() : "No signal generated";
+                log.info("ORDER_VALIDATION: strategy={} signal=HOLD reason={}", strategy.getStrategyName(), holdReason);
             }
             
         } catch (Exception e) {
@@ -114,15 +115,15 @@ public class TradingOrchestrator {
     private void processSignal(StrategySignal signal) {
         try {
             if (!validateSignal(signal)) {
-                log.warn("Invalid signal from strategy {}: {}", signal.getStrategyName(), signal);
+                log.warn("ORDER_VALIDATION: Invalid signal strategy={} type={}", signal.getStrategyName(), signal.getType());
                 return;
             }
             
             Order order = createOrderFromSignal(signal);
             
-            log.info("Submitting order: {} {} {} at {} (Strategy: {})", 
-                    order.getSide(), order.getQuantity(), order.getTradingPair().getSymbol(), 
-                    order.getPrice(), signal.getStrategyName());
+            log.info("ORDER_VALIDATION: Submitting order strategy={} side={} pair={} quantity={} price={}", 
+                    signal.getStrategyName(), order.getSide(), order.getTradingPair().getSymbol(), 
+                    order.getQuantity(), order.getPrice());
             
             // Execute order through exchange
             exchangePort.placeOrder(order);
@@ -248,9 +249,8 @@ public class TradingOrchestrator {
                 Trade trade = tradeMatchingService.openTrade(
                         strategyName, tradingPair, tradeType, price, quantity, orderId);
                 
-                log.info("Opened trade {} for strategy '{}': {} {} {} at {}", 
-                        trade.getId(), strategyName, tradeType, quantity, 
-                        tradingPair.getSymbol(), price);
+                log.info("ORDER_VALIDATION: Opened trade strategy={} tradeId={} type={} pair={} quantity={} price={}", 
+                        strategyName, trade.getId(), tradeType, tradingPair.getSymbol(), quantity, price);
                 
             } else if (signal.getType() == SignalType.SELL) {
                 // Closing position(s)
@@ -258,16 +258,15 @@ public class TradingOrchestrator {
                     TradeMatchingService.MatchingResult result = tradeMatchingService.closeTrade(
                             strategyName, tradingPair, price, quantity, orderId);
                     
-                    log.info("Closed trades for strategy '{}': matched {} {}, realized P&L: {}", 
-                            strategyName, result.getTotalMatchedQuantity(), 
-                            tradingPair.getSymbol(), result.getTotalRealizedPnL());
+                    log.info("ORDER_VALIDATION: Closed trades strategy={} pair={} matchedQuantity={} realizedPnL={}", 
+                            strategyName, tradingPair.getSymbol(), result.getTotalMatchedQuantity(), result.getTotalRealizedPnL());
                     
                     if (result.isPartialMatch()) {
-                        log.warn("Partial match only for strategy '{}': remaining quantity: {}", 
+                        log.warn("ORDER_VALIDATION: Partial match strategy={} remainingQuantity={}", 
                                 strategyName, result.getRemainingQuantity());
                     }
                 } else {
-                    log.warn("Sell signal from strategy '{}' but no open trades found for pair '{}'", 
+                    log.warn("ORDER_VALIDATION: Sell signal no open trades strategy={} pair={}", 
                             strategyName, tradingPair.getSymbol());
                 }
             }

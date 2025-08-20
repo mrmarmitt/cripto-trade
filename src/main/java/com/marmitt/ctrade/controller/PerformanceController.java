@@ -1,14 +1,13 @@
 package com.marmitt.ctrade.controller;
 
-import com.marmitt.ctrade.application.service.StrategyPerformanceTracker;
-import com.marmitt.ctrade.application.service.TradingOrchestrator;
+import com.marmitt.ctrade.application.service.PerformanceService;
+import com.marmitt.ctrade.application.service.PerformanceService.PerformanceSummary;
 import com.marmitt.ctrade.domain.valueobject.StrategyMetrics;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -20,8 +19,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class PerformanceController {
     
-    private final StrategyPerformanceTracker performanceTracker;
-    private final TradingOrchestrator tradingOrchestrator;
+    private final PerformanceService performanceService;
     
     /**
      * GET /api/performance/strategies/{strategyName}
@@ -30,22 +28,16 @@ public class PerformanceController {
     @GetMapping("/strategies/{strategyName}")
     public ResponseEntity<StrategyMetrics> getStrategyMetrics(@PathVariable String strategyName) {
         try {
-            log.info("Requested performance metrics for strategy: {}", strategyName);
-            
-            StrategyMetrics metrics = performanceTracker.calculateMetrics(strategyName);
+            StrategyMetrics metrics = performanceService.getStrategyMetrics(strategyName);
             
             if (metrics == null) {
-                log.warn("No metrics found for strategy: {}", strategyName);
                 return ResponseEntity.notFound().build();
             }
-            
-            log.debug("Returning metrics for {}: Total P&L = {}, Trades = {}", 
-                    strategyName, metrics.getTotalPnL(), metrics.getTotalTrades());
             
             return ResponseEntity.ok(metrics);
             
         } catch (Exception e) {
-            log.error("Error retrieving metrics for strategy {}: {}", strategyName, e.getMessage(), e);
+            log.error("PERF_ERROR: Failed to get metrics for strategy={} error={}", strategyName, e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
@@ -57,16 +49,11 @@ public class PerformanceController {
     @GetMapping("/strategies")
     public ResponseEntity<List<StrategyMetrics>> getAllStrategiesMetrics() {
         try {
-            log.info("Requested performance metrics for all strategies");
-            
-            List<StrategyMetrics> allMetrics = performanceTracker.getAllStrategiesMetrics();
-            
-            log.debug("Returning metrics for {} strategies", allMetrics.size());
-            
+            List<StrategyMetrics> allMetrics = performanceService.getAllStrategiesMetrics();
             return ResponseEntity.ok(allMetrics);
             
         } catch (Exception e) {
-            log.error("Error retrieving metrics for all strategies: {}", e.getMessage(), e);
+            log.error("PERF_ERROR: Failed to get all strategies metrics error={}", e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
@@ -78,34 +65,11 @@ public class PerformanceController {
     @GetMapping("/summary")
     public ResponseEntity<PerformanceSummary> getPerformanceSummary() {
         try {
-            log.info("Requested performance summary");
-            
-            BigDecimal totalRealizedPnL = performanceTracker.getTotalRealizedPnL();
-            BigDecimal totalUnrealizedPnL = performanceTracker.getTotalUnrealizedPnL();
-            BigDecimal totalPnL = performanceTracker.getTotalPnL();
-            
-            String bestStrategy = performanceTracker.getBestStrategy();
-            String worstStrategy = performanceTracker.getWorstStrategy();
-            
-            List<StrategyMetrics> topStrategies = performanceTracker.getTopPerformingStrategies(5);
-            
-            PerformanceSummary summary = new PerformanceSummary(
-                    totalRealizedPnL,
-                    totalUnrealizedPnL, 
-                    totalPnL,
-                    bestStrategy,
-                    worstStrategy,
-                    topStrategies.size(),
-                    topStrategies
-            );
-            
-            log.debug("Performance summary: Total P&L = {}, Best = {}, Worst = {}", 
-                    totalPnL, bestStrategy, worstStrategy);
-            
+            PerformanceSummary summary = performanceService.getPerformanceSummary();
             return ResponseEntity.ok(summary);
             
         } catch (Exception e) {
-            log.error("Error retrieving performance summary: {}", e.getMessage(), e);
+            log.error("PERF_ERROR: Failed to get performance summary error={}", e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
@@ -117,28 +81,13 @@ public class PerformanceController {
     @PostMapping("/update-unrealized")
     public ResponseEntity<String> updateUnrealizedPnL() {
         try {
-            log.info("Manual update of unrealized P&L requested");
-            
-            tradingOrchestrator.updateUnrealizedPnL();
-            
+            performanceService.updateUnrealizedPnL();
             return ResponseEntity.ok("Unrealized P&L updated successfully");
             
         } catch (Exception e) {
-            log.error("Error updating unrealized P&L: {}", e.getMessage(), e);
+            log.error("PERF_ERROR: Failed to update unrealized P&L error={}", e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
     
-    /**
-     * DTO para resumo de performance
-     */
-    public static record PerformanceSummary(
-            BigDecimal totalRealizedPnL,
-            BigDecimal totalUnrealizedPnL,
-            BigDecimal totalPnL,
-            String bestStrategy,
-            String worstStrategy,
-            int activeStrategies,
-            List<StrategyMetrics> topPerformers
-    ) {}
 }

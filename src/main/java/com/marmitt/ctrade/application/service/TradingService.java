@@ -22,10 +22,15 @@ public class TradingService {
 
     public Order placeBuyOrder(TradingPair tradingPair, BigDecimal quantity, BigDecimal price) {
         try {
+            log.info("ORDER_VALIDATION: Placing BUY order pair={} quantity={} price={}", 
+                    tradingPair.getSymbol(), quantity, price);
+            
             validateOrderParameters(quantity, price);
             
             Order order = new Order(tradingPair, Order.OrderType.LIMIT, Order.OrderSide.BUY, quantity, price);
             Order result = exchangePort.placeOrder(order);
+            
+            log.info("ORDER_VALIDATION: BUY order placed orderId={} status={}", result.getId(), result.getStatus());
             
             auditService.logOrderPlacement(
                 TradingAuditLog.ActionType.PLACE_BUY_ORDER, 
@@ -60,10 +65,15 @@ public class TradingService {
 
     public Order placeSellOrder(TradingPair tradingPair, BigDecimal quantity, BigDecimal price) {
         try {
+            log.info("ORDER_VALIDATION: Placing SELL order pair={} quantity={} price={}", 
+                    tradingPair.getSymbol(), quantity, price);
+            
             validateOrderParameters(quantity, price);
             
             Order order = new Order(tradingPair, Order.OrderType.LIMIT, Order.OrderSide.SELL, quantity, price);
             Order result = exchangePort.placeOrder(order);
+            
+            log.info("ORDER_VALIDATION: SELL order placed orderId={} status={}", result.getId(), result.getStatus());
             
             auditService.logOrderPlacement(
                 TradingAuditLog.ActionType.PLACE_SELL_ORDER, 
@@ -98,6 +108,9 @@ public class TradingService {
 
     public Order placeMarketBuyOrder(TradingPair tradingPair, BigDecimal quantity) {
         try {
+            log.info("ORDER_VALIDATION: Placing MARKET BUY order pair={} quantity={}", 
+                    tradingPair.getSymbol(), quantity);
+            
             if (quantity == null || quantity.compareTo(BigDecimal.ZERO) <= 0) {
                 throw new IllegalArgumentException("Quantity must be positive");
             }
@@ -105,6 +118,9 @@ public class TradingService {
             Price currentPrice = exchangePort.getCurrentPrice(tradingPair);
             Order order = new Order(tradingPair, Order.OrderType.MARKET, Order.OrderSide.BUY, quantity, currentPrice.getValue());
             Order result = exchangePort.placeOrder(order);
+            
+            log.info("ORDER_VALIDATION: MARKET BUY order placed orderId={} status={} executedPrice={}", 
+                    result.getId(), result.getStatus(), currentPrice.getValue());
             
             auditService.logOrderPlacement(
                 TradingAuditLog.ActionType.PLACE_MARKET_BUY_ORDER, 
@@ -265,11 +281,8 @@ public class TradingService {
                 throw new IllegalArgumentException("New status cannot be null");
             }
             
-            log.info("Processing order status update: {} -> {}", orderId, newStatus);
-            
-            // Aqui poderia atualizar em um repository local se tivéssemos
-            // Por enquanto apenas logamos a atualização
-            log.info("Order {} updated to status: {} (reason: {})", orderId, newStatus, reason);
+            log.info("ORDER_VALIDATION: Order status update orderId={} newStatus={} reason={}", 
+                    orderId, newStatus, reason);
             
         } catch (Exception e) {
             log.error("Error processing order status update for order {}: {}", orderId, e.getMessage(), e);

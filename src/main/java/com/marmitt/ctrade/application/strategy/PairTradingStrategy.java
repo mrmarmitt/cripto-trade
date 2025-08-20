@@ -52,12 +52,14 @@ public class PairTradingStrategy extends AbstractTradingStrategy {
     @Override
     public StrategySignal analyze(MarketData marketData, Portfolio portfolio) {
         if (!isEnabled()) {
-            return StrategySignal.hold(getStrategyName());
+            return new StrategySignal(SignalType.HOLD, null, null, null, "Strategy is disabled", getStrategyName());
         }
         
         if (!marketData.hasPriceFor(pair1) || !marketData.hasPriceFor(pair2)) {
             log.debug("Missing price data for pair trading analysis");
-            return StrategySignal.hold(getStrategyName());
+            return new StrategySignal(SignalType.HOLD, null, null, null, 
+                String.format("Missing price data for %s or %s", pair1.getSymbol(), pair2.getSymbol()), 
+                getStrategyName());
         }
         
         BigDecimal price1 = marketData.getPriceFor(pair1);
@@ -68,7 +70,10 @@ public class PairTradingStrategy extends AbstractTradingStrategy {
         
         if (spreadHistory.size() < 10) {
             log.debug("Insufficient history for pair trading analysis. Current size: {}", spreadHistory.size());
-            return StrategySignal.hold(getStrategyName());
+            return new StrategySignal(SignalType.HOLD, null, null, null, 
+                String.format("Insufficient history: %d/10 samples. %s=%s, %s=%s", 
+                    spreadHistory.size(), pair1.getSymbol(), price1, pair2.getSymbol(), price2), 
+                getStrategyName());
         }
         
         double zScore = calculateZScore(spread);
@@ -82,7 +87,10 @@ public class PairTradingStrategy extends AbstractTradingStrategy {
             return createBuyPair1SellPair2Signal(price1, price2, zScore);
         }
         
-        return StrategySignal.hold(getStrategyName());
+        return new StrategySignal(SignalType.HOLD, null, null, null, 
+            String.format("Z-score %.2f within thresholds [%.2f, %.2f]. %s=%s, %s=%s, spread=%s", 
+                zScore, lowerThreshold, upperThreshold, pair1.getSymbol(), price1, pair2.getSymbol(), price2, spread), 
+            getStrategyName());
     }
     
     private BigDecimal calculateSpread(BigDecimal price1, BigDecimal price2) {

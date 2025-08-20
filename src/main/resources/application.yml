@@ -17,7 +17,7 @@ spring:
     database-platform: org.hibernate.dialect.H2Dialect
     hibernate:
       ddl-auto: create-drop
-    show-sql: true
+    show-sql: false
 
 trading:
   price-cache:
@@ -27,6 +27,6 @@ trading:
 
 logging:
   level:
-    com.marmitt.ctrade: DEBUG
+    com.marmitt.ctrade: INFO
     org.springframework.web: DEBUG
     okhttp3: INFO

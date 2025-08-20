@@ -1,18 +1,16 @@
 package com.marmitt.ctrade.controller;
 
+import com.marmitt.ctrade.application.service.TradeService;
+import com.marmitt.ctrade.application.service.TradeService.TradePnLSummary;
 import com.marmitt.ctrade.domain.entity.Trade;
 import com.marmitt.ctrade.domain.valueobject.TradeStatus;
-import com.marmitt.ctrade.infrastructure.repository.TradeRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Pageable;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -26,7 +24,7 @@ import java.util.Optional;
 @RequiredArgsConstructor
 public class TradeController {
     
-    private final TradeRepository tradeRepository;
+    private final TradeService tradeService;
     
     /**
      * GET /api/trades?strategy=X&status=Y&page=0&size=10
@@ -42,19 +40,11 @@ public class TradeController {
             @RequestParam(defaultValue = "20") int size) {
         
         try {
-            log.info("Requested trades: strategy={}, status={}, page={}, size={}", 
-                    strategy, status, page, size);
-            
-            Pageable pageable = PageRequest.of(page, size);
-            Page<Trade> trades = tradeRepository.findTrades(strategy, status, startDate, endDate, pageable);
-            
-            log.debug("Returning {} trades (page {} of {})", 
-                    trades.getNumberOfElements(), trades.getNumber() + 1, trades.getTotalPages());
-            
+            Page<Trade> trades = tradeService.getTrades(strategy, status, startDate, endDate, page, size);
             return ResponseEntity.ok(trades);
             
         } catch (Exception e) {
-            log.error("Error retrieving trades: {}", e.getMessage(), e);
+            log.error("TRADE_ERROR: Failed to get trades error={}", e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
@@ -66,19 +56,16 @@ public class TradeController {
     @GetMapping("/{id}")
     public ResponseEntity<Trade> getTrade(@PathVariable Long id) {
         try {
-            log.info("Requested trade with ID: {}", id);
-            
-            Optional<Trade> trade = tradeRepository.findById(id);
+            Optional<Trade> trade = tradeService.getTradeById(id);
             
             if (trade.isEmpty()) {
-                log.warn("Trade not found with ID: {}", id);
                 return ResponseEntity.notFound().build();
             }
             
             return ResponseEntity.ok(trade.get());
             
         } catch (Exception e) {
-            log.error("Error retrieving trade {}: {}", id, e.getMessage(), e);
+            log.error("TRADE_ERROR: Failed to get trade id={} error={}", id, e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
@@ -93,17 +80,11 @@ public class TradeController {
             @RequestParam(defaultValue = "50") int limit) {
         
         try {
-            log.info("Requested trades for strategy: {} (limit: {})", strategyName, limit);
-            
-            Pageable pageable = PageRequest.of(0, limit);
-            List<Trade> trades = tradeRepository.findRecentTradesByStrategy(strategyName, pageable);
-            
-            log.debug("Returning {} trades for strategy: {}", trades.size(), strategyName);
-            
+            List<Trade> trades = tradeService.getTradesByStrategy(strategyName, limit);
             return ResponseEntity.ok(trades);
             
         } catch (Exception e) {
-            log.error("Error retrieving trades for strategy {}: {}", strategyName, e.getMessage(), e);
+            log.error("TRADE_ERROR: Failed to get strategy trades strategy={} error={}", strategyName, e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
@@ -115,16 +96,11 @@ public class TradeController {
     @GetMapping("/strategy/{strategyName}/open")
     public ResponseEntity<List<Trade>> getOpenTradesByStrategy(@PathVariable String strategyName) {
         try {
-            log.info("Requested open trades for strategy: {}", strategyName);
-            
-            List<Trade> openTrades = tradeRepository.findByStrategyNameAndStatus(strategyName, TradeStatus.OPEN);
-            
-            log.debug("Returning {} open trades for strategy: {}", openTrades.size(), strategyName);
-            
+            List<Trade> openTrades = tradeService.getOpenTradesByStrategy(strategyName);
             return ResponseEntity.ok(openTrades);
             
         } catch (Exception e) {
-            log.error("Error retrieving open trades for strategy {}: {}", strategyName, e.getMessage(), e);
+            log.error("TRADE_ERROR: Failed to get open trades strategy={} error={}", strategyName, e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
@@ -136,38 +112,11 @@ public class TradeController {
     @GetMapping("/strategy/{strategyName}/pnl")
     public ResponseEntity<TradePnLSummary> getStrategyPnLSummary(@PathVariable String strategyName) {
         try {
-            log.info("Requested P&L summary for strategy: {}", strategyName);
-            
-            Optional<BigDecimal> totalRealized = tradeRepository.sumRealizedPnLByStrategy(strategyName);
-            Optional<BigDecimal> totalUnrealized = tradeRepository.sumUnrealizedPnLByStrategy(strategyName);
-            Optional<BigDecimal> totalPnL = tradeRepository.sumTotalPnLByStrategy(strategyName);
-            
-            Long totalTrades = tradeRepository.countByStrategyName(strategyName);
-            Long openTrades = tradeRepository.countByStrategyNameAndStatus(strategyName, TradeStatus.OPEN);
-            Long closedTrades = tradeRepository.countByStrategyNameAndStatus(strategyName, TradeStatus.CLOSED);
-            
-            Long winningTrades = tradeRepository.countWinningTrades(strategyName);
-            Long losingTrades = tradeRepository.countLosingTrades(strategyName);
-            
-            TradePnLSummary summary = new TradePnLSummary(
-                    strategyName,
-                    totalRealized.orElse(BigDecimal.ZERO),
-                    totalUnrealized.orElse(BigDecimal.ZERO),
-                    totalPnL.orElse(BigDecimal.ZERO),
-                    totalTrades,
-                    openTrades,
-                    closedTrades,
-                    winningTrades,
-                    losingTrades
-            );
-            
-            log.debug("P&L summary for {}: Total={}, Open={}, Closed={}", 
-                    strategyName, totalPnL.orElse(BigDecimal.ZERO), openTrades, closedTrades);
-            
+            TradePnLSummary summary = tradeService.getStrategyPnLSummary(strategyName);
             return ResponseEntity.ok(summary);
             
         } catch (Exception e) {
-            log.error("Error retrieving P&L summary for strategy {}: {}", strategyName, e.getMessage(), e);
+            log.error("TRADE_ERROR: Failed to get PnL summary strategy={} error={}", strategyName, e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
@@ -179,33 +128,13 @@ public class TradeController {
     @GetMapping("/recent")
     public ResponseEntity<List<Trade>> getRecentTrades(@RequestParam(defaultValue = "20") int limit) {
         try {
-            log.info("Requested recent trades (limit: {})", limit);
-            
-            Pageable pageable = PageRequest.of(0, limit);
-            List<Trade> recentTrades = tradeRepository.findRecentTrades(pageable);
-            
-            log.debug("Returning {} recent trades", recentTrades.size());
-            
+            List<Trade> recentTrades = tradeService.getRecentTrades(limit);
             return ResponseEntity.ok(recentTrades);
             
         } catch (Exception e) {
-            log.error("Error retrieving recent trades: {}", e.getMessage(), e);
+            log.error("TRADE_ERROR: Failed to get recent trades error={}", e.getMessage());
             return ResponseEntity.internalServerError().build();
         }
     }
     
-    /**
-     * DTO para resumo de P&L de trades
-     */
-    public static record TradePnLSummary(
-            String strategyName,
-            BigDecimal totalRealizedPnL,
-            BigDecimal totalUnrealizedPnL,
-            BigDecimal totalPnL,
-            Long totalTrades,
-            Long openTrades,
-            Long closedTrades,
-            Long winningTrades,
-            Long losingTrades
-    ) {}
 }
