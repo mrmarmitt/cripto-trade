@@ -1,23 +1,54 @@
-# Configuration for Binance WebSocket Real Connection
-# Copy to src/main/resources/application-binance.yml to use
-
+# Mock Exchange Configuration
+mock:
+  exchange:
+    # Feed configuration - controls how market data is provided
+    feed:
+      # Strict mode: use exact values from files without any randomization
+      strict:
+        enable: true
+        data-folder: "classpath:mock-data/"
+      # Random mode: generate random market data with volatility and trends
+      random:
+        enable: false
+        data-folder: "classpath:mock-data/"
+    
+    # Message timing configuration
+    message-delay:
+      price-updates: 1000     # milliseconds between price updates
+      order-updates: 5000    # milliseconds between order updates
+      min-delay: 500         # minimum delay variation
+      max-delay: 1000        # maximum delay variation
+    
+    # Order execution configuration
+    orders:
+      acceptance-rate: 0.8           # 80% of orders accepted (FILLED vs REJECTED)
+      execution-rate: 0.7            # 70% of accepted orders executed vs kept open
+      price-margin: 0.05             # 5% price margin for order execution
+      partial-fill-rate: 0.2         # 20% chance of partial fills
+      
+    # Price simulation configuration
+    price-simulation:
+      volatility: 0.02               # 2% maximum price variation
+      trend-probability: 0.1         # 10% chance of trending vs random walk
+      trend-strength: 0.005          # 0.5% trend per update
+      replay-mode: false             # true = replay historical data, false = simulate
+      replay-speed: 1.0              # speed multiplier for replay mode
+      
+    # Market conditions simulation
+    market-conditions:
+      slippage-rate: 0.001           # 0.1% slippage on market orders
+      liquidity-factor: 1.0          # multiplier for order book depth
+      
 websocket:
   exchange: MOCK
-  url: ws://localhost:8080/mock
-  connection-timeout: 5s
+  url: "ws://mock.exchange.local"
+  connection-timeout: 5000
   max-retries: 3
-  auto-reconnect: true
+  retry-delay: 1000
 
 trading:
   pairs:
     active:
       - BTCUSDT
       - ETHUSDT
-      - ADAUSDT
     stream-format: ticker
-
-
-
-# For testnet (if available)
-# websocket:
-#   url: wss://testnet.binance.vision/ws/!ticker@arr
