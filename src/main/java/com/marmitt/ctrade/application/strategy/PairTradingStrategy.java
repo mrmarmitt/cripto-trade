@@ -1,11 +1,13 @@
 package com.marmitt.ctrade.application.strategy;
 
+import com.marmitt.ctrade.application.service.PriceCacheService;
 import com.marmitt.ctrade.domain.entity.MarketData;
 import com.marmitt.ctrade.domain.entity.Portfolio;
 import com.marmitt.ctrade.domain.entity.TradingPair;
 import com.marmitt.ctrade.domain.valueobject.StrategySignal;
 import com.marmitt.ctrade.domain.valueobject.SignalType;
 import com.marmitt.ctrade.infrastructure.config.StrategyProperties;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -13,6 +15,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @Slf4j
 public class PairTradingStrategy extends AbstractTradingStrategy {
@@ -24,7 +27,9 @@ public class PairTradingStrategy extends AbstractTradingStrategy {
     private final double upperThreshold;
     private final double lowerThreshold;
     private final BigDecimal tradingAmount;
+    @Getter
     private final TradingPair pair1;
+    @Getter
     private final TradingPair pair2;
     
     public PairTradingStrategy() {
@@ -39,11 +44,11 @@ public class PairTradingStrategy extends AbstractTradingStrategy {
         this.lowerThreshold = getDoubleParameter("lowerThreshold", -2.0);
         this.tradingAmount = BigDecimal.valueOf(getDoubleParameter("tradingAmount", 100.0));
         
-        String pair1Symbol = getStringParameter("pair1", "BTC/USDT");
-        String pair2Symbol = getStringParameter("pair2", "ETH/USDT");
+        String pair1Symbol = getStringParameter("pair1", "BTCUSDT");
+        String pair2Symbol = getStringParameter("pair2", "ETHUSDT");
         
-        this.pair1 = new TradingPair(pair1Symbol);
-        this.pair2 = new TradingPair(pair2Symbol);
+        this.pair1 = parseTradingPair(pair1Symbol);
+        this.pair2 = parseTradingPair(pair2Symbol);
         
         log.info("PairTradingStrategy initialized with pairs: {} and {}, thresholds: [{}, {}]", 
                 pair1Symbol, pair2Symbol, lowerThreshold, upperThreshold);
@@ -57,6 +62,10 @@ public class PairTradingStrategy extends AbstractTradingStrategy {
         
         if (!marketData.hasPriceFor(pair1) || !marketData.hasPriceFor(pair2)) {
             log.debug("Missing price data for pair trading analysis");
+            log.debug("Looking for pair1: {}", pair1);
+            log.debug("Looking for pair2: {}", pair2);
+            log.debug("HasPriceFor pair1: {}", marketData.hasPriceFor(pair1));
+            log.debug("HasPriceFor pair2: {}", marketData.hasPriceFor(pair2));
             return new StrategySignal(SignalType.HOLD, null, null, null, 
                 String.format("Missing price data for %s or %s", pair1.getSymbol(), pair2.getSymbol()), 
                 getStrategyName());
@@ -78,15 +87,24 @@ public class PairTradingStrategy extends AbstractTradingStrategy {
         
         double zScore = calculateZScore(spread);
         
-        log.debug("Pair trading analysis - Spread: {}, Z-Score: {}, Thresholds: [{}, {}]", 
-                spread, zScore, lowerThreshold, upperThreshold);
+        log.info("📈 PairTrading Analysis - Spread: {}, Z-Score: {:.2f}, Thresholds: [{}, {}], History: {}", 
+                spread, zScore, lowerThreshold, upperThreshold, spreadHistory.size());
+        
+        // More aggressive reversal: close positions when z-score approaches neutral zone
+        if (Math.abs(zScore) < 0.5) {
+            log.info("⚡ NEUTRAL ZONE - Z-score {:.2f} close to zero, generating SELL to close positions", zScore);
+            return createSellPair1BuyPair2Signal(price1, price2, zScore);
+        }
         
         if (zScore > upperThreshold) {
+            log.info("🔴 SELL Signal - Z-score {:.2f} > threshold {} - Mean reversion expected", zScore, upperThreshold);
             return createSellPair1BuyPair2Signal(price1, price2, zScore);
         } else if (zScore < lowerThreshold) {
+            log.info("🟢 BUY Signal - Z-score {:.2f} < threshold {} - Opening new position", zScore, lowerThreshold);
             return createBuyPair1SellPair2Signal(price1, price2, zScore);
         }
         
+        log.debug("⚪ HOLD Signal - Z-score {:.2f} within thresholds [{}, {}]", zScore, lowerThreshold, upperThreshold);
         return new StrategySignal(SignalType.HOLD, null, null, null, 
             String.format("Z-score %.2f within thresholds [%.2f, %.2f]. %s=%s, %s=%s, spread=%s", 
                 zScore, lowerThreshold, upperThreshold, pair1.getSymbol(), price1, pair2.getSymbol(), price2, spread), 
@@ -140,19 +158,35 @@ public class PairTradingStrategy extends AbstractTradingStrategy {
     }
     
     private StrategySignal createSellPair1BuyPair2Signal(BigDecimal price1, BigDecimal price2, double zScore) {
+        // In true pair trading, when spread is high we should:
+        // 1. SELL the overperforming asset (pair1)
+        // 2. BUY the underperforming asset (pair2)
+        // For simplicity, we'll create signals for pair1 first, but log both actions
+        
         BigDecimal quantity1 = tradingAmount.divide(price1, 8, RoundingMode.HALF_UP);
         
-        String reason = String.format("Pair trading: Spread above upper threshold (z-score: %.2f). Selling %s, buying %s", 
-                zScore, pair1.getSymbol(), pair2.getSymbol());
+        String reason = String.format("🔄 Pair trading REVERSION: Z-score %.2f > %.2f. Spread too HIGH - SELL %s @ %s (expecting mean reversion)", 
+                zScore, upperThreshold, pair1.getSymbol(), price1);
+        
+        log.info("🔴 Pair Trading Signal: SELL {} {} @ {} | Should also BUY {} @ {} (spread reversion)", 
+                pair1.getSymbol(), quantity1, price1, pair2.getSymbol(), price2);
         
         return StrategySignal.sell(pair1, quantity1, price1, reason, getStrategyName());
     }
     
     private StrategySignal createBuyPair1SellPair2Signal(BigDecimal price1, BigDecimal price2, double zScore) {
+        // In true pair trading, when spread is low we should:
+        // 1. BUY the underperforming asset (pair1) 
+        // 2. SELL the overperforming asset (pair2)
+        // For simplicity, we'll create signals for pair1 first, but log both actions
+        
         BigDecimal quantity1 = tradingAmount.divide(price1, 8, RoundingMode.HALF_UP);
         
-        String reason = String.format("Pair trading: Spread below lower threshold (z-score: %.2f). Buying %s, selling %s", 
-                zScore, pair1.getSymbol(), pair2.getSymbol());
+        String reason = String.format("🔄 Pair trading DIVERGENCE: Z-score %.2f < %.2f. Spread too LOW - BUY %s @ %s (expecting divergence)", 
+                zScore, lowerThreshold, pair1.getSymbol(), price1);
+        
+        log.info("🟢 Pair Trading Signal: BUY {} {} @ {} | Should also SELL {} @ {} (spread divergence)", 
+                pair1.getSymbol(), quantity1, price1, pair2.getSymbol(), price2);
         
         return StrategySignal.buy(pair1, quantity1, price1, reason, getStrategyName());
     }
@@ -161,7 +195,7 @@ public class PairTradingStrategy extends AbstractTradingStrategy {
         if (spreadHistory.isEmpty()) {
             return 0.0;
         }
-        BigDecimal currentSpread = spreadHistory.get(spreadHistory.size() - 1);
+        BigDecimal currentSpread = spreadHistory.getLast();
         return calculateZScore(currentSpread);
     }
     
@@ -169,11 +203,40 @@ public class PairTradingStrategy extends AbstractTradingStrategy {
         return spreadHistory.size();
     }
     
-    public TradingPair getPair1() {
-        return pair1;
+    private TradingPair parseTradingPair(String tradingPairString) {
+        if (tradingPairString == null || tradingPairString.isEmpty()) {
+            throw new IllegalArgumentException("Trading pair string cannot be null or empty");
+        }
+        
+        // Handle formats like "BTCUSDT", "BTC-USDT", "BTC/USDT"
+        String cleanPair = tradingPairString.replace("-", "").replace("/", "").toUpperCase();
+        
+        // Common trading pairs mapping
+        if (cleanPair.endsWith("USDT")) {
+            String baseCurrency = cleanPair.substring(0, cleanPair.length() - 4);
+            return new TradingPair(baseCurrency, "USDT");
+        } else if (cleanPair.endsWith("BTC")) {
+            String baseCurrency = cleanPair.substring(0, cleanPair.length() - 3);
+            return new TradingPair(baseCurrency, "BTC");
+        } else if (cleanPair.endsWith("ETH")) {
+            String baseCurrency = cleanPair.substring(0, cleanPair.length() - 3);
+            return new TradingPair(baseCurrency, "ETH");
+        } else if (cleanPair.endsWith("BNB")) {
+            String baseCurrency = cleanPair.substring(0, cleanPair.length() - 3);
+            return new TradingPair(baseCurrency, "BNB");
+        } else if (cleanPair.endsWith("BUSD")) {
+            String baseCurrency = cleanPair.substring(0, cleanPair.length() - 4);
+            return new TradingPair(baseCurrency, "BUSD");
+        } else {
+            // Default fallback - assume last 3 characters are quote currency
+            if (cleanPair.length() >= 6) {
+                String baseCurrency = cleanPair.substring(0, cleanPair.length() - 3);
+                String quoteCurrency = cleanPair.substring(cleanPair.length() - 3);
+                return new TradingPair(baseCurrency, quoteCurrency);
+            } else {
+                throw new IllegalArgumentException("Unable to parse trading pair: " + tradingPairString);
+            }
+        }
     }
-    
-    public TradingPair getPair2() {
-        return pair2;
-    }
+
 }

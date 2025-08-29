@@ -16,7 +16,7 @@ public class OpenApiConfig {
                 .info(new Info()
                         .title("Ctrade API")
                         .version("1.0.0")
-                        .description("API para aplicação de trading de criptomoedas com arquitetura hexagonal")
+                        .description("API para aplicação de trading de criptomoedas")
                         .contact(new Contact()
                                 .name("Marmitt")
                                 .email("contato@example.com"))

@@ -80,7 +80,7 @@ public class PerformanceService {
         log.info("PERF_VALIDATION: Manual unrealized P&L update completed");
     }
 
-    public static record PerformanceSummary(
+    public record PerformanceSummary(
             BigDecimal totalRealizedPnL,
             BigDecimal totalUnrealizedPnL,
             BigDecimal totalPnL,

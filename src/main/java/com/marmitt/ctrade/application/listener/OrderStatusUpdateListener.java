@@ -1,6 +1,6 @@
 package com.marmitt.ctrade.application.listener;
 
-import com.marmitt.ctrade.application.service.TradingService;
+import com.marmitt.ctrade.application.service.ExchangeTradingService;
 import com.marmitt.ctrade.domain.dto.OrderUpdateMessage;
 import com.marmitt.ctrade.domain.listener.OrderUpdateListener;
 import lombok.RequiredArgsConstructor;
@@ -12,7 +12,7 @@ import org.springframework.stereotype.Service;
 @Slf4j
 public class OrderStatusUpdateListener implements OrderUpdateListener {
     
-    private final TradingService tradingService;
+    private final ExchangeTradingService exchangeTradingService;
     
     @Override
     public void onOrderUpdate(OrderUpdateMessage orderUpdate) {
@@ -20,7 +20,7 @@ public class OrderStatusUpdateListener implements OrderUpdateListener {
                 orderUpdate.getOrderId(), orderUpdate.getStatus());
         
         try {
-            tradingService.processOrderStatusUpdate(
+            exchangeTradingService.processOrderStatusUpdate(
                 orderUpdate.getOrderId(),
                 orderUpdate.getStatus(),
                 orderUpdate.getReason()

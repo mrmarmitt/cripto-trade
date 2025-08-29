@@ -1,14 +1,11 @@
 package com.marmitt.ctrade.application.service;
 
-import com.marmitt.ctrade.application.service.PriceCacheService;
 import com.marmitt.ctrade.domain.entity.Trade;
-import com.marmitt.ctrade.domain.entity.TradingPair;
 import com.marmitt.ctrade.domain.valueobject.StrategyMetrics;
 import com.marmitt.ctrade.domain.valueobject.TradeStatus;
 import com.marmitt.ctrade.infrastructure.repository.TradeRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
@@ -16,8 +13,8 @@ import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
+import java.util.Comparator;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Collectors;
 
@@ -28,7 +25,7 @@ public class StrategyPerformanceTracker {
     
     private final TradeRepository tradeRepository;
     private final PriceCacheService priceCacheService;
-    
+
     /**
      * Calcula métricas completas de uma estratégia
      */
@@ -36,35 +33,67 @@ public class StrategyPerformanceTracker {
         log.debug("Calculating metrics for strategy: {}", strategyName);
         
         List<Trade> allTrades = tradeRepository.findByStrategyName(strategyName);
-        List<Trade> closedTrades = allTrades.stream()
+        List<Trade> fullyClosedTrades = allTrades.stream()
                 .filter(t -> t.getStatus() == TradeStatus.CLOSED)
-                .collect(Collectors.toList());
+                .toList();
+        List<Trade> partiallyClosedTrades = allTrades.stream()
+                .filter(t -> t.getStatus() == TradeStatus.PARTIAL_CLOSED)
+                .toList();
         List<Trade> openTrades = allTrades.stream()
                 .filter(t -> t.getStatus() == TradeStatus.OPEN)
+                .collect(Collectors.toList());
+        
+        // Consistent definitions for metrics calculations
+        // closedTrades for P&L = CLOSED + PARTIAL_CLOSED (any trade with realized P&L)
+        List<Trade> tradesWithRealizedPnL = allTrades.stream()
+                .filter(t -> t.getStatus() == TradeStatus.CLOSED || t.getStatus() == TradeStatus.PARTIAL_CLOSED)
                 .collect(Collectors.toList());
         
         StrategyMetrics.StrategyMetricsBuilder builder = StrategyMetrics.builder()
                 .strategyName(strategyName);
         
-        // Basic counts
+        // Discriminated counts logic:
+        // Total = OPEN + PARTIAL_CLOSED + CLOSED (mutually exclusive)
+        // openTrades = OPEN only (no closure yet)
+        // partiallyClosedTrades = PARTIAL_CLOSED (some closure)
+        // closedTrades = CLOSED only (full closure)
+        
+        int purelyOpenTrades = openTrades.size();
+        int partiallyClosedCount = partiallyClosedTrades.size();
+        int fullyClosedCount = fullyClosedTrades.size();
+        
         builder.totalTrades(allTrades.size())
-                .openTrades(openTrades.size())
-                .closedTrades(closedTrades.size());
+                .openTrades(purelyOpenTrades)           // Only OPEN status
+                .partiallyClosedTrades(partiallyClosedCount)  // Only PARTIAL_CLOSED status
+                .closedTrades(fullyClosedCount);        // Only CLOSED status
+                
+        log.debug("Trade status for {}: Total={}, Open={}, Partial={}, Closed={}", 
+                strategyName, allTrades.size(), purelyOpenTrades, partiallyClosedCount, fullyClosedCount);
+                
+        // Verification: Total should equal the sum of all statuses  
+        int verification = purelyOpenTrades + partiallyClosedCount + fullyClosedCount;
+        if (verification != allTrades.size()) {
+            log.warn("Trade count mismatch for {}: Total={} but sum of statuses={} (Open:{}, Partial:{}, Closed:{})", 
+                    strategyName, allTrades.size(), verification, purelyOpenTrades, partiallyClosedCount, fullyClosedCount);
+        }
         
         // P&L calculations
-        calculatePnLMetrics(builder, strategyName, allTrades, closedTrades, openTrades);
+        calculatePnLMetrics(builder, strategyName, allTrades, tradesWithRealizedPnL, openTrades);
         
         // Win/Loss statistics
-        calculateWinLossMetrics(builder, closedTrades);
+        calculateWinLossMetrics(builder, tradesWithRealizedPnL);
+        
+        // Order statistics
+        calculateOrderMetrics(builder);
         
         // Risk metrics
-        calculateRiskMetrics(builder, allTrades, closedTrades);
+        calculateRiskMetrics(builder, allTrades, tradesWithRealizedPnL);
         
         // Time metrics
-        calculateTimeMetrics(builder, allTrades, closedTrades);
+        calculateTimeMetrics(builder, allTrades, tradesWithRealizedPnL);
         
         // Best/Worst trades
-        calculateBestWorstTrades(builder, closedTrades);
+        calculateBestWorstTrades(builder, tradesWithRealizedPnL);
         
         // Recent performance
         calculateRecentPerformance(builder, strategyName);
@@ -82,10 +111,10 @@ public class StrategyPerformanceTracker {
     
     private void calculatePnLMetrics(StrategyMetrics.StrategyMetricsBuilder builder, 
                                    String strategyName, List<Trade> allTrades, 
-                                   List<Trade> closedTrades, List<Trade> openTrades) {
+                                   List<Trade> tradesWithPnL, List<Trade> openTrades) {
         
         // Realized P&L (from closed trades)
-        BigDecimal realizedPnL = closedTrades.stream()
+        BigDecimal realizedPnL = tradesWithPnL.stream()
                 .map(Trade::getRealizedPnL)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         
@@ -150,17 +179,30 @@ public class StrategyPerformanceTracker {
         }
     }
     
-    private void calculateWinLossMetrics(StrategyMetrics.StrategyMetricsBuilder builder, List<Trade> closedTrades) {
-        List<Trade> winningTrades = closedTrades.stream()
+    private void calculateWinLossMetrics(StrategyMetrics.StrategyMetricsBuilder builder, List<Trade> tradesWithPnL) {
+        List<Trade> winningTrades = tradesWithPnL.stream()
                 .filter(Trade::isProfitable)
-                .collect(Collectors.toList());
+                .toList();
         
-        List<Trade> losingTrades = closedTrades.stream()
+        List<Trade> losingTrades = tradesWithPnL.stream()
                 .filter(Trade::isLoss)
-                .collect(Collectors.toList());
+                .toList();
+        
+        List<Trade> neutralTrades = tradesWithPnL.stream()
+                .filter(trade -> !trade.isProfitable() && !trade.isLoss())
+                .toList();
         
         builder.winningTrades(winningTrades.size())
-                .losingTrades(losingTrades.size());
+                .losingTrades(losingTrades.size())
+                .neutralTrades(neutralTrades.size());
+        
+        // Log para debug quando há trades neutros (P&L = 0)
+        if (!neutralTrades.isEmpty()) {
+            log.info("Found {} neutral trades (P&L = 0) for strategy '{}': {}", 
+                    neutralTrades.size(), "PairTradingStrategy",
+                    neutralTrades.stream().map(t -> String.format("Trade[%d]: realized=%s, unrealized=%s", 
+                            t.getId(), t.getRealizedPnL(), t.getUnrealizedPnL())).toList());
+        }
         
         // Average win/loss
         if (!winningTrades.isEmpty()) {
@@ -180,17 +222,40 @@ public class StrategyPerformanceTracker {
         }
         
         // Average P&L per trade
-        if (!closedTrades.isEmpty()) {
-            BigDecimal avgPnL = closedTrades.stream()
+        if (!tradesWithPnL.isEmpty()) {
+            BigDecimal avgPnL = tradesWithPnL.stream()
                     .map(Trade::getRealizedPnL)
                     .reduce(BigDecimal.ZERO, BigDecimal::add)
-                    .divide(BigDecimal.valueOf(closedTrades.size()), 4, RoundingMode.HALF_UP);
+                    .divide(BigDecimal.valueOf(tradesWithPnL.size()), 4, RoundingMode.HALF_UP);
             builder.avgPnL(avgPnL);
         }
     }
     
+    private void calculateOrderMetrics(StrategyMetrics.StrategyMetricsBuilder builder) {
+        try {
+//            MockExchangeAdapter.OrderStatistics orderStats = mockExchangeAdapter.getOrderStatistics();
+            
+//            builder.totalOrders(orderStats.totalOrders)
+//                    .successfulOrders(orderStats.successfulOrders)
+//                    .failedOrders(orderStats.failedOrders)
+//                    .pendingOrders(orderStats.pendingOrders);
+                    
+//            log.debug("Order statistics: Total={}, Successful={}, Failed={}, Pending={}",
+//                    orderStats.totalOrders, orderStats.successfulOrders,
+//                    orderStats.failedOrders, orderStats.pendingOrders);
+                    
+        } catch (Exception e) {
+            log.warn("Error calculating order metrics: {}", e.getMessage());
+            // Set default values if order statistics are not available
+            builder.totalOrders(0)
+                    .successfulOrders(0)
+                    .failedOrders(0)
+                    .pendingOrders(0);
+        }
+    }
+    
     private void calculateRiskMetrics(StrategyMetrics.StrategyMetricsBuilder builder, 
-                                    List<Trade> allTrades, List<Trade> closedTrades) {
+                                    List<Trade> allTrades, List<Trade> tradesWithPnL) {
         
         // Max drawdown from trades
         BigDecimal maxDrawdown = allTrades.stream()
@@ -201,22 +266,22 @@ public class StrategyPerformanceTracker {
         builder.maxDrawdown(maxDrawdown);
         
         // Calculate Sharpe Ratio if we have enough data
-        if (closedTrades.size() >= 10) {
-            BigDecimal sharpeRatio = calculateSharpeRatio(closedTrades);
+        if (tradesWithPnL.size() >= 10) {
+            BigDecimal sharpeRatio = calculateSharpeRatio(tradesWithPnL);
             builder.sharpeRatio(sharpeRatio);
         }
         
         // Calculate volatility
-        if (closedTrades.size() >= 5) {
-            BigDecimal volatility = calculateVolatility(closedTrades);
+        if (tradesWithPnL.size() >= 5) {
+            BigDecimal volatility = calculateVolatility(tradesWithPnL);
             builder.volatility(volatility);
         }
     }
     
-    private BigDecimal calculateSharpeRatio(List<Trade> closedTrades) {
+    private BigDecimal calculateSharpeRatio(List<Trade> tradesWithPnL) {
         try {
             // Calculate returns
-            List<BigDecimal> returns = closedTrades.stream()
+            List<BigDecimal> returns = tradesWithPnL.stream()
                     .map(Trade::getReturnPercentage)
                     .collect(Collectors.toList());
             
@@ -248,9 +313,9 @@ public class StrategyPerformanceTracker {
         }
     }
     
-    private BigDecimal calculateVolatility(List<Trade> closedTrades) {
+    private BigDecimal calculateVolatility(List<Trade> tradesWithPnL) {
         try {
-            List<BigDecimal> returns = closedTrades.stream()
+            List<BigDecimal> returns = tradesWithPnL.stream()
                     .map(Trade::getReturnPercentage)
                     .collect(Collectors.toList());
             
@@ -274,7 +339,7 @@ public class StrategyPerformanceTracker {
     }
     
     private void calculateTimeMetrics(StrategyMetrics.StrategyMetricsBuilder builder, 
-                                    List<Trade> allTrades, List<Trade> closedTrades) {
+                                    List<Trade> allTrades, List<Trade> tradesWithPnL) {
         
         if (!allTrades.isEmpty()) {
             LocalDateTime firstTrade = allTrades.stream()
@@ -299,8 +364,8 @@ public class StrategyPerformanceTracker {
         }
         
         // Average holding period for closed trades
-        if (!closedTrades.isEmpty()) {
-            List<Duration> holdingPeriods = closedTrades.stream()
+        if (!tradesWithPnL.isEmpty()) {
+            List<Duration> holdingPeriods = tradesWithPnL.stream()
                     .map(Trade::getHoldingPeriod)
                     .filter(duration -> !duration.isZero())
                     .collect(Collectors.toList());
@@ -327,12 +392,12 @@ public class StrategyPerformanceTracker {
         }
     }
     
-    private void calculateBestWorstTrades(StrategyMetrics.StrategyMetricsBuilder builder, List<Trade> closedTrades) {
-        if (closedTrades.isEmpty()) return;
+    private void calculateBestWorstTrades(StrategyMetrics.StrategyMetricsBuilder builder, List<Trade> tradesWithPnL) {
+        if (tradesWithPnL.isEmpty()) return;
         
         // Best trade (highest P&L)
-        Trade bestTrade = closedTrades.stream()
-                .max((t1, t2) -> t1.getRealizedPnL().compareTo(t2.getRealizedPnL()))
+        Trade bestTrade = tradesWithPnL.stream()
+                .max(Comparator.comparing(Trade::getRealizedPnL))
                 .orElse(null);
         
         if (bestTrade != null) {
@@ -341,8 +406,8 @@ public class StrategyPerformanceTracker {
         }
         
         // Worst trade (lowest P&L)
-        Trade worstTrade = closedTrades.stream()
-                .min((t1, t2) -> t1.getRealizedPnL().compareTo(t2.getRealizedPnL()))
+        Trade worstTrade = tradesWithPnL.stream()
+                .min(Comparator.comparing(Trade::getRealizedPnL))
                 .orElse(null);
         
         if (worstTrade != null) {

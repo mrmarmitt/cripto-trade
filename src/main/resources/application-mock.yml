@@ -1,51 +1,64 @@
-# Mock Exchange Configuration
+# Mock Exchange Configuration - Specialized by Feed Type
 mock:
   exchange:
     # Feed configuration - controls how market data is provided
     feed:
       # Strict mode: use exact values from files without any randomization
       strict:
-        enable: true
+        enable: false
         data-folder: "classpath:mock-data/"
-      # Random mode: generate random market data with volatility and trends
+        # Message timing for strict feed simulation
+        message-delay:
+          price-updates: 1000     # milliseconds between price updates
+          order-updates: 5000     # milliseconds between order updates
+          min-delay: 500          # minimum delay variation
+          max-delay: 1000         # maximum delay variation
+          
+      # Random mode: generate random market data with volatility and trends  
       random:
         enable: false
         data-folder: "classpath:mock-data/"
+        # Message timing for random feed simulation
+        message-delay:
+          price-updates: 800      # faster updates for random mode
+          order-updates: 4000
+          min-delay: 200
+          max-delay: 800
+        # Price simulation parameters
+        price-simulation:
+          volatility: 0.02               # 2% maximum price variation
+          trend-probability: 0.1         # 10% chance of trending vs random walk
+          trend-strength: 0.005          # 0.5% trend per update
+          replay-mode: false             # true = replay historical data, false = simulate
+          replay-speed: 1.0              # speed multiplier for replay mode
+          
+      # Real mode: connect to real exchange WebSocket feed
+      real:
+        enable: true
+        url: "wss://stream.binance.com:9443/stream"
+        exchange: "BINANCE"
+        # Real feed uses actual exchange timing - no artificial delays
     
-    # Message timing configuration
-    message-delay:
-      price-updates: 1000     # milliseconds between price updates
-      order-updates: 5000    # milliseconds between order updates
-      min-delay: 500         # minimum delay variation
-      max-delay: 1000        # maximum delay variation
-    
-    # Order execution configuration
+    # Order execution configuration (applies to all feed types)
     orders:
-      acceptance-rate: 0.8           # 80% of orders accepted (FILLED vs REJECTED)
-      execution-rate: 0.7            # 70% of accepted orders executed vs kept open
-      price-margin: 0.05             # 5% price margin for order execution
-      partial-fill-rate: 0.2         # 20% chance of partial fills
+      acceptance-rate: 0.95          # 95% of orders accepted (FILLED vs REJECTED)
+      execution-rate: 0.80           # 80% of accepted orders executed vs kept open
+      price-margin: 0.05             # 5% price margin for order execution (0.05 = 5%)
+      partial-fill-rate: 0.1         # 10% chance of partial fills
       
-    # Price simulation configuration
-    price-simulation:
-      volatility: 0.02               # 2% maximum price variation
-      trend-probability: 0.1         # 10% chance of trending vs random walk
-      trend-strength: 0.005          # 0.5% trend per update
-      replay-mode: false             # true = replay historical data, false = simulate
-      replay-speed: 1.0              # speed multiplier for replay mode
-      
-    # Market conditions simulation
+    # Market conditions simulation (applies to strict and random feeds)
     market-conditions:
       slippage-rate: 0.001           # 0.1% slippage on market orders
       liquidity-factor: 1.0          # multiplier for order book depth
-      
+
+# MockWebSocketAdapter configuration (used regardless of feed type)      
 websocket:
-  exchange: MOCK
-  url: "ws://mock.exchange.local"
+  exchange: MOCK                     # Use MockWebSocketAdapter
   connection-timeout: 5000
   max-retries: 3
   retry-delay: 1000
 
+# Trading pairs configuration (applies to all feed types)
 trading:
   pairs:
     active:

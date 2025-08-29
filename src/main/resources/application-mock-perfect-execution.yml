@@ -1,0 +1,55 @@
+# Mock Exchange Configuration - Perfect Execution Mode
+# This profile ensures 100% order execution success for strategy validation
+mock:
+  exchange:
+    # Feed configuration - controls how market data is provided
+    feed:
+      # Strict mode: use exact values from files without any randomization
+      strict:
+        enable: true
+        data-folder: "classpath:mock-data/"
+      # Random mode: generate random market data with volatility and trends
+      random:
+        enable: false
+        data-folder: "classpath:mock-data/"
+    
+    # Message timing configuration - optimized for fast execution
+    message-delay:
+      price-updates: 10           # Very fast price updates for quick simulation
+      order-updates: 100          # Fast order status updates
+      min-delay: 0                # No minimum delay variation
+      max-delay: 0                # No maximum delay variation
+    
+    # Order execution configuration - PERFECT EXECUTION
+    orders:
+      acceptance-rate: 1.0        # 100% of orders accepted (never rejected)
+      execution-rate: 1.0         # 100% of accepted orders executed immediately
+      price-margin: 1.0           # 100% price margin (all orders within price range)
+      partial-fill-rate: 0.0      # 0% chance of partial fills (always complete fills)
+      
+    # Price simulation configuration - minimal variation for predictability
+    price-simulation:
+      volatility: 0.0             # No additional price variation
+      trend-probability: 0.0      # No trending behavior
+      trend-strength: 0.0         # No trend strength
+      replay-mode: false          # Use strict file replay
+      replay-speed: 1.0           # Normal replay speed
+      
+    # Market conditions simulation - ideal conditions
+    market-conditions:
+      slippage-rate: 0.0          # No slippage on market orders
+      liquidity-factor: 10.0      # High liquidity (10x normal)
+      
+websocket:
+  exchange: MOCK
+  url: "ws://mock.exchange.local"
+  connection-timeout: 5000
+  max-retries: 3
+  retry-delay: 1000
+
+trading:
+  pairs:
+    active:
+      - BTCUSDT
+      - ETHUSDT
+    stream-format: ticker

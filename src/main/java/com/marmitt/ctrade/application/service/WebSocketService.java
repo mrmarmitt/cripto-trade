@@ -14,13 +14,8 @@ public class WebSocketService {
     public WebSocketService(WebSocketPort webSocketPort) {
         this.webSocketPort = webSocketPort;
     }
-    
-    @PostConstruct
-    public void init() {
-        startConnection();
-        log.info("WebSocketService initialized with event-driven architecture");
-    }
-    
+
+//    @PostConstruct
     public void startConnection() {
         log.info("Starting WebSocket connection");
         webSocketPort.connect();

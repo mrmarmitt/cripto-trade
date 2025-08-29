@@ -6,6 +6,7 @@ import com.marmitt.ctrade.domain.dto.PriceUpdateMessage;
 import com.marmitt.ctrade.domain.entity.MarketData;
 import com.marmitt.ctrade.domain.entity.TradingPair;
 import com.marmitt.ctrade.domain.listener.PriceUpdateListener;
+import com.marmitt.ctrade.domain.port.TradingPairProvider;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -23,26 +24,25 @@ public class TradingStrategyListener implements PriceUpdateListener {
     
     private final TradingOrchestrator tradingOrchestrator;
     private final PriceCacheService priceCacheService;
+//    private final TradingPairProvider tradingPairProvider;
     
     @Override
     public void onPriceUpdate(PriceUpdateMessage message) {
         try {
-            log.debug("Processing price update for trading strategies: {} = {}", 
+            log.info("Processing price update for trading strategies: {} = {}", 
                     message.getTradingPair(), message.getPrice());
             
-            // Update the price cache first
+            // Parse trading pair for strategy execution
             TradingPair updatedPair = parseTradingPair(message.getTradingPair());
             LocalDateTime timestamp = message.getTimestamp() != null ? 
                     message.getTimestamp() : LocalDateTime.now();
-            
-            priceCacheService.updatePrice(updatedPair.getSymbol(), message.getPrice(), timestamp);
             
             // Create comprehensive MarketData using cached prices
             MarketData marketData = createComprehensiveMarketData(updatedPair, message.getPrice(), timestamp);
             
             if (marketData != null) {
                 tradingOrchestrator.executeStrategies(marketData);
-                log.debug("Successfully triggered strategy execution for {}", message.getTradingPair());
+                log.info("Successfully triggered strategy execution for {}", message.getTradingPair());
             } else {
                 log.warn("Failed to create comprehensive MarketData for: {}", message);
             }
@@ -62,30 +62,30 @@ public class TradingStrategyListener implements PriceUpdateListener {
             // Add the updated pair
             currentPrices.put(updatedPair, updatedPrice);
             
-            // Add common trading pairs from cache
-            String[] commonPairs = {"BTC/USDT", "ETH/USDT", "BNB/USDT", "ADA/USDT", "SOL/USDT", "DOT/USDT"};
-            
-            for (String pairSymbol : commonPairs) {
+            // Add active trading pairs from configuration
+/*
+            for (String activePair : tradingPairProvider.getActiveTradingPairs()) {
                 try {
-                    TradingPair pair = new TradingPair(pairSymbol);
+                    TradingPair pair = parseTradingPair(activePair);
                     
                     // Skip if this is the updated pair (already added)
                     if (pair.equals(updatedPair)) {
                         continue;
                     }
                     
-                    Optional<BigDecimal> cachedPrice = priceCacheService.getLatestPrice(pairSymbol);
+                    Optional<BigDecimal> cachedPrice = priceCacheService.getLatestPrice(activePair);
                     if (cachedPrice.isPresent()) {
                         currentPrices.put(pair, cachedPrice.get());
-                        log.trace("Added cached price for {}: {}", pairSymbol, cachedPrice.get());
+                        log.trace("Added cached price for {}: {}", activePair, cachedPrice.get());
                     } else {
-                        log.trace("No cached price available for {}", pairSymbol);
+                        log.trace("No cached price available for {}", activePair);
                     }
                 } catch (Exception e) {
-                    log.trace("Error adding cached price for {}: {}", pairSymbol, e.getMessage());
+                    log.trace("Error adding cached price for {}: {}", activePair, e.getMessage());
                 }
             }
-            
+*/
+
             // Create MarketData with all available prices
             MarketData marketData = new MarketData();
             marketData.setCurrentPrices(currentPrices);
@@ -94,6 +94,11 @@ public class TradingStrategyListener implements PriceUpdateListener {
             
             log.debug("Created comprehensive MarketData with {} price entries", currentPrices.size());
             
+            // Debug: log all TradingPairs in the MarketData
+            for (TradingPair pair : currentPrices.keySet()) {
+                log.debug("MarketData contains pair: {} -> {}", pair, currentPrices.get(pair));
+            }
+            
             return marketData;
             
         } catch (Exception e) {
@@ -101,7 +106,7 @@ public class TradingStrategyListener implements PriceUpdateListener {
             return null;
         }
     }
-    
+
     private TradingPair parseTradingPair(String tradingPairString) {
         if (tradingPairString == null || tradingPairString.isEmpty()) {
             throw new IllegalArgumentException("Trading pair string cannot be null or empty");

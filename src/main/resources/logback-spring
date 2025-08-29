@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<configuration>
+
+    <!-- Console Appender -->
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+    </appender>
+
+    <!-- Main Application Log -->
+    <appender name="MAIN_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/cripto-trade.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/cripto-trade-%d{yyyy-MM-dd}-%i.log.gz</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>2GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- Validation Logs (All Validation Types) -->
+    <appender name="VALIDATION_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/validation.log</file>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} - %msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/validation-%d{yyyy-MM-dd}-%i.log.gz</fileNamePattern>
+            <maxFileSize>20MB</maxFileSize>
+            <maxHistory>30</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- Error Logs -->
+    <appender name="ERROR_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/errors.log</file>
+        <filter class="ch.qos.logback.classic.filter.LevelFilter">
+            <level>ERROR</level>
+            <onMatch>ACCEPT</onMatch>
+            <onMismatch>DENY</onMismatch>
+        </filter>
+        <encoder>
+            <pattern>%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/errors-%d{yyyy-MM-dd}-%i.log.gz</fileNamePattern>
+            <maxFileSize>10MB</maxFileSize>
+            <maxHistory>60</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- Trading & Orders Logs -->
+    <appender name="TRADING_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/trading.log</file>
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/trading-%d{yyyy-MM-dd}-%i.log.gz</fileNamePattern>
+            <maxFileSize>100MB</maxFileSize>
+            <maxHistory>7</maxHistory>
+            <totalSizeCap>1GB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- Price Updates Logs -->
+    <appender name="PRICES_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/prices.log</file>
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} - %msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/prices-%d{yyyy-MM-dd}-%i.log.gz</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>3</maxHistory>
+            <totalSizeCap>500MB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- Strategy Analysis Logs -->
+    <appender name="STRATEGY_FILE" class="ch.qos.logback.core.rolling.RollingFileAppender">
+        <file>logs/strategy.log</file>
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} - %msg%n</pattern>
+        </encoder>
+        <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+            <fileNamePattern>logs/strategy-%d{yyyy-MM-dd}-%i.log.gz</fileNamePattern>
+            <maxFileSize>50MB</maxFileSize>
+            <maxHistory>7</maxHistory>
+            <totalSizeCap>500MB</totalSizeCap>
+        </rollingPolicy>
+    </appender>
+
+    <!-- Logger Configurations -->
+    
+    <!-- =================================================================== -->
+    <!-- PRICE & MARKET DATA LOGGERS -->
+    <!-- =================================================================== -->
+    
+    <!-- Price Logging Listener - Logs all price updates -->
+    <logger name="com.marmitt.ctrade.application.listener.PriceLoggingListener" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="PRICES_FILE"/>
+        <appender-ref ref="MAIN_FILE"/>
+    </logger>
+    
+    <!-- Price Cache Update Listener -->
+    <logger name="com.marmitt.ctrade.application.listener.PriceCacheUpdateListener" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="PRICES_FILE"/>
+        <appender-ref ref="MAIN_FILE"/>
+    </logger>
+    
+    <!-- WebSocket Handler - Price and order updates -->
+    <logger name="com.marmitt.ctrade.application.publisher.WebSocketHandler" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="PRICES_FILE"/>
+        <appender-ref ref="MAIN_FILE"/>
+    </logger>
+    
+    <!-- Mock WebSocket Adapter -->
+    <logger name="com.marmitt.ctrade.infrastructure.exchange.mock.MockWebSocketAdapter" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="PRICES_FILE"/>
+        <appender-ref ref="MAIN_FILE"/>
+    </logger>
+    
+    <!-- =================================================================== -->
+    <!-- ORDERS & TRADING LOGGERS -->
+    <!-- =================================================================== -->
+    
+    <!-- Mock Exchange Adapter - Order processing -->
+    <logger name="com.marmitt.ctrade.infrastructure.exchange.mock.MockExchangeAdapter" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="TRADING_FILE"/>
+        <appender-ref ref="MAIN_FILE"/>
+    </logger>
+    
+    <!-- Order Status Update Listener -->
+    <logger name="com.marmitt.ctrade.application.listener.OrderStatusUpdateListener" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="TRADING_FILE"/>
+        <appender-ref ref="MAIN_FILE"/>
+    </logger>
+    
+    <!-- Trading Orchestrator Logger -->
+    <logger name="com.marmitt.ctrade.application.service.TradingOrchestrator" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="TRADING_FILE"/>
+        <appender-ref ref="VALIDATION_FILE"/>
+        <appender-ref ref="ERROR_FILE"/>
+    </logger>
+
+    <!-- Trading Service Logger -->
+    <logger name="com.marmitt.ctrade.application.service.TradingService" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="TRADING_FILE"/>
+        <appender-ref ref="VALIDATION_FILE"/>
+        <appender-ref ref="ERROR_FILE"/>
+    </logger>
+    
+    <!-- Trade Matching Service -->
+    <logger name="com.marmitt.ctrade.application.service.TradeMatchingService" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="TRADING_FILE"/>
+        <appender-ref ref="MAIN_FILE"/>
+    </logger>
+    
+    <!-- =================================================================== -->
+    <!-- STRATEGY LOGGERS -->
+    <!-- =================================================================== -->
+    
+    <!-- Pair Trading Strategy -->
+    <logger name="com.marmitt.ctrade.application.strategy.PairTradingStrategy" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="STRATEGY_FILE"/>
+        <appender-ref ref="MAIN_FILE"/>
+    </logger>
+    
+    <!-- All Strategy Package -->
+    <logger name="com.marmitt.ctrade.application.strategy" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="STRATEGY_FILE"/>
+        <appender-ref ref="MAIN_FILE"/>
+    </logger>
+    
+    <!-- =================================================================== -->
+    <!-- PERFORMANCE & MONITORING LOGGERS -->
+    <!-- =================================================================== -->
+
+    <!-- Performance Service Logger -->
+    <logger name="com.marmitt.ctrade.application.service.PerformanceService" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="MAIN_FILE"/>
+        <appender-ref ref="VALIDATION_FILE"/>
+        <appender-ref ref="ERROR_FILE"/>
+    </logger>
+
+    <!-- Trade Service Logger -->
+    <logger name="com.marmitt.ctrade.application.service.TradeService" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="MAIN_FILE"/>
+        <appender-ref ref="VALIDATION_FILE"/>
+        <appender-ref ref="ERROR_FILE"/>
+    </logger>
+
+    <!-- =================================================================== -->
+    <!-- INFRASTRUCTURE & TECHNICAL LOGGERS -->
+    <!-- =================================================================== -->
+    
+    <!-- Feed Strategies -->
+    <logger name="com.marmitt.ctrade.infrastructure.exchange.mock.strategy" level="DEBUG" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="PRICES_FILE"/>
+        <appender-ref ref="MAIN_FILE"/>
+    </logger>
+    
+    <!-- WebSocket Infrastructure -->
+    <logger name="com.marmitt.ctrade.infrastructure.websocket" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="MAIN_FILE"/>
+    </logger>
+    
+    <!-- Binance Exchange Adapter -->
+    <logger name="com.marmitt.ctrade.infrastructure.exchange.binance" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="TRADING_FILE"/>
+        <appender-ref ref="MAIN_FILE"/>
+    </logger>
+
+    <!-- =================================================================== -->
+    <!-- FALLBACK LOGGERS -->
+    <!-- =================================================================== -->
+
+    <!-- Application Package Logger (fallback for unconfigured classes) -->
+    <logger name="com.marmitt.ctrade" level="INFO" additivity="false">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="MAIN_FILE"/>
+        <appender-ref ref="ERROR_FILE"/>
+    </logger>
+    
+    <!-- Spring Framework (reduce noise) -->
+    <logger name="org.springframework" level="WARN" additivity="false">
+        <appender-ref ref="MAIN_FILE"/>
+        <appender-ref ref="ERROR_FILE"/>
+    </logger>
+    
+    <!-- Hibernate (reduce noise) -->
+    <logger name="org.hibernate" level="WARN" additivity="false">
+        <appender-ref ref="MAIN_FILE"/>
+        <appender-ref ref="ERROR_FILE"/>
+    </logger>
+
+    <!-- Root Logger -->
+    <root level="WARN">
+        <appender-ref ref="CONSOLE"/>
+        <appender-ref ref="MAIN_FILE"/>
+        <appender-ref ref="ERROR_FILE"/>
+    </root>
+
+</configuration>

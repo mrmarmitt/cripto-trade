@@ -26,10 +26,18 @@ public class StrategyMetrics {
     
     // Trade Statistics
     private Integer totalTrades;                    // Número total de trades
-    private Integer openTrades;                     // Trades atualmente abertos
-    private Integer closedTrades;                   // Trades fechados
+    private Integer openTrades;                     // Trades atualmente abertos (OPEN)
+    private Integer partiallyClosedTrades;          // Trades parcialmente fechados (PARTIAL_CLOSED)
+    private Integer closedTrades;                   // Trades completamente fechados (CLOSED)
     private Integer winningTrades;                  // Trades lucrativos
     private Integer losingTrades;                   // Trades com prejuízo
+    private Integer neutralTrades;                  // Trades sem ganho nem perda (P&L = 0)
+    
+    // Order Statistics
+    private Integer totalOrders;                    // Total de ordens enviadas
+    private Integer successfulOrders;               // Ordens executadas (FILLED)
+    private Integer failedOrders;                   // Ordens canceladas/rejeitadas
+    private Integer pendingOrders;                  // Ordens ainda pendentes
     
     // Performance Ratios
     private Double winRate;                         // Taxa de acerto (winning trades / total trades)

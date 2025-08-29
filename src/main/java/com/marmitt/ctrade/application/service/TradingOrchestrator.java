@@ -1,5 +1,6 @@
 package com.marmitt.ctrade.application.service;
 
+import com.marmitt.ctrade.config.StrategyRegistry;
 import com.marmitt.ctrade.domain.entity.MarketData;
 import com.marmitt.ctrade.domain.entity.Order;
 import com.marmitt.ctrade.domain.entity.Portfolio;
@@ -17,7 +18,6 @@ import org.springframework.stereotype.Service;
 
 import jakarta.annotation.PostConstruct;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -29,7 +29,7 @@ import java.util.concurrent.Executors;
 public class TradingOrchestrator {
     
     private final StrategyRegistry strategyRegistry;
-    private final ExchangePort exchangePort;
+//    private final ExchangePort exchangePort;
     private final StrategyProperties strategyProperties;
     private final TradeMatchingService tradeMatchingService;
     private final StrategyPerformanceTracker performanceTracker;
@@ -126,7 +126,7 @@ public class TradingOrchestrator {
                     order.getQuantity(), order.getPrice());
             
             // Execute order through exchange
-            exchangePort.placeOrder(order);
+//            exchangePort.placeOrder(order);
             
             // Track trade for P&L calculation
             trackTradeExecution(signal, order);

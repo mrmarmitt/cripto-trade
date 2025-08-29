@@ -54,6 +54,17 @@ public interface TradeRepository extends JpaRepository<Trade, Long> {
             @Param("pair") TradingPair pair,
             @Param("status") TradeStatus status);
     
+    // Trades abertos e parcialmente fechados para FIFO matching (incluindo PARTIAL_CLOSED)
+    @Query("SELECT t FROM Trade t WHERE t.strategyName = :strategyName " +
+           "AND t.pair = :pair " +
+           "AND (t.status = com.marmitt.ctrade.domain.valueobject.TradeStatus.OPEN " +
+           "     OR t.status = com.marmitt.ctrade.domain.valueobject.TradeStatus.PARTIAL_CLOSED) " +
+           "AND t.remainingQuantity > 0 " +
+           "ORDER BY t.entryTime ASC")
+    List<Trade> findOldestOpenAndPartialTrades(
+            @Param("strategyName") String strategyName,
+            @Param("pair") TradingPair pair);
+    
     // Primeiro trade aberto para FIFO
     @Query("SELECT t FROM Trade t WHERE t.strategyName = :strategyName " +
            "AND t.pair = :pair AND t.status = com.marmitt.ctrade.domain.valueobject.TradeStatus.OPEN " +

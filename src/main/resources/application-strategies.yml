@@ -9,9 +9,9 @@ trading:
         max-order-value: 1000
         min-order-value: 10
         parameters:
-          pair1: "BTC/USDT"
-          pair2: "ETH/USDT"
-          upperThreshold: 2.0
-          lowerThreshold: -2.0
-          maxHistorySize: 50
+          pair1: "BTCUSDT"
+          pair2: "ETHUSDT"
+          upperThreshold: 1.0     # Muito mais sensível para gerar mais SELL signals
+          lowerThreshold: -1.0    # Muito mais sensível para gerar mais BUY signals  
+          maxHistorySize: 15      # Histórico ainda menor = mais reativo às mudanças
           tradingAmount: 100.0

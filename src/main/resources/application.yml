@@ -24,9 +24,14 @@ trading:
     ttl-minutes: 5
     max-history-size: 100
     cleanup-interval-minutes: 10
+  pair:
+    active:
+      - BTC/USDT
+      - BTC/USDC
+      - USD/CUSDT
 
 logging:
   level:
-    com.marmitt.ctrade: INFO
+    com.marmitt.ctrade: DEBUG
     org.springframework.web: DEBUG
     okhttp3: INFO

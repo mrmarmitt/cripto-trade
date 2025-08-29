@@ -20,6 +20,7 @@ public class PriceCacheUpdateListener implements PriceUpdateListener {
                 priceUpdate.getTradingPair(), priceUpdate.getPrice());
         
         try {
+            // Store price with original format (BTCUSDT) for consistent cache access
             priceCacheService.updatePrice(
                 priceUpdate.getTradingPair(),
                 priceUpdate.getPrice(),

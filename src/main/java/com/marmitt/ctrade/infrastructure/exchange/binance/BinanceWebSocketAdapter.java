@@ -9,13 +9,9 @@ import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.WebSocket;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 
-@Component
-@ConditionalOnProperty(name = "websocket.exchange", havingValue = "BINANCE", matchIfMissing = false)
 @Slf4j
 public class BinanceWebSocketAdapter extends AbstractWebSocketAdapter {
 
@@ -27,11 +23,6 @@ public class BinanceWebSocketAdapter extends AbstractWebSocketAdapter {
     // Binance-specific connection
     private WebSocket webSocket;
 
-    /**
-     * Construtor principal para uso em produção.
-     * Cria automaticamente a BinanceStreamProcessingStrategy.
-     */
-    @Autowired
     public BinanceWebSocketAdapter(WebSocketProperties properties,
                                    WebSocketConnectionHandler connectionHandler,
                                    ConnectionManager connectionManager,
@@ -53,15 +44,11 @@ public class BinanceWebSocketAdapter extends AbstractWebSocketAdapter {
                 .build();
     }
 
-    /**
-     * Construtor para testes unitários.
-     * Permite injetar uma StreamProcessingStrategy mockada.
-     */
     BinanceWebSocketAdapter(WebSocketProperties properties,
                             ConnectionManager connectionManager,
                             ConnectionStatsTracker statsTracker,
                             WebSocketEventPublisher eventPublisher,
-                            TradingPairProvider tradingPairProvider,
+                            BinanceTradingPairProvider tradingPairProvider,
                             OkHttpClient okHttpClient,
                             BinanceWebSocketListener binanceWebSocketListener) {
         super(eventPublisher,
@@ -81,7 +68,10 @@ public class BinanceWebSocketAdapter extends AbstractWebSocketAdapter {
 
     @Override
     protected void doConnect() {
-        String streamUrl = buildStreamUrl();
+        String streamUrl = WebSocketUrlBuilder.buildStreamUrl(
+            properties.getUrl(), 
+            tradingPairProvider.getFormattedStreamList()
+        );
         log.info("Connecting to Binance WebSocket with URL: {}", streamUrl);
         
         Request request = new Request.Builder()
@@ -91,34 +81,6 @@ public class BinanceWebSocketAdapter extends AbstractWebSocketAdapter {
         webSocket = okHttpClient.newWebSocket(request, binanceWebSocketListener);
     }
     
-    /**
-     * Constrói a URL do stream com base nos trading pairs configurados.
-     * Usa base URL das propriedades e adiciona os streams dos trading pairs ativos.
-     */
-    private String buildStreamUrl() {
-        String baseUrl = properties.getUrl();
-        String streamList = tradingPairProvider.getFormattedStreamList();
-        
-        if (streamList.isEmpty()) {
-            log.warn("No trading pairs configured, using base URL: {}", baseUrl);
-            return baseUrl;
-        }
-        
-        // Se a URL base já contém parâmetros de stream, substitui
-        // Se não, adiciona como parâmetro streams
-        if (baseUrl.contains("?streams=")) {
-            String streamUrl = baseUrl.replaceAll("\\?streams=.*$", "?streams=" + streamList);
-            log.debug("Replaced streams in URL: {} -> {}", baseUrl, streamUrl);
-            return streamUrl;
-        } else if (baseUrl.contains("/stream")) {
-            String streamUrl = baseUrl + "?streams=" + streamList;
-            log.debug("Added streams to URL: {} -> {}", baseUrl, streamUrl);
-            return streamUrl;
-        } else {
-            log.debug("Using base URL unchanged: {}", baseUrl);
-            return baseUrl;
-        }
-    }
 
     @Override
     protected void doDisconnect() {

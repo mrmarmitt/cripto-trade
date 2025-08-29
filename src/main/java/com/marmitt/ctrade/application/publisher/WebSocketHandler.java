@@ -1,4 +1,4 @@
-package com.marmitt.ctrade.application.service;
+package com.marmitt.ctrade.application.publisher;
 
 import com.marmitt.ctrade.domain.dto.OrderUpdateMessage;
 import com.marmitt.ctrade.domain.dto.PriceUpdateMessage;

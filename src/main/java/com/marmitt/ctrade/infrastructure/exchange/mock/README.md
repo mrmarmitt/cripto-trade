@@ -6,21 +6,30 @@ Este pacote contém toda a implementação de simulação para desenvolvimento e
 
 ```
 mock/
-├── MockExchangeAdapter.java     # Adapter simulado para operações de trading
-├── MockWebSocketAdapter.java    # Adapter simulado para WebSocket com simuladores
-└── README.md                    # Este arquivo
+├── MockExchangeAdapter.java           # Adapter simulado para operações de trading
+├── MockWebSocketAdapter.java          # Adapter simulado para WebSocket com estratégias de feed
+├── strategy/
+│   ├── FeedStrategy.java              # Interface para estratégias de feed
+│   ├── FeedStrategyFactory.java       # Factory para criar estratégias
+│   ├── StrictFeedStrategy.java        # Feed usando arquivos mock-data
+│   ├── RandomFeedStrategy.java        # Feed com dados aleatórios
+│   └── RealFeedStrategy.java          # Feed conectando a exchanges reais
+├── service/
+│   └── MockMarketDataLoader.java      # Carregador de dados mock
+└── README.md                          # Este arquivo
 ```
 
 ## Componentes
 
 ### MockWebSocketAdapter
-- **Responsabilidade**: Simula conexão WebSocket completa para desenvolvimento e testes
+- **Responsabilidade**: Simula conexão WebSocket com múltiplas estratégias de feed
 - **Features**: 
-  - Simulação automática de preços em tempo real
-  - Gerenciamento de subscrições mock
-  - Simuladores automáticos para múltiplos pares
-  - Observer pattern para notificações
-  - Logs detalhados para debugging
+  - **Múltiplas estratégias de feed**: Strict, Random, Real
+  - **Feed Strict**: Usa dados exatos dos arquivos mock-data
+  - **Feed Random**: Gera dados aleatórios com volatilidade configurável
+  - **Feed Real**: Conecta a exchanges reais (Binance, etc.)
+  - **Arquitetura pluggável**: Troca de estratégia via configuração
+  - **Reutilização de código**: Aproveita StreamProcessingStrategy existente
 - **Arquitetura**: Extende `AbstractWebSocketAdapter` seguindo padrões da infraestrutura
 - **Ativação**: `websocket.exchange=MOCK` (padrão)
 
@@ -33,21 +42,79 @@ mock/
 
 ## Configuração
 
-### Profile Mock (Padrão)
+### Estratégias de Feed
+
+#### 1. Feed Strict (Padrão)
+Usa dados exatos dos arquivos mock-data sem randomização:
 ```yaml
-# application.yml (profile padrão)
-websocket:
-  exchange: MOCK  # Usa implementação mock para desenvolvimento
-  url: "ws://localhost:8080/mock"  # URL mock para logging
-  connection-timeout: PT5S
-  max-retries: 3
-  auto-reconnect: true
+# application-mock-strict.yml
+mock:
+  exchange:
+    feed:
+      strict:
+        enable: true
+        data-folder: "classpath:mock-data/"
+        message-delay:
+          price-updates: 1000     # timing específico para strict
+          order-updates: 5000
+          min-delay: 500
+          max-delay: 1000
+      random:
+        enable: false
+      real:
+        enable: false
 ```
 
-### Ativação Automática
-- Profile padrão → `MockWebSocketAdapter` é carregado automaticamente
-- Não requer configuração adicional
-- Inicia simuladores automaticamente ao conectar
+#### 2. Feed Random  
+Gera dados aleatórios com volatilidade configurável:
+```yaml
+# application-mock-random.yml
+mock:
+  exchange:
+    feed:
+      strict:
+        enable: false
+      random:
+        enable: true
+        data-folder: "classpath:mock-data/"
+        message-delay:
+          price-updates: 800      # timing específico para random
+          order-updates: 4000
+        price-simulation:         # configuração específica para random
+          volatility: 0.02
+          trend-probability: 0.1
+          trend-strength: 0.005
+      real:
+        enable: false
+```
+
+#### 3. Feed Real
+Conecta a exchanges reais - sem configurações de timing artificial:
+```yaml
+# application-mock-real-feed.yml
+mock:
+  exchange:
+    feed:
+      strict:
+        enable: false
+      random:
+        enable: false
+      real:
+        enable: true
+        url: "wss://stream.binance.com:9443/ws/!ticker@arr"
+        exchange: "BINANCE"
+        # Sem message-delay ou price-simulation - usa dados reais
+```
+
+### WebSocket Configuration
+A configuração `websocket` é genérica e usada independente do tipo de feed:
+```yaml
+websocket:
+  exchange: MOCK                     # Sempre usa MockWebSocketAdapter
+  url: "ws://mock.exchange.local"    # Placeholder (real URL está em real.url)
+  connection-timeout: 5000
+  max-retries: 3
+```
 
 ## Simuladores Automáticos
 

@@ -20,9 +20,23 @@ public class MockExchangeProperties {
         return isStrictMode() ? feed.getStrict().getDataFolder() : feed.getRandom().getDataFolder();
     }
     
-    private MessageDelay messageDelay = new MessageDelay();
+    public MessageDelay getMessageDelay() {
+        if (feed.getStrict().isEnable()) {
+            return feed.getStrict().getMessageDelay();
+        } else if (feed.getRandom().isEnable()) {
+            return feed.getRandom().getMessageDelay();
+        }
+        return new MessageDelay(); // fallback
+    }
+    
+    public PriceSimulation getPriceSimulation() {
+        if (feed.getRandom().isEnable()) {
+            return feed.getRandom().getPriceSimulation();
+        }
+        return new PriceSimulation(); // fallback
+    }
+    
     private Orders orders = new Orders();
-    private PriceSimulation priceSimulation = new PriceSimulation();
     private MarketConditions marketConditions = new MarketConditions();
     
     @Data
@@ -60,17 +74,28 @@ public class MockExchangeProperties {
     public static class Feed {
         private StrictFeed strict = new StrictFeed();
         private RandomFeed random = new RandomFeed();
+        private RealFeed real = new RealFeed();
     }
     
     @Data
     public static class StrictFeed {
-        private boolean enable = true;
+        private boolean enable = false;
         private String dataFolder = "classpath:mock-data/";
+        private MessageDelay messageDelay = new MessageDelay();
     }
     
     @Data
     public static class RandomFeed {
         private boolean enable = false;
         private String dataFolder = "classpath:mock-data/";
+        private MessageDelay messageDelay = new MessageDelay();
+        private PriceSimulation priceSimulation = new PriceSimulation();
+    }
+    
+    @Data
+    public static class RealFeed {
+        private boolean enable = false;
+        private String url;
+        private String exchange;
     }
 }

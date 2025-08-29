@@ -87,14 +87,16 @@ public class TradeMatchingService {
         BigDecimal totalRealizedPnL = BigDecimal.ZERO;
         MatchingResult result = new MatchingResult();
         
-        // Busca trades abertos mais antigos (FIFO)
-        List<Trade> openTrades = tradeRepository.findOldestOpenTrades(
-                strategyName, tradingPair, TradeStatus.OPEN);
+        // Busca trades abertos e parcialmente fechados mais antigos (FIFO) - inclui PARTIAL_CLOSED
+        List<Trade> openTrades = tradeRepository.findOldestOpenAndPartialTrades(strategyName, tradingPair);
         
         if (openTrades.isEmpty()) {
-            log.warn("No open trades found for strategy '{}' and pair '{}'", strategyName, tradingPair.getSymbol());
+            log.warn("No open or partial trades found for strategy '{}' and pair '{}'", strategyName, tradingPair.getSymbol());
             throw new IllegalStateException("No open trades available for closing");
         }
+        
+        log.debug("Found {} open/partial trades for closing: strategy='{}', pair='{}'", 
+                openTrades.size(), strategyName, tradingPair.getSymbol());
         
         for (Trade openTrade : openTrades) {
             if (remainingQuantity.compareTo(BigDecimal.ZERO) <= 0) {
@@ -112,8 +114,9 @@ public class TradeMatchingService {
             
             result.addMatchedTrade(openTrade, matchedQuantity, matchedPnL);
             
-            log.debug("Matched {} with trade {} - quantity: {}, P&L: {}", 
-                    exitOrderId, openTrade.getId(), matchedQuantity, matchedPnL);
+            log.debug("Matched {} with trade {} (status: {}) - quantity: {}, P&L: {}, remaining: {}", 
+                    exitOrderId, openTrade.getId(), openTrade.getStatus(), matchedQuantity, matchedPnL, 
+                    openTrade.getRemainingQuantity());
         }
         
         if (remainingQuantity.compareTo(BigDecimal.ZERO) > 0) {
@@ -213,10 +216,11 @@ public class TradeMatchingService {
     }
     
     /**
-     * Verifica se há trades abertos para uma estratégia
+     * Verifica se há trades abertos ou parcialmente fechados para uma estratégia
      */
     public boolean hasOpenTrades(String strategyName, TradingPair tradingPair) {
-        return getFirstOpenTrade(strategyName, tradingPair).isPresent();
+        List<Trade> openAndPartialTrades = tradeRepository.findOldestOpenAndPartialTrades(strategyName, tradingPair);
+        return !openAndPartialTrades.isEmpty();
     }
     
     /**

@@ -1,4 +1,4 @@
-package com.marmitt.ctrade.application.service;
+package com.marmitt.ctrade.config;
 
 import com.marmitt.ctrade.domain.port.TradingStrategy;
 import lombok.extern.slf4j.Slf4j;

@@ -1,5 +1,6 @@
-package com.marmitt.ctrade.application.service;
+package com.marmitt.ctrade.application.scheduler;
 
+import com.marmitt.ctrade.application.service.PriceCacheService;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -10,11 +11,11 @@ import java.util.concurrent.TimeUnit;
 @Service
 @RequiredArgsConstructor
 @Slf4j
-public class PriceCacheCleanupService {
+public class PriceCacheCleanupScheduler {
     
     private final PriceCacheService priceCacheService;
     
-    @Scheduled(fixedRateString = "${trading.price-cache.cleanup-interval-minutes:10}", timeUnit = TimeUnit.MINUTES)
+    @Scheduled(fixedRateString = "${trading.price-cache.cleanup-interval-minutes}", timeUnit = TimeUnit.MINUTES)
     public void cleanupExpiredCacheEntries() {
         try {
             log.debug("Starting scheduled cleanup of expired price cache entries");

@@ -1,5 +1,6 @@
 package com.marmitt.ctrade.application.service;
 
+import com.marmitt.ctrade.config.TradingProperties;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -15,14 +16,11 @@ import java.util.concurrent.ConcurrentHashMap;
 public class PriceCacheService {
     
     private final Map<String, List<PriceCacheEntry>> priceHistoryCache = new ConcurrentHashMap<>();
-    private final Duration cacheTtl;
-    private final int maxHistorySize;
+    private final TradingProperties tradingProperties;
     
-    public PriceCacheService(@Value("${trading.price-cache.ttl-minutes:5}") int ttlMinutes,
-                            @Value("${trading.price-cache.max-history-size:100}") int maxHistorySize) {
-        this.cacheTtl = Duration.ofMinutes(ttlMinutes);
-        this.maxHistorySize = maxHistorySize;
-        log.info("Price cache TTL configured to {} minutes, max history size: {}", ttlMinutes, maxHistorySize);
+    public PriceCacheService(TradingProperties tradingProperties) {
+
+        this.tradingProperties = tradingProperties;
     }
     
     public void updatePrice(String tradingPair, BigDecimal price, LocalDateTime timestamp) {
@@ -39,7 +37,7 @@ public class PriceCacheService {
         List<PriceCacheEntry> history = priceHistoryCache.get(tradingPair);
         
         // Limitar tamanho do histórico
-        if (history.size() > maxHistorySize) {
+        if (history.size() > tradingProperties.priceCache().maxHistorySize()) {
             history.remove(0); // Remove o mais antigo
             log.debug("Removed oldest price entry for {} to maintain max history size", tradingPair);
         }
@@ -65,51 +63,7 @@ public class PriceCacheService {
         // Todas as entradas estão expiradas
         return Optional.empty();
     }
-    
-    public Optional<LocalDateTime> getLastUpdateTime(String tradingPair) {
-        List<PriceCacheEntry> history = priceHistoryCache.get(tradingPair);
-        if (history == null || history.isEmpty()) {
-            return Optional.empty();
-        }
-        
-        // Buscar a entrada mais recente válida
-        for (int i = history.size() - 1; i >= 0; i--) {
-            PriceCacheEntry entry = history.get(i);
-            if (isEntryValid(entry)) {
-                return Optional.of(entry.timestamp);
-            }
-        }
-        
-        return Optional.empty();
-    }
-    
-    public boolean hasPrice(String tradingPair) {
-        return getLatestPrice(tradingPair).isPresent();
-    }
-    
-    public List<PriceCacheEntry> getPriceHistory(String tradingPair) {
-        List<PriceCacheEntry> history = priceHistoryCache.get(tradingPair);
-        if (history == null) {
-            return new ArrayList<>();
-        }
-        
-        // Retornar apenas entradas válidas (não expiradas)
-        return history.stream()
-                .filter(this::isEntryValid)
-                .toList();
-    }
-    
-    public List<PriceCacheEntry> getPriceHistory(String tradingPair, int limit) {
-        List<PriceCacheEntry> fullHistory = getPriceHistory(tradingPair);
-        
-        if (fullHistory.size() <= limit) {
-            return fullHistory;
-        }
-        
-        // Retornar os 'limit' mais recentes
-        return fullHistory.subList(fullHistory.size() - limit, fullHistory.size());
-    }
-    
+
     public int getCacheSize() {
         return priceHistoryCache.size();
     }
@@ -119,12 +73,7 @@ public class PriceCacheService {
                 .mapToInt(List::size)
                 .sum();
     }
-    
-    public void clearCache() {
-        priceHistoryCache.clear();
-        log.info("Price cache cleared");
-    }
-    
+
     public int clearExpiredEntries() {
         int totalRemoved = 0;
         
@@ -155,7 +104,7 @@ public class PriceCacheService {
     }
     
     private boolean isEntryValid(PriceCacheEntry entry) {
-        return Duration.between(entry.timestamp, LocalDateTime.now()).compareTo(cacheTtl) < 0;
+        return Duration.between(entry.timestamp, LocalDateTime.now()).compareTo(tradingProperties.priceCache().getTtlMinutesAsDuration()) < 0;
     }
 
     public record PriceCacheEntry(BigDecimal price, LocalDateTime timestamp) {

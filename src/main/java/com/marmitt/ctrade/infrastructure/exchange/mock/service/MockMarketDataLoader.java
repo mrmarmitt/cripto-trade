@@ -24,7 +24,7 @@ public class MockMarketDataLoader {
     
     private final MockExchangeProperties properties;
     private final ResourceLoader resourceLoader;
-    private final TradingPairProvider tradingPairProvider;
+//    private final TradingPairProvider tradingPairProvider;
     private final ObjectMapper objectMapper = new ObjectMapper();
     
     private Map<String, List<PriceData>> priceDataMap = new HashMap<>();
@@ -34,12 +34,12 @@ public class MockMarketDataLoader {
     @PostConstruct
     public void loadMarketData() {
         // Get active trading pairs from configuration
-        List<String> activePairs = tradingPairProvider.getActiveTradingPairs();
-        log.info("Loading market data for active trading pairs: {}", activePairs);
+//        List<String> activePairs = tradingPairProvider.getActiveTradingPairs();
+//        log.info("Loading market data for active trading pairs: {}", activePairs);
         
-        for (String pair : activePairs) {
-            loadPriceDataForPair(pair);
-        }
+//        for (String pair : activePairs) {
+//            loadPriceDataForPair(pair);
+//        }
         
         log.info("Successfully loaded market data for {} trading pairs from {}", 
             priceDataMap.size(), properties.getDataFolder());
