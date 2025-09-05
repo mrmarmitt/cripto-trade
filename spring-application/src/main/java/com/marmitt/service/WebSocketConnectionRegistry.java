@@ -5,6 +5,7 @@ import org.springframework.stereotype.Component;
 
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
+import java.util.Set;
 
 @Component
 public class WebSocketConnectionRegistry {
@@ -24,5 +25,13 @@ public class WebSocketConnectionRegistry {
     
     public boolean hasConnection(String exchangeName) {
         return connections.containsKey(exchangeName);
+    }
+    
+    public Set<String> getAllExchangeNames() {
+        return connections.keySet();
+    }
+    
+    public Map<String, WebSocketConnectionManager> getAllConnections() {
+        return Map.copyOf(connections);
     }
 }

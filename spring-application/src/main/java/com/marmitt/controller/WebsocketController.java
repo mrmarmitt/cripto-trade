@@ -7,6 +7,7 @@ import com.marmitt.service.WebSocketExampleService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 
 @RestController
@@ -35,8 +36,20 @@ public class WebsocketController {
         return webSocketService.getStatus(exchange);
     }
 
+    @GetMapping("/all")
+    public Map<String, WebSocketConnectionResponse> getAllConnectionResult() {
+        return webSocketService.getAllStatus();
+    }
+
+
     @GetMapping("/stats")
     public WebSocketStatsResponse getConnectionStats(@RequestParam String exchange) {
         return webSocketService.getStats(exchange);
+    }
+
+
+    @GetMapping("/stats/all")
+    public Map<String, WebSocketStatsResponse> getAllConnectionStats() {
+        return webSocketService.getAllStats();
     }
 }

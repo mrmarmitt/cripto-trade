@@ -23,6 +23,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.stream.Collectors;
 
@@ -202,5 +203,21 @@ public class WebSocketExampleService {
     public WebSocketStatsResponse getStats(String exchange) {
         WebSocketConnectionManager manager = connectionRegistry.getOrCreateConnection(exchange);
         return ConnectionStatsMapper.toResponse(manager.getConnectionStats(), exchange);
+    }
+
+    public Map<String, WebSocketConnectionResponse> getAllStatus() {
+        return connectionRegistry.getAllConnections().entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> ConnectionResultMapper.toResponse(entry.getValue().getConnectionResult())
+                ));
+    }
+
+    public Map<String, WebSocketStatsResponse> getAllStats() {
+        return connectionRegistry.getAllConnections().entrySet().stream()
+                .collect(Collectors.toMap(
+                        Map.Entry::getKey,
+                        entry -> ConnectionStatsMapper.toResponse(entry.getValue().getConnectionStats(), entry.getKey())
+                ));
     }
 }
