@@ -67,43 +67,37 @@ public class WebSocketExampleService {
     public CompletableFuture<WebSocketConnectionResponse> connect(WebSocketConnectRequest request) {
         String exchange = request.exchange();
         
-        // Verifica se já está conectado
+        // Obtém o status atual da conexão e passa para o use case
         WebSocketConnectionManager manager = connectionRegistry.getOrCreateConnection(exchange);
         ConnectionResult currentStatus = manager.getConnectionResult();
-        
-        if (currentStatus.isConnected()) {
-            log.info("Already connected to {} exchange", exchange);
-            return CompletableFuture.completedFuture(
-                ConnectionResultMapper.toResponse(currentStatus.withMetadata("message", "Already connected"))
-            );
+
+        // Inicia processo de conexão se necessário
+        if (!currentStatus.isConnected() && !currentStatus.isInProgress()) {
+            manager.startConnection();
         }
-        
-        // Inicia nova conexão
-        CompletableFuture<ConnectionResult> connectionFuture = manager.startConnection();
-        if (connectionFuture.isDone()) {
-            return connectionFuture.thenApply(ConnectionResultMapper::toResponse);
-        }
-        
-        // Seleciona exchange e conecta
+
+        // Seleciona exchange e conecta (toda lógica de validação está no use case)
         if ("BINANCE".equalsIgnoreCase(exchange)) {
-            return connectToBinance(request, manager);
+            return connectToBinance(request, manager, currentStatus);
         } else if ("COINBASE".equalsIgnoreCase(exchange)) {
-            return connectToCoinbase(request, manager);
+            return connectToCoinbase(request, manager, currentStatus);
         } else {
-            CompletableFuture<WebSocketConnectionResponse> failedFuture = new CompletableFuture<>();
-            failedFuture.complete(ConnectionResultMapper.toResponse(
-                ConnectionResult.failure("Unsupported exchange: " + exchange)
-            ));
-            return failedFuture;
+            return CompletableFuture.completedFuture(
+                ConnectionResultMapper.toResponse(
+                    ConnectionResult.failure("Unsupported exchange: " + exchange)
+                )
+            );
         }
     }
     
-    private CompletableFuture<WebSocketConnectionResponse> connectToBinance(WebSocketConnectRequest request, WebSocketConnectionManager manager) {
+    private CompletableFuture<WebSocketConnectionResponse> connectToBinance(WebSocketConnectRequest request, WebSocketConnectionManager manager, ConnectionResult currentStatus) {
         WebSocketConnectionParameters connectionParams = buildWebSocketConnectionParameters(request);
 
-        return connectWebSocket.execute(connectionParams, binanceUrlBuilder, webSocketPort, binanceWebSocketListener)
+        return connectWebSocket.execute(connectionParams, currentStatus, binanceUrlBuilder, webSocketPort, binanceWebSocketListener)
                 .thenApply(response -> {
-                    manager.onConnected();
+                    if (response.isSuccess() && !currentStatus.isConnected()) {
+                        manager.onConnected();
+                    }
                     return response;
                 })
                 .exceptionally(throwable -> {
@@ -118,25 +112,27 @@ public class WebSocketExampleService {
                 });
     }
     
-    private CompletableFuture<WebSocketConnectionResponse> connectToCoinbase(WebSocketConnectRequest request, WebSocketConnectionManager manager) {
+    private CompletableFuture<WebSocketConnectionResponse> connectToCoinbase(WebSocketConnectRequest request, WebSocketConnectionManager manager, ConnectionResult currentStatus) {
         WebSocketConnectionParameters connectionParams = buildWebSocketConnectionParameters(request);
 
-        return connectWebSocket.execute(connectionParams, coinbaseUrlBuilder, webSocketPort, coinbaseWebSocketListener)
+        return connectWebSocket.execute(connectionParams, currentStatus, coinbaseUrlBuilder, webSocketPort, coinbaseWebSocketListener)
                 .thenApply(response -> {
-                    manager.onConnected();
-                    
-                    // Envia mensagem de subscribe para Coinbase após conexão estabelecida
-                    if (coinbaseWebSocketListener instanceof CoinbaseWebSocketListener coinbaseListener) {
-                        try {
-                            // Para cada currency pair, envia mensagem de subscribe
-                            for (com.marmitt.controller.dto.CurrencyPair pair : request.symbols()) {
-                                String coinbaseSymbol = pair.baseCurrency() + "-" + pair.quoteCurrency();
-                                String subscribeMessage = coinbaseListener.createSubscribeMessage(coinbaseSymbol);
-                                webSocketPort.sendMessage(subscribeMessage);
-                                log.info("Sent subscribe message to Coinbase: {}", subscribeMessage);
+                    if (response.isSuccess() && !currentStatus.isConnected()) {
+                        manager.onConnected();
+                        
+                        // Envia mensagem de subscribe para Coinbase após conexão estabelecida
+                        if (coinbaseWebSocketListener instanceof CoinbaseWebSocketListener coinbaseListener) {
+                            try {
+                                // Para cada currency pair, envia mensagem de subscribe
+                                for (com.marmitt.controller.dto.CurrencyPair pair : request.symbols()) {
+                                    String coinbaseSymbol = pair.baseCurrency() + "-" + pair.quoteCurrency();
+                                    String subscribeMessage = coinbaseListener.createSubscribeMessage(coinbaseSymbol);
+                                    webSocketPort.sendMessage(subscribeMessage);
+                                    log.info("Sent subscribe message to Coinbase: {}", subscribeMessage);
+                                }
+                            } catch (Exception e) {
+                                log.error("Failed to send subscribe message to Coinbase", e);
                             }
-                        } catch (Exception e) {
-                            log.error("Failed to send subscribe message to Coinbase", e);
                         }
                     }
                     

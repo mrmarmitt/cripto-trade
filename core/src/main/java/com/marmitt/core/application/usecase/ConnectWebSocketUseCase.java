@@ -16,10 +16,27 @@ public class ConnectWebSocketUseCase implements ConnectWebSocketPort {
     @Override
     public CompletableFuture<WebSocketConnectionResponse> execute(
             WebSocketConnectionParameters parameters,
+            ConnectionResult currentConnectionResult,
             ExchangeUrlBuilderPort exchangeUrlBuilderPort,
             WebSocketPort webSocketPort,
             WebSocketListenerPort listener) {
 
+        // Validation logic moved from service to use case
+        if (currentConnectionResult.isConnected()) {
+            return CompletableFuture.completedFuture(
+                ConnectionResultMapper.toResponse(
+                    currentConnectionResult.withMetadata("message", "Already connected")
+                )
+            );
+        }
+
+        if (currentConnectionResult.isInProgress()) {
+            return CompletableFuture.completedFuture(
+                ConnectionResultMapper.toResponse(currentConnectionResult)
+            );
+        }
+
+        // Proceed with new connection
         String connectionUrl = exchangeUrlBuilderPort.buildConnectionUrl(parameters);
         return webSocketPort.connect(connectionUrl, listener)
                 .thenApply(ConnectionResultMapper::toResponse);
