@@ -1,6 +1,8 @@
 package com.marmitt.service;
 
+import com.marmitt.controller.dto.WebSocketConnectRequest;
 import com.marmitt.core.domain.ConnectionResult;
+import com.marmitt.core.dto.configuration.CurrencyPair;
 import com.marmitt.core.dto.websocket.ConnectionResultMapper;
 import com.marmitt.core.dto.websocket.WebSocketConnectionResponse;
 import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
@@ -20,6 +22,7 @@ import org.springframework.stereotype.Service;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
+import java.util.stream.Collectors;
 
 @Service
 public class WebSocketExampleService {
@@ -61,7 +64,9 @@ public class WebSocketExampleService {
     }
 
 
-    public CompletableFuture<WebSocketConnectionResponse> connect(String exchange, String baseCurrency, String quoteCurrency) {
+    public CompletableFuture<WebSocketConnectionResponse> connect(WebSocketConnectRequest request) {
+        String exchange = request.exchange();
+        
         // Verifica se já está conectado
         WebSocketConnectionManager manager = connectionRegistry.getOrCreateConnection(exchange);
         ConnectionResult currentStatus = manager.getConnectionResult();
@@ -81,9 +86,9 @@ public class WebSocketExampleService {
         
         // Seleciona exchange e conecta
         if ("BINANCE".equalsIgnoreCase(exchange)) {
-            return connectToBinance(baseCurrency, quoteCurrency, manager);
+            return connectToBinance(request, manager);
         } else if ("COINBASE".equalsIgnoreCase(exchange)) {
-            return connectToCoinbase(baseCurrency, quoteCurrency, manager);
+            return connectToCoinbase(request, manager);
         } else {
             CompletableFuture<WebSocketConnectionResponse> failedFuture = new CompletableFuture<>();
             failedFuture.complete(ConnectionResultMapper.toResponse(
@@ -93,13 +98,10 @@ public class WebSocketExampleService {
         }
     }
     
-    private CompletableFuture<WebSocketConnectionResponse> connectToBinance(String baseCurrency, String quoteCurrency, WebSocketConnectionManager manager) {
-        WebSocketConnectionParameters request = WebSocketConnectionParameters.of(
-                List.of(StreamType.TICKER),
-                Map.of("baseCurrency", baseCurrency, "quoteCurrency", quoteCurrency)
-        );
+    private CompletableFuture<WebSocketConnectionResponse> connectToBinance(WebSocketConnectRequest request, WebSocketConnectionManager manager) {
+        WebSocketConnectionParameters connectionParams = buildWebSocketConnectionParameters(request);
 
-        return connectWebSocket.execute(request, binanceUrlBuilder, webSocketPort, binanceWebSocketListener)
+        return connectWebSocket.execute(connectionParams, binanceUrlBuilder, webSocketPort, binanceWebSocketListener)
                 .thenApply(response -> {
                     manager.onConnected();
                     return response;
@@ -111,29 +113,28 @@ public class WebSocketExampleService {
                 })
                 .whenComplete((result, throwable) -> {
                     if (throwable == null && result.isSuccess()) {
-                        log.info("Successfully connected to Binance WebSocket");
+                        log.info("Successfully connected to Binance WebSocket for symbols: {}", request.symbols());
                     }
                 });
     }
     
-    private CompletableFuture<WebSocketConnectionResponse> connectToCoinbase(String baseCurrency, String quoteCurrency, WebSocketConnectionManager manager) {
-        WebSocketConnectionParameters request = WebSocketConnectionParameters.of(
-                List.of(StreamType.TICKER),
-                Map.of("baseCurrency", baseCurrency, "quoteCurrency", quoteCurrency)
-        );
+    private CompletableFuture<WebSocketConnectionResponse> connectToCoinbase(WebSocketConnectRequest request, WebSocketConnectionManager manager) {
+        WebSocketConnectionParameters connectionParams = buildWebSocketConnectionParameters(request);
 
-        return connectWebSocket.execute(request, coinbaseUrlBuilder, webSocketPort, coinbaseWebSocketListener)
+        return connectWebSocket.execute(connectionParams, coinbaseUrlBuilder, webSocketPort, coinbaseWebSocketListener)
                 .thenApply(response -> {
                     manager.onConnected();
                     
                     // Envia mensagem de subscribe para Coinbase após conexão estabelecida
                     if (coinbaseWebSocketListener instanceof CoinbaseWebSocketListener coinbaseListener) {
                         try {
-                            // Cria símbolo no formato Coinbase (baseCurrency-quoteCurrency)
-                            String coinbaseSymbol = baseCurrency + "-" + quoteCurrency;
-                            String subscribeMessage = coinbaseListener.createSubscribeMessage(coinbaseSymbol);
-                            webSocketPort.sendMessage(subscribeMessage);
-                            log.info("Sent subscribe message to Coinbase: {}", subscribeMessage);
+                            // Para cada currency pair, envia mensagem de subscribe
+                            for (com.marmitt.controller.dto.CurrencyPair pair : request.symbols()) {
+                                String coinbaseSymbol = pair.baseCurrency() + "-" + pair.quoteCurrency();
+                                String subscribeMessage = coinbaseListener.createSubscribeMessage(coinbaseSymbol);
+                                webSocketPort.sendMessage(subscribeMessage);
+                                log.info("Sent subscribe message to Coinbase: {}", subscribeMessage);
+                            }
                         } catch (Exception e) {
                             log.error("Failed to send subscribe message to Coinbase", e);
                         }
@@ -148,14 +149,25 @@ public class WebSocketExampleService {
                 })
                 .whenComplete((result, throwable) -> {
                     if (throwable == null && result.isSuccess()) {
-                        log.info("Successfully connected to Coinbase WebSocket");
+                        log.info("Successfully connected to Coinbase WebSocket for symbols: {}", request.symbols());
                     }
                 });
     }
-    
+
+    private WebSocketConnectionParameters buildWebSocketConnectionParameters(WebSocketConnectRequest request) {
+        List<CurrencyPair> coreCurrencyPairs = request.symbols().stream()
+                .map(pair -> new CurrencyPair(pair.baseCurrency(), pair.quoteCurrency()))
+                .collect(Collectors.toList());
+
+         return WebSocketConnectionParameters.of(
+                List.of(request.streamType()),
+                coreCurrencyPairs
+        );
+    }
+
     public CompletableFuture<WebSocketConnectionResponse> disconnect(String exchange) {
         WebSocketConnectionManager manager = connectionRegistry.getOrCreateConnection(exchange);
-        CompletableFuture<ConnectionResult> disconnectFuture = manager.startDisconnection();
+        manager.startDisconnection();
         
         return disconnectWebSocket.execute(webSocketPort)
                 .thenApply(response -> {
@@ -179,7 +191,4 @@ public class WebSocketExampleService {
         ConnectionResult result = manager.getConnectionResult();
         return ConnectionResultMapper.toResponse(result);
     }
-//    public boolean isConnected(WebSocketPort webSocketPort) {
-//        return webSocketUseCase.isConnected(webSocketPort);
-//    }
 }

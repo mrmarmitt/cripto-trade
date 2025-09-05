@@ -7,31 +7,24 @@ import java.util.Map;
 
 public record WebSocketConnectionParameters(
         List<StreamType> streamType,
+        List<CurrencyPair> currencyPairs,
         Map<String, Object> additionalParameters
 ) {
 
-    public static WebSocketConnectionParameters of(List<StreamType> streams) {
-        return new WebSocketConnectionParameters(streams, Map.of());
+    public static WebSocketConnectionParameters of(List<StreamType> streams, List<CurrencyPair> pairs) {
+        return new WebSocketConnectionParameters(streams, pairs, Map.of());
     }
 
-    public static WebSocketConnectionParameters of(List<StreamType> streams, Map<String, Object> parameters) {
-        return new WebSocketConnectionParameters(streams, parameters);
+    public static WebSocketConnectionParameters of(List<StreamType> streams, List<CurrencyPair> pairs, Map<String, Object> parameters) {
+        return new WebSocketConnectionParameters(streams, pairs, parameters);
     }
 
-    public List<String> getSymbols() {
-        Object symbolsParam = additionalParameters.get("symbols");
-        if (symbolsParam == null || symbolsParam.toString().trim().isEmpty()) {
-            return List.of();
-        }
-        return List.of(symbolsParam.toString().split(","));
+    public List<CurrencyPair> getCurrencyPairs() {
+        return currencyPairs != null ? currencyPairs : List.of();
     }
 
     public boolean isMultiSymbol() {
-        Object symbolsParam = additionalParameters.get("symbols");
-        if (symbolsParam == null || symbolsParam.toString().trim().isEmpty()) {
-            return false;
-        }
-        return symbolsParam.toString().contains(",");
+        return currencyPairs != null && currencyPairs.size() > 1;
     }
 
     public Object getParameterValue(String key) {

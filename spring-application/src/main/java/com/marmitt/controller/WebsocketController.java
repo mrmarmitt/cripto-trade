@@ -1,8 +1,9 @@
 package com.marmitt.controller;
 
+import com.marmitt.controller.dto.WebSocketConnectRequest;
 import com.marmitt.core.dto.websocket.WebSocketConnectionResponse;
-import com.marmitt.core.ports.outbound.WebSocketPort;
 import com.marmitt.service.WebSocketExampleService;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.concurrent.CompletableFuture;
@@ -19,10 +20,8 @@ public class WebsocketController {
 
     @PostMapping("/connect")
     public CompletableFuture<WebSocketConnectionResponse> connect(
-            @RequestParam String exchange, 
-            @RequestParam String baseCurrency,
-            @RequestParam String quoteCurrency) {
-        return webSocketService.connect(exchange, baseCurrency, quoteCurrency);
+            @Valid @RequestBody WebSocketConnectRequest request) {
+        return webSocketService.connect(request);
     }
 
     @PostMapping("/disconnect")
