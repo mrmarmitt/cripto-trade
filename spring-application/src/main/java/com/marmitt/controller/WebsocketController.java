@@ -2,6 +2,7 @@ package com.marmitt.controller;
 
 import com.marmitt.controller.dto.WebSocketConnectRequest;
 import com.marmitt.core.dto.websocket.WebSocketConnectionResponse;
+import com.marmitt.core.dto.websocket.WebSocketStatsResponse;
 import com.marmitt.service.WebSocketExampleService;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
@@ -32,5 +33,10 @@ public class WebsocketController {
     @GetMapping()
     public WebSocketConnectionResponse getConnectionResult(@RequestParam String exchange) {
         return webSocketService.getStatus(exchange);
+    }
+
+    @GetMapping("/stats")
+    public WebSocketStatsResponse getConnectionStats(@RequestParam String exchange) {
+        return webSocketService.getStats(exchange);
     }
 }

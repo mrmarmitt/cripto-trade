@@ -1,6 +1,6 @@
 package com.marmitt.core.ports.inbound.websocket;
 
-import com.marmitt.core.domain.ConnectionResult;
+import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
 import com.marmitt.core.dto.websocket.WebSocketConnectionResponse;
 import com.marmitt.core.dto.configuration.WebSocketConnectionParameters;
 import com.marmitt.core.ports.outbound.ExchangeUrlBuilderPort;
@@ -13,7 +13,7 @@ public interface ConnectWebSocketPort {
 
     CompletableFuture<WebSocketConnectionResponse> execute(
             WebSocketConnectionParameters parameters,
-            ConnectionResult currentConnectionResult,
+            WebSocketConnectionManager manager,
             ExchangeUrlBuilderPort exchangeUrlBuilderPort,
             WebSocketPort webSocketPort,
             WebSocketListenerPort listener);

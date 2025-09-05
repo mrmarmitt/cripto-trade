@@ -15,32 +15,29 @@ import java.time.Duration;
 import java.util.concurrent.CompletableFuture;
 
 
-@Component
 public class OkHttp3WebSocketAdapter implements WebSocketPort {
 
     private final OkHttpClient client;
-    private final OkHttp3ListenerConverter okHttp3ListenerConverter;
 
     private WebSocket webSocket;
+    private WebSocketConnectionManager currentManager;
 
-    public OkHttp3WebSocketAdapter(OkHttp3ListenerConverter okHttp3ListenerConverter) {
-        this.okHttp3ListenerConverter = okHttp3ListenerConverter;
+    public OkHttp3WebSocketAdapter() {
         this.client = new OkHttpClient.Builder().readTimeout(Duration.ZERO).build();
     }
 
     @Override
-    public CompletableFuture<ConnectionResult> connect(String url, WebSocketListenerPort listener) {
+    public CompletableFuture<ConnectionResult> connect(String url, WebSocketListenerPort listener, WebSocketConnectionManager manager) {
         Request request = new Request.Builder()
                 .url(url)
                 .build();
 
-        // Cria um manager temporário apenas para esta conexão
-        WebSocketConnectionManager manager = WebSocketConnectionManager.forExchange("GENERIC");
+        // Usa o manager fornecido pela camada superior
+        this.currentManager = manager;
         CompletableFuture<ConnectionResult> connectionFuture = manager.startConnection();
 
-        WebSocketListener enhancedListener = okHttp3ListenerConverter.convert(listener, manager);
+        WebSocketListener enhancedListener = OkHttp3ListenerConverter.convert(listener, manager);
         this.webSocket = client.newWebSocket(request, enhancedListener);
-
         return connectionFuture;
     }
 
@@ -48,13 +45,17 @@ public class OkHttp3WebSocketAdapter implements WebSocketPort {
     public CompletableFuture<ConnectionResult> disconnect() {
         if (webSocket != null) {
             webSocket.close(1000, "Normal closure");
-            // Retorna um resultado simples de desconexão
-            return CompletableFuture.completedFuture(
-                ConnectionResult.idle("GENERIC").disconnected("Manual disconnect")
-            );
+            if (currentManager != null) {
+                currentManager.startDisconnection();
+                return CompletableFuture.completedFuture(
+                    currentManager.getConnectionResult()
+                );
+            }
         }
+        
+        // Fallback se não há manager
         return CompletableFuture.completedFuture(
-            ConnectionResult.idle("GENERIC").disconnected("No active connection")
+            ConnectionResult.idle("UNKNOWN").disconnected("No active connection")
         );
     }
 
@@ -83,9 +84,14 @@ public class OkHttp3WebSocketAdapter implements WebSocketPort {
 
     @Override
     public ConnectionResult getConnectionResult() {
-        if (webSocket != null) {
-            return ConnectionResult.idle("GENERIC").connected();
+        if (currentManager != null) {
+            return currentManager.getConnectionResult();
         }
-        return ConnectionResult.idle("GENERIC");
+        
+        // Fallback se não há manager
+        if (webSocket != null) {
+            return ConnectionResult.idle("UNKNOWN").connected();
+        }
+        return ConnectionResult.idle("UNKNOWN");
     }
 }

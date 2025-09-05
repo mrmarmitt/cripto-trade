@@ -8,7 +8,7 @@ description = 'CTrace - Cryptocurrency Trading Application'
 
 java {
 	toolchain {
-		languageVersion = JavaLanguageVersion.of(24)
+		languageVersion = JavaLanguageVersion.of(21)
 	}
 }
 
@@ -27,12 +27,27 @@ subprojects {
 	
 	java {
 		toolchain {
-			languageVersion = JavaLanguageVersion.of(24)
+			languageVersion = JavaLanguageVersion.of(21)
 		}
 	}
 	
 	repositories {
 		mavenCentral()
+	}
+	
+	configurations {
+		compileOnly {
+			extendsFrom annotationProcessor
+		}
+	}
+	
+	dependencies {
+		// Lombok para todos os submódulos
+		compileOnly 'org.projectlombok:lombok:1.18.36'
+		annotationProcessor 'org.projectlombok:lombok:1.18.36'
+		
+		// SLF4J API para logging (necessário para @Slf4j)
+		implementation 'org.slf4j:slf4j-api:2.0.7'
 	}
 }
 
