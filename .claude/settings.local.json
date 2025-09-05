@@ -16,7 +16,9 @@
       "Bash(sed:*)",
       "Bash(mkdir:*)",
       "Bash(cp:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(true)"
     ],
     "defaultMode": "acceptEdits"
   }

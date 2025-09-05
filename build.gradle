@@ -1,7 +1,5 @@
 plugins {
 	id 'java'
-	id 'org.springframework.boot' version '3.5.4'
-	id 'io.spring.dependency-management' version '1.1.7'
 }
 
 group = 'com.marmitt'
@@ -24,24 +22,34 @@ repositories {
 	mavenCentral()
 }
 
-dependencies {
-	implementation 'org.springframework.boot:spring-boot-starter-web'
-	implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
-	implementation 'org.springframework.boot:spring-boot-starter-actuator'
-	implementation 'org.springframework.boot:spring-boot-starter-validation'
-	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.9'
-	implementation 'com.squareup.okhttp3:okhttp:4.12.0'
-	implementation 'com.fasterxml.jackson.core:jackson-databind'
-
-	runtimeOnly 'com.h2database:h2'
-	compileOnly 'org.projectlombok:lombok'
-	annotationProcessor 'org.projectlombok:lombok'
-
-	testImplementation 'org.springframework.boot:spring-boot-starter-test'
-	testImplementation 'org.springframework.boot:spring-boot-starter-webflux'
-	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
+subprojects {
+	apply plugin: 'java'
+	
+	java {
+		toolchain {
+			languageVersion = JavaLanguageVersion.of(24)
+		}
+	}
+	
+	repositories {
+		mavenCentral()
+	}
 }
 
-tasks.named('test') {
-	useJUnitPlatform()
+// Root project dependencies and configuration
+dependencies {
+	// This project depends on the application module
+	implementation project(':spring-application')
+}
+
+// Configure main source set for root project
+sourceSets {
+	main {
+		java {
+			srcDirs = []
+		}
+		resources {
+			srcDirs = []
+		}
+	}
 }
