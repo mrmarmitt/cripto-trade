@@ -4,7 +4,6 @@ import com.marmitt.core.domain.ConnectionResult;
 import com.marmitt.core.domain.ConnectionStats;
 import com.marmitt.core.enums.ConnectionStatus;
 
-import java.time.Instant;
 import java.util.concurrent.CompletableFuture;
 
 public class WebSocketConnectionManager {
@@ -15,13 +14,19 @@ public class WebSocketConnectionManager {
 
     private WebSocketConnectionManager(ConnectionResult connectionResult) {
         this.currentResult = connectionResult;
-        this.currentStats = ConnectionStats.empty();
+        this.currentStats = createStatsForExchange();
         this.pendingOperation = CompletableFuture.completedFuture(connectionResult);
     }
 
-
     public static WebSocketConnectionManager forExchange(String exchangeName) {
         return new WebSocketConnectionManager(ConnectionResult.idle(exchangeName));
+    }
+    
+    /**
+     * Cria estatísticas iniciais zeradas.
+     */
+    private static ConnectionStats createStatsForExchange() {
+        return ConnectionStats.empty();
     }
 
     public CompletableFuture<ConnectionResult> startConnection() {
@@ -68,25 +73,10 @@ public class WebSocketConnectionManager {
         currentResult = currentCopyConnectionResult.connected();
 
         // Atualiza estatísticas localmente
-        Instant now = Instant.now();
         if (currentCopyConnectionResult.status() == ConnectionStatus.CONNECTING) {
-            currentStats = new ConnectionStats(
-                    currentCopyConnectionStats.totalConnections() + 1,
-                    currentCopyConnectionStats.totalReconnections(),
-                    currentCopyConnectionStats.totalMessagesReceived(),
-                    currentCopyConnectionStats.totalErrors(),
-                    now,
-                    currentCopyConnectionStats.lastMessageAt()
-            );
+            currentStats.recordConnection();
         } else if (currentCopyConnectionResult.status() == ConnectionStatus.RECONNECTING) {
-            currentStats = new ConnectionStats(
-                    currentCopyConnectionStats.totalConnections(),
-                    currentCopyConnectionStats.totalReconnections() + 1,
-                    currentCopyConnectionStats.totalMessagesReceived(),
-                    currentCopyConnectionStats.totalErrors(),
-                    now,
-                    currentCopyConnectionStats.lastMessageAt()
-            );
+            currentStats.recordReconnection();
         }
 
         completePendingOperation();
@@ -110,22 +100,16 @@ public class WebSocketConnectionManager {
         currentResult = currentCopyConnectionResult.failed(reason, cause);
 
         // Atualiza estatísticas de erro localmente
-        currentStats = new ConnectionStats(
-                currentCopyConnectionStats.totalConnections(),
-                currentCopyConnectionStats.totalReconnections(),
-                currentCopyConnectionStats.totalMessagesReceived(),
-                currentCopyConnectionStats.totalErrors() + 1,
-                currentCopyConnectionStats.lastConnectedAt(),
-                currentCopyConnectionStats.lastMessageAt()
-        );
+        currentStats.recordError();
 
         completePendingOperation();
     }
 
     public CompletableFuture<ConnectionResult> startDisconnection() {
+        ConnectionResult copyConnectionResult = currentResult;
         return switch (currentResult.status()) {
             case IDLE, ERROR -> {
-                currentResult = currentResult.disconnected("Already disconnected - no active connection");
+                currentResult = copyConnectionResult.disconnected("Already disconnected - no active connection");
                 yield CompletableFuture.completedFuture(currentResult);
             }
 
@@ -135,7 +119,7 @@ public class WebSocketConnectionManager {
                 if (pendingOperation != null && !pendingOperation.isDone()) {
                     pendingOperation.cancel(true);
                 }
-                currentResult = currentResult.disconnected("Connection attempt cancelled");
+                currentResult = copyConnectionResult.disconnected("Connection attempt cancelled");
                 yield CompletableFuture.completedFuture(currentResult);
             }
 
@@ -157,16 +141,7 @@ public class WebSocketConnectionManager {
      * Deve ser chamado sempre que uma mensagem é recebida via WebSocket.
      */
     public void onMessageReceived() {
-        ConnectionStats currentCopyConnectionStats = currentStats;
-
-        currentStats = new ConnectionStats(
-                currentCopyConnectionStats.totalConnections(),
-                currentCopyConnectionStats.totalReconnections(),
-                currentCopyConnectionStats.totalMessagesReceived() + 1,
-                currentCopyConnectionStats.totalErrors(),
-                currentCopyConnectionStats.lastConnectedAt(),
-                Instant.now()
-        );
+        currentStats.recordMessage();
     }
 
     /**
@@ -175,14 +150,7 @@ public class WebSocketConnectionManager {
      * @param errorType tipo do erro para categorização (não utilizado nesta implementação)
      */
     public void onMessageError(String errorType) {
-        currentStats = new ConnectionStats(
-                currentStats.totalConnections(),
-                currentStats.totalReconnections(),
-                currentStats.totalMessagesReceived(),
-                currentStats.totalErrors() + 1,
-                currentStats.lastConnectedAt(),
-                currentStats.lastMessageAt()
-        );
+        currentStats.recordError();
     }
 
     /**
@@ -196,8 +164,9 @@ public class WebSocketConnectionManager {
      * Reseta as estatísticas da conexão.
      */
     public void resetStats() {
-        currentStats = ConnectionStats.empty();
+        currentStats = createStatsForExchange();
     }
+    
 
     public ConnectionResult getConnectionResult() {
         if (pendingOperation.isDone()) {
