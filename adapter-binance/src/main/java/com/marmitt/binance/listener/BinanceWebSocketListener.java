@@ -1,10 +1,10 @@
 package com.marmitt.binance.listener;
 
-import com.marmitt.core.ports.outbound.WebSocketListenerPort;
+import com.marmitt.core.ports.outbound.websocket.MessageProcessorPort;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class BinanceWebSocketListener implements WebSocketListenerPort {
+public class BinanceWebSocketListener implements MessageProcessorPort {
     @Override
     public void onMessage(String message) {
         log.info("Binance - Received message: {}", message);

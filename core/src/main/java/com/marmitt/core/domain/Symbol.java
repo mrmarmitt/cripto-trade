@@ -1,6 +1,6 @@
 package com.marmitt.core.domain;
 
-public record Symbol(String value) {
+public record Symbol(String value) { //TODO: pensar em substituir por um dois campos para ficar mais fácil de identificar os moedas.
     
     public Symbol {
         if (value == null || value.trim().isEmpty()) {

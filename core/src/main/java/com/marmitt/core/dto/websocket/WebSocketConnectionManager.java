@@ -3,23 +3,28 @@ package com.marmitt.core.dto.websocket;
 import com.marmitt.core.domain.ConnectionResult;
 import com.marmitt.core.domain.ConnectionStats;
 import com.marmitt.core.enums.ConnectionStatus;
+import lombok.Getter;
 
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 public class WebSocketConnectionManager {
 
-    private volatile ConnectionResult currentResult;
-    private volatile ConnectionStats currentStats;
+    @Getter
+    private final String exchangeName;
+    private volatile ConnectionStats currentConnectionStats;
+    private volatile ConnectionResult currentConnectionResult;
     private volatile CompletableFuture<ConnectionResult> pendingOperation;
 
-    private WebSocketConnectionManager(ConnectionResult connectionResult) {
-        this.currentResult = connectionResult;
-        this.currentStats = createStatsForExchange();
+    private WebSocketConnectionManager(ConnectionResult connectionResult, String exchangeName) {
+        this.exchangeName = exchangeName;
+        this.currentConnectionResult = connectionResult;
+        this.currentConnectionStats = createStatsForExchange();
         this.pendingOperation = CompletableFuture.completedFuture(connectionResult);
     }
 
     public static WebSocketConnectionManager forExchange(String exchangeName) {
-        return new WebSocketConnectionManager(ConnectionResult.idle(exchangeName));
+        return new WebSocketConnectionManager(ConnectionResult.idle(), exchangeName);
     }
     
     /**
@@ -30,7 +35,7 @@ public class WebSocketConnectionManager {
     }
 
     public CompletableFuture<ConnectionResult> startConnection() {
-        ConnectionResult currentCopyConnectionResult = currentResult;
+        ConnectionResult currentCopyConnectionResult = currentConnectionResult;
 
         return switch (currentCopyConnectionResult.status()) {
             case CONNECTED -> CompletableFuture.completedFuture(
@@ -42,7 +47,7 @@ public class WebSocketConnectionManager {
                     yield pendingOperation; // Retorna operação em andamento
                 }
                 // Se não há operação pendente, inicia nova
-                currentResult = currentCopyConnectionResult.connecting();
+                currentConnectionResult = currentCopyConnectionResult.connecting();
                 pendingOperation = new CompletableFuture<>();
                 yield pendingOperation;
             }
@@ -52,9 +57,9 @@ public class WebSocketConnectionManager {
                 if (currentCopyConnectionResult.status() == ConnectionStatus.DISCONNECTED ||
                         currentCopyConnectionResult.status() == ConnectionStatus.CLOSED ||
                         currentCopyConnectionResult.status() == ConnectionStatus.ERROR) {
-                    currentResult = ConnectionResult.idle(currentCopyConnectionResult.exchangeName()).connecting();
+                    currentConnectionResult = ConnectionResult.idle().connecting();
                 } else {
-                    currentResult = currentCopyConnectionResult.connecting();
+                    currentConnectionResult = currentCopyConnectionResult.connecting();
                 }
                 pendingOperation = new CompletableFuture<>();
                 yield pendingOperation;
@@ -67,60 +72,60 @@ public class WebSocketConnectionManager {
     }
 
     public void onConnected() {
-        ConnectionResult currentCopyConnectionResult = currentResult;
-        ConnectionStats currentCopyConnectionStats = currentStats;
+        ConnectionResult currentCopyConnectionResult = currentConnectionResult;
+        ConnectionStats currentCopyConnectionStats = currentConnectionStats;
 
-        currentResult = currentCopyConnectionResult.connected();
+        currentConnectionResult = currentCopyConnectionResult.connected();
 
         // Atualiza estatísticas localmente
         if (currentCopyConnectionResult.status() == ConnectionStatus.CONNECTING) {
-            currentStats.recordConnection();
+            currentConnectionStats.recordConnection();
         } else if (currentCopyConnectionResult.status() == ConnectionStatus.RECONNECTING) {
-            currentStats.recordReconnection();
+            currentConnectionStats.recordReconnection();
         }
 
         completePendingOperation();
     }
 
     public void onClosing(int code, String reason) {
-        ConnectionResult currentCopyConnectionResult = currentResult;
-        currentResult = currentCopyConnectionResult.closing(code, reason);
+        ConnectionResult currentCopyConnectionResult = currentConnectionResult;
+        currentConnectionResult = currentCopyConnectionResult.closing(code, reason);
     }
 
     public void onClosed(int code, String reason) {
-        ConnectionResult currentCopyConnectionResult = currentResult;
-        currentResult = currentCopyConnectionResult.closed(code, reason);
+        ConnectionResult currentCopyConnectionResult = currentConnectionResult;
+        currentConnectionResult = currentCopyConnectionResult.closed(code, reason);
         completePendingOperation();
     }
 
     public void onFailure(String reason, Throwable cause) {
-        ConnectionResult currentCopyConnectionResult = currentResult;
-        ConnectionStats currentCopyConnectionStats = currentStats;
+        ConnectionResult currentCopyConnectionResult = currentConnectionResult;
+        ConnectionStats currentCopyConnectionStats = currentConnectionStats;
 
-        currentResult = currentCopyConnectionResult.failed(reason, cause);
+        currentConnectionResult = currentCopyConnectionResult.failed(reason, cause);
 
         // Atualiza estatísticas de erro localmente
-        currentStats.recordError();
+        currentConnectionStats.recordError();
 
         completePendingOperation();
     }
 
     public CompletableFuture<ConnectionResult> startDisconnection() {
-        ConnectionResult copyConnectionResult = currentResult;
-        return switch (currentResult.status()) {
+        ConnectionResult copyConnectionResult = currentConnectionResult;
+        return switch (currentConnectionResult.status()) {
             case IDLE, ERROR -> {
-                currentResult = copyConnectionResult.disconnected("Already disconnected - no active connection");
-                yield CompletableFuture.completedFuture(currentResult);
+                currentConnectionResult = copyConnectionResult.disconnected("Already disconnected - no active connection");
+                yield CompletableFuture.completedFuture(currentConnectionResult);
             }
 
-            case DISCONNECTED, CLOSED -> CompletableFuture.completedFuture(currentResult);
+            case DISCONNECTED, CLOSED -> CompletableFuture.completedFuture(currentConnectionResult);
 
             case CONNECTING -> {
                 if (pendingOperation != null && !pendingOperation.isDone()) {
                     pendingOperation.cancel(true);
                 }
-                currentResult = copyConnectionResult.disconnected("Connection attempt cancelled");
-                yield CompletableFuture.completedFuture(currentResult);
+                currentConnectionResult = copyConnectionResult.disconnected("Connection attempt cancelled");
+                yield CompletableFuture.completedFuture(currentConnectionResult);
             }
 
             case CONNECTED, CLOSING, RECONNECTING -> {
@@ -132,7 +137,7 @@ public class WebSocketConnectionManager {
 
     private void completePendingOperation() {
         if (pendingOperation != null && !pendingOperation.isDone()) {
-            pendingOperation.complete(currentResult);
+            pendingOperation.complete(currentConnectionResult);
         }
     }
 
@@ -141,7 +146,7 @@ public class WebSocketConnectionManager {
      * Deve ser chamado sempre que uma mensagem é recebida via WebSocket.
      */
     public void onMessageReceived() {
-        currentStats.recordMessage();
+        currentConnectionStats.recordMessage();
     }
 
     /**
@@ -150,32 +155,32 @@ public class WebSocketConnectionManager {
      * @param errorType tipo do erro para categorização (não utilizado nesta implementação)
      */
     public void onMessageError(String errorType) {
-        currentStats.recordError();
-    }
-
-    /**
-     * Retorna as estatísticas atuais da conexão.
-     */
-    public ConnectionStats getConnectionStats() {
-        return currentStats;
+        currentConnectionStats.recordError();
     }
 
     /**
      * Reseta as estatísticas da conexão.
      */
     public void resetStats() {
-        currentStats = createStatsForExchange();
+        currentConnectionStats = createStatsForExchange();
     }
-    
+
+    public UUID getConnectionId() {
+        return getConnectionResult().connectionId();
+    }
+
+    public ConnectionStats getConnectionStats() {
+        return currentConnectionStats;
+    }
 
     public ConnectionResult getConnectionResult() {
         if (pendingOperation.isDone()) {
             try {
                 return pendingOperation.get();
             } catch (Exception e) {
-                return currentResult.failed("Future access error", e);
+                return currentConnectionResult.failed("Future access error", e);
             }
         }
-        return currentResult;
+        return currentConnectionResult;
     }
 }

@@ -1,6 +1,5 @@
 package com.marmitt.service;
 
-import com.marmitt.adapter.OkHttp3ListenerConverter;
 import com.marmitt.adapter.OkHttp3WebSocketAdapter;
 import com.marmitt.coinbase.listener.CoinbaseWebSocketListener;
 import com.marmitt.controller.dto.WebSocketConnectRequest;
@@ -16,10 +15,11 @@ import com.marmitt.core.dto.websocket.ConnectionStatsMapper;
 import com.marmitt.core.ports.inbound.websocket.ConnectWebSocketPort;
 import com.marmitt.core.ports.inbound.websocket.DisconnectWebSocketPort;
 import com.marmitt.core.ports.outbound.ExchangeUrlBuilderPort;
-import com.marmitt.core.ports.outbound.WebSocketListenerPort;
-import com.marmitt.core.ports.outbound.WebSocketPort;
+import com.marmitt.core.ports.outbound.websocket.MessageProcessorPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
 import java.util.List;
@@ -38,20 +38,21 @@ public class WebSocketExampleService {
     private final WebSocketConnectionRegistry connectionRegistry;
 
     private final WebSocketPort binanceWebSocketPort;
-    private final WebSocketListenerPort binanceWebSocketListener;
+    private final MessageProcessorPort binanceWebSocketListener;
     private final ExchangeUrlBuilderPort binanceUrlBuilder;
 
     private final WebSocketPort coinbaseWebSocketPort;
-    private final WebSocketListenerPort coinbaseWebSocketListener;
+    private final MessageProcessorPort coinbaseWebSocketListener;
     private final ExchangeUrlBuilderPort coinbaseUrlBuilder;
 
     public WebSocketExampleService(
             ConnectWebSocketPort connectWebSocket,
             DisconnectWebSocketPort disconnectWebSocket,
             WebSocketConnectionRegistry connectionRegistry,
-            WebSocketListenerPort binanceWebSocketListener,
+            ApplicationEventPublisher eventPublisher,
+            MessageProcessorPort binanceWebSocketListener,
             ExchangeUrlBuilderPort binanceUrlBuilder,
-            WebSocketListenerPort coinbaseWebSocketListener,
+            MessageProcessorPort coinbaseWebSocketListener,
             ExchangeUrlBuilderPort coinbaseUrlBuilder) {
 
 
@@ -59,11 +60,11 @@ public class WebSocketExampleService {
         this.disconnectWebSocket = disconnectWebSocket;
         this.connectionRegistry = connectionRegistry;
 
-        this.binanceWebSocketPort = new OkHttp3WebSocketAdapter();
+        this.binanceWebSocketPort = new OkHttp3WebSocketAdapter(eventPublisher);
         this.binanceWebSocketListener = binanceWebSocketListener;
         this.binanceUrlBuilder = binanceUrlBuilder;
 
-        this.coinbaseWebSocketPort = new OkHttp3WebSocketAdapter();
+        this.coinbaseWebSocketPort = new OkHttp3WebSocketAdapter(eventPublisher);
         this.coinbaseWebSocketListener = coinbaseWebSocketListener;
         this.coinbaseUrlBuilder = coinbaseUrlBuilder;
     }
@@ -71,9 +72,10 @@ public class WebSocketExampleService {
 
     public CompletableFuture<WebSocketConnectionResponse> connect(WebSocketConnectRequest request) {
         String exchange = request.exchange();
-        
+
         // Obtém o status atual da conexão e passa para o use case
-        WebSocketConnectionManager manager = connectionRegistry.getOrCreateConnection(exchange);
+        connectionRegistry.createConnection(exchange);
+        WebSocketConnectionManager manager = connectionRegistry.getConnection(exchange);
 
         // Seleciona exchange e conecta (toda lógica de validação está no use case)
         if ("BINANCE".equalsIgnoreCase(exchange)) {
@@ -86,11 +88,12 @@ public class WebSocketExampleService {
 
         return CompletableFuture.completedFuture(
                 ConnectionResultMapper.toResponse(
-                    ConnectionResult.failure("Unsupported exchange: " + exchange)
+                        ConnectionResult.failure("Unsupported exchange: " + exchange),
+                        exchange
                 )
-            );
+        );
     }
-    
+
     private CompletableFuture<WebSocketConnectionResponse> connectToBinance(WebSocketConnectRequest request, WebSocketConnectionManager manager) {
         WebSocketConnectionParameters connectionParams = buildWebSocketConnectionParameters(request);
         ConnectionResult currentStatus = manager.getConnectionResult();
@@ -105,7 +108,10 @@ public class WebSocketExampleService {
                 .exceptionally(throwable -> {
                     log.error("Failed to connect to Binance WebSocket", throwable);
                     manager.onFailure("Connection failed", throwable);
-                    return ConnectionResultMapper.toResponse(ConnectionResult.failure("Connection failed: " + throwable.getMessage()));
+                    return ConnectionResultMapper.toResponse(
+                            ConnectionResult.failure("Connection failed: " + throwable.getMessage()),
+                            manager.getExchangeName()
+                    );
                 })
                 .whenComplete((result, throwable) -> {
                     if (throwable == null && result.isSuccess()) {
@@ -113,7 +119,7 @@ public class WebSocketExampleService {
                     }
                 });
     }
-    
+
     private CompletableFuture<WebSocketConnectionResponse> connectToCoinbase(WebSocketConnectRequest request, WebSocketConnectionManager manager) {
         WebSocketConnectionParameters connectionParams = buildWebSocketConnectionParameters(request);
         ConnectionResult currentStatus = manager.getConnectionResult();
@@ -122,7 +128,7 @@ public class WebSocketExampleService {
                 .thenApply(response -> {
                     if (response.isSuccess() && !currentStatus.isConnected()) {
                         manager.onConnected();
-                        
+
                         // Envia mensagem de subscribe para Coinbase após conexão estabelecida
                         if (coinbaseWebSocketListener instanceof CoinbaseWebSocketListener coinbaseListener) {
                             try {
@@ -138,13 +144,16 @@ public class WebSocketExampleService {
                             }
                         }
                     }
-                    
+
                     return response;
                 })
                 .exceptionally(throwable -> {
                     log.error("Failed to connect to Coinbase WebSocket", throwable);
                     manager.onFailure("Connection failed", throwable);
-                    return ConnectionResultMapper.toResponse(ConnectionResult.failure("Connection failed: " + throwable.getMessage()));
+                    return ConnectionResultMapper.toResponse(
+                            ConnectionResult.failure("Connection failed: " + throwable.getMessage()),
+                            manager.getExchangeName()
+                    );
                 })
                 .whenComplete((result, throwable) -> {
                     if (throwable == null && result.isSuccess()) {
@@ -158,14 +167,14 @@ public class WebSocketExampleService {
                 .map(pair -> new CurrencyPair(pair.baseCurrency(), pair.quoteCurrency()))
                 .collect(Collectors.toList());
 
-         return WebSocketConnectionParameters.of(
+        return WebSocketConnectionParameters.of(
                 List.of(request.streamType()),
                 coreCurrencyPairs
         );
     }
 
     public CompletableFuture<WebSocketConnectionResponse> disconnect(String exchange) {
-        WebSocketConnectionManager manager = connectionRegistry.getOrCreateConnection(exchange);
+        WebSocketConnectionManager manager = connectionRegistry.getConnection(exchange);
         manager.startDisconnection();
 
         WebSocketPort webSocketPort = "BINANCE".equalsIgnoreCase(exchange) ? binanceWebSocketPort : coinbaseWebSocketPort;
@@ -174,12 +183,12 @@ public class WebSocketExampleService {
                 .thenApply(response -> {
                     manager.onClosed(1000, "Manual disconnect");
                     // Retorna o estado atualizado do manager, não a response original
-                    return ConnectionResultMapper.toResponse(manager.getConnectionResult());
+                    return ConnectionResultMapper.toResponse(manager.getConnectionResult(), manager.getExchangeName());
                 })
                 .exceptionally(throwable -> {
                     log.error("Failed to disconnect from {} WebSocket", exchange, throwable);
                     manager.onFailure("Disconnect failed", throwable);
-                    return ConnectionResultMapper.toResponse(manager.getConnectionResult());
+                    return ConnectionResultMapper.toResponse(manager.getConnectionResult(), manager.getExchangeName());
                 })
                 .whenComplete((result, throwable) -> {
                     if (throwable == null) {
@@ -195,21 +204,21 @@ public class WebSocketExampleService {
     }
 
     public WebSocketConnectionResponse getStatus(String exchange) {
-        WebSocketConnectionManager manager = connectionRegistry.getOrCreateConnection(exchange);
+        WebSocketConnectionManager manager = connectionRegistry.getConnection(exchange);
         ConnectionResult result = manager.getConnectionResult();
-        return ConnectionResultMapper.toResponse(result);
+        return ConnectionResultMapper.toResponse(result, manager.getExchangeName());
     }
 
     public WebSocketStatsResponse getStats(String exchange) {
-        WebSocketConnectionManager manager = connectionRegistry.getOrCreateConnection(exchange);
-        return ConnectionStatsMapper.toResponse(manager.getConnectionStats(), exchange);
+        WebSocketConnectionManager manager = connectionRegistry.getConnection(exchange);
+        return ConnectionStatsMapper.toResponse(manager.getConnectionStats(), manager.getExchangeName());
     }
 
     public Map<String, WebSocketConnectionResponse> getAllStatus() {
         return connectionRegistry.getAllConnections().entrySet().stream()
                 .collect(Collectors.toMap(
                         Map.Entry::getKey,
-                        entry -> ConnectionResultMapper.toResponse(entry.getValue().getConnectionResult())
+                        entry -> ConnectionResultMapper.toResponse(entry.getValue().getConnectionResult(), entry.getKey())
                 ));
     }
 

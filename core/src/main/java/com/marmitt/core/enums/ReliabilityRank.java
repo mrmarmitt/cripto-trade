@@ -1,4 +1,4 @@
-package com.marmitt.core.domain;
+package com.marmitt.core.enums;
 
 import lombok.Getter;
 

@@ -12,16 +12,14 @@ public record ConnectionResult(
         ConnectionStatus status,
         String message,
         Instant timestamp,
-        String exchangeName,
         UUID connectionId,
         Map<String, Object> metadata) {
 
-    public static ConnectionResult idle(String exchangeName) {
+    public static ConnectionResult idle() {
         return new ConnectionResult(
                 ConnectionStatus.IDLE,
                 "WebSocket adapter initialized, ready to connect",
                 Instant.now(),
-                exchangeName,
                 null,
                 Map.of("initialized", true)
         );
@@ -32,7 +30,6 @@ public record ConnectionResult(
                 ConnectionStatus.CONNECTING,
                 "Establishing connection...",
                 Instant.now(),
-                this.exchangeName,
                 UUID.randomUUID(),
                 this.metadata
         );
@@ -46,7 +43,6 @@ public record ConnectionResult(
                 ConnectionStatus.CONNECTED,
                 "Connection established successfully",
                 Instant.now(),
-                this.exchangeName,
                 this.connectionId,
                 newMetadata
         );
@@ -57,7 +53,6 @@ public record ConnectionResult(
                 ConnectionStatus.ERROR,
                 reason,
                 Instant.now(),
-                "UNKNOWN",
                 UUID.randomUUID(),
                 Map.of("error", reason)
         );
@@ -72,7 +67,6 @@ public record ConnectionResult(
                 ConnectionStatus.ERROR,
                 reason,
                 Instant.now(),
-                this.exchangeName,
                 this.connectionId,
                 newMetadata
         );
@@ -87,7 +81,6 @@ public record ConnectionResult(
                 ConnectionStatus.DISCONNECTED,
                 reason,
                 Instant.now(),
-                this.exchangeName,
                 this.connectionId,
                 newMetadata
         );
@@ -102,7 +95,6 @@ public record ConnectionResult(
                 ConnectionStatus.CLOSING,
                 reason,
                 Instant.now(),
-                exchangeName,
                 this.connectionId,
                 newMetadata
         );
@@ -118,7 +110,6 @@ public record ConnectionResult(
                 ConnectionStatus.CLOSED,
                 reason,
                 Instant.now(),
-                this.exchangeName,
                 this.connectionId,
                 newMetadata
         );
@@ -131,7 +122,6 @@ public record ConnectionResult(
                 this.status,
                 this.message,
                 this.timestamp,
-                this.exchangeName,
                 this.connectionId,
                 newMetadata);
     }

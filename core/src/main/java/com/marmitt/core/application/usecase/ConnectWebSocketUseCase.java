@@ -7,8 +7,8 @@ import com.marmitt.core.dto.websocket.WebSocketConnectionResponse;
 import com.marmitt.core.dto.configuration.WebSocketConnectionParameters;
 import com.marmitt.core.ports.inbound.websocket.ConnectWebSocketPort;
 import com.marmitt.core.ports.outbound.ExchangeUrlBuilderPort;
-import com.marmitt.core.ports.outbound.WebSocketListenerPort;
-import com.marmitt.core.ports.outbound.WebSocketPort;
+import com.marmitt.core.ports.outbound.websocket.MessageProcessorPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -20,22 +20,23 @@ public class ConnectWebSocketUseCase implements ConnectWebSocketPort {
             WebSocketConnectionManager manager,
             ExchangeUrlBuilderPort exchangeUrlBuilderPort,
             WebSocketPort webSocketPort,
-            WebSocketListenerPort listener) {
+            MessageProcessorPort listener) {
 
         ConnectionResult currentConnectionResult = manager.getConnectionResult();
-        
+
         // Validation logic moved from service to use case
         if (currentConnectionResult.isConnected()) {
             return CompletableFuture.completedFuture(
-                ConnectionResultMapper.toResponse(
-                    currentConnectionResult.withMetadata("message", "Already connected")
-                )
+                    ConnectionResultMapper.toResponse(
+                            currentConnectionResult.withMetadata("message", "Already connected"),
+                            manager.getExchangeName()
+                    )
             );
         }
 
         if (currentConnectionResult.isInProgress()) {
             return CompletableFuture.completedFuture(
-                ConnectionResultMapper.toResponse(currentConnectionResult)
+                    ConnectionResultMapper.toResponse(currentConnectionResult, manager.getExchangeName())
             );
         }
 
@@ -44,6 +45,7 @@ public class ConnectWebSocketUseCase implements ConnectWebSocketPort {
         // Proceed with new connection
         String connectionUrl = exchangeUrlBuilderPort.buildConnectionUrl(parameters);
         return webSocketPort.connect(connectionUrl, listener, manager)
-                .thenApply(ConnectionResultMapper::toResponse);
+                .thenApply(connectionResult ->
+                        ConnectionResultMapper.toResponse(connectionResult, manager.getExchangeName()));
     }
 }

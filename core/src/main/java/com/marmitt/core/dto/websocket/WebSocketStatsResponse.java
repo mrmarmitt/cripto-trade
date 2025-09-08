@@ -1,6 +1,6 @@
 package com.marmitt.core.dto.websocket;
 
-import com.marmitt.core.domain.ReliabilityRank;
+import com.marmitt.core.enums.ReliabilityRank;
 
 import java.time.Duration;
 import java.time.Instant;

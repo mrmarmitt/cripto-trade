@@ -1,4 +1,4 @@
-package com.marmitt.core.ports.outbound;
+package com.marmitt.core.ports.outbound.websocket;
 
 import com.marmitt.core.domain.ConnectionResult;
 import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
@@ -6,7 +6,7 @@ import java.util.concurrent.CompletableFuture;
 
 public interface WebSocketPort {
 
-    CompletableFuture<ConnectionResult> connect(String url, WebSocketListenerPort listener, WebSocketConnectionManager manager);
+    CompletableFuture<ConnectionResult> connect(String url, MessageProcessorPort listener, WebSocketConnectionManager manager);
 
     CompletableFuture<ConnectionResult> disconnect();
 

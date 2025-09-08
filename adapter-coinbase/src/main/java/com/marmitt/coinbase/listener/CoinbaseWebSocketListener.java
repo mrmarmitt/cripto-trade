@@ -1,6 +1,6 @@
 package com.marmitt.coinbase.listener;
 
-import com.marmitt.core.ports.outbound.WebSocketListenerPort;
+import com.marmitt.core.ports.outbound.websocket.MessageProcessorPort;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.coinbase.request.TickerStreamRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -9,7 +9,7 @@ import java.util.Arrays;
 import java.util.List;
 
 @Slf4j
-public class CoinbaseWebSocketListener implements WebSocketListenerPort {
+public class CoinbaseWebSocketListener implements MessageProcessorPort {
     
     private final ObjectMapper objectMapper = new ObjectMapper();
 

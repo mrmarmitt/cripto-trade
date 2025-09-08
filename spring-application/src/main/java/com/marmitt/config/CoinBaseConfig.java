@@ -3,7 +3,7 @@ package com.marmitt.config;
 import com.marmitt.coinbase.CoinbaseUrlBuilder;
 import com.marmitt.coinbase.listener.CoinbaseWebSocketListener;
 import com.marmitt.core.ports.outbound.ExchangeUrlBuilderPort;
-import com.marmitt.core.ports.outbound.WebSocketListenerPort;
+import com.marmitt.core.ports.outbound.websocket.MessageProcessorPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -16,7 +16,7 @@ public class CoinbaseConfig {
     }
 
     @Bean
-    public WebSocketListenerPort coinbaseWebSocketListener() {
+    public MessageProcessorPort coinbaseWebSocketListener() {
         return new CoinbaseWebSocketListener();
     }
 }
