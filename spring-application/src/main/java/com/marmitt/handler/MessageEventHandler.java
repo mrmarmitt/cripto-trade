@@ -14,8 +14,8 @@ public class MessageEventHandler {
     @EventListener
     @Async("messageProcessingExecutor")
     public void handleRawMessage(RawMessageReceivedEvent event) {
-        // Recupera correlationId no MDC para logs correlacionados
-       // MDC.put("correlationId", event.getContext().correlationId());
+//         Recupera correlationId no MDC para logs correlacionados
+        MDC.put("correlationId", event.getContext().correlationId().toString());
         
         try {
             log.info("Processing message: exchange={}, correlationId={}, connectionId={}, messageLength={}",
@@ -33,8 +33,8 @@ public class MessageEventHandler {
         } catch (Exception e) {
             log.error("Error processing message: {}", e.getMessage(), e);
             
-//        } finally {
-          //  MDC.clear(); // Limpa MDC
+        } finally {
+            MDC.clear(); // Limpa MDC
         }
     }
 }
