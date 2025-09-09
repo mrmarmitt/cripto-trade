@@ -17,10 +17,7 @@ import org.springframework.context.ApplicationEventPublisher;
 @Slf4j
 public class OkHttp3ListenerConverter {
 
-    private static final ObjectMapper objectMapper = new ObjectMapper();
-
-    public static WebSocketListener convert(MessageProcessorPort listener,
-                                            WebSocketConnectionManager webSocketConnectionManager,
+    public static WebSocketListener convert(WebSocketConnectionManager webSocketConnectionManager,
                                             ApplicationEventPublisher eventPublisher) {
 
         return new WebSocketListener() {

@@ -28,7 +28,7 @@ public class OkHttp3WebSocketAdapter implements WebSocketPort {
     }
 
     @Override
-    public CompletableFuture<ConnectionResult> connect(String url, MessageProcessorPort listener, WebSocketConnectionManager manager) {
+    public CompletableFuture<ConnectionResult> connect(String url, WebSocketConnectionManager manager) {
         Request request = new Request.Builder()
                 .url(url)
                 .build();
@@ -37,7 +37,7 @@ public class OkHttp3WebSocketAdapter implements WebSocketPort {
         this.currentManager = manager;
         CompletableFuture<ConnectionResult> connectionFuture = manager.startConnection();
 
-        WebSocketListener enhancedListener = OkHttp3ListenerConverter.convert(listener, manager, eventPublisher);
+        WebSocketListener enhancedListener = OkHttp3ListenerConverter.convert(manager, eventPublisher);
         this.webSocket = client.newWebSocket(request, enhancedListener);
         return connectionFuture;
     }

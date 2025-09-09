@@ -44,7 +44,7 @@ public class ConnectWebSocketUseCase implements ConnectWebSocketPort {
 
         // Proceed with new connection
         String connectionUrl = exchangeUrlBuilderPort.buildConnectionUrl(parameters);
-        return webSocketPort.connect(connectionUrl, listener, manager)
+        return webSocketPort.connect(connectionUrl, manager)
                 .thenApply(connectionResult ->
                         ConnectionResultMapper.toResponse(connectionResult, manager.getExchangeName()));
     }

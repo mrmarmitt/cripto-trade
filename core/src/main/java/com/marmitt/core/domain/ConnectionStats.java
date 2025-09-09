@@ -31,8 +31,7 @@ public class ConnectionStats {
     private Instant lastMessageAt;
     
     // Métricas de timing
-    @Builder.Default
-    private final Instant connectionStartTime = Instant.now();
+    private Instant connectionStartTime;
     @Builder.Default
     private final List<Instant> messageTimestamps = new ArrayList<>();        // Últimos 100 timestamps para cálculos
     private Instant lastSilenceStart;
@@ -61,7 +60,7 @@ public class ConnectionStats {
         this.totalErrors = 0;
         this.lastConnectedAt = null;
         this.lastMessageAt = null;
-        this.connectionStartTime = Instant.now();
+        this.connectionStartTime = null;
         this.messageTimestamps = new ArrayList<>();
         this.lastSilenceStart = null;
         this.messageCountHistory = new ArrayList<>();
@@ -77,13 +76,36 @@ public class ConnectionStats {
     public static ConnectionStats empty() {
         return new ConnectionStats();
     }
+    
+    /**
+     * Reseta apenas as métricas de contagem, preservando o connectionStartTime.
+     * Útil para resetar estatísticas sem perder o contexto temporal da conexão.
+     */
+    public void resetCounters() {
+        this.totalMessagesReceived = 0;
+        this.totalErrors = 0;
+        this.messageTimestamps.clear();
+        this.messageCountHistory.clear();
+        this.responseTimes.clear();
+        this.malformedMessages = 0;
+        this.duplicateMessages = 0;
+        this.messageCountPerMinute.clear();
+        this.lastSilenceStart = null;
+        // Preserva connectionStartTime, totalConnections, totalReconnections, lastConnectedAt
+    }
 
     /**
      * Registra uma nova conexão.
      */
     public void recordConnection() {
         this.totalConnections++;
-        this.lastConnectedAt = Instant.now();
+        Instant now = Instant.now();
+        this.lastConnectedAt = now;
+        
+        // Define connectionStartTime apenas na primeira conexão
+        if (this.connectionStartTime == null) {
+            this.connectionStartTime = now;
+        }
     }
     
     /**
@@ -91,7 +113,13 @@ public class ConnectionStats {
      */
     public void recordReconnection() {
         this.totalReconnections++;
-        this.lastConnectedAt = Instant.now();
+        Instant now = Instant.now();
+        this.lastConnectedAt = now;
+        
+        // Define connectionStartTime apenas se ainda não foi definido
+        if (this.connectionStartTime == null) {
+            this.connectionStartTime = now;
+        }
     }
     
     /**

@@ -159,10 +159,10 @@ public class WebSocketConnectionManager {
     }
 
     /**
-     * Reseta as estatísticas da conexão.
+     * Reseta as estatísticas da conexão, preservando o connectionStartTime.
      */
     public void resetStats() {
-        currentConnectionStats = createStatsForExchange();
+        currentConnectionStats.resetCounters();
     }
 
     public UUID getConnectionId() {

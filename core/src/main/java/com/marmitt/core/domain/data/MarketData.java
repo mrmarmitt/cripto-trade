@@ -1,4 +1,6 @@
-package com.marmitt.core.domain;
+package com.marmitt.core.domain.data;
+
+import com.marmitt.core.domain.Symbol;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -14,7 +16,8 @@ public record MarketData(
         BigDecimal priceChange24h,
         BigDecimal priceChangePercent24h,
         Instant timestamp
-) {
+) implements ProcessorResponse {
+
     public BigDecimal getSpread() {
         if (bidPrice == null || askPrice == null) {
             return BigDecimal.ZERO;

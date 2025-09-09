@@ -1,6 +1,6 @@
 package com.marmitt.core.ports.outbound;
 
-import com.marmitt.core.domain.MarketData;
+import com.marmitt.core.domain.data.MarketData;
 import com.marmitt.core.domain.Symbol;
 
 import java.util.concurrent.CompletableFuture;

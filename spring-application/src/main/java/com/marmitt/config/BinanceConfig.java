@@ -1,7 +1,7 @@
 package com.marmitt.config;
 
 import com.marmitt.binance.BinanceUrlBuilder;
-import com.marmitt.binance.listener.BinanceWebSocketListener;
+import com.marmitt.binance.processor.BinanceMessageProcessor;
 import com.marmitt.core.ports.outbound.ExchangeUrlBuilderPort;
 import com.marmitt.core.ports.outbound.websocket.MessageProcessorPort;
 import org.springframework.context.annotation.Bean;
@@ -15,8 +15,8 @@ public class BinanceConfig {
         return new BinanceUrlBuilder();
     }
 
-    @Bean
-    public MessageProcessorPort binanceWebSocketListener() {
-        return new BinanceWebSocketListener();
+    @Bean("binanceMessageProcessor")
+    public MessageProcessorPort binanceMessageProcessor() {
+        return new BinanceMessageProcessor();
     }
 }

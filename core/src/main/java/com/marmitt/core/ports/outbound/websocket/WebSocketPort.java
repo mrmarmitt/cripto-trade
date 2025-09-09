@@ -6,7 +6,7 @@ import java.util.concurrent.CompletableFuture;
 
 public interface WebSocketPort {
 
-    CompletableFuture<ConnectionResult> connect(String url, MessageProcessorPort listener, WebSocketConnectionManager manager);
+    CompletableFuture<ConnectionResult> connect(String url, WebSocketConnectionManager manager);
 
     CompletableFuture<ConnectionResult> disconnect();
 

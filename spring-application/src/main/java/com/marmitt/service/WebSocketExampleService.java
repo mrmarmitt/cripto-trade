@@ -1,7 +1,7 @@
 package com.marmitt.service;
 
 import com.marmitt.adapter.OkHttp3WebSocketAdapter;
-import com.marmitt.coinbase.listener.CoinbaseWebSocketListener;
+import com.marmitt.coinbase.processor.CoinbaseMessageProcessor;
 import com.marmitt.controller.dto.WebSocketConnectRequest;
 import com.marmitt.core.domain.ConnectionResult;
 import com.marmitt.core.enums.ConnectionStatus;
@@ -130,7 +130,7 @@ public class WebSocketExampleService {
                         manager.onConnected();
 
                         // Envia mensagem de subscribe para Coinbase após conexão estabelecida
-                        if (coinbaseWebSocketListener instanceof CoinbaseWebSocketListener coinbaseListener) {
+                        if (coinbaseWebSocketListener instanceof CoinbaseMessageProcessor coinbaseListener) {
                             try {
                                 // Para cada currency pair, envia mensagem de subscribe
                                 for (com.marmitt.controller.dto.CurrencyPair pair : request.symbols()) {
