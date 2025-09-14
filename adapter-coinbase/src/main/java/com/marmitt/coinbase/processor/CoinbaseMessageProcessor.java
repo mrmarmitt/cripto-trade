@@ -3,7 +3,7 @@ package com.marmitt.coinbase.processor;
 import com.marmitt.core.domain.data.ProcessorResponse;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
-import com.marmitt.core.ports.outbound.websocket.MessageProcessorPort;
+import com.marmitt.core.ports.outbound.websocket.AdapterMessageProcessorPort;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.coinbase.request.TickerStreamRequest;
 import lombok.extern.slf4j.Slf4j;
@@ -12,7 +12,7 @@ import java.util.Arrays;
 import java.util.List;
 
 @Slf4j
-public class CoinbaseMessageProcessor implements MessageProcessorPort {
+public class CoinbaseMessageProcessor implements AdapterMessageProcessorPort {
     
     private final ObjectMapper objectMapper = new ObjectMapper();
 

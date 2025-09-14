@@ -2,7 +2,6 @@ package com.marmitt.adapter;
 
 import com.marmitt.core.domain.ConnectionResult;
 import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
-import com.marmitt.core.ports.outbound.websocket.MessageProcessorPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;

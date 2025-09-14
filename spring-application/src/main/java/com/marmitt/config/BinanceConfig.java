@@ -3,7 +3,7 @@ package com.marmitt.config;
 import com.marmitt.binance.BinanceUrlBuilder;
 import com.marmitt.binance.processor.BinanceMessageProcessor;
 import com.marmitt.core.ports.outbound.ExchangeUrlBuilderPort;
-import com.marmitt.core.ports.outbound.websocket.MessageProcessorPort;
+import com.marmitt.core.ports.outbound.websocket.AdapterMessageProcessorPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -16,7 +16,7 @@ public class BinanceConfig {
     }
 
     @Bean("binanceMessageProcessor")
-    public MessageProcessorPort binanceMessageProcessor() {
+    public AdapterMessageProcessorPort binanceMessageProcessor() {
         return new BinanceMessageProcessor();
     }
 }

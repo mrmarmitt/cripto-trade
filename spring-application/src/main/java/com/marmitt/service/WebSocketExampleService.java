@@ -15,7 +15,7 @@ import com.marmitt.core.dto.websocket.ConnectionStatsMapper;
 import com.marmitt.core.ports.inbound.websocket.ConnectWebSocketPort;
 import com.marmitt.core.ports.inbound.websocket.DisconnectWebSocketPort;
 import com.marmitt.core.ports.outbound.ExchangeUrlBuilderPort;
-import com.marmitt.core.ports.outbound.websocket.MessageProcessorPort;
+import com.marmitt.core.ports.outbound.websocket.AdapterMessageProcessorPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -38,11 +38,11 @@ public class WebSocketExampleService {
     private final WebSocketConnectionRegistry connectionRegistry;
 
     private final WebSocketPort binanceWebSocketPort;
-    private final MessageProcessorPort binanceWebSocketListener;
+    private final AdapterMessageProcessorPort binanceWebSocketListener;
     private final ExchangeUrlBuilderPort binanceUrlBuilder;
 
     private final WebSocketPort coinbaseWebSocketPort;
-    private final MessageProcessorPort coinbaseWebSocketListener;
+    private final AdapterMessageProcessorPort coinbaseWebSocketListener;
     private final ExchangeUrlBuilderPort coinbaseUrlBuilder;
 
     public WebSocketExampleService(
@@ -50,9 +50,9 @@ public class WebSocketExampleService {
             DisconnectWebSocketPort disconnectWebSocket,
             WebSocketConnectionRegistry connectionRegistry,
             ApplicationEventPublisher eventPublisher,
-            MessageProcessorPort binanceWebSocketListener,
+            AdapterMessageProcessorPort binanceWebSocketListener,
             ExchangeUrlBuilderPort binanceUrlBuilder,
-            MessageProcessorPort coinbaseWebSocketListener,
+            AdapterMessageProcessorPort coinbaseWebSocketListener,
             ExchangeUrlBuilderPort coinbaseUrlBuilder) {
 
 

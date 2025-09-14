@@ -1,17 +1,16 @@
 package com.marmitt.binance.processor;
 
-import com.marmitt.core.domain.data.ErrorData;
 import com.marmitt.core.domain.data.ProcessorResponse;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
-import com.marmitt.core.ports.outbound.websocket.MessageProcessorPort;
+import com.marmitt.core.ports.outbound.websocket.AdapterMessageProcessorPort;
 import com.marmitt.core.ports.outbound.websocket.SpecializedProcessor;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 
 @Slf4j
-public class BinanceMessageProcessor implements MessageProcessorPort {
+public class BinanceMessageProcessor implements AdapterMessageProcessorPort {
 
     private final List<SpecializedProcessor<? extends ProcessorResponse>> specializedProcessors;
 

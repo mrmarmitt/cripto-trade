@@ -4,7 +4,7 @@ import com.marmitt.core.domain.data.ProcessorResponse;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
 
-public interface MessageProcessorPort {
+public interface AdapterMessageProcessorPort {
     
     /**
      * Processa uma mensagem WebSocket raw e retorna um resultado tipado

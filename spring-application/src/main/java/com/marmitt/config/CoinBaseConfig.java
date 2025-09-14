@@ -1,9 +1,7 @@
 package com.marmitt.config;
 
 import com.marmitt.coinbase.CoinbaseUrlBuilder;
-import com.marmitt.coinbase.processor.CoinbaseMessageProcessor;
 import com.marmitt.core.ports.outbound.ExchangeUrlBuilderPort;
-import com.marmitt.core.ports.outbound.websocket.MessageProcessorPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 

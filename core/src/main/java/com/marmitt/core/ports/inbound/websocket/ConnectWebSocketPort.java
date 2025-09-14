@@ -4,7 +4,7 @@ import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
 import com.marmitt.core.dto.websocket.WebSocketConnectionResponse;
 import com.marmitt.core.dto.configuration.WebSocketConnectionParameters;
 import com.marmitt.core.ports.outbound.ExchangeUrlBuilderPort;
-import com.marmitt.core.ports.outbound.websocket.MessageProcessorPort;
+import com.marmitt.core.ports.outbound.websocket.AdapterMessageProcessorPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 
 import java.util.concurrent.CompletableFuture;
@@ -16,6 +16,6 @@ public interface ConnectWebSocketPort {
             WebSocketConnectionManager manager,
             ExchangeUrlBuilderPort exchangeUrlBuilderPort,
             WebSocketPort webSocketPort,
-            MessageProcessorPort listener);
+            AdapterMessageProcessorPort listener);
 
 }

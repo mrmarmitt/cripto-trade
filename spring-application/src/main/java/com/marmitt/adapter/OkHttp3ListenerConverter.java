@@ -1,10 +1,7 @@
 package com.marmitt.adapter;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.core.dto.websocket.MessageContext;
 import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
-import com.marmitt.core.ports.outbound.websocket.MessageProcessorPort;
 import com.marmitt.event.RawMessageReceivedEvent;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.Response;
