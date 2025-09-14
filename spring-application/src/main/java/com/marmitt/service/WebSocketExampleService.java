@@ -19,6 +19,7 @@ import com.marmitt.core.ports.outbound.websocket.AdapterMessageProcessorPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.slf4j.MDC;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 
@@ -73,25 +74,32 @@ public class WebSocketExampleService {
     public CompletableFuture<WebSocketConnectionResponse> connect(WebSocketConnectRequest request) {
         String exchange = request.exchange();
 
-        // Obtém o status atual da conexão e passa para o use case
-        connectionRegistry.createConnection(exchange);
-        WebSocketConnectionManager manager = connectionRegistry.getConnection(exchange);
+        try {
+            // Obtém o status atual da conexão e passa para o use case
+            connectionRegistry.createConnection(exchange);
+            WebSocketConnectionManager manager = connectionRegistry.getConnection(exchange);
 
-        // Seleciona exchange e conecta (toda lógica de validação está no use case)
-        if ("BINANCE".equalsIgnoreCase(exchange)) {
-            return connectToBinance(request, manager);
+            // Adiciona contexto no MDC para logs de conexão
+            MDC.put("exchangeName", exchange);
+
+            // Seleciona exchange e conecta (toda lógica de validação está no use case)
+            if ("BINANCE".equalsIgnoreCase(exchange)) {
+                return connectToBinance(request, manager);
+            }
+
+            if ("COINBASE".equalsIgnoreCase(exchange)) {
+                return connectToCoinbase(request, manager);
+            }
+
+            return CompletableFuture.completedFuture(
+                    ConnectionResultMapper.toResponse(
+                            ConnectionResult.failure("Unsupported exchange: " + exchange),
+                            exchange
+                    )
+            );
+        } finally {
+            MDC.clear();
         }
-
-        if ("COINBASE".equalsIgnoreCase(exchange)) {
-            return connectToCoinbase(request, manager);
-        }
-
-        return CompletableFuture.completedFuture(
-                ConnectionResultMapper.toResponse(
-                        ConnectionResult.failure("Unsupported exchange: " + exchange),
-                        exchange
-                )
-        );
     }
 
     private CompletableFuture<WebSocketConnectionResponse> connectToBinance(WebSocketConnectRequest request, WebSocketConnectionManager manager) {
@@ -115,6 +123,7 @@ public class WebSocketExampleService {
                 })
                 .whenComplete((result, throwable) -> {
                     if (throwable == null && result.isSuccess()) {
+                        MDC.put("connectionId", manager.getConnectionId().toString());
                         log.info("Successfully connected to Binance WebSocket for symbols: {}", request.symbols());
                     }
                 });
@@ -173,34 +182,43 @@ public class WebSocketExampleService {
         );
     }
 
-    public CompletableFuture<WebSocketConnectionResponse> disconnect(String exchange) {
-        WebSocketConnectionManager manager = connectionRegistry.getConnection(exchange);
-        manager.startDisconnection();
+    public CompletableFuture<WebSocketConnectionResponse> disconnect(String exchange) {;
+        
+        try {
+            WebSocketConnectionManager manager = connectionRegistry.getConnection(exchange);
+            // Adiciona contexto no MDC para logs de desconexão
+            MDC.put("exchangeName", manager.getExchangeName());
+            MDC.put("connectionId", manager.getConnectionId().toString());
 
-        WebSocketPort webSocketPort = "BINANCE".equalsIgnoreCase(exchange) ? binanceWebSocketPort : coinbaseWebSocketPort;
+            manager.startDisconnection();
 
-        return disconnectWebSocket.execute(webSocketPort)
-                .thenApply(response -> {
-                    manager.onClosed(1000, "Manual disconnect");
-                    // Retorna o estado atualizado do manager, não a response original
-                    return ConnectionResultMapper.toResponse(manager.getConnectionResult(), manager.getExchangeName());
-                })
-                .exceptionally(throwable -> {
-                    log.error("Failed to disconnect from {} WebSocket", exchange, throwable);
-                    manager.onFailure("Disconnect failed", throwable);
-                    return ConnectionResultMapper.toResponse(manager.getConnectionResult(), manager.getExchangeName());
-                })
-                .whenComplete((result, throwable) -> {
-                    if (throwable == null) {
-                        if (result.status() == ConnectionStatus.CLOSED || result.status() == ConnectionStatus.DISCONNECTED) {
-                            log.info("Successfully disconnected from {} WebSocket", exchange);
-                        } else if (!result.isSuccess()) {
-                            log.warn("Disconnect completed with status: {} for {}", result.status(), exchange);
-                        } else {
-                            log.debug("Disconnect operation completed with success status: {} for {}", result.status(), exchange);
+            WebSocketPort webSocketPort = "BINANCE".equalsIgnoreCase(exchange) ? binanceWebSocketPort : coinbaseWebSocketPort;
+
+            return disconnectWebSocket.execute(webSocketPort)
+                    .thenApply(response -> {
+                        manager.onClosed(1000, "Manual disconnect");
+                        // Retorna o estado atualizado do manager, não a response original
+                        return ConnectionResultMapper.toResponse(manager.getConnectionResult(), manager.getExchangeName());
+                    })
+                    .exceptionally(throwable -> {
+                        log.error("Failed to disconnect from {} WebSocket", exchange, throwable);
+                        manager.onFailure("Disconnect failed", throwable);
+                        return ConnectionResultMapper.toResponse(manager.getConnectionResult(), manager.getExchangeName());
+                    })
+                    .whenComplete((result, throwable) -> {
+                        if (throwable == null) {
+                            if (result.status() == ConnectionStatus.CLOSED || result.status() == ConnectionStatus.DISCONNECTED) {
+                                log.info("Successfully disconnected from {} WebSocket", exchange);
+                            } else if (!result.isSuccess()) {
+                                log.warn("Disconnect completed with status: {} for {}", result.status(), exchange);
+                            } else {
+                                log.debug("Disconnect operation completed with success status: {} for {}", result.status(), exchange);
+                            }
                         }
-                    }
-                });
+                    });
+        } finally {
+            MDC.clear();
+        }
     }
 
     public WebSocketConnectionResponse getStatus(String exchange) {
