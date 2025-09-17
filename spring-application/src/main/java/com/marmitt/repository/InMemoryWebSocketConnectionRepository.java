@@ -1,18 +1,18 @@
-package com.marmitt.service;
+package com.marmitt.repository;
 
 import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
-import org.springframework.stereotype.Component;
+import org.springframework.stereotype.Repository;
 
-import java.util.concurrent.ConcurrentHashMap;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
-@Component
-public class WebSocketConnectionRegistry {
+@Repository
+public class InMemoryWebSocketConnectionRepository {
 
     private final Map<String, WebSocketConnectionManager> connections = new ConcurrentHashMap<>();
 
-    public void createConnection(String exchangeName) {
+    public void registerConnection(String exchangeName) {
         if (connections.get(exchangeName) == null) {
             connections.put(
                     exchangeName,

@@ -12,7 +12,7 @@ public class WebSocketConnectionManager {
 
     @Getter
     private final String exchangeName;
-    private volatile ConnectionStats currentConnectionStats;
+    private final ConnectionStats currentConnectionStats;
     private volatile ConnectionResult currentConnectionResult;
     private volatile CompletableFuture<ConnectionResult> pendingOperation;
 
@@ -73,7 +73,6 @@ public class WebSocketConnectionManager {
 
     public void onConnected() {
         ConnectionResult currentCopyConnectionResult = currentConnectionResult;
-        ConnectionStats currentCopyConnectionStats = currentConnectionStats;
 
         currentConnectionResult = currentCopyConnectionResult.connected();
 
@@ -100,7 +99,6 @@ public class WebSocketConnectionManager {
 
     public void onFailure(String reason, Throwable cause) {
         ConnectionResult currentCopyConnectionResult = currentConnectionResult;
-        ConnectionStats currentCopyConnectionStats = currentConnectionStats;
 
         currentConnectionResult = currentCopyConnectionResult.failed(reason, cause);
 
