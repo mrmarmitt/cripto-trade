@@ -1,6 +1,5 @@
 package com.marmitt.service;
 
-import com.marmitt.coinbase.processor.CoinbaseMessageProcessor;
 import com.marmitt.controller.dto.WebSocketConnectRequest;
 import com.marmitt.core.domain.ConnectionResult;
 import com.marmitt.core.dto.configuration.CurrencyPair;
@@ -22,13 +21,13 @@ import java.util.stream.Collectors;
 
 @Service
 @Slf4j
-public class ExchangeConnectionService {
+public class ExchangeConnectService {
 
     private final ConnectWebSocketPort connectWebSocket;
     private final InMemoryWebSocketConnectionRepository connectionRepository;
     private final InMemoryExchangeAdapterRepository adapterRepository;
 
-    public ExchangeConnectionService(ConnectWebSocketPort connectWebSocket, InMemoryWebSocketConnectionRepository connectionRepository, InMemoryExchangeAdapterRepository adapterRepository) {
+    public ExchangeConnectService(ConnectWebSocketPort connectWebSocket, InMemoryWebSocketConnectionRepository connectionRepository, InMemoryExchangeAdapterRepository adapterRepository) {
         this.connectWebSocket = connectWebSocket;
         this.connectionRepository = connectionRepository;
         this.adapterRepository = adapterRepository;

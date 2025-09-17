@@ -81,23 +81,23 @@ public class WebSocketExampleService {
             WebSocketConnectRequest request,
             WebSocketConnectionManager manager,
             ExchangeAdapterPort adapter) {
-        
+
         WebSocketConnectionParameters connectionParams = buildWebSocketConnectionParameters(request);
         ConnectionResult currentStatus = manager.getConnectionResult();
         String exchangeName = adapter.getExchangeName();
 
         return connectWebSocket.execute(
-                connectionParams, 
-                manager, 
-                adapter.getUrlBuilder(), 
-                adapter.getWebSocketPort(), 
+                connectionParams,
+                manager,
+                adapter.getUrlBuilder(),
+                adapter.getWebSocketPort(),
                 adapter.getMessageProcessor())
                 .thenApply(response -> {
                     if (response.isSuccess() && !currentStatus.isConnected()) {
                         manager.onConnected();
 
                         // Lógica específica para Coinbase (subscribe message)
-                        if ("COINBASE".equalsIgnoreCase(exchangeName) && 
+                        if ("COINBASE".equalsIgnoreCase(exchangeName) &&
                             adapter.getMessageProcessor() instanceof CoinbaseMessageProcessor coinbaseListener) {
                             try {
                                 for (com.marmitt.controller.dto.CurrencyPair pair : request.symbols()) {
@@ -141,7 +141,7 @@ public class WebSocketExampleService {
     }
 
     public CompletableFuture<WebSocketConnectionResponse> disconnect(String exchange) {
-        
+
         try {
             ExchangeAdapterPort adapter = adapterRepository.getAdapter(exchange);
             if (adapter == null) {

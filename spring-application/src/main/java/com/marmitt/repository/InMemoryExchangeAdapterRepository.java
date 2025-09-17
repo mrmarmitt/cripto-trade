@@ -3,6 +3,7 @@ package com.marmitt.repository;
 import com.marmitt.config.exchange.BinanceExchangeAdapter;
 import com.marmitt.config.exchange.CoinbaseExchangeAdapter;
 import com.marmitt.core.ports.outbound.ExchangeAdapterPort;
+import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import jakarta.annotation.PostConstruct;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Repository;
@@ -13,7 +14,7 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Repository
-public class InMemoryExchangeAdapterRepository {
+public class InMemoryExchangeAdapterRepository  implements ExchangeAdapterRepositoryPort {
 
     private final Map<String, ExchangeAdapterPort> adapters = new ConcurrentHashMap<>();
 
@@ -33,6 +34,7 @@ public class InMemoryExchangeAdapterRepository {
      * Registra um adapter para uma exchange específica.
      * Usado durante a inicialização do Spring.
      */
+    @Override
     public void registerAdapter(ExchangeAdapterPort adapter) {
         String exchangeName = adapter.getExchangeName().toUpperCase();
         adapters.put(exchangeName, adapter);
@@ -43,6 +45,7 @@ public class InMemoryExchangeAdapterRepository {
      * @param exchangeName Nome da exchange (case-insensitive)
      * @return ExchangeAdapter ou null se não encontrado
      */
+    @Override
     public ExchangeAdapterPort getAdapter(String exchangeName) {
         return adapters.get(exchangeName.toUpperCase());
     }
@@ -52,6 +55,7 @@ public class InMemoryExchangeAdapterRepository {
      * @param exchangeName Nome da exchange (case-insensitive)
      * @return Optional contendo o adapter se encontrado
      */
+    @Override
     public Optional<ExchangeAdapterPort> findAdapter(String exchangeName) {
         return Optional.ofNullable(getAdapter(exchangeName));
     }
@@ -59,6 +63,7 @@ public class InMemoryExchangeAdapterRepository {
     /**
      * Verifica se existe um adapter registrado para a exchange.
      */
+    @Override
     public boolean hasAdapter(String exchangeName) {
         return adapters.containsKey(exchangeName.toUpperCase());
     }
@@ -66,6 +71,7 @@ public class InMemoryExchangeAdapterRepository {
     /**
      * Retorna todos os nomes de exchanges registradas.
      */
+    @Override
     public Set<String> getAllExchangeNames() {
         return adapters.keySet();
     }
@@ -73,6 +79,7 @@ public class InMemoryExchangeAdapterRepository {
     /**
      * Retorna uma cópia imutável de todos os adapters registrados.
      */
+    @Override
     public Map<String, ExchangeAdapterPort> getAllAdapters() {
         return Map.copyOf(adapters);
     }
@@ -80,6 +87,7 @@ public class InMemoryExchangeAdapterRepository {
     /**
      * Retorna o número de adapters registrados.
      */
+    @Override
     public int getAdapterCount() {
         return adapters.size();
     }

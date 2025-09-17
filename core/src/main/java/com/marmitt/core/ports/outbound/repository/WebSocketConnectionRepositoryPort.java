@@ -5,7 +5,7 @@ import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
 import java.util.Map;
 import java.util.Set;
 
-public interface WebSocketConnectionRepository {
+public interface WebSocketConnectionRepositoryPort {
 
     void registerConnection(String exchangeName);
 

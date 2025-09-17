@@ -1,6 +1,7 @@
 package com.marmitt.repository;
 
 import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
+import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import org.springframework.stereotype.Repository;
 
 import java.util.Map;
@@ -8,10 +9,11 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Repository
-public class InMemoryWebSocketConnectionRepository {
+public class InMemoryWebSocketConnectionRepository implements WebSocketConnectionRepositoryPort {
 
     private final Map<String, WebSocketConnectionManager> connections = new ConcurrentHashMap<>();
 
+    @Override
     public void registerConnection(String exchangeName) {
         if (connections.get(exchangeName) == null) {
             connections.put(
@@ -21,18 +23,22 @@ public class InMemoryWebSocketConnectionRepository {
         }
     }
 
+    @Override
     public WebSocketConnectionManager getConnection(String exchangeName) {
         return connections.get(exchangeName);
     }
 
+    @Override
     public boolean hasConnection(String exchangeName) {
         return connections.containsKey(exchangeName);
     }
 
+    @Override
     public Set<String> getAllExchangeNames() {
         return connections.keySet();
     }
 
+    @Override
     public Map<String, WebSocketConnectionManager> getAllConnections() {
         return Map.copyOf(connections);
     }
