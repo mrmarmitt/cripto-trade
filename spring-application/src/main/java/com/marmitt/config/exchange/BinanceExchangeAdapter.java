@@ -1,9 +1,11 @@
 package com.marmitt.config.exchange;
 
+import com.marmitt.adapter.OkHttp3ListenerConverter;
 import com.marmitt.adapter.OkHttp3WebSocketAdapter;
 import com.marmitt.binance.BinanceUrlBuilder;
 import com.marmitt.binance.processor.BinanceMessageProcessor;
 import com.marmitt.core.ports.outbound.ExchangeUrlBuilderPort;
+import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.websocket.AdapterMessageProcessorPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 import com.marmitt.core.ports.outbound.ExchangeAdapterPort;
@@ -25,8 +27,9 @@ public class BinanceExchangeAdapter implements ExchangeAdapterPort {
     private final AdapterMessageProcessorPort messageProcessor;
     private final ExchangeUrlBuilderPort urlBuilder;
 
-    public BinanceExchangeAdapter(ApplicationEventPublisher eventPublisher) {
-        this.webSocketPort = new OkHttp3WebSocketAdapter(eventPublisher);
+    public BinanceExchangeAdapter(EventPublisherPort eventPublisher) {
+
+        this.webSocketPort = new OkHttp3WebSocketAdapter(new OkHttp3ListenerConverter(eventPublisher));
         this.messageProcessor = new BinanceMessageProcessor();
         this.urlBuilder = new BinanceUrlBuilder();
     }

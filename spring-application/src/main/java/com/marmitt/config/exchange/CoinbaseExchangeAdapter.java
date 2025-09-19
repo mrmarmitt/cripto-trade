@@ -1,9 +1,11 @@
 package com.marmitt.config.exchange;
 
+import com.marmitt.adapter.OkHttp3ListenerConverter;
 import com.marmitt.adapter.OkHttp3WebSocketAdapter;
 import com.marmitt.coinbase.CoinbaseUrlBuilder;
 import com.marmitt.coinbase.processor.CoinbaseMessageProcessor;
 import com.marmitt.core.ports.outbound.ExchangeUrlBuilderPort;
+import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.websocket.AdapterMessageProcessorPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 import com.marmitt.core.ports.outbound.ExchangeAdapterPort;
@@ -25,8 +27,8 @@ public class CoinbaseExchangeAdapter implements ExchangeAdapterPort {
     private final AdapterMessageProcessorPort messageProcessor;
     private final ExchangeUrlBuilderPort urlBuilder;
 
-    public CoinbaseExchangeAdapter(ApplicationEventPublisher eventPublisher) {
-        this.webSocketPort = new OkHttp3WebSocketAdapter(eventPublisher);
+    public CoinbaseExchangeAdapter(EventPublisherPort eventPublisher) {
+        this.webSocketPort = new OkHttp3WebSocketAdapter(new OkHttp3ListenerConverter(eventPublisher));
         this.messageProcessor = new CoinbaseMessageProcessor();
         this.urlBuilder = new CoinbaseUrlBuilder();
     }

@@ -1,18 +1,14 @@
 package com.marmitt.core.ports.outbound.websocket;
 
-import com.marmitt.core.domain.ConnectionResult;
-import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
-import java.util.concurrent.CompletableFuture;
+import java.util.UUID;
 
 public interface WebSocketPort {
 
-    CompletableFuture<ConnectionResult> connect(String url, WebSocketConnectionManager manager);
+    void connect(String url, String exchangeName, UUID connectionId);
 
-    CompletableFuture<ConnectionResult> disconnect();
+    void disconnect(String exchangeName, UUID currentConnectionId);
 
-    CompletableFuture<ConnectionResult> sendMessage(String message);
+    void sendMessage(String message);
 
     boolean isConnected();
-
-    ConnectionResult getConnectionResult();
 }

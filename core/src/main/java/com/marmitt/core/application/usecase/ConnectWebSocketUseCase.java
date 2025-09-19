@@ -1,51 +1,38 @@
 package com.marmitt.core.application.usecase;
 
 import com.marmitt.core.domain.ConnectionResult;
+import com.marmitt.core.dto.configuration.WebSocketConnectionParameters;
 import com.marmitt.core.dto.websocket.ConnectionResultMapper;
 import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
 import com.marmitt.core.dto.websocket.WebSocketConnectionResponse;
-import com.marmitt.core.dto.configuration.WebSocketConnectionParameters;
 import com.marmitt.core.ports.inbound.websocket.ConnectWebSocketPort;
-import com.marmitt.core.ports.outbound.ExchangeUrlBuilderPort;
-import com.marmitt.core.ports.outbound.websocket.AdapterMessageProcessorPort;
-import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
-
-import java.util.concurrent.CompletableFuture;
+import com.marmitt.core.ports.outbound.ExchangeAdapterPort;
+import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 
 public class ConnectWebSocketUseCase implements ConnectWebSocketPort {
 
-    @Override
-    public CompletableFuture<WebSocketConnectionResponse> execute(
-            WebSocketConnectionParameters parameters,
-            WebSocketConnectionManager manager,
-            ExchangeUrlBuilderPort exchangeUrlBuilderPort,
-            WebSocketPort webSocketPort,
-            AdapterMessageProcessorPort listener) {
+    private final WebSocketConnectionRepositoryPort connectionRepository;
+    private final ExchangeAdapterRepositoryPort adapterRepository;
 
-        ConnectionResult currentConnectionResult = manager.getConnectionResult();
-
-        // Validation logic moved from service to use case
-        if (currentConnectionResult.isConnected()) {
-            return CompletableFuture.completedFuture(
-                    ConnectionResultMapper.toResponse(
-                            currentConnectionResult.withMetadata("message", "Already connected"),
-                            manager.getExchangeName()
-                    )
-            );
-        }
-
-        if (currentConnectionResult.isInProgress()) {
-            return CompletableFuture.completedFuture(
-                    ConnectionResultMapper.toResponse(currentConnectionResult, manager.getExchangeName())
-            );
-        }
-
-        manager.startConnection();
-
-        // Proceed with new connection
-        String connectionUrl = exchangeUrlBuilderPort.buildConnectionUrl(parameters);
-        return webSocketPort.connect(connectionUrl, manager)
-                .thenApply(connectionResult ->
-                        ConnectionResultMapper.toResponse(connectionResult, manager.getExchangeName()));
+    public ConnectWebSocketUseCase(WebSocketConnectionRepositoryPort connectionRepository, ExchangeAdapterRepositoryPort adapterRepository) {
+        this.connectionRepository = connectionRepository;
+        this.adapterRepository = adapterRepository;
     }
+
+    @Override
+    public WebSocketConnectionResponse execute(WebSocketConnectionParameters parameters, String exchangeName) {
+
+        connectionRepository.registerConnection(exchangeName);
+        WebSocketConnectionManager manager = connectionRepository.getConnection(exchangeName);
+        ExchangeAdapterPort adapter = adapterRepository.getAdapter(exchangeName);
+
+        manager.setConnectionResult(ConnectionResult.connecting());
+        String connectionUrl = adapter.getUrlBuilder().buildConnectionUrl(parameters);
+        adapter.getWebSocketPort().connect(connectionUrl, exchangeName, manager.getConnectionId());
+
+
+        return ConnectionResultMapper.toResponse(manager.getConnectionResult(), exchangeName);
+    }
+
 }

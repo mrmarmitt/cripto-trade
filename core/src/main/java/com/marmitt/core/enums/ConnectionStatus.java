@@ -4,6 +4,7 @@ public enum ConnectionStatus {
     IDLE,
     CONNECTING,
     CONNECTED,
+    DISCONNECTING,
     DISCONNECTED,
     CLOSING,
     CLOSED,

@@ -30,13 +30,13 @@ public class WebsocketController {
     }
 
     @PostMapping("/connect")
-    public CompletableFuture<WebSocketConnectionResponse> connect(
+    public WebSocketConnectionResponse connect(
             @Valid @RequestBody WebSocketConnectRequest request) {
         return exchangeConnectionService.connect(request);
     }
 
     @PostMapping("/disconnect")
-    public CompletableFuture<WebSocketConnectionResponse> disconnect(@RequestParam String exchange) {
+    public WebSocketConnectionResponse disconnect(@RequestParam String exchange) {
         return exchangeDisconnectService.disconnect(exchange);
     }
 

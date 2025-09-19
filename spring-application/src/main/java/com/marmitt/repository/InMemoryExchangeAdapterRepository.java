@@ -3,6 +3,7 @@ package com.marmitt.repository;
 import com.marmitt.config.exchange.BinanceExchangeAdapter;
 import com.marmitt.config.exchange.CoinbaseExchangeAdapter;
 import com.marmitt.core.ports.outbound.ExchangeAdapterPort;
+import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import jakarta.annotation.PostConstruct;
 import org.springframework.context.ApplicationEventPublisher;
@@ -18,9 +19,9 @@ public class InMemoryExchangeAdapterRepository  implements ExchangeAdapterReposi
 
     private final Map<String, ExchangeAdapterPort> adapters = new ConcurrentHashMap<>();
 
-    private final ApplicationEventPublisher eventPublisher;
+    private final EventPublisherPort eventPublisher;
 
-    public InMemoryExchangeAdapterRepository(ApplicationEventPublisher eventPublisher) {
+    public InMemoryExchangeAdapterRepository(EventPublisherPort eventPublisher) {
         this.eventPublisher = eventPublisher;
     }
 

@@ -33,7 +33,10 @@ public class MessageEventHandler {
                     event.getContext().correlationId(),
                     event.getContext().connectionId(),
                     event.getRawMessage().length());
-            
+
+            //TODO: verificar se a mensagem recebiba
+            //TODO: recuperar o manager e contabilizar a mensagem recebida webSocketConnectionManager.onMessageReceived();
+
             // Delega o processamento para o UseCase
             ProcessingResult<?> result = processMessagePort.processRawMessage(
                 event.getRawMessage(), 

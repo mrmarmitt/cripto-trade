@@ -1,97 +1,57 @@
 package com.marmitt.adapter;
 
 import com.marmitt.core.domain.ConnectionResult;
-import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
+import lombok.extern.slf4j.Slf4j;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
 import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
-import org.springframework.context.ApplicationEventPublisher;
 
 import java.time.Duration;
+import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 
 
+@Slf4j
 public class OkHttp3WebSocketAdapter implements WebSocketPort {
 
     private final OkHttpClient client;
-    private final ApplicationEventPublisher eventPublisher;
+    private final OkHttp3ListenerConverter okHttp3ListenerConverter;
 
     private WebSocket webSocket;
-    private WebSocketConnectionManager currentManager;
 
-    public OkHttp3WebSocketAdapter(ApplicationEventPublisher eventPublisher) {
+    public OkHttp3WebSocketAdapter(OkHttp3ListenerConverter okHttp3ListenerConverter) {
+        this.okHttp3ListenerConverter = okHttp3ListenerConverter;
         this.client = new OkHttpClient.Builder().readTimeout(Duration.ZERO).build();
-        this.eventPublisher = eventPublisher;
     }
 
     @Override
-    public CompletableFuture<ConnectionResult> connect(String url, WebSocketConnectionManager manager) {
+    public void connect(String url, String exchangeName, UUID connectionId) {
         Request request = new Request.Builder()
                 .url(url)
                 .build();
 
-        // Usa o manager fornecido pela camada superior
-        this.currentManager = manager;
-        CompletableFuture<ConnectionResult> connectionFuture = manager.startConnection();
-
-        WebSocketListener enhancedListener = OkHttp3ListenerConverter.convert(manager, eventPublisher);
+        WebSocketListener enhancedListener = okHttp3ListenerConverter.convert(exchangeName, connectionId);
         this.webSocket = client.newWebSocket(request, enhancedListener);
-        return connectionFuture;
+        
+        log.info("WebSocket connection initiated for exchange: {}, connectionId: {}", exchangeName, connectionId);
     }
 
     @Override
-    public CompletableFuture<ConnectionResult> disconnect() {
+    public void disconnect(String exchangeName, UUID currentConnectionId) {
         if (webSocket != null) {
             webSocket.close(1000, "Normal closure");
-            if (currentManager != null) {
-                currentManager.startDisconnection();
-                return CompletableFuture.completedFuture(
-                    currentManager.getConnectionResult()
-                );
-            }
         }
-        
-        // Fallback se não há manager
-        return CompletableFuture.completedFuture(
-            ConnectionResult.idle().disconnected("No active connection")
-        );
     }
 
     @Override
-    public CompletableFuture<ConnectionResult> sendMessage(String message) {
-        if (webSocket == null || !isConnected()) {
-            return CompletableFuture.failedFuture(
-                    new IllegalStateException("WebSocket not connected")
-            );
-        }
-
-        boolean sent = webSocket.send(message);
-        if (sent) {
-            return CompletableFuture.completedFuture(null);
-        } else {
-            return CompletableFuture.failedFuture(
-                    new RuntimeException("Failed to send message")
-            );
-        }
+    public void sendMessage(String message) {
+        webSocket.send(message);
     }
 
     @Override
     public boolean isConnected() {
         return webSocket != null;
-    }
-
-    @Override
-    public ConnectionResult getConnectionResult() {
-        if (currentManager != null) {
-            return currentManager.getConnectionResult();
-        }
-        
-        // Fallback se não há manager
-        if (webSocket != null) {
-            return ConnectionResult.idle().connected();
-        }
-        return ConnectionResult.idle();
     }
 }
