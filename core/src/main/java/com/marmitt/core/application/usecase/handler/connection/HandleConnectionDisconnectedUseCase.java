@@ -3,7 +3,7 @@ package com.marmitt.core.application.usecase.handler.connection;
 import com.marmitt.core.domain.ConnectionResult;
 import com.marmitt.core.dto.events.WebSocketDisconnectedEvent;
 import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
-import com.marmitt.core.ports.inbound.websocket.HandleConnectionDisconnectedPort;
+import com.marmitt.core.ports.inbound.handler.HandleConnectionDisconnectedPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 

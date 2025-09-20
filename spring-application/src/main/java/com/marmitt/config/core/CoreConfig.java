@@ -1,8 +1,13 @@
 package com.marmitt.config.core;
 
 import com.marmitt.core.application.usecase.*;
+import com.marmitt.core.application.usecase.handler.HandlerProcessMessageUseCase;
+import com.marmitt.core.application.usecase.websocket.ConnectStatsWebSocketUseCase;
+import com.marmitt.core.application.usecase.websocket.ConnectStatusWebSocketUseCase;
+import com.marmitt.core.application.usecase.websocket.ConnectWebSocketUseCase;
+import com.marmitt.core.application.usecase.websocket.DisconnectWebSocketUseCase;
 import com.marmitt.core.ports.inbound.listener.ManageListenersPort;
-import com.marmitt.core.ports.inbound.message.ProcessMessagePort;
+import com.marmitt.core.ports.inbound.handler.HandlerProcessMessagePort;
 import com.marmitt.core.ports.inbound.websocket.ConnectStatsWebSocketPort;
 import com.marmitt.core.ports.inbound.websocket.ConnectStatusWebSocketPort;
 import com.marmitt.core.ports.inbound.websocket.ConnectWebSocketPort;
@@ -35,9 +40,9 @@ public class CoreConfig {
     }
 
     @Bean
-    public ProcessMessagePort processMessage(MessageProcessorRepositoryPort processorRepository,
-                                           ListenerRepositoryPort listenerRepository) {
-        return new ProcessMessageUseCase(processorRepository, listenerRepository);
+    public HandlerProcessMessagePort processMessage(MessageProcessorRepositoryPort processorRepository,
+                                                    ListenerRepositoryPort listenerRepository) {
+        return new HandlerProcessMessageUseCase(processorRepository, listenerRepository);
     }
 
     @Bean

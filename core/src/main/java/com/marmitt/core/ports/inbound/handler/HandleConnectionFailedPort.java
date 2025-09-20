@@ -1,4 +1,4 @@
-package com.marmitt.core.ports.inbound.websocket;
+package com.marmitt.core.ports.inbound.handler;
 
 import com.marmitt.core.dto.events.WebSocketFailedEvent;
 

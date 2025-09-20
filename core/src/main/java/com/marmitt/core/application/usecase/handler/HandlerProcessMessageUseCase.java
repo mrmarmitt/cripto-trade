@@ -1,11 +1,11 @@
-package com.marmitt.core.application.usecase;
+package com.marmitt.core.application.usecase.handler;
 
 import com.marmitt.core.domain.data.MarketData;
 import com.marmitt.core.domain.data.OrderData;
 import com.marmitt.core.domain.data.ProcessorResponse;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
-import com.marmitt.core.ports.inbound.message.ProcessMessagePort;
+import com.marmitt.core.ports.inbound.handler.HandlerProcessMessagePort;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
 import com.marmitt.core.ports.outbound.listener.PriceUpdateListener;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
@@ -18,19 +18,19 @@ import java.util.Optional;
  * UseCase para processamento de mensagens recebidas de exchanges.
  * Coordena o processamento e notificação de listeners usando o processor apropriado para cada exchange.
  */
-public class ProcessMessageUseCase implements ProcessMessagePort {
+public class HandlerProcessMessageUseCase implements HandlerProcessMessagePort {
     
     private final MessageProcessorRepositoryPort processorRepository;
     private final ListenerRepositoryPort listenerRepository;
     
-    public ProcessMessageUseCase(MessageProcessorRepositoryPort processorRepository,
-                                ListenerRepositoryPort listenerRepository) {
+    public HandlerProcessMessageUseCase(MessageProcessorRepositoryPort processorRepository,
+                                        ListenerRepositoryPort listenerRepository) {
         this.processorRepository = processorRepository;
         this.listenerRepository = listenerRepository;
     }
     
     @Override
-    public ProcessingResult<?> processRawMessage(String rawMessage, MessageContext context) {
+    public ProcessingResult<?> execute(String rawMessage, MessageContext context) {
         if (rawMessage == null || rawMessage.trim().isEmpty()) {
             throw new IllegalArgumentException("Raw message cannot be null or empty");
         }

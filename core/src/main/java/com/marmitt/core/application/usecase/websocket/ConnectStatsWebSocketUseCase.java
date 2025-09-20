@@ -1,4 +1,4 @@
-package com.marmitt.core.application.usecase;
+package com.marmitt.core.application.usecase.websocket;
 
 import com.marmitt.core.dto.websocket.ConnectionStatsMapper;
 import com.marmitt.core.dto.websocket.WebSocketConnectionManager;

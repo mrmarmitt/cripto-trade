@@ -1,7 +1,7 @@
 package com.marmitt.config.core;
 
 import com.marmitt.core.application.usecase.handler.connection.*;
-import com.marmitt.core.ports.inbound.websocket.*;
+import com.marmitt.core.ports.inbound.handler.*;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

@@ -1,7 +1,7 @@
 package com.marmitt.handler;
 
 import com.marmitt.core.dto.processing.ProcessingResult;
-import com.marmitt.core.ports.inbound.message.ProcessMessagePort;
+import com.marmitt.core.ports.inbound.handler.HandlerProcessMessagePort;
 import com.marmitt.event.RawMessageReceivedEvent;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
@@ -11,11 +11,11 @@ import org.springframework.stereotype.Component;
 
 @Component
 @Slf4j
-public class MessageEventHandler {
+public class ProcessMessageEventListener {
 
-    private final ProcessMessagePort processMessagePort;
+    private final HandlerProcessMessagePort processMessagePort;
 
-    public MessageEventHandler(ProcessMessagePort processMessagePort) {
+    public ProcessMessageEventListener(HandlerProcessMessagePort processMessagePort) {
         this.processMessagePort = processMessagePort;
     }
 
@@ -38,7 +38,7 @@ public class MessageEventHandler {
             //TODO: recuperar o manager e contabilizar a mensagem recebida webSocketConnectionManager.onMessageReceived();
 
             // Delega o processamento para o UseCase
-            ProcessingResult<?> result = processMessagePort.processRawMessage(
+            ProcessingResult<?> result = processMessagePort.execute(
                 event.getRawMessage(), 
                 event.getContext()
             );
