@@ -40,12 +40,6 @@ public class CoreConfig {
     }
 
     @Bean
-    public HandlerProcessMessagePort processMessage(MessageProcessorRepositoryPort processorRepository,
-                                                    ListenerRepositoryPort listenerRepository) {
-        return new HandlerProcessMessageUseCase(processorRepository, listenerRepository);
-    }
-
-    @Bean
     public ConnectStatusWebSocketPort connectStatusWebSocket(WebSocketConnectionRepositoryPort webSocketConnectionRepository){
         return new ConnectStatusWebSocketUseCase(webSocketConnectionRepository);
     }

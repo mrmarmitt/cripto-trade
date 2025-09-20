@@ -34,9 +34,6 @@ public class ProcessMessageEventListener {
                     event.getContext().connectionId(),
                     event.getRawMessage().length());
 
-            //TODO: verificar se a mensagem recebiba
-            //TODO: recuperar o manager e contabilizar a mensagem recebida webSocketConnectionManager.onMessageReceived();
-
             // Delega o processamento para o UseCase
             ProcessingResult<?> result = processMessagePort.execute(
                 event.getRawMessage(), 

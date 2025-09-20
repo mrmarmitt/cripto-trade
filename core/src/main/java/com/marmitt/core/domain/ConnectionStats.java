@@ -18,49 +18,50 @@ import java.util.concurrent.ConcurrentHashMap;
  * Contém métricas agregadas incluindo confiabilidade, constância e tendências.
  */
 @Getter
-@Builder(toBuilder = true)
 @AllArgsConstructor
 public class ConnectionStats {
     
     // Métricas básicas
     private long totalConnections;
+    private long totalDisconnections;
     private long totalReconnections;
     private long totalMessagesReceived;
     private long totalErrors;
     private Instant lastConnectedAt;
+    private Instant lastDisconnectedAt;
     private Instant lastMessageAt;
     
     // Métricas de timing
     private Instant connectionStartTime;
-    @Builder.Default
-    private final List<Instant> messageTimestamps = new ArrayList<>();        // Últimos 100 timestamps para cálculos
+    private Instant disconnectionStartTime;
+    private final List<Instant> messageTimestamps;        // Últimos 100 timestamps para cálculos
     private Instant lastSilenceStart;
     
     // Métricas de performance
-    @Builder.Default
-    private final List<Long> messageCountHistory = new ArrayList<>();         // Contadores por minuto (últimos 10 min)
-    @Builder.Default
-    private final List<Duration> responseTimes = new ArrayList<>();           // Para calcular média
+    private final List<Long> messageCountHistory;         // Contadores por minuto (últimos 10 min)
+    private final List<Duration> responseTimes;           // Para calcular média
     
     // Métricas de qualidade
     private long malformedMessages;
     private long duplicateMessages;
     
     // Auxiliar para tracking por minuto (não serializado)
-    @Builder.Default
-    private transient Map<Long, Long> messageCountPerMinute = new ConcurrentHashMap<>();
+    private transient Map<Long, Long> messageCountPerMinute;
 
     /**
      * Construtor padrão - cria estatísticas zeradas.
      */
     private ConnectionStats() {
         this.totalConnections = 0;
+        this.totalDisconnections = 0;
         this.totalReconnections = 0;
         this.totalMessagesReceived = 0;
         this.totalErrors = 0;
         this.lastConnectedAt = null;
+        this.lastDisconnectedAt = null;
         this.lastMessageAt = null;
         this.connectionStartTime = null;
+        this.disconnectionStartTime = null;
         this.messageTimestamps = new ArrayList<>();
         this.lastSilenceStart = null;
         this.messageCountHistory = new ArrayList<>();
@@ -107,7 +108,20 @@ public class ConnectionStats {
             this.connectionStartTime = now;
         }
     }
-    
+    /**
+     * Registra uma nova desconexão.
+     */
+    public void recordDisconnection() {
+        this.totalDisconnections++;
+        Instant now = Instant.now();
+        this.lastDisconnectedAt = now;
+
+        // Define connectionStartTime apenas na primeira conexão
+        if (this.disconnectionStartTime == null) {
+            this.disconnectionStartTime = now;
+        }
+    }
+
     /**
      * Registra uma reconexão.
      */

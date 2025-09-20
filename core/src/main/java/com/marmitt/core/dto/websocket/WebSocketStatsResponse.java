@@ -13,10 +13,12 @@ import java.time.Instant;
 public record WebSocketStatsResponse(
         // Métricas básicas
         long totalConnections,
-        long totalReconnections, 
+        long totalDisconnections,
+        long totalReconnections,
         long totalMessagesReceived,
         long totalErrors,
         Instant lastConnectedAt,
+        Instant lastDisconnectedAt,
         Instant lastMessageAt,
         String exchangeName,
         

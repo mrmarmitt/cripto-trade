@@ -5,11 +5,13 @@ import com.marmitt.core.domain.data.OrderData;
 import com.marmitt.core.domain.data.ProcessorResponse;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
+import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
 import com.marmitt.core.ports.inbound.handler.HandlerProcessMessagePort;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
 import com.marmitt.core.ports.outbound.listener.PriceUpdateListener;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.MessageProcessorRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import com.marmitt.core.ports.outbound.websocket.AdapterMessageProcessorPort;
 
 import java.util.Optional;
@@ -19,12 +21,15 @@ import java.util.Optional;
  * Coordena o processamento e notificação de listeners usando o processor apropriado para cada exchange.
  */
 public class HandlerProcessMessageUseCase implements HandlerProcessMessagePort {
-    
+
+    private final WebSocketConnectionRepositoryPort connectionRepository;
     private final MessageProcessorRepositoryPort processorRepository;
     private final ListenerRepositoryPort listenerRepository;
     
-    public HandlerProcessMessageUseCase(MessageProcessorRepositoryPort processorRepository,
+    public HandlerProcessMessageUseCase(WebSocketConnectionRepositoryPort connectionRepository,
+                                        MessageProcessorRepositoryPort processorRepository,
                                         ListenerRepositoryPort listenerRepository) {
+        this.connectionRepository = connectionRepository;
         this.processorRepository = processorRepository;
         this.listenerRepository = listenerRepository;
     }
@@ -38,7 +43,9 @@ public class HandlerProcessMessageUseCase implements HandlerProcessMessagePort {
         if (context == null) {
             throw new IllegalArgumentException("Message context cannot be null");
         }
-        
+        WebSocketConnectionManager manager = connectionRepository.getConnection(context.exchangeName());
+        manager.onMessageReceived();
+
         try {
             // Busca o processor apropriado para a exchange
             Optional<AdapterMessageProcessorPort> processor = processorRepository.getProcessor(context.exchangeName());
@@ -56,12 +63,15 @@ public class HandlerProcessMessageUseCase implements HandlerProcessMessagePort {
             if ((result.isSuccess() || result.isWarning()) && result.getData().isPresent()) {
                 ProcessorResponse response = result.getData().get();
                 notifyListeners(response);
+            } else {
+                manager.onMessageError(result.getErrorMessage().orElse("No message error."));
             }
             
             return result;
             
         } catch (Exception e) {
             // Retorna resultado com erro se algo deu errado
+            manager.onMessageError(e.getMessage());
             return ProcessingResult.error(context.correlationId().toString(),"Error processing message: " + e.getMessage(), e);
         }
     }

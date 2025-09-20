@@ -91,14 +91,39 @@ public class WebSocketConnectionManager {
     }
 
     private void updateStatsForTransition(ConnectionStatus from, ConnectionStatus to) {
-        if (to == ConnectionStatus.CONNECTED) {
-            if (from == ConnectionStatus.CONNECTING) {
-                currentConnectionStats.recordConnection();
-            } else if (from == ConnectionStatus.RECONNECTING) {
-                currentConnectionStats.recordReconnection();
-            }
-        } else if (to == ConnectionStatus.ERROR) {
+        switch (from) {
+            case CONNECTING -> handleFromConnecting(to);
+            case CONNECTED -> handleFromConnected(to);
+            case DISCONNECTING -> handleFromDisconnecting(to);
+            case RECONNECTING -> handleFromReconnecting(to);
+        }
+        
+        if (to == ConnectionStatus.ERROR) {
             currentConnectionStats.recordError();
+        }
+    }
+    
+    private void handleFromConnecting(ConnectionStatus to) {
+        if (to == ConnectionStatus.CONNECTED) {
+            currentConnectionStats.recordConnection();
+        }
+    }
+    
+    private void handleFromConnected(ConnectionStatus to) {
+        if (to == ConnectionStatus.DISCONNECTING || to == ConnectionStatus.CLOSING) {
+            // Não registra disconnection aqui, só quando realmente desconectar
+        }
+    }
+    
+    private void handleFromDisconnecting(ConnectionStatus to) {
+        if (to == ConnectionStatus.DISCONNECTED) {
+            currentConnectionStats.recordDisconnection();
+        }
+    }
+    
+    private void handleFromReconnecting(ConnectionStatus to) {
+        if (to == ConnectionStatus.CONNECTED) {
+            currentConnectionStats.recordReconnection();
         }
     }
 }
