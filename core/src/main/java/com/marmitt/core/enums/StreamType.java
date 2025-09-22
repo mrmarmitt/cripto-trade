@@ -5,7 +5,7 @@ public enum StreamType {
     BOOK_TICKER,
     DEPTH,
     TRADE,
-    KLINE,
-    MINI_TICKER,
-    ALL_TICKER
+//    KLINE,
+//    MINI_TICKER,
+//    ALL_TICKER
 }

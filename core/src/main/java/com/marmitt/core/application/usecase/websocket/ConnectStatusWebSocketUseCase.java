@@ -1,9 +1,9 @@
 package com.marmitt.core.application.usecase.websocket;
 
 import com.marmitt.core.domain.ConnectionResult;
-import com.marmitt.core.dto.websocket.ConnectionResultMapper;
-import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
-import com.marmitt.core.dto.websocket.WebSocketConnectionResponse;
+import com.marmitt.core.dto.websocket.mapper.ConnectionResultMapper;
+import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
+import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
 import com.marmitt.core.ports.inbound.websocket.ConnectStatusWebSocketPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 
@@ -20,12 +20,12 @@ public class ConnectStatusWebSocketUseCase implements ConnectStatusWebSocketPort
     }
 
     @Override
-    public WebSocketConnectionResponse getStatus(String exchange) {
-        WebSocketConnectionManager manager = webSocketConnectionRepository.getConnection(exchange);
+    public WebSocketConnectionResponse getStatus(final String exchangeName) {
+        WebSocketConnectionManager manager = webSocketConnectionRepository.getConnection(exchangeName);
         if (manager == null) {
             return ConnectionResultMapper.toResponse(
-                    ConnectionResult.failure("Exchange not found: " + exchange),
-                    exchange
+                    ConnectionResult.failure("Exchange not found: " + exchangeName),
+                    exchangeName
             );
         }
 

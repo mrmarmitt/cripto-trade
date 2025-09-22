@@ -1,7 +1,7 @@
 package com.marmitt.service;
 
-import com.marmitt.core.dto.websocket.WebSocketConnectionResponse;
-import com.marmitt.core.dto.websocket.WebSocketStatsResponse;
+import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
+import com.marmitt.core.dto.websocket.response.WebSocketStatsResponse;
 import com.marmitt.core.ports.inbound.websocket.ConnectStatsWebSocketPort;
 import com.marmitt.core.ports.inbound.websocket.ConnectStatusWebSocketPort;
 import lombok.extern.slf4j.Slf4j;

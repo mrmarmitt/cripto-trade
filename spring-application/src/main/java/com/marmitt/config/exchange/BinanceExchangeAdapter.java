@@ -1,15 +1,17 @@
 package com.marmitt.config.exchange;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.adapter.OkHttp3ListenerConverter;
 import com.marmitt.adapter.OkHttp3WebSocketAdapter;
 import com.marmitt.binance.BinanceUrlBuilder;
-import com.marmitt.binance.processor.BinanceMessageProcessor;
-import com.marmitt.core.ports.outbound.ExchangeUrlBuilderPort;
+import com.marmitt.binance.processor.receive.BinanceReceivedMessageProcessor;
+import com.marmitt.binance.processor.send.BinanceSenderMessageProcessor;
+import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
-import com.marmitt.core.ports.outbound.websocket.AdapterMessageProcessorPort;
+import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
+import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
-import com.marmitt.core.ports.outbound.ExchangeAdapterPort;
-import org.springframework.context.ApplicationEventPublisher;
+import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 
 /**
  * Implementação do ExchangeAdapter para Binance.
@@ -24,13 +26,14 @@ import org.springframework.context.ApplicationEventPublisher;
 public class BinanceExchangeAdapter implements ExchangeAdapterPort {
 
     private final WebSocketPort webSocketPort;
-    private final AdapterMessageProcessorPort messageProcessor;
+    private final ReceivedMessageProcessorPort receivedMessageProcessor;
+    private final SenderMessageProcessorPort senderMessageProcessor;
     private final ExchangeUrlBuilderPort urlBuilder;
 
-    public BinanceExchangeAdapter(EventPublisherPort eventPublisher) {
-
+    public BinanceExchangeAdapter(ObjectMapper objectMapper, EventPublisherPort eventPublisher) {
         this.webSocketPort = new OkHttp3WebSocketAdapter(new OkHttp3ListenerConverter(eventPublisher));
-        this.messageProcessor = new BinanceMessageProcessor();
+        this.receivedMessageProcessor = new BinanceReceivedMessageProcessor(objectMapper);
+        this.senderMessageProcessor = new BinanceSenderMessageProcessor(objectMapper);
         this.urlBuilder = new BinanceUrlBuilder();
     }
 
@@ -45,8 +48,13 @@ public class BinanceExchangeAdapter implements ExchangeAdapterPort {
     }
 
     @Override
-    public AdapterMessageProcessorPort getMessageProcessor() {
-        return messageProcessor;
+    public ReceivedMessageProcessorPort getReceivedMessageProcessor() {
+        return receivedMessageProcessor;
+    }
+
+    @Override
+    public SenderMessageProcessorPort getSenderMessageProcessor() {
+        return this.senderMessageProcessor;
     }
 
     @Override

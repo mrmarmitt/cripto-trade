@@ -5,17 +5,15 @@ import com.marmitt.core.domain.data.OrderData;
 import com.marmitt.core.domain.data.ProcessorResponse;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
-import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
+import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.ports.inbound.handler.HandlerProcessMessagePort;
-import com.marmitt.core.ports.outbound.ExchangeAdapterPort;
+import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
 import com.marmitt.core.ports.outbound.listener.PriceUpdateListener;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
-import com.marmitt.core.ports.outbound.websocket.AdapterMessageProcessorPort;
-
-import java.util.Optional;
+import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 
 /**
  * UseCase para processamento de mensagens recebidas de exchanges.
@@ -36,7 +34,7 @@ public class HandlerProcessMessageUseCase implements HandlerProcessMessagePort {
     }
     
     @Override
-    public ProcessingResult<?> execute(String rawMessage, MessageContext context) {
+    public ProcessingResult<?> execute(final String rawMessage, final MessageContext context) {
         if (rawMessage == null || rawMessage.trim().isEmpty()) {
             throw new IllegalArgumentException("Raw message cannot be null or empty");
         }
@@ -50,7 +48,7 @@ public class HandlerProcessMessageUseCase implements HandlerProcessMessagePort {
         try {
             // Busca o processor apropriado para a exchange
             ExchangeAdapterPort adapter = exchangeAdapterRepository.getAdapter(context.exchangeName());
-            AdapterMessageProcessorPort messageProcessor = adapter.getMessageProcessor();
+            ReceivedMessageProcessorPort messageProcessor = adapter.getReceivedMessageProcessor();
 
             if (messageProcessor == null) {
                 return ProcessingResult.error(context.correlationId().toString(), "No processor found for exchange: " + context.exchangeName());
@@ -83,7 +81,7 @@ public class HandlerProcessMessageUseCase implements HandlerProcessMessagePort {
      * 
      * @param response dados processados
      */
-    private void notifyListeners(ProcessorResponse response) {
+    private void notifyListeners(final ProcessorResponse response) {
         if (response instanceof MarketData marketData) {
             notifyPriceUpdate(marketData);
         } else if (response instanceof OrderData orderData) {
@@ -96,7 +94,7 @@ public class HandlerProcessMessageUseCase implements HandlerProcessMessagePort {
      * 
      * @param marketData dados do mercado para notificar
      */
-    private void notifyPriceUpdate(MarketData marketData) {
+    private void notifyPriceUpdate(final MarketData marketData) {
         if (marketData == null) {
             throw new IllegalArgumentException("MarketData cannot be null");
         }
@@ -119,7 +117,7 @@ public class HandlerProcessMessageUseCase implements HandlerProcessMessagePort {
      * 
      * @param orderData dados da ordem para notificar
      */
-    private void notifyOrderUpdate(OrderData orderData) {
+    private void notifyOrderUpdate(final OrderData orderData) {
         if (orderData == null) {
             throw new IllegalArgumentException("OrderData cannot be null");
         }

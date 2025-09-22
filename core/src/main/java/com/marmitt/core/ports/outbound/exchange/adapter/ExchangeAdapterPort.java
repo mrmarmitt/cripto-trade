@@ -1,6 +1,5 @@
-package com.marmitt.core.ports.outbound;
+package com.marmitt.core.ports.outbound.exchange.adapter;
 
-import com.marmitt.core.ports.outbound.websocket.AdapterMessageProcessorPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 
 /**
@@ -16,23 +15,14 @@ import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
  */
 public interface ExchangeAdapterPort {
     
-    /**
-     * Retorna o nome da exchange (ex: "BINANCE", "COINBASE")
-     */
     String getExchangeName();
 
-    /**
-     * Retorna o WebSocketPort específico desta exchange
-     */
     WebSocketPort getWebSocketPort();
 
-    /**
-     * Retorna o processador de mensagens específico desta exchange
-     */
-    AdapterMessageProcessorPort getMessageProcessor();
-    
-    /**
-     * Retorna o construtor de URLs específico desta exchange
-     */
+    ReceivedMessageProcessorPort getReceivedMessageProcessor();
+
+    SenderMessageProcessorPort getSenderMessageProcessor();
+
     ExchangeUrlBuilderPort getUrlBuilder();
+
 }

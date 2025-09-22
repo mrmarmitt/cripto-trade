@@ -1,12 +1,12 @@
 package com.marmitt.repository;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.config.exchange.BinanceExchangeAdapter;
 import com.marmitt.config.exchange.CoinbaseExchangeAdapter;
-import com.marmitt.core.ports.outbound.ExchangeAdapterPort;
+import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import jakarta.annotation.PostConstruct;
-import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Repository;
 
 import java.util.Map;
@@ -20,14 +20,16 @@ public class InMemoryExchangeAdapterRepository  implements ExchangeAdapterReposi
     private final Map<String, ExchangeAdapterPort> adapters = new ConcurrentHashMap<>();
 
     private final EventPublisherPort eventPublisher;
+    private final ObjectMapper objectMapper;
 
-    public InMemoryExchangeAdapterRepository(EventPublisherPort eventPublisher) {
+    public InMemoryExchangeAdapterRepository(EventPublisherPort eventPublisher, ObjectMapper objectMapper) {
         this.eventPublisher = eventPublisher;
+        this.objectMapper = objectMapper;
     }
 
     @PostConstruct
     public void initExchangeAdapters() {
-        registerAdapter(new BinanceExchangeAdapter(eventPublisher));
+        registerAdapter(new BinanceExchangeAdapter(objectMapper, eventPublisher));
         registerAdapter(new CoinbaseExchangeAdapter(eventPublisher));
     }
 

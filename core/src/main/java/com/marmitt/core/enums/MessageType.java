@@ -1,0 +1,10 @@
+package com.marmitt.core.enums;
+
+public enum MessageType {
+    ORDER_PLACEMENT,
+    ORDER_CANCELLATION,
+    ORDER_MODIFICATION,
+    ACCOUNT_UPDATE,
+    STREAM_SUBSCRIPTION,
+    STREAM_UNSUBSCRIPTION
+}

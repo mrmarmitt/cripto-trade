@@ -1,6 +1,6 @@
 package com.marmitt.repository;
 
-import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
+import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import org.springframework.stereotype.Repository;
 

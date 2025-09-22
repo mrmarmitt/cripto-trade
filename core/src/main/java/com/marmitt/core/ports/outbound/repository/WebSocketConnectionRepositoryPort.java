@@ -1,6 +1,6 @@
 package com.marmitt.core.ports.outbound.repository;
 
-import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
+import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 
 import java.util.Map;
 import java.util.Set;

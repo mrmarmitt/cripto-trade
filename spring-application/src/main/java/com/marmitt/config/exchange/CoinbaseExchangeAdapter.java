@@ -4,12 +4,12 @@ import com.marmitt.adapter.OkHttp3ListenerConverter;
 import com.marmitt.adapter.OkHttp3WebSocketAdapter;
 import com.marmitt.coinbase.CoinbaseUrlBuilder;
 import com.marmitt.coinbase.processor.CoinbaseMessageProcessor;
-import com.marmitt.core.ports.outbound.ExchangeUrlBuilderPort;
+import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
-import com.marmitt.core.ports.outbound.websocket.AdapterMessageProcessorPort;
+import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
+import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
-import com.marmitt.core.ports.outbound.ExchangeAdapterPort;
-import org.springframework.context.ApplicationEventPublisher;
+import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 
 /**
  * Implementação do ExchangeAdapter para Coinbase.
@@ -24,7 +24,7 @@ import org.springframework.context.ApplicationEventPublisher;
 public class CoinbaseExchangeAdapter implements ExchangeAdapterPort {
 
     private final WebSocketPort webSocketPort;
-    private final AdapterMessageProcessorPort messageProcessor;
+    private final ReceivedMessageProcessorPort messageProcessor;
     private final ExchangeUrlBuilderPort urlBuilder;
 
     public CoinbaseExchangeAdapter(EventPublisherPort eventPublisher) {
@@ -44,8 +44,13 @@ public class CoinbaseExchangeAdapter implements ExchangeAdapterPort {
     }
 
     @Override
-    public AdapterMessageProcessorPort getMessageProcessor() {
+    public ReceivedMessageProcessorPort getReceivedMessageProcessor() {
         return messageProcessor;
+    }
+
+    @Override
+    public SenderMessageProcessorPort getSenderMessageProcessor() {
+        return null;
     }
 
     @Override

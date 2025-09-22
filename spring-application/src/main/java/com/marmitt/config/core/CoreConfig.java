@@ -1,15 +1,9 @@
 package com.marmitt.config.core;
 
 import com.marmitt.core.application.usecase.*;
-import com.marmitt.core.application.usecase.websocket.ConnectStatsWebSocketUseCase;
-import com.marmitt.core.application.usecase.websocket.ConnectStatusWebSocketUseCase;
-import com.marmitt.core.application.usecase.websocket.ConnectWebSocketUseCase;
-import com.marmitt.core.application.usecase.websocket.DisconnectWebSocketUseCase;
+import com.marmitt.core.application.usecase.websocket.*;
 import com.marmitt.core.ports.inbound.listener.ManageListenersPort;
-import com.marmitt.core.ports.inbound.websocket.ConnectStatsWebSocketPort;
-import com.marmitt.core.ports.inbound.websocket.ConnectStatusWebSocketPort;
-import com.marmitt.core.ports.inbound.websocket.ConnectWebSocketPort;
-import com.marmitt.core.ports.inbound.websocket.DisconnectWebSocketPort;
+import com.marmitt.core.ports.inbound.websocket.*;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
@@ -29,6 +23,11 @@ public class CoreConfig {
     public DisconnectWebSocketPort disconnectWebSocket(WebSocketConnectionRepositoryPort connectionRepository,
                                                        ExchangeAdapterRepositoryPort adapterRepository) {
         return new DisconnectWebSocketUseCase(connectionRepository, adapterRepository);
+    }
+
+    @Bean
+    public SendMessageWebSocketPort sendMessageWebSocket(ExchangeAdapterRepositoryPort adapterRepository){
+        return new SendMessageWebSocketUseCase(adapterRepository);
     }
     
     @Bean

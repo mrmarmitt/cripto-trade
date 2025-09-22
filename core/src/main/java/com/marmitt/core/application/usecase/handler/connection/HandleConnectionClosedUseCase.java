@@ -2,7 +2,7 @@ package com.marmitt.core.application.usecase.handler.connection;
 
 import com.marmitt.core.domain.ConnectionResult;
 import com.marmitt.core.dto.events.WebSocketClosedEvent;
-import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
+import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.ports.inbound.handler.HandleConnectionClosedPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
@@ -25,7 +25,7 @@ public class HandleConnectionClosedUseCase implements HandleConnectionClosedPort
     }
 
     @Override
-    public void execute(WebSocketClosedEvent event) {
+    public void execute(final WebSocketClosedEvent event) {
         log.info("Processing connection closed event for exchange: {} - Code: {}, Reason: {}",
                 event.exchange(), event.code(), event.reason());
 

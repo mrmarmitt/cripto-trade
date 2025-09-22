@@ -1,4 +1,4 @@
-package com.marmitt.core.dto.websocket;
+package com.marmitt.core.dto.websocket.response;
 
 import com.marmitt.core.enums.ConnectionStatus;
 

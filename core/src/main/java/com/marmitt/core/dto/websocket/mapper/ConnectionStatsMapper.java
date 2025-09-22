@@ -1,6 +1,7 @@
-package com.marmitt.core.dto.websocket;
+package com.marmitt.core.dto.websocket.mapper;
 
 import com.marmitt.core.domain.ConnectionStats;
+import com.marmitt.core.dto.websocket.response.WebSocketStatsResponse;
 import com.marmitt.core.enums.ReliabilityRank;
 
 import java.time.Duration;

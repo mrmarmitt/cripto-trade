@@ -1,12 +1,12 @@
 package com.marmitt.core.ports.inbound.websocket;
 
-import com.marmitt.core.dto.configuration.WebSocketConnectionParameters;
-import com.marmitt.core.dto.websocket.WebSocketConnectionResponse;
+import com.marmitt.core.dto.websocket.request.WebSocketConnectionParametersRequest;
+import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
 
 public interface ConnectWebSocketPort {
 
     WebSocketConnectionResponse execute(
-            WebSocketConnectionParameters parameters,
-            String exchangeName);
+            String exchangeName,
+            WebSocketConnectionParametersRequest parameters);
 
 }

@@ -1,4 +1,4 @@
-package com.marmitt.binance.processor;
+package com.marmitt.binance.processor.receive;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -7,16 +7,20 @@ import com.marmitt.core.domain.data.MarketData;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
-import com.marmitt.core.ports.outbound.websocket.SpecializedProcessor;
+import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedSpecializedProcessorPort;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 
 @Slf4j
-public class BinanceTickerProcessor implements SpecializedProcessor<MarketData> {
+public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketData> {
     
-    private final ObjectMapper objectMapper = new ObjectMapper();
+    private final ObjectMapper objectMapper;
+
+    public TickerProcessor(ObjectMapper objectMapper) {
+        this.objectMapper = objectMapper;
+    }
 
     @Override
     public ProcessingResult<MarketData> processMessage(String rawMessage, MessageContext context) {

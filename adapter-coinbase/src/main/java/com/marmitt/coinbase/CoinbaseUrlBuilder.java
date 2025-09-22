@@ -1,12 +1,12 @@
 package com.marmitt.coinbase;
 
-import com.marmitt.core.dto.configuration.WebSocketConnectionParameters;
-import com.marmitt.core.ports.outbound.ExchangeUrlBuilderPort;
+import com.marmitt.core.dto.websocket.request.WebSocketConnectionParametersRequest;
+import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
 
 public class CoinbaseUrlBuilder implements ExchangeUrlBuilderPort {
 
     @Override
-    public String buildConnectionUrl(WebSocketConnectionParameters parameters) {
+    public String buildConnectionUrl(WebSocketConnectionParametersRequest parameters) {
         return CoinbaseConfiguration.BASE_URL;
     }
 }

@@ -1,4 +1,4 @@
-package com.marmitt.core.dto.websocket;
+package com.marmitt.core.dto.wrapper;
 
 import com.marmitt.core.domain.ConnectionResult;
 import com.marmitt.core.domain.ConnectionStats;

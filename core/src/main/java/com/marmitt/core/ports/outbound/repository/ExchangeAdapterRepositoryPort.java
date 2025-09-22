@@ -1,6 +1,6 @@
 package com.marmitt.core.ports.outbound.repository;
 
-import com.marmitt.core.ports.outbound.ExchangeAdapterPort;
+import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 
 import java.util.Map;
 import java.util.Optional;

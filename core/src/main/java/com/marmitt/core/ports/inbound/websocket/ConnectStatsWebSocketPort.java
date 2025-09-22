@@ -1,6 +1,6 @@
 package com.marmitt.core.ports.inbound.websocket;
 
-import com.marmitt.core.dto.websocket.WebSocketStatsResponse;
+import com.marmitt.core.dto.websocket.response.WebSocketStatsResponse;
 
 import java.util.Map;
 import java.util.Set;

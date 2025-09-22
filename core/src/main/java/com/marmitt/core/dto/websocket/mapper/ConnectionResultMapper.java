@@ -1,6 +1,7 @@
-package com.marmitt.core.dto.websocket;
+package com.marmitt.core.dto.websocket.mapper;
 
 import com.marmitt.core.domain.ConnectionResult;
+import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
 
 public class ConnectionResultMapper {
     

@@ -1,10 +1,10 @@
-package com.marmitt.core.ports.outbound.websocket;
+package com.marmitt.core.ports.outbound.exchange.adapter;
 
 import com.marmitt.core.domain.data.ProcessorResponse;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
 
-public interface AdapterMessageProcessorPort {
+public interface ReceivedMessageProcessorPort {
     
     /**
      * Processa uma mensagem WebSocket raw e retorna um resultado tipado

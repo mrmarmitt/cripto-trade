@@ -1,15 +1,12 @@
 package com.marmitt.service;
 
 import com.marmitt.core.domain.ConnectionResult;
-import com.marmitt.core.dto.websocket.ConnectionResultMapper;
-import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
-import com.marmitt.core.dto.websocket.WebSocketConnectionResponse;
+import com.marmitt.core.dto.websocket.mapper.ConnectionResultMapper;
+import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
 import com.marmitt.core.ports.inbound.websocket.DisconnectWebSocketPort;
-import com.marmitt.core.ports.outbound.ExchangeAdapterPort;
+import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 import com.marmitt.repository.InMemoryExchangeAdapterRepository;
-import com.marmitt.repository.InMemoryWebSocketConnectionRepository;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
 import org.springframework.stereotype.Service;
 
 @Service

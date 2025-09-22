@@ -1,8 +1,8 @@
 package com.marmitt.controller;
 
 import com.marmitt.controller.dto.WebSocketConnectRequest;
-import com.marmitt.core.dto.websocket.WebSocketConnectionResponse;
-import com.marmitt.core.dto.websocket.WebSocketStatsResponse;
+import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
+import com.marmitt.core.dto.websocket.response.WebSocketStatsResponse;
 import com.marmitt.service.ExchangeConnectService;
 import com.marmitt.service.ExchangeDisconnectService;
 import com.marmitt.service.ExchangeWebSocketQueryService;
@@ -10,7 +10,6 @@ import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
-import java.util.concurrent.CompletableFuture;
 
 @RestController
 @RequestMapping("/websocket")
@@ -38,6 +37,11 @@ public class WebsocketController {
     @PostMapping("/disconnect")
     public WebSocketConnectionResponse disconnect(@RequestParam String exchange) {
         return exchangeDisconnectService.disconnect(exchange);
+    }
+
+    @PostMapping("/send")
+    public void send() {
+
     }
 
     @GetMapping()
