@@ -7,10 +7,11 @@ import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
 import com.marmitt.core.dto.websocket.WebSocketConnectionManager;
 import com.marmitt.core.ports.inbound.handler.HandlerProcessMessagePort;
+import com.marmitt.core.ports.outbound.ExchangeAdapterPort;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
 import com.marmitt.core.ports.outbound.listener.PriceUpdateListener;
+import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
-import com.marmitt.core.ports.outbound.repository.MessageProcessorRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import com.marmitt.core.ports.outbound.websocket.AdapterMessageProcessorPort;
 
@@ -23,14 +24,14 @@ import java.util.Optional;
 public class HandlerProcessMessageUseCase implements HandlerProcessMessagePort {
 
     private final WebSocketConnectionRepositoryPort connectionRepository;
-    private final MessageProcessorRepositoryPort processorRepository;
+    private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
     private final ListenerRepositoryPort listenerRepository;
     
     public HandlerProcessMessageUseCase(WebSocketConnectionRepositoryPort connectionRepository,
-                                        MessageProcessorRepositoryPort processorRepository,
+                                        ExchangeAdapterRepositoryPort exchangeAdapterRepository,
                                         ListenerRepositoryPort listenerRepository) {
         this.connectionRepository = connectionRepository;
-        this.processorRepository = processorRepository;
+        this.exchangeAdapterRepository = exchangeAdapterRepository;
         this.listenerRepository = listenerRepository;
     }
     
@@ -48,15 +49,16 @@ public class HandlerProcessMessageUseCase implements HandlerProcessMessagePort {
 
         try {
             // Busca o processor apropriado para a exchange
-            Optional<AdapterMessageProcessorPort> processor = processorRepository.getProcessor(context.exchangeName());
-            
-            if (processor.isEmpty()) {
+            ExchangeAdapterPort adapter = exchangeAdapterRepository.getAdapter(context.exchangeName());
+            AdapterMessageProcessorPort messageProcessor = adapter.getMessageProcessor();
+
+            if (messageProcessor == null) {
                 return ProcessingResult.error(context.correlationId().toString(), "No processor found for exchange: " + context.exchangeName());
             }
             
             // Processa a mensagem usando o processor da exchange
-            ProcessingResult<? extends ProcessorResponse> result = 
-                processor.get().processMessage(rawMessage, context);
+            ProcessingResult<? extends ProcessorResponse> result =
+                    messageProcessor.processMessage(rawMessage, context);
             
             // Notifica listeners apenas se há dados válidos (Success ou Warning)
             // Não notifica em caso de Error, mesmo que tenha dados

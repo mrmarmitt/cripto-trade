@@ -1,4 +1,4 @@
-package com.marmitt.listener;
+package com.marmitt.core.application.listener;
 
 import com.marmitt.core.domain.data.OrderData;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;

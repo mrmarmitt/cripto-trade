@@ -3,8 +3,8 @@ package com.marmitt.config.core;
 import com.marmitt.core.application.usecase.handler.HandlerProcessMessageUseCase;
 import com.marmitt.core.application.usecase.handler.connection.*;
 import com.marmitt.core.ports.inbound.handler.*;
+import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
-import com.marmitt.core.ports.outbound.repository.MessageProcessorRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -14,9 +14,9 @@ public class HandleConnectionConfig {
 
     @Bean
     public HandlerProcessMessagePort processMessage(WebSocketConnectionRepositoryPort connectionManager,
-                                                    MessageProcessorRepositoryPort processorRepository,
+                                                    ExchangeAdapterRepositoryPort adapterRepository,
                                                     ListenerRepositoryPort listenerRepository) {
-        return new HandlerProcessMessageUseCase(connectionManager, processorRepository, listenerRepository);
+        return new HandlerProcessMessageUseCase(connectionManager, adapterRepository, listenerRepository);
     }
 
     @Bean

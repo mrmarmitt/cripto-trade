@@ -3,8 +3,8 @@ package com.marmitt.repository;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
 import com.marmitt.core.ports.outbound.listener.PriceUpdateListener;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
-import com.marmitt.listener.MarketDataPriceUpdateListener;
-import com.marmitt.listener.TradingOrderUpdateListener;
+import com.marmitt.core.application.listener.MarketDataPriceUpdateListener;
+import com.marmitt.core.application.listener.TradingOrderUpdateListener;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Repository;
 
