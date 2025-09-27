@@ -6,13 +6,17 @@ import jakarta.validation.constraints.NotNull;
 
 import java.util.List;
 
-public record WebSocketConnectRequest(
+public record MarketDataSubscribeRequest(
         @NotNull(message = "Exchange must not be null")
         @NotEmpty(message = "Exchange must not be empty")
         String exchange,
 
-        @Valid
-        List<CurrencyPair> symbols
-) {
+        String symbol,
 
+        @Valid
+        List<CurrencyPair> symbols,
+
+        @NotNull(message = "Subscribe flag must not be null")
+        Boolean subscribe
+) {
 }

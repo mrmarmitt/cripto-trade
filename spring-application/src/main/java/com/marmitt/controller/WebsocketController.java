@@ -1,5 +1,12 @@
 package com.marmitt.controller;
 
+import com.marmitt.controller.dto.MarketDataSubscribeRequest;
+import com.marmitt.controller.dto.MarketDataSubscribeResponse;
+import com.marmitt.controller.dto.OrderCancelRequest;
+import com.marmitt.controller.dto.OrderCreateRequest;
+import com.marmitt.controller.dto.OrderManagementResponse;
+import com.marmitt.controller.dto.OrderNotificationSubscribeRequest;
+import com.marmitt.controller.dto.OrderNotificationSubscribeResponse;
 import com.marmitt.controller.dto.WebSocketConnectRequest;
 import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
 import com.marmitt.core.dto.websocket.response.WebSocketStatsResponse;
@@ -39,9 +46,40 @@ public class WebsocketController {
         return exchangeDisconnectService.disconnect(exchange);
     }
 
-    @PostMapping("/send")
-    public void send() {
+    @PostMapping("/market-data/subscribe")
+    public MarketDataSubscribeResponse subscribeMarketData(@Valid @RequestBody MarketDataSubscribeRequest request) {
+        // TODO: Implementar lógica no service
+        return MarketDataSubscribeResponse.successfully("subscription");
+    }
 
+    @PostMapping("/market-data/unsubscribe")
+    public MarketDataSubscribeResponse unsubscribeMarketData(@Valid @RequestBody MarketDataSubscribeRequest request) {
+        // TODO: Implementar lógica no service
+        return MarketDataSubscribeResponse.successfully("unsubscription");
+    }
+
+    @PostMapping("/order-notifications/subscribe")
+    public OrderNotificationSubscribeResponse subscribeOrderNotifications(@Valid @RequestBody OrderNotificationSubscribeRequest request) {
+        // TODO: Implementar lógica no service
+        return OrderNotificationSubscribeResponse.successfully("subscription");
+    }
+
+    @PostMapping("/order-notifications/unsubscribe")
+    public OrderNotificationSubscribeResponse unsubscribeOrderNotifications(@Valid @RequestBody OrderNotificationSubscribeRequest request) {
+        // TODO: Implementar lógica no service
+        return OrderNotificationSubscribeResponse.successfully("unsubscription");
+    }
+
+    @PostMapping("/orders/create")
+    public OrderManagementResponse createOrder(@Valid @RequestBody OrderCreateRequest request) {
+        // TODO: Implementar lógica no service
+        return OrderManagementResponse.successfully("creation");
+    }
+
+    @PostMapping("/orders/cancel")
+    public OrderManagementResponse cancelOrder(@Valid @RequestBody OrderCancelRequest request) {
+        // TODO: Implementar lógica no service
+        return OrderManagementResponse.successfully("cancellation");
     }
 
     @GetMapping()

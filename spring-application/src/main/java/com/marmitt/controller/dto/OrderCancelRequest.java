@@ -1,18 +1,15 @@
 package com.marmitt.controller.dto;
 
-import jakarta.validation.Valid;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
 
-import java.util.List;
-
-public record WebSocketConnectRequest(
+public record OrderCancelRequest(
         @NotNull(message = "Exchange must not be null")
         @NotEmpty(message = "Exchange must not be empty")
         String exchange,
 
-        @Valid
-        List<CurrencyPair> symbols
+        @NotNull(message = "Order ID must not be null")
+        @NotEmpty(message = "Order ID must not be empty")
+        String orderId
 ) {
-
 }
