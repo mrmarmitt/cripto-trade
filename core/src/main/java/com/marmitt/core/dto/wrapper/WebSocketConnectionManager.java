@@ -48,18 +48,6 @@ public class WebSocketConnectionManager {
         this.currentConnectionResult = newResult;
     }
 
-    public void onMessageReceived() {
-        currentConnectionStats.recordMessage();
-    }
-
-    public void onMessageError(String errorType) {
-        currentConnectionStats.recordError();
-    }
-
-    public void resetStats() {
-        currentConnectionStats.resetCounters();
-    }
-
     public UUID getConnectionId() {
         return getConnectionResult().connectionId();
     }
@@ -72,12 +60,24 @@ public class WebSocketConnectionManager {
         return currentConnectionResult;
     }
 
-    private boolean isValidTransition(ConnectionStatus from, ConnectionStatus to) {
-        // Estados que podem transicionar para qualquer outro (reset/override)
-        if (from == ConnectionStatus.ERROR || from == ConnectionStatus.CLOSED) {
-            return true;
-        }
+    public void onMessageReceived() {
+        currentConnectionStats.recordMessage();
+    }
 
+    public void onMessageError(String errorType) {
+        currentConnectionStats.recordError();
+    }
+
+    public void resetConnection() {
+        if (currentConnectionResult.status() == ConnectionStatus.ERROR ||
+                currentConnectionResult.status() == ConnectionStatus.CLOSED) {
+
+            this.currentConnectionResult = ConnectionResult.idle();
+            currentConnectionStats.resetCounters();
+        }
+    }
+
+    private boolean isValidTransition(ConnectionStatus from, ConnectionStatus to) {
         return switch (from) {
             case IDLE -> Set.of(ConnectionStatus.CONNECTING, ConnectionStatus.ERROR).contains(to);
             case CONNECTING -> Set.of(ConnectionStatus.CONNECTED, ConnectionStatus.ERROR, ConnectionStatus.DISCONNECTED, ConnectionStatus.CLOSING).contains(to);
@@ -86,7 +86,7 @@ public class WebSocketConnectionManager {
             case DISCONNECTING -> Set.of(ConnectionStatus.DISCONNECTED, ConnectionStatus.ERROR).contains(to);
             case DISCONNECTED -> Set.of(ConnectionStatus.CONNECTING, ConnectionStatus.IDLE, ConnectionStatus.ERROR).contains(to);
             case RECONNECTING -> Set.of(ConnectionStatus.CONNECTED, ConnectionStatus.ERROR, ConnectionStatus.DISCONNECTED).contains(to);
-            default -> false;
+            case ERROR, CLOSED -> true;
         };
     }
 
@@ -110,6 +110,10 @@ public class WebSocketConnectionManager {
     }
     
     private void handleFromConnected(ConnectionStatus to) {
+        if (to == ConnectionStatus.ERROR) {
+            currentConnectionStats.recordDisconnection();
+        }
+
         if (to == ConnectionStatus.DISCONNECTING || to == ConnectionStatus.CLOSING) {
             // Não registra disconnection aqui, só quando realmente desconectar
         }

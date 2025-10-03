@@ -27,10 +27,11 @@ public class ConnectWebSocketUseCase implements ConnectWebSocketPort {
         WebSocketConnectionManager manager = connectionRepository.getConnection(exchangeName);
         ExchangeAdapterPort adapter = adapterRepository.getAdapter(exchangeName);
 
+        manager.resetConnection();
         manager.setConnectionResult(ConnectionResult.connecting());
+
         String connectionUrl = adapter.getUrlBuilder().buildConnectionUrl(parameters);
         adapter.getWebSocketPort().connect(connectionUrl, exchangeName, manager.getConnectionId());
-
 
         return ConnectionResultMapper.toResponse(manager.getConnectionResult(), exchangeName);
     }
