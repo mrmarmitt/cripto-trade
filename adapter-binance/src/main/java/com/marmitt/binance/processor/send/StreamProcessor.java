@@ -5,6 +5,7 @@ import com.marmitt.core.dto.common.CurrencyPair;
 import com.marmitt.core.dto.websocket.request.SendMessageRequest;
 import com.marmitt.core.dto.websocket.request.SendStreamRequest;
 import com.marmitt.core.enums.MessageType;
+import com.marmitt.core.enums.StreamAction;
 import com.marmitt.core.enums.StreamType;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderSpecializedProcessorPort;
 
@@ -42,7 +43,7 @@ public class StreamProcessor implements SenderSpecializedProcessorPort {
                     .toList();
 
             Map<String, Object> message = new HashMap<>();
-            message.put("method", streamRequest.isSubscribe() ? "SUBSCRIBE" : "UNSUBSCRIBE");
+            message.put("method", streamRequest.getStreamAction() == StreamAction.SUBSCRIBE ? "SUBSCRIBE" : "UNSUBSCRIBE");
             message.put("params", streams.toArray(new String[0]));
             message.put("id", System.currentTimeMillis());
 
@@ -53,7 +54,7 @@ public class StreamProcessor implements SenderSpecializedProcessorPort {
     }
 
     private String buildStreamName(CurrencyPair currencyPair) {
-        String lowerSymbol = currencyPair.baseCurrency() + currencyPair.quoteCurrency();
+        String lowerSymbol = (currencyPair.baseCurrency() + currencyPair.quoteCurrency()).toLowerCase();
         return switch (currencyPair.streamType()) {
             case TICKER -> lowerSymbol + "@ticker";
             case TRADE -> lowerSymbol + "@trade";

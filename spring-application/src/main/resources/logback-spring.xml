@@ -2,7 +2,7 @@
 <configuration>
     
     <!-- Register custom converter -->
-    <conversionRule conversionWord="cMDC" converterClass="com.marmitt.config.logback.ConditionalMDCConverter" />
+    <conversionRule conversionWord="cMDC" converterClass="com.marmitt.application.spring.config.logback.ConditionalMDCConverter" />
     
     <!-- Console Appender with Pattern including correlationId -->
     <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">

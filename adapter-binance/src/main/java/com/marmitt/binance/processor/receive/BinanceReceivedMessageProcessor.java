@@ -23,25 +23,23 @@ public class BinanceReceivedMessageProcessor implements ReceivedMessageProcessor
 
     @Override
     public ProcessingResult<? extends ProcessorResponse> processMessage(String rawMessage, MessageContext context) {
-        log.info("Binance - Processing message: correlationId={}, length={}",
-                context.correlationId(), rawMessage.length());
-
         for (ReceivedSpecializedProcessorPort<? extends ProcessorResponse> processor : specializedProcessors) {
             if (processor.canProcess(rawMessage)) {
                 try {
                     return processor.processMessage(rawMessage, context);
                 } catch (Exception e) {
-                    log.error("Error in specialized processor {}: correlationId={}, error={}", 
-                             processor.getClass().getSimpleName(), context.correlationId(), e.getMessage(), e);
-                    return ProcessingResult.error(context.correlationId().toString(),
-                        "Failed in " + processor.getClass().getSimpleName() + ": " + e.getMessage(), e);
+                    return ProcessingResult.error(
+                            context.correlationId().toString(),
+                            "Error in specialized processor " + processor.getClass().getSimpleName() + ", error=" + e.getMessage(),
+                            rawMessage,
+                            e);
                 }
             }
         }
 
-        log.warn("No specialized processor found for Binance message: correlationId={}, messageLength={}", 
-                context.correlationId(), rawMessage.length());
         return ProcessingResult.error(context.correlationId().toString(),
-            "No specialized processor found for Binance message");
+                "No specialized processor found for Binance message",
+                rawMessage
+                );
     }
 }

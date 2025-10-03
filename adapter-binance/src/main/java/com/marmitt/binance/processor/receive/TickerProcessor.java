@@ -27,8 +27,6 @@ public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketD
         String correlationId = context.correlationId().toString();
         
         try {
-            log.debug("Processing Binance ticker message: correlationId={}", correlationId);
-            
             TickerEvent tickerEvent = objectMapper.readValue(rawMessage, TickerEvent.class);
             
             // Parse campos específicos Binance ticker
@@ -36,14 +34,14 @@ public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketD
             
             // Validações básicas
             if (!isValidMarketData(marketData)) {
-                return ProcessingResult.warning(correlationId, marketData,
+                return ProcessingResult.warning(
+                        correlationId,
+                        rawMessage,
+                        marketData,
                     "Binance ticker contains suspicious values: price=" + marketData.price());
             }
             
-            log.debug("Successfully processed Binance ticker: symbol={}, price={}, correlationId={}", 
-                     marketData.symbol().value(), marketData.price(), correlationId);
-            
-            return ProcessingResult.success(correlationId, marketData);
+            return ProcessingResult.success(correlationId, rawMessage, marketData);
             
         } catch (Exception e) {
             log.error("Error processing Binance ticker: correlationId={}, error={}", 
@@ -118,7 +116,7 @@ public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketD
     
     @SuppressWarnings({"unchecked", "rawtypes"})
     private ProcessingResult<MarketData> createErrorResult(String correlationId, String message, Exception e) {
-        ProcessingResult error = new ProcessingResult.Error(correlationId, message, e, java.time.Instant.now());
+        ProcessingResult error = new ProcessingResult.Error(correlationId, message, null, e, java.time.Instant.now());
         return (ProcessingResult<MarketData>) error;
     }
 }

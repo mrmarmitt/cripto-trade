@@ -22,7 +22,7 @@ public class CoinbaseMessageProcessor implements ReceivedMessageProcessorPort {
                 context.correlationId(), rawMessage.length());
         
         // TODO: Implementar processamento real quando necessário
-        ProcessingResult<Object> success = ProcessingResult.success(context.correlationId().toString(), rawMessage);
+        ProcessingResult<Object> success = ProcessingResult.success(context.correlationId().toString(), rawMessage, new Object());
         return castToProcessorResponseResult(success);
     }
 

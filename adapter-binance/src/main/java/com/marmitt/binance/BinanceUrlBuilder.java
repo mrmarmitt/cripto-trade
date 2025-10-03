@@ -21,14 +21,14 @@ public class BinanceUrlBuilder implements ExchangeUrlBuilderPort {
         if (currencyPairs.size() == 1) {
             CurrencyPair pair = currencyPairs.getFirst();
             String binanceSymbol = buildStreamName(pair);
-            String stream = binanceSymbol.toLowerCase() + "@ticker";
-            return Configuration.BASE_URL + Configuration.SINGLE_STREAM_PATH + "/" + stream;
+//            String stream = binanceSymbol.toLowerCase() + "@ticker";
+            return Configuration.BASE_URL + Configuration.SINGLE_STREAM_PATH + "/" + binanceSymbol;
         }
 
         // Para múltiplos símbolos, usa combined stream
         List<String> streams = currencyPairs.stream()
                 .map(this::buildStreamName)
-                .map(symbol -> symbol.toLowerCase() + "@ticker")
+//                .map(symbol -> symbol.toLowerCase() + "@ticker")
                 .collect(Collectors.toList());
         
         String streamQuery = String.join("/", streams);
@@ -36,7 +36,7 @@ public class BinanceUrlBuilder implements ExchangeUrlBuilderPort {
     }
 
     private String buildStreamName(CurrencyPair currencyPair) {
-        String lowerSymbol = currencyPair.baseCurrency() + currencyPair.quoteCurrency();
+        String lowerSymbol = (currencyPair.baseCurrency() + currencyPair.quoteCurrency()).toLowerCase();
         return switch (currencyPair.streamType()) {
             case TICKER -> lowerSymbol + "@ticker";
             case TRADE -> lowerSymbol + "@trade";
