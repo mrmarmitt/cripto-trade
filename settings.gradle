@@ -1,1 +1,8 @@
 rootProject.name = 'ctrade'
+include 'adapter-binance'
+include 'adapter-coinbase'
+include 'adapter-mock'
+include 'strategy'
+include 'spring-application'
+include 'core'
+

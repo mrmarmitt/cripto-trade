@@ -13,7 +13,7 @@ This is a cryptocurrency trading application built with Spring Boot using hexago
 - **Build Tool**: Gradle
 - **Containerization**: Docker & Docker Compose
 - **Database**: To be configured
-- **Testing**: JUnit (expected)
+- **Validation**: Manual testing and validation process
 
 ## Architecture Overview
 
@@ -50,8 +50,8 @@ The application follows hexagonal architecture with these main components:
 # Build the project
 ./gradlew build
 
-# Run tests
-./gradlew test
+# Check build and compilation
+./gradlew check
 
 # Run the application
 ./gradlew bootRun
@@ -93,32 +93,14 @@ gh pr list
 gh project view 3 --owner mrmarmitt --format json
 ```
 
-## Project Tasks (from GitHub Project Board)
+## Project Management
 
-**Phase 1 - Foundation:**
-- [1.0] Criação da aplicação Spring Boot com Gradle e Docker Compose
-- [1.1] Estrutura base Spring Boot hexagonal
-- [1.2] Modelar entidades do domínio  
-- [1.3] Definir portas do domínio
+Para acompanhar o progresso completo do projeto, status de implementação e roadmap detalhado:
 
-**Phase 2 - Application Layer:**
-- [2.1] TradingOrchestrator
-- [2.2] Sistema modular de estratégias
-- [2.3] Services de aplicação
+📋 **[Estratégia de Implementação](docs/STRATEGY-PL-IMPLEMENTATION.md)** - Status completo do projeto  
+🎯 **[Próximos Passos](docs/NEXT-STEPS-PL-IMPLEMENTATION.md)** - Roadmap detalhado de implementação
 
-**Phase 3 - Infrastructure:**
-- [3.1] MockExchangeAdapter
-- [3.2] Configuração de banco de dados
-- [3.3] Sistema de agendamento
-- [3.4] Controllers REST
-
-**Phase 4 - Analysis:**
-- [4.1] Engine de backtesting
-- [4.2] Gerador de dados históricos
-
-**Phase 5 - Operations:**
-- [5.1] Sistema de configuração
-- [5.2] Logging estruturado
+O sistema segue desenvolvimento incremental com foco atual no sistema de P&L e performance tracking.
 
 ## Package Organization
 
@@ -139,6 +121,20 @@ The project follows a well-organized package structure for exchange integrations
 - Use `websocket.exchange=BINANCE` to activate Binance adapter
 - Use `websocket.exchange=MOCK` (default) to use mock adapter  
 - Both adapters implement the same interfaces for seamless switching
+
+## Development and Validation Strategy
+
+The application follows a validation-driven development approach where features are manually tested and validated according to business requirements. Testing implementation will be done on-demand based on validation results and specific needs identified during the development process.
+
+## Documentation Requirements
+
+### Project Structure Updates
+When creating new classes, **MUST** update the project structure tree in the README.md file to reflect the new additions. This ensures the documentation stays current and helps team members understand the codebase organization.
+
+- Add new classes to the appropriate section in the project tree
+- Include brief descriptions for new packages or significant architectural changes
+- Update any relevant architecture diagrams or documentation sections
+- Maintain consistency with existing documentation format
 
 ## Security Considerations
 
