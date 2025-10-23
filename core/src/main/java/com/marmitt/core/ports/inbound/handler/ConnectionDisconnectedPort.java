@@ -8,7 +8,7 @@ import com.marmitt.core.dto.events.WebSocketDisconnectedEvent;
  * Define o contrato para processar eventos quando uma conexão WebSocket
  * é desconectada manualmente ou automaticamente.
  */
-public interface HandleConnectionDisconnectedPort {
+public interface ConnectionDisconnectedPort {
     
     /**
      * Processa evento de desconexão.

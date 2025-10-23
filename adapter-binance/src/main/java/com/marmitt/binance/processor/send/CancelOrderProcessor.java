@@ -2,7 +2,7 @@ package com.marmitt.binance.processor.send;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
-import com.marmitt.core.dto.websocket.request.SendMessageRequest;
+import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.enums.MessageType;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderSpecializedProcessorPort;
 
@@ -18,7 +18,7 @@ public class CancelOrderProcessor implements SenderSpecializedProcessorPort {
     }
 
     @Override
-    public String execute(SendMessageRequest request) {
+    public String execute(MessageRequest request) {
         if (!(request instanceof SendCancelOrderRequest cancelRequest)) {
             throw new IllegalArgumentException("Expected SendCancelOrderRequest but received: " + request.getClass().getSimpleName());
         }

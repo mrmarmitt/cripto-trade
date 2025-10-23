@@ -26,8 +26,9 @@ public class CoreConfig {
     }
 
     @Bean
-    public SendMessageWebSocketPort sendMessageWebSocket(ExchangeAdapterRepositoryPort adapterRepository){
-        return new SendMessageWebSocketUseCase(adapterRepository);
+    public SendMessageWebSocketPort sendMessageWebSocket(WebSocketConnectionRepositoryPort connectionRepository,
+                                                         ExchangeAdapterRepositoryPort adapterRepository){
+        return new SendMessageWebSocketUseCase(connectionRepository, adapterRepository);
     }
     
     @Bean

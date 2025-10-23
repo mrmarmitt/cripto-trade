@@ -8,7 +8,7 @@ import com.marmitt.core.dto.events.WebSocketClosingEvent;
  * Define o contrato para processar eventos quando uma conexão WebSocket
  * está iniciando o processo de fechamento.
  */
-public interface HandleConnectionClosingPort {
+public interface ConnectionClosingPort {
     
     /**
      * Processa evento de início do fechamento da conexão.

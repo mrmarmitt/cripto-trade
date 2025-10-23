@@ -3,20 +3,12 @@ package com.marmitt.core.application.usecase.handler.connection;
 import com.marmitt.core.domain.ConnectionResult;
 import com.marmitt.core.dto.events.WebSocketFailedEvent;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
-import com.marmitt.core.ports.inbound.handler.HandleConnectionFailedPort;
+import com.marmitt.core.ports.inbound.handler.ConnectionFailedPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
-/**
- * Use case para processar eventos de falha na conexão WebSocket.
- * 
- * Responsável por:
- * - Atualizar o estado da conexão para ERROR
- * - Registrar detalhes da falha
- * - Logging de eventos de erro
- */
 @Slf4j
-public class HandleConnectionFailedUseCase implements HandleConnectionFailedPort {
+public class HandleConnectionFailedUseCase implements ConnectionFailedPort {
 
     private final WebSocketConnectionRepositoryPort connectionManagerPort;
 

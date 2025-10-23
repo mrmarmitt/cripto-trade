@@ -1,8 +1,8 @@
 package com.marmitt.core.ports.outbound.exchange.adapter;
 
-import com.marmitt.core.dto.websocket.request.WebSocketConnectionParametersRequest;
+import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 
 public interface ExchangeUrlBuilderPort {
 
-    String buildConnectionUrl(WebSocketConnectionParametersRequest parameters);
+    String buildConnectionUrl(StreamSubscriptionRequest parameters);
 }

@@ -5,7 +5,7 @@ import com.marmitt.core.enums.OrderSide;
 import com.marmitt.core.enums.OrderType;
 import java.math.BigDecimal;
 
-public class SendOrderRequest extends SendMessageRequest {
+public class SendOrderRequest extends MessageRequest {
     
     private final String symbol;
     private final BigDecimal quantity;

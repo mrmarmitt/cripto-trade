@@ -3,6 +3,7 @@ package com.marmitt.application.spring.config.core;
 import com.marmitt.core.application.usecase.handler.HandlerProcessMessageUseCase;
 import com.marmitt.core.application.usecase.handler.connection.*;
 import com.marmitt.core.ports.inbound.handler.*;
+import com.marmitt.core.ports.inbound.websocket.PostConnectionEstablishedPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
@@ -20,27 +21,33 @@ public class HandleConnectionConfig {
     }
 
     @Bean
-    public HandleConnectionEstablishedPort handleConnectionEstablished(WebSocketConnectionRepositoryPort connectionManager) {
+    public ConnectionEstablishedPort handleConnectionEstablished(WebSocketConnectionRepositoryPort connectionManager) {
         return new HandleConnectionEstablishedUseCase(connectionManager);
     }
 
     @Bean
-    public HandleConnectionClosingPort handleConnectionClosing(WebSocketConnectionRepositoryPort connectionManager) {
+    public PostConnectionEstablishedPort handlePostConnectionEstablished(WebSocketConnectionRepositoryPort connectionManager,
+                                                                         ExchangeAdapterRepositoryPort adapterRepository) {
+        return new HandlePostConnectionEstablishUseCase(connectionManager, adapterRepository);
+    }
+
+    @Bean
+    public ConnectionClosingPort handleConnectionClosing(WebSocketConnectionRepositoryPort connectionManager) {
         return new HandleConnectionClosingUseCase(connectionManager);
     }
 
     @Bean
-    public HandleConnectionClosedPort handleConnectionClosed(WebSocketConnectionRepositoryPort connectionManager) {
+    public ConnectionClosedPort handleConnectionClosed(WebSocketConnectionRepositoryPort connectionManager) {
         return new HandleConnectionClosedUseCase(connectionManager);
     }
 
     @Bean
-    public HandleConnectionDisconnectedPort handleConnectionDisconnected(WebSocketConnectionRepositoryPort connectionManager) {
+    public ConnectionDisconnectedPort handleConnectionDisconnected(WebSocketConnectionRepositoryPort connectionManager) {
         return new HandleConnectionDisconnectedUseCase(connectionManager);
     }
 
     @Bean
-    public HandleConnectionFailedPort handleConnectionFailed(WebSocketConnectionRepositoryPort connectionManager) {
+    public ConnectionFailedPort handleConnectionFailed(WebSocketConnectionRepositoryPort connectionManager) {
         return new HandleConnectionFailedUseCase(connectionManager);
     }
 }

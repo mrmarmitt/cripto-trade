@@ -13,7 +13,9 @@ public record TickerEvent(
         String high_24h,               // 24h high price
         String volume_30d,             // 30d volume
         String best_bid,               // Best bid price
+        String best_bid_size,          // Best bid size
         String best_ask,               // Best ask price
+        String best_ask_size,          // Best ask size
         String side,                   // Last trade side
         String time,                   // Timestamp
         Long trade_id,                 // Trade ID
@@ -24,10 +26,18 @@ public record TickerEvent(
     }
 
     public BigDecimal getBestBidPriceAsDecimal() {
-        return new BigDecimal(best_bid);
+        return best_bid != null ? new BigDecimal(best_bid) : null;
     }
 
     public BigDecimal getBestAskPriceAsDecimal() {
-        return new BigDecimal(best_ask);
+        return best_ask != null ? new BigDecimal(best_ask) : null;
+    }
+
+    public BigDecimal getBestBidSizeAsDecimal() {
+        return best_bid_size != null ? new BigDecimal(best_bid_size) : null;
+    }
+
+    public BigDecimal getBestAskSizeAsDecimal() {
+        return best_ask_size != null ? new BigDecimal(best_ask_size) : null;
     }
 }

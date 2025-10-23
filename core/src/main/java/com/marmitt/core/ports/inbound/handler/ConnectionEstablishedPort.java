@@ -8,7 +8,7 @@ import com.marmitt.core.dto.events.WebSocketConnectedEvent;
  * Define o contrato para processar eventos quando uma conexão WebSocket
  * é estabelecida com sucesso.
  */
-public interface HandleConnectionEstablishedPort {
+public interface ConnectionEstablishedPort {
     
     /**
      * Processa evento de conexão estabelecida.

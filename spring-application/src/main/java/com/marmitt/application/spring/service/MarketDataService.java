@@ -3,7 +3,7 @@ package com.marmitt.application.spring.service;
 import com.marmitt.application.spring.controller.dto.market.MarketDataStreamRequest;
 import com.marmitt.application.spring.controller.dto.market.MarketDataStreamResponse;
 import com.marmitt.application.spring.controller.mapper.MarketDataMapper;
-import com.marmitt.core.dto.websocket.request.SendStreamRequest;
+import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 import com.marmitt.core.ports.inbound.websocket.SendMessageWebSocketPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -19,13 +19,13 @@ public class MarketDataService {
     }
 
     public MarketDataStreamResponse subscribe(MarketDataStreamRequest request) {
-        SendStreamRequest sendStreamRequest = MarketDataMapper.toSubscribeSendStreamRequest(request);
+        StreamSubscriptionRequest sendStreamRequest = MarketDataMapper.toSubscribeSendStreamRequest(request);
         sendMessageWebSocket.execute(sendStreamRequest);
         return MarketDataStreamResponse.successfully("subscription");
     }
 
     public MarketDataStreamResponse unsubscribe(MarketDataStreamRequest request) {
-        SendStreamRequest sendStreamRequest = MarketDataMapper.toUnsubscribeSendStreamRequest(request);
+        StreamSubscriptionRequest sendStreamRequest = MarketDataMapper.toUnsubscribeSendStreamRequest(request);
         sendMessageWebSocket.execute(sendStreamRequest);
         return MarketDataStreamResponse.successfully("unsubscription");
     }

@@ -8,12 +8,12 @@ import lombok.Getter;
 import java.util.List;
 
 @Getter
-public class SendStreamRequest extends SendMessageRequest {
+public class StreamSubscriptionRequest extends MessageRequest {
     
     private final List<CurrencyPair> currencyPairs;
     private final StreamAction streamAction;
     
-    public SendStreamRequest(String exchangeName, List<CurrencyPair> currencyPairs, StreamAction streamAction) {
+    public StreamSubscriptionRequest(String exchangeName, List<CurrencyPair> currencyPairs, StreamAction streamAction) {
         super(exchangeName, streamAction == StreamAction.SUBSCRIBE ? MessageType.STREAM_SUBSCRIPTION : MessageType.STREAM_UNSUBSCRIPTION);
         this.currencyPairs = currencyPairs;
         this.streamAction = streamAction;

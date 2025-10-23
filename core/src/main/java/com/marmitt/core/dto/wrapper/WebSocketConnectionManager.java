@@ -2,10 +2,13 @@ package com.marmitt.core.dto.wrapper;
 
 import com.marmitt.core.domain.ConnectionResult;
 import com.marmitt.core.domain.ConnectionStats;
+import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.enums.ConnectionStatus;
 import com.marmitt.core.exceptions.IllegalStateTransitionException;
 import lombok.Getter;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -15,11 +18,14 @@ public class WebSocketConnectionManager {
     private final String exchangeName;
     private final ConnectionStats currentConnectionStats;
     private volatile ConnectionResult currentConnectionResult;
+    @Getter
+    private final List<MessageRequest> requestHistory;
 
     private WebSocketConnectionManager(ConnectionResult connectionResult, String exchangeName) {
         this.exchangeName = exchangeName;
         this.currentConnectionResult = connectionResult;
         this.currentConnectionStats = createStatsForExchange();
+        this.requestHistory = new ArrayList<>();
     }
 
     public static WebSocketConnectionManager forExchange(String exchangeName) {
@@ -46,6 +52,14 @@ public class WebSocketConnectionManager {
         
         // Atualiza o resultado
         this.currentConnectionResult = newResult;
+    }
+
+    public void addRequestToHistory(MessageRequest request) {
+        requestHistory.add(request);
+    }
+
+    public MessageRequest getLastRequestHistory() {
+        return requestHistory.getLast();
     }
 
     public UUID getConnectionId() {
