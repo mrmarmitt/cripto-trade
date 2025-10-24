@@ -2,7 +2,7 @@ package com.marmitt.core.dto.websocket.request;
 
 import com.marmitt.core.enums.MessageType;
 
-public class SendCancelOrderRequest extends SendMessageRequest {
+public class SendCancelOrderRequest extends MessageRequest {
     
     private final String orderId;
     private final String symbol;

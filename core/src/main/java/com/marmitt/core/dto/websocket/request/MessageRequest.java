@@ -4,12 +4,12 @@ import com.marmitt.core.enums.MessageType;
 import lombok.Getter;
 
 @Getter
-public abstract class SendMessageRequest {
+public abstract class MessageRequest {
     
     private final String exchangeName;
     private final MessageType messageType;
     
-    protected SendMessageRequest(String exchangeName, MessageType messageType) {
+    protected MessageRequest(String exchangeName, MessageType messageType) {
         this.exchangeName = exchangeName;
         this.messageType = messageType;
     }

@@ -1,0 +1,131 @@
+# .clinerules - Validation Rules for CTrace Trading Application
+# This file defines automated validation rules for maintaining code quality
+
+[build]
+# Compile and validate all modules
+commands = [
+    "./gradlew clean",
+    "./gradlew build"
+]
+description = "Clean build and compile all modules"
+
+[verification] 
+# Run all verification tasks
+commands = [
+    "./gradlew check"
+]
+description = "Run all verification checks including tests"
+
+[quality]
+# Code quality checks
+commands = [
+    "./gradlew javadoc"
+]
+description = "Generate documentation and verify code quality"
+
+[security]
+# Security validations for trading application
+patterns = [
+    # Never commit API keys or secrets
+    "(?i)(api_key|api_secret|private_key|password|token)\\s*=\\s*['\"][^'\"]{8,}['\"]",
+    # Check for hardcoded credentials
+    "(?i)(binance|coinbase).*['\"][a-zA-Z0-9]{20,}['\"]"
+]
+message = "❌ Security violation: API keys or credentials detected"
+
+[architecture]
+# Hexagonal architecture validation  
+patterns = [
+    # Core domain should not depend on infrastructure
+    "core/.*\\.java.*import.*infrastructure",
+    # Application layer should not depend on specific adapters
+    "application/.*\\.java.*import.*(binance|coinbase|mock)\\."
+]
+message = "❌ Architecture violation: Dependency inversion principle violated"
+
+[documentation]
+# Documentation requirements from CLAUDE.md
+validate_on = ["create", "modify"]
+check_files = [
+    "README.md"
+]
+patterns = [
+    # When adding new classes, README structure should be updated
+    "src/main/java/com/marmitt/.*/.*\\.java"
+]
+message = "📝 Update project structure in README.md when adding new classes"
+
+[spring_boot]
+# Spring Boot specific validations
+commands = [
+    "./gradlew spring-application:bootJar"
+]
+description = "Validate Spring Boot application packaging"
+
+[modules]
+# Multi-module project validation
+commands = [
+    "./gradlew :core:build",
+    "./gradlew :adapter-binance:build", 
+    "./gradlew :adapter-coinbase:build",
+    "./gradlew :adapter-mock:build",
+    "./gradlew :spring-application:build",
+    "./gradlew :strategy:build"
+]
+description = "Build and validate all modules independently"
+
+[commit_message]
+# Commit message validation
+patterns = [
+    "^(feat|fix|docs|style|refactor|test|chore|perf|ci)(\(.+\))?: .{1,50}"
+]
+message = "❌ Commit message must follow conventional commits format"
+
+[websocket_config]
+# WebSocket configuration validation
+files = [
+    "spring-application/src/main/resources/application.properties"
+]
+validate_properties = [
+    "websocket.exchange"
+]
+message = "⚙️ Ensure WebSocket exchange configuration is properly set"
+
+[trading_safety]
+# Trading application safety checks
+patterns = [
+    # Warn about hardcoded trading amounts
+    "(?i)(quantity|amount|size).*=.*[0-9]{4,}",
+    # Check for unsafe order types
+    "OrderType\\.MARKET.*quantity.*>.*1000"
+]
+message = "⚠️ Trading safety: Review hardcoded amounts and order configurations"
+
+[pre_commit]
+# Pre-commit validation sequence
+sequence = [
+    "security",
+    "architecture", 
+    "build",
+    "verification",
+    "commit_message"
+]
+
+[pre_push]
+# Pre-push validation sequence  
+sequence = [
+    "modules",
+    "spring_boot",
+    "quality",
+    "documentation"
+]
+
+[auto_fix]
+# Automatic fixes that can be applied
+patterns = [
+    {
+        find = "import\\s+java\\.util\\.\\*;",
+        replace = "// Use specific imports instead of wildcard",
+        message = "🔧 Replace wildcard imports with specific imports"
+    }
+]

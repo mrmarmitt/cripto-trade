@@ -2,11 +2,10 @@ package com.marmitt.binance.processor.send;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.core.dto.common.CurrencyPair;
-import com.marmitt.core.dto.websocket.request.SendMessageRequest;
-import com.marmitt.core.dto.websocket.request.SendStreamRequest;
+import com.marmitt.core.dto.websocket.request.MessageRequest;
+import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 import com.marmitt.core.enums.MessageType;
 import com.marmitt.core.enums.StreamAction;
-import com.marmitt.core.enums.StreamType;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderSpecializedProcessorPort;
 
 import java.util.HashMap;
@@ -22,8 +21,8 @@ public class StreamProcessor implements SenderSpecializedProcessorPort {
     }
 
     @Override
-    public String execute(SendMessageRequest request) {
-        if (request instanceof SendStreamRequest streamRequest) {
+    public String execute(MessageRequest request) {
+        if (request instanceof StreamSubscriptionRequest streamRequest) {
             return processStreamSubscription(streamRequest);
         } else {
             throw new IllegalArgumentException("Expected SendStreamSubscriptionRequest or SendTickerSubscriptionRequest but received: " + request.getClass().getSimpleName());
@@ -35,7 +34,7 @@ public class StreamProcessor implements SenderSpecializedProcessorPort {
         return MessageType.STREAM_SUBSCRIPTION.equals(messageType) || MessageType.STREAM_UNSUBSCRIPTION.equals(messageType);
     }
 
-    private String processStreamSubscription(SendStreamRequest streamRequest) {
+    private String processStreamSubscription(StreamSubscriptionRequest streamRequest) {
 
         try {
             List<String> streams = streamRequest.getCurrencyPairs().stream()

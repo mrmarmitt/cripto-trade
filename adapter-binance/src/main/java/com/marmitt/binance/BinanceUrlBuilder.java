@@ -1,7 +1,7 @@
 package com.marmitt.binance;
 
 import com.marmitt.core.dto.common.CurrencyPair;
-import com.marmitt.core.dto.websocket.request.WebSocketConnectionParametersRequest;
+import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
 
 import java.util.List;
@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
 public class BinanceUrlBuilder implements ExchangeUrlBuilderPort {
 
     @Override
-    public String buildConnectionUrl(WebSocketConnectionParametersRequest parameters) {
+    public String buildConnectionUrl(StreamSubscriptionRequest parameters) {
         List<CurrencyPair> currencyPairs = parameters.getCurrencyPairs();
         
         if (currencyPairs.isEmpty()) {

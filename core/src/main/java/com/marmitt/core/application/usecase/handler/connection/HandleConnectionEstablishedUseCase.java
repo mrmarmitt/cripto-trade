@@ -3,7 +3,7 @@ package com.marmitt.core.application.usecase.handler.connection;
 import com.marmitt.core.domain.ConnectionResult;
 import com.marmitt.core.dto.events.WebSocketConnectedEvent;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
-import com.marmitt.core.ports.inbound.handler.HandleConnectionEstablishedPort;
+import com.marmitt.core.ports.inbound.handler.ConnectionEstablishedPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
@@ -16,7 +16,7 @@ import lombok.extern.slf4j.Slf4j;
  * - Logging de eventos de conexão
  */
 @Slf4j
-public class HandleConnectionEstablishedUseCase implements HandleConnectionEstablishedPort {
+public class HandleConnectionEstablishedUseCase implements ConnectionEstablishedPort {
 
     private final WebSocketConnectionRepositoryPort connectionManagerPort;
 

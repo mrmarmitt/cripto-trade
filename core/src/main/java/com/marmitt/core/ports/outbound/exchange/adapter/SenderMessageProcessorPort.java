@@ -1,8 +1,8 @@
 package com.marmitt.core.ports.outbound.exchange.adapter;
 
-import com.marmitt.core.dto.websocket.request.SendMessageRequest;
+import com.marmitt.core.dto.websocket.request.MessageRequest;
 
 public interface SenderMessageProcessorPort {
     
-    String execute(SendMessageRequest request);
+    String execute(MessageRequest request);
 }

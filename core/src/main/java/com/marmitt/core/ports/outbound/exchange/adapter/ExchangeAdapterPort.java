@@ -17,6 +17,8 @@ public interface ExchangeAdapterPort {
     
     String getExchangeName();
 
+    boolean requiresPostConnection();
+
     WebSocketPort getWebSocketPort();
 
     ReceivedMessageProcessorPort getReceivedMessageProcessor();

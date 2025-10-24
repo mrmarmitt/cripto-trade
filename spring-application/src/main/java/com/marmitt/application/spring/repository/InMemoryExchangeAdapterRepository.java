@@ -30,7 +30,7 @@ public class InMemoryExchangeAdapterRepository  implements ExchangeAdapterReposi
     @PostConstruct
     public void initExchangeAdapters() {
         registerAdapter(new BinanceExchangeAdapter(objectMapper, eventPublisher));
-        registerAdapter(new CoinbaseExchangeAdapter(eventPublisher));
+        registerAdapter(new CoinbaseExchangeAdapter(objectMapper, eventPublisher));
     }
 
     /**

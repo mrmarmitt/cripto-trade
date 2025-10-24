@@ -6,23 +6,13 @@ import com.marmitt.application.spring.adapter.OkHttp3WebSocketAdapter;
 import com.marmitt.binance.BinanceUrlBuilder;
 import com.marmitt.binance.processor.receive.BinanceReceivedMessageProcessor;
 import com.marmitt.binance.processor.send.BinanceSenderMessageProcessor;
-import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
+import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
+import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
-import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 
-/**
- * Implementação do ExchangeAdapter para Binance.
- * 
- * Encapsula todos os componentes específicos da Binance:
- * - WebSocketPort usando OkHttp3WebSocketAdapter
- * - BinanceMessageProcessor para processamento de mensagens
- * - BinanceUrlBuilder para construção de URLs
- * 
- * Registra-se automaticamente no ExchangeAdapterRegistry durante a inicialização.
- */
 public class BinanceExchangeAdapter implements ExchangeAdapterPort {
 
     private final WebSocketPort webSocketPort;
@@ -43,6 +33,11 @@ public class BinanceExchangeAdapter implements ExchangeAdapterPort {
     }
 
     @Override
+    public boolean requiresPostConnection() {
+        return false;
+    }
+
+    @Override
     public WebSocketPort getWebSocketPort() {
         return webSocketPort;
     }
@@ -54,7 +49,7 @@ public class BinanceExchangeAdapter implements ExchangeAdapterPort {
 
     @Override
     public SenderMessageProcessorPort getSenderMessageProcessor() {
-        return this.senderMessageProcessor;
+        return senderMessageProcessor;
     }
 
     @Override

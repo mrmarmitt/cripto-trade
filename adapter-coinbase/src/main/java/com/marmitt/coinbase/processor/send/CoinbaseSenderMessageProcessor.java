@@ -1,18 +1,20 @@
-package com.marmitt.binance.processor.send;
+package com.marmitt.coinbase.processor.send;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderSpecializedProcessorPort;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
 import java.util.List;
 
-public class BinanceSenderMessageProcessor implements SenderMessageProcessorPort {
+@Slf4j
+public class CoinbaseSenderMessageProcessor implements SenderMessageProcessorPort {
 
     private final List<SenderSpecializedProcessorPort> specializedProcessors;
 
-    public BinanceSenderMessageProcessor(ObjectMapper objectMapper) {
+    public CoinbaseSenderMessageProcessor(ObjectMapper objectMapper) {
         this.specializedProcessors = new ArrayList<>();
         initializeProcessors(objectMapper);
     }

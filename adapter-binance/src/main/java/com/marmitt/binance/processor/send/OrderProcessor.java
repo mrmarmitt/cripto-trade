@@ -1,7 +1,7 @@
 package com.marmitt.binance.processor.send;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.marmitt.core.dto.websocket.request.SendMessageRequest;
+import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.enums.MessageType;
 import com.marmitt.core.enums.OrderSide;
@@ -20,7 +20,7 @@ public class OrderProcessor implements SenderSpecializedProcessorPort {
     }
 
     @Override
-    public String execute(SendMessageRequest request) {
+    public String execute(MessageRequest request) {
         if (!(request instanceof SendOrderRequest orderRequest)) {
             throw new IllegalArgumentException("Expected SendOrderRequest but received: " + request.getClass().getSimpleName());
         }

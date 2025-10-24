@@ -8,7 +8,7 @@ import com.marmitt.core.dto.events.WebSocketClosedEvent;
  * Define o contrato para processar eventos quando uma conexão WebSocket
  * é fechada (normal ou inesperadamente).
  */
-public interface HandleConnectionClosedPort {
+public interface ConnectionClosedPort {
     
     /**
      * Processa evento de conexão fechada.

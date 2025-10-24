@@ -1,7 +1,7 @@
 package com.marmitt.core.ports.inbound.websocket;
 
-import com.marmitt.core.dto.websocket.request.SendMessageRequest;
+import com.marmitt.core.dto.websocket.request.MessageRequest;
 
 public interface SendMessageWebSocketPort {
-    void execute(SendMessageRequest request);
+    void execute(MessageRequest request);
 }

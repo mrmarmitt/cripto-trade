@@ -8,7 +8,7 @@ import com.marmitt.core.dto.events.WebSocketFailedEvent;
  * Define o contrato para processar eventos quando uma conexão WebSocket
  * falha ao ser estabelecida ou encontra um erro.
  */
-public interface HandleConnectionFailedPort {
+public interface ConnectionFailedPort {
     
     /**
      * Processa evento de falha na conexão.
