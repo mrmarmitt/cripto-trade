@@ -3,9 +3,6 @@ package com.marmitt.core.dto.events;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * Event published when a WebSocket connection is successfully established.
- */
 public record WebSocketConnectedEvent(
         String exchange,
         String message,

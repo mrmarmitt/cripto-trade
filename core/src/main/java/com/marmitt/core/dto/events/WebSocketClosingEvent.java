@@ -3,9 +3,6 @@ package com.marmitt.core.dto.events;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * Event published when a WebSocket connection is starting to close.
- */
 public record WebSocketClosingEvent(
         String exchange,
         int code,

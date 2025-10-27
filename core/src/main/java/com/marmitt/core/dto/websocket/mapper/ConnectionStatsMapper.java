@@ -6,20 +6,8 @@ import com.marmitt.core.enums.ReliabilityRank;
 
 import java.time.Duration;
 
-/**
- * Mapper para converter ConnectionStats (domain) para WebSocketStatsResponse (DTO).
- * <p>
- * Inclui todas as métricas avançadas de confiabilidade e performance.
- */
 public class ConnectionStatsMapper {
 
-    /**
-     * Converte ConnectionStats do domínio para DTO de resposta com métricas avançadas.
-     *
-     * @param stats        estatísticas do domínio
-     * @param exchangeName nome da exchange para contexto
-     * @return DTO para camada de apresentação
-     */
     public static WebSocketStatsResponse toResponse(ConnectionStats stats, String exchangeName) {
         if (stats == null) {
             return createEmptyResponse(exchangeName != null ? exchangeName : "UNKNOWN");
@@ -74,12 +62,6 @@ public class ConnectionStatsMapper {
         );
     }
 
-    /**
-     * Cria uma resposta vazia para casos onde não há estatísticas.
-     *
-     * @param exchangeName nome da exchange
-     * @return DTO com estatísticas zeradas
-     */
     public static WebSocketStatsResponse createEmptyResponse(String exchangeName) {
         return new WebSocketStatsResponse(
                 0L,
@@ -112,21 +94,12 @@ public class ConnectionStatsMapper {
                 0L);
     }
 
-    /**
-     * Determina performance relativa baseada no reliability score.
-     */
     private static String determineRelativePerformance(double reliabilityScore) {
         if (reliabilityScore >= 80.0) return "ABOVE_AVERAGE";
         if (reliabilityScore >= 60.0) return "AVERAGE";
         return "BELOW_AVERAGE";
     }
 
-    /**
-     * Calcula diferença entre mensagens esperadas vs recebidas.
-     *
-     * @param stats                     estatísticas de conexão
-     * @param expectedMessagesPerMinute baseline esperado de mensagens por minuto
-     */
     private static long calculateExpectedVsActual(ConnectionStats stats, long expectedMessagesPerMinute) {
         if (stats.getTotalUptime().isZero()) {
             return 0L;

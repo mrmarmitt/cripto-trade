@@ -5,11 +5,6 @@ import com.marmitt.core.enums.ReliabilityRank;
 import java.time.Duration;
 import java.time.Instant;
 
-/**
- * DTO para representar estatísticas avançadas de conexão WebSocket na camada de apresentação.
- * 
- * Inclui métricas de confiabilidade, constância e tendências para análise operacional.
- */
 public record WebSocketStatsResponse(
         // Métricas básicas
         long totalConnections,

@@ -1,7 +1,9 @@
 package com.marmitt.core.dto.websocket.request;
 
 import com.marmitt.core.enums.MessageType;
+import lombok.Getter;
 
+@Getter
 public class SendCancelOrderRequest extends MessageRequest {
     
     private final String orderId;
@@ -12,12 +14,5 @@ public class SendCancelOrderRequest extends MessageRequest {
         this.orderId = orderId;
         this.symbol = symbol;
     }
-    
-    public String getOrderId() {
-        return orderId;
-    }
-    
-    public String getSymbol() {
-        return symbol;
-    }
+
 }

@@ -3,9 +3,6 @@ package com.marmitt.core.dto.events;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * Event published when a WebSocket connection is manually disconnected.
- */
 public record WebSocketDisconnectedEvent(
         String exchange,
         String reason,

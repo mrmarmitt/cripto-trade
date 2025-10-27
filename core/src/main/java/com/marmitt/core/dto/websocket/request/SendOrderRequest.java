@@ -3,8 +3,11 @@ package com.marmitt.core.dto.websocket.request;
 import com.marmitt.core.enums.MessageType;
 import com.marmitt.core.enums.OrderSide;
 import com.marmitt.core.enums.OrderType;
+import lombok.Getter;
+
 import java.math.BigDecimal;
 
+@Getter
 public class SendOrderRequest extends MessageRequest {
     
     private final String symbol;
@@ -22,24 +25,5 @@ public class SendOrderRequest extends MessageRequest {
         this.orderType = orderType;
         this.orderSide = orderSide;
     }
-    
-    public String getSymbol() {
-        return symbol;
-    }
-    
-    public BigDecimal getQuantity() {
-        return quantity;
-    }
-    
-    public BigDecimal getPrice() {
-        return price;
-    }
-    
-    public OrderType getOrderType() {
-        return orderType;
-    }
-    
-    public OrderSide getOrderSide() {
-        return orderSide;
-    }
+
 }

@@ -3,9 +3,6 @@ package com.marmitt.core.dto.events;
 import java.time.Instant;
 import java.util.UUID;
 
-/**
- * Event published when a WebSocket connection fails to establish or encounters an error.
- */
 public record WebSocketFailedEvent(
         String exchange,
         String reason,

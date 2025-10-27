@@ -1,8 +1,5 @@
 package com.marmitt.core.dto.listener;
 
-/**
- * Record que contém estatísticas sobre listeners registrados.
- */
 public record ListenerStats(
     int orderUpdateListenerCount,
     int priceUpdateListenerCount,
