@@ -15,11 +15,13 @@ core/src/main/java/com/marmitt/core/
 │   │   ├── Balance.java             # Saldo do portfolio
 │   │   └── Transaction.java         # Registro de transações
 │   ├── strategy/                     # 🆕 Strategy Domain  
-│   │   ├── StrategyExecution.java   # Execução de estratégia
+│   │   ├── StrategyExecution.java   # Execução de estratégia  
 │   │   └── StrategyPerformance.java # Performance da estratégia
 │   └── value/                        # 🆕 Value Objects
 │       ├── Asset.java               # Valor de ativos (crypto, fiat, stablecoin)
 │       ├── PortfolioId.java         # ID do portfolio
+│       ├── StrategyId.java          # ID da estratégia
+│       ├── TransactionId.java       # ID da transação
 │       └── Percentage.java          # Percentual
 ├── application/                      # Use Cases e Services
 │   ├── portfolio/                    # 🆕 Portfolio Use Cases
@@ -41,12 +43,13 @@ core/src/main/java/com/marmitt/core/
 │   └── outbound/                     # Contratos para saída
 │       ├── portfolio/                # 🆕 Portfolio Repositories
 │       │   ├── PortfolioRepositoryPort.java
-│       │   └── TransactionRepositoryPort.java
+│       │   ├── TransactionRepositoryPort.java
+│       │   └── StrategyRepositoryPort.java
 │       ├── order/                    # 🆕 Order Management
 │       │   └── OrderExecutionPort.java
-│       └── strategy/                 # Já existe + extensão
-│           ├── TradingStrategy.java  # Já existe
-│           └── StrategyExecutionPort.java # Já existe
+│       └── strategy/                 # Ports para estratégia
+│           ├── TradingStrategy.java      # Interface para implementações externas
+│           └── StrategyExecutionPort.java # Port para execução de estratégia
 └── dto/                              # Data Transfer Objects
     └── portfolio/                    # 🆕 Portfolio DTOs
         ├── PortfolioResponse.java
@@ -54,65 +57,169 @@ core/src/main/java/com/marmitt/core/
         └── ExecutionResult.java
 ```
 
-## 🏗️ Responsabilidades de Cada Classe
+## 🏗️ Classes de Domínio - Responsabilidades e Detalhamento
 
-### 🎯 Domain Layer
+### Portfolio (Aggregate Root)
 
-#### Portfolio.java (Aggregate Root)
-```java
-class Portfolio {
-    // Responsabilidades:
-    // - Manter estado do portfolio (id, name, strategy)
-    // - Gerenciar capital inicial e atual
-    // - Manter lista de positions
-    // - Validar operações de compra/venda
-    // - Calcular valor total do portfolio
-}
-```
+**Responsabilidades:**
+- Manter estado do portfolio (id, name, strategyId, strategyName)
+- Gerenciar capital inicial e atual através do Balance
+- Manter e organizar lista de positions por Symbol
+- Validar operações de compra/venda antes da execução
+- Calcular valor total do portfolio e P&L
+- Referenciar estratégia por ID (não executar diretamente)
+- Controlar estado ativo/inativo para safety
 
-#### Position.java (Entity)
-```java
-class Position {
-    // Responsabilidades:
-    // - Representar posição em um ativo específico
-    // - Manter quantidade, preço médio, valor atual
-    // - Calcular P&L unrealized
-    // - Validar quantidade para venda
-}
-```
+| Variável | Tipo | Descrição | Utilidade |
+|----------|------|-----------|-----------|
+| `id` | `UUID` | Identificador único do portfolio | Chave primária, referência externa |
+| `name` | `String` | Nome descritivo do portfolio | Interface do usuário, relatórios |
+| `strategyId` | `UUID` | ID da estratégia associada | Referência estável para execução |
+| `strategyName` | `String` | Nome da estratégia | Interface, logs, identificação |
+| `balance` | `Balance` | Gestão de capital disponível/investido | Controle de liquidez, validações |
+| `positions` | `Map<Symbol, Position>` | Posições ativas indexadas por símbolo | Acesso rápido O(1), gestão de ativos |
+| `transactions` | `List<Transaction>` | Histórico de todas as transações | Auditoria, P&L, compliance |
+| `isActive` | `boolean` | Status ativo/inativo do portfolio | Controle de execução, safety |
+| `createdAt` | `Instant` | Timestamp de criação | Auditoria, métricas temporais |
 
-#### Balance.java (Value Object)
-```java
-class Balance {
-    // Responsabilidades:
-    // - Manter saldo disponível vs. investido
-    // - Validar se há capital suficiente
-    // - Calcular utilização de capital
-}
-```
+### Position (Entity)
 
-#### Transaction.java (Entity)
-```java
-class Transaction {
-    // Responsabilidades:
-    // - Registrar operação de compra/venda
-    // - Manter timestamp, símbolo, quantidade, preço
-    // - Calcular fees e custos
-    // - Immutable record de operação
-}
-```
+**Responsabilidades:**
+- Representar posição em um ativo específico (par de trading)
+- Manter quantidade, preço médio e preço atual
+- Calcular P&L unrealized automaticamente
+- Validar quantidade para operações de venda
+- Atualizar preço médio com weighted average em compras
+- Reduzir posição em vendas mantendo integridade
 
-#### Asset.java (Value Object)
-```java
-class Asset {
-    // Responsabilidades:
-    // - Representar valor de qualquer tipo de ativo (crypto, fiat, stablecoin)
-    // - Manter amount, symbol e type do ativo
-    // - Validar operações matemáticas entre assets do mesmo tipo
-    // - Conversão e formatação adequada por tipo de ativo
-    // - Factory methods para diferentes tipos (crypto, fiat, stablecoin)
-}
-```
+| Variável | Tipo | Descrição | Utilidade |
+|----------|------|-----------|-----------|
+| `symbol` | `Symbol` | Par de trading (ex: "BTCUSDT") | Identificador do mercado/contexto |
+| `quantity` | `Asset` | Quantidade do ativo base | Volume possuído (ex: "0.5 BTC") |
+| `averagePrice` | `Asset` | Preço médio de compra | Cálculo de P&L, base de custo |
+| `currentPrice` | `Asset` | Preço atual de mercado | Avaliação mark-to-market |
+
+**Relacionamento Symbol ↔ Assets:**
+- `Symbol("BTCUSDT")` = Contexto do mercado
+- `quantity.symbol()` = "BTC" (base asset)
+- `price.symbol()` = "USDT" (quote asset)
+- Validação: `symbol == quantity.symbol + price.symbol`
+
+### Transaction (Entity)
+
+**Responsabilidades:**
+- Registrar operação de compra/venda de forma imutável
+- Manter timestamp, símbolo, quantidade, preço e fees
+- Calcular valor total da operação
+- Fornecer histórico auditável de todas as operações
+- Servir como base para cálculos de P&L e compliance
+
+| Variável | Tipo | Descrição | Utilidade |
+|----------|------|-----------|-----------|
+| `id` | `UUID` | Identificador único da transação | Rastreabilidade, referência |
+| `type` | `TransactionType` | BUY ou SELL | Classificação da operação |
+| `symbol` | `Symbol` | Par de trading da operação | Contexto de mercado |
+| `quantity` | `Asset` | Quantidade transacionada | Volume da operação |
+| `price` | `Asset` | Preço unitário | Valor de execução |
+| `total` | `Asset` | Valor total da operação | Impacto no capital |
+| `fee` | `Asset` | Taxa da transação | Custo operacional |
+| `timestamp` | `Instant` | Momento da execução | Ordenação temporal |
+
+### Balance (Value Object)
+
+**Responsabilidades:**
+- Manter saldo disponível vs. investido
+- Validar se há capital suficiente para operações
+- Calcular utilização de capital e P&L do portfolio
+- Garantir invariante matemática de conservação de capital
+- Alocar/desalocar capital conforme operações
+
+| Variável | Tipo | Descrição | Utilidade |
+|----------|------|-----------|-----------|
+| `available` | `Asset` | Capital disponível para trading | Liquidez, validação de ordens |
+| `invested` | `Asset` | Capital atualmente investido | Utilização de capital |
+| `initialCapital` | `Asset` | Capital inicial do portfolio | Base para cálculo de P&L |
+
+**Invariante:** `available + invested = totalCapital`
+
+### Asset (Value Object)
+
+**Responsabilidades:**
+- Representar valor de qualquer tipo de ativo (crypto, fiat, stablecoin)
+- Manter amount, symbol e type do ativo
+- Validar operações matemáticas entre assets do mesmo tipo
+- Conversão e formatação adequada por tipo de ativo
+- Factory methods para diferentes tipos de ativo
+- Garantir precisão decimal apropriada por tipo
+
+| Variável | Tipo | Descrição | Utilidade |
+|----------|------|-----------|-----------|
+| `amount` | `BigDecimal` | Quantidade numérica | Precisão decimal para valores |
+| `symbol` | `String` | Símbolo do ativo | Identificação (BTC, USDT, USD) |
+| `type` | `AssetType` | Tipo do ativo | Comportamento específico |
+
+**AssetType e seus comportamentos:**
+- `CRYPTOCURRENCY`: 8 casas decimais, alta volatilidade
+- `FIAT`: 2 casas decimais, moedas tradicionais  
+- `STABLECOIN`: 4 casas decimais, pareadas com fiat
+
+### Symbol (Value Object)
+
+**Responsabilidades:**
+- Representar par de trading seguindo padrão das exchanges
+- Servir como chave identificadora única para positions
+- Validar formato e consistência do símbolo
+- Facilitar mapeamento e indexação de mercados
+
+| Variável | Tipo | Descrição | Utilidade |
+|----------|------|-----------|-----------|
+| `value` | `String` | Representação do par | Identificação padrão exchanges |
+
+**Exemplos:**
+- `"BTCUSDT"` = Bitcoin vs Tether
+- `"ETHBTC"` = Ethereum vs Bitcoin
+- `"ADAUSD"` = Cardano vs US Dollar
+
+### Enums
+
+#### AssetType
+**Responsabilidade:** Definir comportamento específico para cada tipo de ativo
+
+| Valor | Descrição | Comportamento |
+|-------|-----------|---------------|
+| `CRYPTOCURRENCY` | Ativos digitais voláteis | 8 casas decimais, formatação específica |
+| `FIAT` | Moedas tradicionais governamentais | 2 casas decimais, estabilidade |
+| `STABLECOIN` | Criptomoedas estáveis | 4 casas decimais, pareadas com fiat |
+
+#### TransactionType
+**Responsabilidade:** Classificar tipo de operação para processamento correto
+
+| Valor | Descrição | Impacto no Portfolio |
+|-------|-----------|---------------------|
+| `BUY` | Operação de compra | Reduz available, aumenta invested, cria/atualiza position |
+| `SELL` | Operação de venda | Aumenta available, reduz invested, reduz/remove position |
+
+## 🔄 Relacionamentos e Fluxos
+
+### Portfolio → Position
+- Portfolio agrega múltiplas Positions
+- Indexação por Symbol para acesso O(1)
+- Position atualizada automaticamente nas operações
+
+### Position → Asset
+- Symbol como contexto de mercado
+- quantity.symbol = base asset do par
+- price.symbol = quote asset do par
+
+### Transaction → Portfolio
+- Toda Transaction gera atualização no Portfolio
+- Balance é atualizado conforme tipo (BUY/SELL)
+- Position é criada/atualizada automaticamente
+
+### Asset → AssetType
+- Comportamento específico por tipo
+- Formatação e precisão adequadas
+- Validações de operações matemáticas
 
 ### 🔧 Application Layer
 
@@ -270,10 +377,11 @@ interface OrderExecutionPort {
 │  │  │                  │ │                  │ │                  │            │ │
 │  │  │ • portfolioId    │ │ • symbol         │ │ • transactionId  │            │ │
 │  │  │ • name           │ │ • quantity       │ │ • type (BUY/SELL)│            │ │
-│  │  │ • strategy       │ │ • avgPrice       │ │ • symbol         │            │ │
-│  │  │ • balance        │ │ • currentValue   │ │ • quantity       │            │ │
-│  │  │ • positions[]    │ │ • unrealizedPnL  │ │ • price          │            │ │
-│  │  │ • isActive       │ │                  │ │ • timestamp      │            │ │
+│  │  │ • strategyId     │ │ • avgPrice       │ │ • symbol         │            │ │
+│  │  │ • strategyName   │ │ • currentValue   │ │ • quantity       │            │ │
+│  │  │ • balance        │ │ • unrealizedPnL  │ │ • price          │            │ │
+│  │  │ • positions[]    │ │                  │ │ • timestamp      │            │ │
+│  │  │ • isActive       │ │                  │ │                  │            │ │
 │  │  └──────────────────┘ └──────────────────┘ └──────────────────┘            │ │
 │  │                                                                            │ │
 │  └────────────────────────────────────────────────────────────────────────────┘ │
@@ -282,9 +390,9 @@ interface OrderExecutionPort {
 │  │                         VALUE OBJECTS                                      │ │
 │  │                                                                            │ │
 │  │  ┌──────────────────┐ ┌──────────────────┐ ┌──────────────────┐            │ │
-│  │  │     Asset        │ │   PortfolioId    │ │   Percentage     │            │ │
+│  │  │     Asset        │ │   PortfolioId    │ │   StrategyId     │            │ │
 │  │  │                  │ │                  │ │                  │            │ │
-│  │  │ • amount         │ │ • value (UUID)   │ │ • value          │            │ │
+│  │  │ • amount         │ │ • value (UUID)   │ │ • value (UUID)   │            │ │
 │  │  │ • symbol         │ │                  │ │                  │            │ │
 │  │  │ • type           │ │                  │ │                  │            │ │
 │  │  └──────────────────┘ └──────────────────┘ └──────────────────┘            │ │

@@ -8,11 +8,13 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.UUID;
 
 public class SimpleMovingAverageStrategy implements TradingStrategy {
     
     private static final String STRATEGY_NAME = "SimpleMovingAverageStrategy";
     private static final String STRATEGY_VERSION = "1.0.0";
+    private static final UUID STRATEGY_ID = UUID.randomUUID();
     
     private boolean enabled = true;
     private final SimpleMovingAverageConfig config;
@@ -24,6 +26,11 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
     
     public SimpleMovingAverageStrategy(SimpleMovingAverageConfig config) {
         this.config = config;
+    }
+
+    @Override
+    public UUID getStrategyId() {
+        return STRATEGY_ID;
     }
 
     @Override

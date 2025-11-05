@@ -1,7 +1,7 @@
 package com.marmitt.core.domain;
 
-public record Symbol(String value) { //TODO: pensar em substituir por um dois campos para ficar mais fácil de identificar os moedas.
-    
+public record Symbol(String value) {
+
     public Symbol {
         if (value == null || value.trim().isEmpty()) {
             throw new IllegalArgumentException("Symbol cannot be null or empty");
