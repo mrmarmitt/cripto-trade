@@ -1,6 +1,5 @@
 package com.marmitt.core.domain.portfolio;
 
-import com.marmitt.core.domain.value.Asset;
 import lombok.Getter;
 
 import java.math.BigDecimal;
@@ -9,7 +8,6 @@ import java.util.Objects;
 @Getter
 public class Balance {
 
-    // Getters
     private Asset available;
     private Asset invested;
     private final Asset initialCapital;

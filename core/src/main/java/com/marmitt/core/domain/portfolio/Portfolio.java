@@ -1,7 +1,6 @@
 package com.marmitt.core.domain.portfolio;
 
 import com.marmitt.core.domain.Symbol;
-import com.marmitt.core.domain.value.Asset;
 import lombok.Getter;
 
 import java.time.Instant;

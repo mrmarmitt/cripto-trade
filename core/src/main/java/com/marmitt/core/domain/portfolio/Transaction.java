@@ -1,7 +1,6 @@
 package com.marmitt.core.domain.portfolio;
 
 import com.marmitt.core.domain.Symbol;
-import com.marmitt.core.domain.value.Asset;
 import com.marmitt.core.enums.TransactionType;
 import lombok.Builder;
 import lombok.Getter;

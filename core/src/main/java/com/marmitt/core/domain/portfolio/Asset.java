@@ -1,4 +1,4 @@
-package com.marmitt.core.domain.value;
+package com.marmitt.core.domain.portfolio;
 
 import com.marmitt.core.enums.AssetType;
 
