@@ -8,11 +8,6 @@ import java.math.BigDecimal;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-/**
- * Implementação exemplo de PriceUpdateListener para monitoramento de preços.
- * Esta implementação demonstra como receber e processar atualizações de preços,
- * incluindo detecção de mudanças significativas.
- */
 @Slf4j
 public class MarketDataPriceUpdateListener implements PriceUpdateListener {
     
