@@ -1,4 +1,4 @@
-package com.marmitt.core.domain;
+package com.marmitt.core.dto.connection;
 
 import com.marmitt.core.enums.ConnectionStatus;
 
@@ -7,15 +7,15 @@ import java.time.Instant;
 import java.util.Map;
 import java.util.UUID;
 
-public record ConnectionResult(
+public record ConnectionResultDto(
         ConnectionStatus status,
         String message,
         Instant timestamp,
         UUID connectionId,
         Map<String, Object> metadata) {
 
-    public static ConnectionResult idle() {
-        return new ConnectionResult(
+    public static ConnectionResultDto idle() {
+        return new ConnectionResultDto(
                 ConnectionStatus.IDLE,
                 "WebSocket adapter initialized, ready to connect",
                 Instant.now(),
@@ -24,8 +24,8 @@ public record ConnectionResult(
         );
     }
 
-    public static ConnectionResult connecting() {
-        return new ConnectionResult(
+    public static ConnectionResultDto connecting() {
+        return new ConnectionResultDto(
                 ConnectionStatus.CONNECTING,
                 "Establishing connection...",
                 Instant.now(),
@@ -34,8 +34,8 @@ public record ConnectionResult(
         );
     }
 
-    public static ConnectionResult connected(String message, UUID connectionId) {
-        return new ConnectionResult(
+    public static ConnectionResultDto connected(String message, UUID connectionId) {
+        return new ConnectionResultDto(
                 ConnectionStatus.CONNECTED,
                 message,
                 Instant.now(),
@@ -44,8 +44,8 @@ public record ConnectionResult(
         );
     }
 
-    public static ConnectionResult disconnecting(String reason, UUID connectionId) {
-        return new ConnectionResult(
+    public static ConnectionResultDto disconnecting(String reason, UUID connectionId) {
+        return new ConnectionResultDto(
                 ConnectionStatus.DISCONNECTING,
                 reason,
                 Instant.now(),
@@ -54,13 +54,13 @@ public record ConnectionResult(
         );
     }
 
-    public static ConnectionResult disconnected(String reason, UUID connectionId) {
+    public static ConnectionResultDto disconnected(String reason, UUID connectionId) {
         Map<String, Object> metadata = Map.of(
                 "disconnectionAt", Instant.now(),
                 "disconnectReason", reason
         );
 
-        return new ConnectionResult(
+        return new ConnectionResultDto(
                 ConnectionStatus.DISCONNECTED,
                 reason,
                 Instant.now(),
@@ -69,24 +69,24 @@ public record ConnectionResult(
         );
     }
 
-    public static ConnectionResult failure(String reason) {
-        return new ConnectionResult(
+    public static ConnectionResultDto failure(String origin, String reason) {
+        return new ConnectionResultDto(
                 ConnectionStatus.ERROR,
-                reason,
+                "Origin class: " + origin + " - " + reason,
                 Instant.now(),
                 null,
                 Map.of("error", reason)
         );
     }
 
-    public static ConnectionResult failure(String reason, Throwable cause) {
+    public static ConnectionResultDto failure(String reason, Throwable cause) {
         Map<String, Object> metadata = Map.of(
                 "error", reason,
                 "errorMessage", cause.getMessage(),
                 "errorType", cause.getClass().getSimpleName()
         );
         
-        return new ConnectionResult(
+        return new ConnectionResultDto(
                 ConnectionStatus.ERROR,
                 reason,
                 Instant.now(),
@@ -95,14 +95,14 @@ public record ConnectionResult(
         );
     }
 
-    public static ConnectionResult failure(String reason, UUID connectionId, Throwable cause) {
+    public static ConnectionResultDto failure(String reason, UUID connectionId, Throwable cause) {
         Map<String, Object> metadata = Map.of(
                 "error", reason,
                 "errorMessage", cause.getMessage(),
                 "errorType", cause.getClass().getSimpleName()
         );
         
-        return new ConnectionResult(
+        return new ConnectionResultDto(
                 ConnectionStatus.ERROR,
                 reason,
                 Instant.now(),
@@ -111,13 +111,13 @@ public record ConnectionResult(
         );
     }
 
-    public static ConnectionResult closing(int code, String reason) {
+    public static ConnectionResultDto closing(int code, String reason) {
         Map<String, Object> metadata = Map.of(
                 "closeCode", code,
                 "closeReason", reason
         );
         
-        return new ConnectionResult(
+        return new ConnectionResultDto(
                 ConnectionStatus.CLOSING,
                 reason,
                 Instant.now(),
@@ -126,13 +126,13 @@ public record ConnectionResult(
         );
     }
 
-    public static ConnectionResult closing(int code, String reason, UUID connectionId) {
+    public static ConnectionResultDto closing(int code, String reason, UUID connectionId) {
         Map<String, Object> metadata = Map.of(
                 "closeCode", code,
                 "closeReason", reason
         );
         
-        return new ConnectionResult(
+        return new ConnectionResultDto(
                 ConnectionStatus.CLOSING,
                 reason,
                 Instant.now(),
@@ -141,14 +141,14 @@ public record ConnectionResult(
         );
     }
 
-    public static ConnectionResult closed(int code, String reason) {
+    public static ConnectionResultDto closed(int code, String reason) {
         Map<String, Object> metadata = Map.of(
                 "closedAt", Instant.now(),
                 "closeCode", code,
                 "closeReason", reason
         );
         
-        return new ConnectionResult(
+        return new ConnectionResultDto(
                 ConnectionStatus.CLOSED,
                 reason,
                 Instant.now(),
@@ -157,14 +157,14 @@ public record ConnectionResult(
         );
     }
 
-    public static ConnectionResult closed(int code, String reason, UUID connectionId) {
+    public static ConnectionResultDto closed(int code, String reason, UUID connectionId) {
         Map<String, Object> metadata = Map.of(
                 "closedAt", Instant.now(),
                 "closeCode", code,
                 "closeReason", reason
         );
         
-        return new ConnectionResult(
+        return new ConnectionResultDto(
                 ConnectionStatus.CLOSED,
                 reason,
                 Instant.now(),
@@ -173,8 +173,8 @@ public record ConnectionResult(
         );
     }
 
-    public static ConnectionResult withMetadata(ConnectionStatus status, String message, Map<String, Object> metadata) {
-        return new ConnectionResult(
+    public static ConnectionResultDto withMetadata(ConnectionStatus status, String message, Map<String, Object> metadata) {
+        return new ConnectionResultDto(
                 status,
                 message,
                 Instant.now(),
@@ -183,8 +183,8 @@ public record ConnectionResult(
         );
     }
 
-    public static ConnectionResult withMetadata(ConnectionStatus status, String message, UUID connectionId, Map<String, Object> metadata) {
-        return new ConnectionResult(
+    public static ConnectionResultDto withMetadata(ConnectionStatus status, String message, UUID connectionId, Map<String, Object> metadata) {
+        return new ConnectionResultDto(
                 status,
                 message,
                 Instant.now(),
@@ -219,6 +219,4 @@ public record ConnectionResult(
         }
         return Duration.between(startTime, Instant.now());
     }
-
-
 }

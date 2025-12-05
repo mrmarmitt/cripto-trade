@@ -25,13 +25,13 @@ public class CancelOrderProcessor implements SenderSpecializedProcessorPort {
 
         try {
             Map<String, Object> cancelOrder = new HashMap<>();
-            cancelOrder.put("symbol", cancelRequest.getSymbol().toUpperCase());
+            cancelOrder.put("currency", cancelRequest.getSymbol().toUpperCase());
             cancelOrder.put("orderId", cancelRequest.getOrderId());
             cancelOrder.put("timestamp", System.currentTimeMillis());
 
             return objectMapper.writeValueAsString(cancelOrder);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to process cancel order message", e);
+            throw new RuntimeException("Failed to process cancel order errorMessage", e);
         }
     }
 

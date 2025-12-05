@@ -3,10 +3,10 @@ package com.marmitt.coinbase.processor.receive;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.coinbase.event.TickerEvent;
-import com.marmitt.core.domain.data.MarketData;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
+import com.marmitt.core.dto.websocket.data.MarketDataDto;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedSpecializedProcessorPort;
 import lombok.extern.slf4j.Slf4j;
 
@@ -15,7 +15,7 @@ import java.math.RoundingMode;
 import java.time.Instant;
 
 @Slf4j
-public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketData> {
+public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketDataDto> {
 
     private final ObjectMapper objectMapper;
 
@@ -24,14 +24,14 @@ public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketD
     }
 
     @Override
-    public ProcessingResult<MarketData> processMessage(String rawMessage, MessageContext context) {
+    public ProcessingResult<MarketDataDto> processMessage(String rawMessage, MessageContext context) {
         String correlationId = context.correlationId().toString();
         
         try {
             TickerEvent tickerEvent = objectMapper.readValue(rawMessage, TickerEvent.class);
             
             // Converter Coinbase ticker para MarketData
-            MarketData marketData = convertTickerEventToMarketData(tickerEvent);
+            MarketDataDto marketData = convertTickerEventToMarketData(tickerEvent);
             
             // Validações básicas de sanidade
             if (!isValidMarketData(marketData)) {
@@ -42,7 +42,7 @@ public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketD
                         "Coinbase ticker contains suspicious values: price=" + marketData.price());
             }
             
-            log.debug("Successfully processed Coinbase ticker for symbol: {}", marketData.symbol().value());
+            log.debug("Successfully processed Coinbase ticker for currency: {}", marketData.symbol().value());
             return ProcessingResult.success(correlationId, rawMessage, marketData);
             
         } catch (Exception e) {
@@ -74,7 +74,7 @@ public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketD
     /**
      * Converte TickerEvent da Coinbase para MarketData do domínio.
      */
-    private MarketData convertTickerEventToMarketData(TickerEvent tickerEvent) {
+    private MarketDataDto convertTickerEventToMarketData(TickerEvent tickerEvent) {
         // Symbol: Coinbase usa formato "BTC-USD", convertemos para Symbol
         Symbol symbol = Symbol.of(tickerEvent.product_id());
         
@@ -108,7 +108,7 @@ public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketD
             }
         }
         
-        return new MarketData(
+        return new MarketDataDto(
             symbol, price, bidPrice, askPrice, volume,
             high24h, low24h, priceChange24h, priceChangePercent24h,
             Instant.now()
@@ -118,7 +118,7 @@ public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketD
     /**
      * Valida se os dados do market data são consistentes e realistas.
      */
-    private boolean isValidMarketData(MarketData marketData) {
+    private boolean isValidMarketData(MarketDataDto marketData) {
         // Validação: preço deve ser positivo
         if (marketData.price() == null || marketData.price().compareTo(BigDecimal.ZERO) <= 0) {
             log.warn("Invalid price in Coinbase ticker: {}", marketData.price());
@@ -158,10 +158,10 @@ public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketD
      * Cria resultado de erro com tipo correto.
      */
     @SuppressWarnings({"unchecked", "rawtypes"})
-    private ProcessingResult<MarketData> createErrorResult(String correlationId, String message, Exception e) {
+    private ProcessingResult<MarketDataDto> createErrorResult(String correlationId, String message, Exception e) {
         ProcessingResult error = new ProcessingResult.Error(
             correlationId, message, null, e, Instant.now()
         );
-        return (ProcessingResult<MarketData>) error;
+        return (ProcessingResult<MarketDataDto>) error;
     }
 }

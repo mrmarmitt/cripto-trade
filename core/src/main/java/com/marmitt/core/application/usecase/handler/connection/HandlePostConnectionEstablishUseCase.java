@@ -11,6 +11,8 @@ import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Optional;
+
 @Slf4j
 public class HandlePostConnectionEstablishUseCase implements PostConnectionEstablishedPort {
 
@@ -25,25 +27,29 @@ public class HandlePostConnectionEstablishUseCase implements PostConnectionEstab
 
     @Override
     public PostConnectionCommandResult execute(WebSocketConnectedEvent event) {
-        ExchangeAdapterPort adapter = adapterRepository.getAdapter(event.exchange());
+        Optional<ExchangeAdapterPort> adapterOptional = adapterRepository.findByName(event.exchange());
         WebSocketConnectionManager manager = connectionRepository.getConnection(event.exchange());
 
-        if (!adapter.requiresPostConnection()) {
+        if (adapterOptional.isEmpty()) {
+            return PostConnectionCommandResult.failure(event.exchange(), "Exchange does not exist.");
+        }
+
+        if (!adapterOptional.get().requiresPostConnection()) {
             return PostConnectionCommandResult.success(
                     event.exchange(),
                     "Post-connection not configured.");
         }
 
-        SenderMessageProcessorPort senderMessageProcessor = adapter.getSenderMessageProcessor();
+        SenderMessageProcessorPort senderMessageProcessor = adapterOptional.get().getSenderMessageProcessor();
         MessageRequest lastRequestHistory = manager.getLastRequestHistory();
         try {
 
             String sentMessage = senderMessageProcessor.execute(lastRequestHistory);
-            adapter.getWebSocketPort().sendMessage(sentMessage);
+            adapterOptional.get().getWebSocketPort().sendMessage(sentMessage);
 
             return PostConnectionCommandResult.success(
                     event.exchange(),
-                    "Post-connection message sent: " + sentMessage
+                    "Post-connection errorMessage sent: " + sentMessage
             );
 
         } catch (Exception e) {

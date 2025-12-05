@@ -10,19 +10,18 @@ Este documento descreve a arquitetura básica para implementar o sistema **1 Por
 core/src/main/java/com/marmitt/core/
 ├── domain/                           # Entidades e Value Objects
 │   ├── portfolio/                    # 🆕 Portfolio Domain
-│   │   ├── Portfolio.java           # Entidade principal
-│   │   ├── Position.java            # Posição em um ativo
-│   │   ├── Balance.java             # Saldo do portfolio
-│   │   └── Transaction.java         # Registro de transações
-│   ├── strategy/                     # 🆕 Strategy Domain  
-│   │   ├── StrategyExecution.java   # Execução de estratégia  
-│   │   └── StrategyPerformance.java # Performance da estratégia
-│   └── value/                        # 🆕 Value Objects
-│       ├── Asset.java               # Valor de ativos (crypto, fiat, stablecoin)
-│       ├── PortfolioId.java         # ID do portfolio
-│       ├── StrategyId.java          # ID da estratégia
-│       ├── TransactionId.java       # ID da transação
-│       └── Percentage.java          # Percentual
+│   │   ├── Portfolio.java           # Entidade principal (Aggregate Root)
+│   │   ├── Position.java            # Posição em um ativo (Entity)
+│   │   ├── Balance.java             # Saldo do portfolio (Value Object)
+│   │   ├── Transaction.java         # Registro de transações (Entity)
+│   │   └── Asset.java               # Valor de ativos (Value Object)
+│   ├── Symbol.java                   # Símbolo do par de trading (Value Object)
+│   ├── StrategyInput.java            # Input para estratégias (Value Object)
+│   ├── StrategyOutput.java           # Output de estratégias (Value Object)
+│   └── data/                         # Domain Data Objects existentes
+│       ├── MarketData.java
+│       ├── TradeData.java
+│       └── ...
 ├── application/                      # Use Cases e Services
 │   ├── portfolio/                    # 🆕 Portfolio Use Cases
 │   │   ├── CreatePortfolioUseCase.java
@@ -179,6 +178,49 @@ core/src/main/java/com/marmitt/core/
 - `"BTCUSDT"` = Bitcoin vs Tether
 - `"ETHBTC"` = Ethereum vs Bitcoin
 - `"ADAUSD"` = Cardano vs US Dollar
+
+### StrategyInput (Value Object)
+
+**Responsabilidades:**
+- Encapsular dados de mercado necessários para execução de estratégias
+- Validar integridade e consistência dos dados de entrada
+- Garantir que informações de preço estejam consistentes (bid ≤ current ≤ ask)
+- Verificar se dados estão atualizados e dentro de limites válidos
+- Servir como contrato padronizado entre market data e estratégias
+
+| Variável | Tipo | Descrição | Utilidade |
+|----------|------|-----------|-----------|
+| `symbol` | `Symbol` | Par de trading | Contexto do mercado para execução |
+| `currentPrice` | `BigDecimal` | Preço atual/last do ativo | Base para decisões da estratégia |
+| `volume` | `BigDecimal` | Volume negociado | Liquidez e momentum do mercado |
+| `bidPrice` | `BigDecimal` | Melhor oferta de compra | Spread analysis, order placement |
+| `askPrice` | `BigDecimal` | Melhor oferta de venda | Spread analysis, order placement |
+| `highPrice` | `BigDecimal` | Maior preço em 24h | Range analysis, volatilidade |
+| `lowPrice` | `BigDecimal` | Menor preço em 24h | Range analysis, support/resistance |
+| `timestamp` | `Instant` | Momento dos dados | Validação de freshness |
+
+### StrategyOutput (Value Object)
+
+**Responsabilidades:**
+- Encapsular decisão e parâmetros de trading gerados pela estratégia
+- Definir ação específica (BUY/SELL/HOLD) com quantidades e preços
+- Fornecer contexto e justificativa para a decisão tomada
+- Incluir parâmetros de risk management (stop loss, take profit)
+- Permitir análise posterior da qualidade das decisões
+
+| Variável | Tipo | Descrição | Utilidade |
+|----------|------|-----------|-----------|
+| `strategyName` | `String` | Nome da estratégia executada | Identificação, logs, auditoria |
+| `symbol` | `Symbol` | Par de trading da decisão | Contexto da operação |
+| `decision` | `TradingAction` | Ação recomendada (BUY/SELL/HOLD) | Tipo de operação a executar |
+| `quantity` | `BigDecimal` | Quantidade a ser operada | Volume da ordem |
+| `targetPrice` | `BigDecimal` | Preço alvo para execução | Limite de preço |
+| `stopLoss` | `BigDecimal` | Preço de stop loss | Gestão de risco |
+| `takeProfit` | `BigDecimal` | Preço de take profit | Realização de lucros |
+| `reasoning` | `String` | Justificativa da decisão | Debug, auditoria, análise |
+| `confidence` | `BigDecimal` | Nível de confiança (0-1) | Força do sinal |
+| `timestamp` | `Instant` | Momento da decisão | Ordenação temporal |
+| `metadata` | `Map<String, Object>` | Dados adicionais da estratégia | Indicadores, parâmetros |
 
 ### Enums
 

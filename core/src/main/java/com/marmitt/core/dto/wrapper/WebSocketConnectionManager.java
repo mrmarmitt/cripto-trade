@@ -1,7 +1,7 @@
 package com.marmitt.core.dto.wrapper;
 
-import com.marmitt.core.domain.ConnectionResult;
-import com.marmitt.core.domain.ConnectionStats;
+import com.marmitt.core.dto.connection.ConnectionResultDto;
+import com.marmitt.core.dto.connection.ConnectionStatsDto;
 import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.enums.ConnectionStatus;
 import com.marmitt.core.exceptions.IllegalStateTransitionException;
@@ -16,12 +16,12 @@ public class WebSocketConnectionManager {
 
     @Getter
     private final String exchangeName;
-    private final ConnectionStats currentConnectionStats;
-    private volatile ConnectionResult currentConnectionResult;
+    private final ConnectionStatsDto currentConnectionStats;
+    private volatile ConnectionResultDto currentConnectionResult;
     @Getter
     private final List<MessageRequest> requestHistory;
 
-    private WebSocketConnectionManager(ConnectionResult connectionResult, String exchangeName) {
+    private WebSocketConnectionManager(ConnectionResultDto connectionResult, String exchangeName) {
         this.exchangeName = exchangeName;
         this.currentConnectionResult = connectionResult;
         this.currentConnectionStats = createStatsForExchange();
@@ -29,14 +29,14 @@ public class WebSocketConnectionManager {
     }
 
     public static WebSocketConnectionManager forExchange(String exchangeName) {
-        return new WebSocketConnectionManager(ConnectionResult.idle(), exchangeName);
+        return new WebSocketConnectionManager(ConnectionResultDto.idle(), exchangeName);
     }
     
-    private static ConnectionStats createStatsForExchange() {
-        return ConnectionStats.empty();
+    private static ConnectionStatsDto createStatsForExchange() {
+        return ConnectionStatsDto.empty();
     }
 
-    public void setConnectionResult(ConnectionResult newResult) {
+    public void setConnectionResult(ConnectionResultDto newResult) {
         ConnectionStatus currentStatus = currentConnectionResult.status();
         ConnectionStatus newStatus = newResult.status();
         
@@ -66,11 +66,11 @@ public class WebSocketConnectionManager {
         return getConnectionResult().connectionId();
     }
 
-    public ConnectionStats getConnectionStats() {
+    public ConnectionStatsDto getConnectionStats() {
         return currentConnectionStats;
     }
 
-    public ConnectionResult getConnectionResult() {
+    public ConnectionResultDto getConnectionResult() {
         return currentConnectionResult;
     }
 
@@ -86,7 +86,7 @@ public class WebSocketConnectionManager {
         if (currentConnectionResult.status() == ConnectionStatus.ERROR ||
                 currentConnectionResult.status() == ConnectionStatus.CLOSED) {
 
-            this.currentConnectionResult = ConnectionResult.idle();
+            this.currentConnectionResult = ConnectionResultDto.idle();
             currentConnectionStats.resetCounters();
         }
     }

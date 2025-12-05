@@ -1,6 +1,6 @@
 package com.marmitt.core.application.usecase.handler.connection;
 
-import com.marmitt.core.domain.ConnectionResult;
+import com.marmitt.core.dto.connection.ConnectionResultDto;
 import com.marmitt.core.dto.events.WebSocketConnectedEvent;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.ports.inbound.handler.ConnectionEstablishedPort;
@@ -30,7 +30,7 @@ public class HandleConnectionEstablishedUseCase implements ConnectionEstablished
 
         try {
             WebSocketConnectionManager manager = connectionManagerPort.getConnection(event.exchange());
-            manager.setConnectionResult(ConnectionResult.connected(
+            manager.setConnectionResult(ConnectionResultDto.connected(
                             event.message(),
                             event.connectionId()
                     )

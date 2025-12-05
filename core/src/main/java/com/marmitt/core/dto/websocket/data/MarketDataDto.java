@@ -1,11 +1,11 @@
-package com.marmitt.core.domain.data;
+package com.marmitt.core.dto.websocket.data;
 
 import com.marmitt.core.domain.Symbol;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 
-public record MarketData(
+public record MarketDataDto(
         Symbol symbol,
         BigDecimal price,
         BigDecimal bidPrice,

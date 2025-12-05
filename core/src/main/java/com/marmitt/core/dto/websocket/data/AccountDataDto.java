@@ -1,4 +1,4 @@
-package com.marmitt.core.domain.data;
+package com.marmitt.core.dto.websocket.data;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -7,7 +7,7 @@ import java.util.Map;
 /**
  * Representa dados de conta processados de mensagens WebSocket
  */
-public record AccountData(
+public record AccountDataDto(
     String accountId,
     Map<String, BigDecimal> balances, // asset -> balance
     Map<String, BigDecimal> lockedBalances, // asset -> locked amount

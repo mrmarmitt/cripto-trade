@@ -1,6 +1,6 @@
 package com.marmitt.core.dto.processing;
 
-import com.marmitt.core.domain.data.ErrorData;
+import com.marmitt.core.dto.websocket.data.ErrorDataDto;
 
 import java.time.Instant;
 import java.util.Optional;
@@ -79,7 +79,7 @@ public sealed interface ProcessingResult<T>
             String rawMessage,
             Exception exception,
             Instant processedAt
-    ) implements ProcessingResult<ErrorData> {
+    ) implements ProcessingResult<ErrorDataDto> {
 
         public Error(String correlationId, String errorMessage, String rawMessage) {
             this(correlationId, errorMessage, rawMessage, null, Instant.now());
@@ -109,7 +109,7 @@ public sealed interface ProcessingResult<T>
         }
 
         @Override
-        public Optional<ErrorData> getData() {
+        public Optional<ErrorDataDto> getData() {
             return Optional.empty();
         }
 
@@ -181,19 +181,19 @@ public sealed interface ProcessingResult<T>
         return new Success<>(correlationId, rawMessage, data);
     }
 
-    static ProcessingResult<ErrorData> error(String correlationId, String errorMessage, String rawMessage) {
+    static ProcessingResult<ErrorDataDto> error(String correlationId, String errorMessage, String rawMessage) {
         return new Error(correlationId, errorMessage, rawMessage);
     }
 
-    static ProcessingResult<ErrorData> error(String correlationId, String errorMessage) {
+    static ProcessingResult<ErrorDataDto> error(String correlationId, String errorMessage) {
         return new Error(correlationId, errorMessage, "");
     }
 
-    static ProcessingResult<ErrorData> error(String correlationId, String errorMessage, Exception exception) {
+    static ProcessingResult<ErrorDataDto> error(String correlationId, String errorMessage, Exception exception) {
         return new Error(correlationId, errorMessage, exception);
     }
 
-    static ProcessingResult<ErrorData> error(String correlationId, String errorMessage, String rawMessage, Exception exception) {
+    static ProcessingResult<ErrorDataDto> error(String correlationId, String errorMessage, String rawMessage, Exception exception) {
         return new Error(correlationId, errorMessage, rawMessage, exception);
     }
 

@@ -30,6 +30,6 @@ public class BinanceSenderMessageProcessor implements SenderMessageProcessorPort
                 .findFirst()
                 .map(processor -> processor.execute(request))
                 .orElseThrow(() -> new IllegalArgumentException(
-                        "No specialized processor found for message type: " + request.getMessageType()));
+                        "No specialized processor found for errorMessage type: " + request.getMessageType()));
     }
 }

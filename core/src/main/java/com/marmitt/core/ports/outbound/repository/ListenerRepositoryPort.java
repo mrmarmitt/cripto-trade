@@ -8,6 +8,15 @@ import java.util.List;
 public interface ListenerRepositoryPort {
 
     boolean addOrderUpdateListener(OrderUpdateListener listener);
+    
+    /**
+     * Registra um listener para receber notificações de atualização de ordens
+     * @param listener O listener a ser registrado
+     * @return true se registrado com sucesso
+     */
+    default boolean registerOrderUpdateListener(OrderUpdateListener listener) {
+        return addOrderUpdateListener(listener);
+    }
 
     boolean removeOrderUpdateListener(OrderUpdateListener listener);
 

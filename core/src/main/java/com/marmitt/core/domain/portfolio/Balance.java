@@ -15,7 +15,7 @@ public class Balance {
     public Balance(Asset initialCapital) {
         this.initialCapital = initialCapital;
         this.available = initialCapital;
-        this.invested = Asset.fiat(BigDecimal.ZERO, initialCapital.symbol());
+        this.invested = Asset.fiat(BigDecimal.ZERO, initialCapital.currency());
     }
     
     private Balance(Asset available, Asset invested, Asset initialCapital) {
@@ -59,6 +59,14 @@ public class Balance {
     }
     
     public boolean hasAvailableAmount(Asset amount) {
-        return amount.amount().compareTo(available.amount()) > 0;
+        return amount.amount().compareTo(available.amount()) <= 0;
+    }
+    
+    public Asset getTotal() {
+        return available.add(invested);
+    }
+    
+    public Asset getAllocated() {
+        return invested;
     }
 }

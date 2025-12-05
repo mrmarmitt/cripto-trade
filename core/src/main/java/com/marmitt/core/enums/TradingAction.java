@@ -1,7 +1,7 @@
 package com.marmitt.core.enums;
 
 public enum TradingAction {
-    BUY,
-    SELL,
-    HOLD
+    SHOULD_BUY,
+    SHOULD_SELL,
+    SHOULD_HOLD
 }

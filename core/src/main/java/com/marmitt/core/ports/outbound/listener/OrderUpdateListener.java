@@ -1,8 +1,12 @@
 package com.marmitt.core.ports.outbound.listener;
 
-import com.marmitt.core.domain.data.OrderData;
+import com.marmitt.core.dto.websocket.data.OrderDataDto;
 
 public interface OrderUpdateListener {
 
-    void onOrderUpdate(OrderData orderData);
+    void onOrderUpdate(OrderDataDto orderData);
+
+    default boolean shouldProcess(OrderDataDto orderData) {
+        return true;
+    }
 }

@@ -1,6 +1,6 @@
 package com.marmitt.core.application.listener;
 
-import com.marmitt.core.domain.data.MarketData;
+import com.marmitt.core.dto.websocket.data.MarketDataDto;
 import com.marmitt.core.ports.outbound.listener.PriceUpdateListener;
 import lombok.extern.slf4j.Slf4j;
 
@@ -18,15 +18,15 @@ public class MarketDataPriceUpdateListener implements PriceUpdateListener {
     private static final BigDecimal SIGNIFICANT_CHANGE_THRESHOLD = new BigDecimal("0.01");
     
     @Override
-    public void onPriceUpdate(MarketData marketData) {
-        String symbol = marketData.symbol().value();
-        BigDecimal currentPrice = marketData.price();
+    public void onPriceUpdate(MarketDataDto marketDataDto) {
+        String symbol = marketDataDto.symbol().value();
+        BigDecimal currentPrice = marketDataDto.price();
         
         log.debug("Price Update Received - Symbol: {}, Price: {}, Volume: {}, Timestamp: {}", 
                 symbol, 
                 currentPrice,
-                marketData.volume(),
-                marketData.timestamp());
+                marketDataDto.volume(),
+                marketDataDto.timestamp());
         
         // Verifica se há uma mudança significativa no preço
         BigDecimal lastPrice = lastPriceCache.get(symbol);
@@ -42,7 +42,7 @@ public class MarketDataPriceUpdateListener implements PriceUpdateListener {
                         percentageChange.multiply(new BigDecimal("100")).setScale(2, BigDecimal.ROUND_HALF_UP));
                 
                 // Aqui você pode implementar lógica para mudanças significativas
-                handleSignificantPriceChange(marketData, lastPrice, percentageChange);
+                handleSignificantPriceChange(marketDataDto, lastPrice, percentageChange);
             }
         }
         
@@ -56,12 +56,12 @@ public class MarketDataPriceUpdateListener implements PriceUpdateListener {
         // - Notificações para usuários
     }
     
-    private void handleSignificantPriceChange(MarketData marketData, BigDecimal lastPrice, BigDecimal percentageChange) {
+    private void handleSignificantPriceChange(MarketDataDto marketDataDto, BigDecimal lastPrice, BigDecimal percentageChange) {
         // Implementação exemplo para mudanças significativas
-        String direction = marketData.price().compareTo(lastPrice) > 0 ? "UP" : "DOWN";
+        String direction = marketDataDto.price().compareTo(lastPrice) > 0 ? "UP" : "DOWN";
         
         log.info("Price movement alert: {} moved {} by {}%", 
-                marketData.symbol().value(), 
+                marketDataDto.symbol().value(),
                 direction, 
                 percentageChange.multiply(new BigDecimal("100")).setScale(2, BigDecimal.ROUND_HALF_UP));
         

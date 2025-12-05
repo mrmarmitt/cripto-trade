@@ -1,4 +1,4 @@
-package com.marmitt.core.domain.data;
+package com.marmitt.core.dto.websocket.data;
 
 import com.marmitt.core.domain.Symbol;
 
@@ -8,7 +8,7 @@ import java.time.Instant;
 /**
  * Representa dados de uma ordem processada de mensagens WebSocket
  */
-public record OrderData(
+public record OrderDataDto(
     String orderId,
     Symbol symbol,
     OrderSide side,

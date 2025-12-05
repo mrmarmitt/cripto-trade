@@ -1,8 +1,11 @@
 package com.marmitt.strategy.impl.simple_moving_avager;
 
 import com.marmitt.core.ports.outbound.strategy.TradingStrategy;
-import com.marmitt.core.domain.StrategyInput;
-import com.marmitt.core.domain.StrategyOutput;
+import com.marmitt.core.domain.strategy.StrategyInput;
+import com.marmitt.core.domain.strategy.StrategyOutput;
+import com.marmitt.core.domain.strategy.PortfolioContext;
+import com.marmitt.core.domain.Symbol;
+import com.marmitt.core.domain.portfolio.Position;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -34,13 +37,13 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
     }
 
     @Override
-    public StrategyOutput executeStrategy(StrategyInput inputData) {
+    public StrategyOutput executeStrategy(StrategyInput inputData, PortfolioContext portfolioContext) {
         if (!enabled) {
-            return StrategyOutput.hold(STRATEGY_NAME, inputData.symbol(), "Strategy is disabled");
+            return StrategyOutput.hold(STRATEGY_NAME, "Strategy is disabled");
         }
         
         if (inputData.currentPrice() == null) {
-            return StrategyOutput.hold(STRATEGY_NAME, inputData.symbol(), "No current price available");
+            return StrategyOutput.hold(STRATEGY_NAME, "No current price available");
         }
         
         // Adiciona o preço atual ao histórico
@@ -53,7 +56,7 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
         
         // Precisa de pelo menos o período completo para calcular
         if (priceHistory.size() < config.movingAveragePeriod()) {
-            return StrategyOutput.hold(STRATEGY_NAME, inputData.symbol(), 
+            return StrategyOutput.hold(STRATEGY_NAME, 
                 String.format("Insufficient data: %d/%d prices", priceHistory.size(), config.movingAveragePeriod()));
         }
         
@@ -68,18 +71,23 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
         // Decisão baseada no desvio da média móvel
         if (priceDeviation.compareTo(config.sellThreshold()) >= 0) {
             // Preço muito acima da média - VENDER
-            return StrategyOutput.sell(STRATEGY_NAME, inputData.symbol(), 
-                                           config.tradingQuantity(), currentPrice, 
+            BigDecimal confidence = calculateConfidence(priceDeviation.abs(), config.sellThreshold().abs());
+            BigDecimal quantity = calculateSellQuantity(portfolioContext);
+            
+            return StrategyOutput.sell(STRATEGY_NAME, confidence, quantity, 
                                            reasoning + " - Price above MA threshold");
+                                           
         } else if (priceDeviation.compareTo(config.buyThreshold()) <= 0) {
             // Preço muito abaixo da média - COMPRAR
-            return StrategyOutput.buy(STRATEGY_NAME, inputData.symbol(), 
-                                          config.tradingQuantity(), currentPrice, 
+            BigDecimal confidence = calculateConfidence(priceDeviation.abs(), config.buyThreshold().abs());
+            BigDecimal quantity = calculateBuyQuantity(inputData.currentPrice(), portfolioContext);
+            
+            return StrategyOutput.buy(STRATEGY_NAME, confidence, quantity, 
                                           reasoning + " - Price below MA threshold");
+                                          
         } else {
             // Preço próximo da média - HOLD
-            return StrategyOutput.hold(STRATEGY_NAME, inputData.symbol(), 
-                                           reasoning + " - Price near MA");
+            return StrategyOutput.hold(STRATEGY_NAME, reasoning + " - Price near MA");
         }
     }
     
@@ -95,6 +103,65 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
         }
         return currentPrice.subtract(movingAverage)
                 .divide(movingAverage, 8, RoundingMode.HALF_UP);
+    }
+    
+    /**
+     * Calcula confidence baseado na magnitude do desvio vs threshold
+     * Quanto maior o desvio em relação ao threshold, maior a confidence
+     */
+    private BigDecimal calculateConfidence(BigDecimal deviationMagnitude, BigDecimal threshold) {
+        if (threshold.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ONE;
+        }
+        
+        // Confidence = min(1.0, deviationMagnitude / threshold)
+        // Ex: Se threshold é 5% e deviation é 10%, confidence = 1.0 (100%)
+        //     Se threshold é 5% e deviation é 2.5%, confidence = 0.5 (50%)
+        BigDecimal ratio = deviationMagnitude.divide(threshold, 4, RoundingMode.HALF_UP);
+        return ratio.min(BigDecimal.ONE);
+    }
+    
+    /**
+     * Calcula quantity para compra baseada no portfolio context e allocation da strategy
+     */
+    private BigDecimal calculateBuyQuantity(BigDecimal currentPrice, PortfolioContext portfolioContext) {
+        // Verificar se há saldo mínimo
+        if (!portfolioContext.hasMinimumBalance()) {
+            return BigDecimal.ZERO;
+        }
+        
+        // Calcular valor baseado na alocação configurada na strategy (ex: 10% do capital)
+        BigDecimal totalCapital = portfolioContext.totalCapital().amount();
+        BigDecimal allocationValue = totalCapital.multiply(config.allocationPercentage());
+        
+        // Verificar se não excede saldo disponível
+        BigDecimal availableBalance = portfolioContext.availableBalance().amount();
+        BigDecimal operationValue = allocationValue.min(availableBalance);
+        
+        // Verificar valor mínimo de operação
+        if (operationValue.compareTo(portfolioContext.minimumOperationAmount()) < 0) {
+            return BigDecimal.ZERO;
+        }
+        
+        // Calcular quantity = valor / preço
+        return operationValue.divide(currentPrice, 8, RoundingMode.DOWN);
+    }
+    
+    /**
+     * Calcula quantity para venda baseada no portfolio context e allocation da strategy
+     */
+    private BigDecimal calculateSellQuantity(PortfolioContext portfolioContext) {
+        // Verificar se existe posição
+        if (!portfolioContext.hasPosition()) {
+            return BigDecimal.ZERO;
+        }
+        
+        BigDecimal availableQuantity = portfolioContext.position().getQuantity().amount();
+        
+        // Vender percentual configurado da posição (ex: 10% da posição atual)
+        BigDecimal sellQuantity = availableQuantity.multiply(config.allocationPercentage());
+        
+        return sellQuantity.setScale(8, RoundingMode.DOWN);
     }
 
     @Override
@@ -117,10 +184,6 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
         this.enabled = enabled;
     }
 
-    public SimpleMovingAverageConfig getConfig() {
-        return config;
-    }
-    
     public int getCurrentHistorySize() {
         return priceHistory.size();
     }

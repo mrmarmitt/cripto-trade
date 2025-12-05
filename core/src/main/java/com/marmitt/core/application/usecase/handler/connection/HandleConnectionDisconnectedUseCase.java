@@ -1,6 +1,6 @@
 package com.marmitt.core.application.usecase.handler.connection;
 
-import com.marmitt.core.domain.ConnectionResult;
+import com.marmitt.core.dto.connection.ConnectionResultDto;
 import com.marmitt.core.dto.events.WebSocketDisconnectedEvent;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.ports.inbound.handler.ConnectionDisconnectedPort;
@@ -32,7 +32,7 @@ public class HandleConnectionDisconnectedUseCase implements ConnectionDisconnect
         try {
 
             WebSocketConnectionManager manager = connectionManagerPort.getConnection(event.exchange());
-            manager.setConnectionResult(ConnectionResult.disconnected(
+            manager.setConnectionResult(ConnectionResultDto.disconnected(
                             event.reason(),
                             event.connectionId()
                     )

@@ -1,6 +1,6 @@
 package com.marmitt.core.application.usecase.handler.connection;
 
-import com.marmitt.core.domain.ConnectionResult;
+import com.marmitt.core.dto.connection.ConnectionResultDto;
 import com.marmitt.core.dto.events.WebSocketFailedEvent;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.ports.inbound.handler.ConnectionFailedPort;
@@ -22,9 +22,9 @@ public class HandleConnectionFailedUseCase implements ConnectionFailedPort {
                 event.exchange(), event.reason());
         
         try {
-            ConnectionResult connectionResult = event.cause() != null ?
-                    ConnectionResult.failure(event.reason(), event.connectionId(), event.cause()) :
-                    ConnectionResult.failure(event.reason());
+            ConnectionResultDto connectionResult = event.cause() != null ?
+                    ConnectionResultDto.failure(event.reason(), event.connectionId(), event.cause()) :
+                    ConnectionResultDto.failure(this.getClass().getSimpleName(), event.reason());
 
             WebSocketConnectionManager manager = connectionManagerPort.getConnection(event.exchange());
             manager.setConnectionResult(connectionResult);

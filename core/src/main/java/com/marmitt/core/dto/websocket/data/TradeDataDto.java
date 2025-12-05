@@ -1,4 +1,4 @@
-package com.marmitt.core.domain.data;
+package com.marmitt.core.dto.websocket.data;
 
 import com.marmitt.core.domain.Symbol;
 
@@ -8,12 +8,12 @@ import java.time.Instant;
 /**
  * Representa dados de negociação/trade processados de mensagens WebSocket
  */
-public record TradeData(
+public record TradeDataDto(
     String tradeId,
     Symbol symbol,
     BigDecimal price,
     BigDecimal quantity,
-    OrderData.OrderSide side,
+    OrderDataDto.OrderSide side,
     String buyerOrderId,
     String sellerOrderId,
     BigDecimal fee,

@@ -12,13 +12,5 @@ public interface StrategyRepositoryPort {
 
     Optional<TradingStrategy> findByName(String strategyName);
 
-    void save(TradingStrategy strategy);
-
-    Collection<TradingStrategy> findAll();
-
-    Collection<TradingStrategy> findAllEnabled();
-
-    boolean existsById(UUID strategyId);
-
-    void deleteById(UUID strategyId);
+    void registerStrategy(TradingStrategy strategy);
 }

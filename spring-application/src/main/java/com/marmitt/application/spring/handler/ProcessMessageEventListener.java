@@ -42,17 +42,17 @@ public class ProcessMessageEventListener {
             } else if (result.isWarning() && result.getData().isPresent()) {
                 log.warn("Processing WARNING - Data type: {}, Warning: {}, , Received Message: {}, Data: {}",
                         result.getData().get().getClass().getSimpleName(),
-                        result.getErrorMessage().orElse("No warning message"),
-                        result.getRawMessage().orElse("No received message"),
+                        result.getErrorMessage().orElse("No warning errorMessage"),
+                        result.getRawMessage().orElse("No received errorMessage"),
                         result.getData().get());
             } else if (result.isError()) {
                 log.error("Processing ERROR - Message: {}, Received Message: {}",
-                        result.getErrorMessage().orElse("No error message"),
-                        result.getRawMessage().orElse("No received message"));
+                        result.getErrorMessage().orElse("No error errorMessage"),
+                        result.getRawMessage().orElse("No received errorMessage"));
             }
 
         } catch (Exception e) {
-            log.error("Error processing message: {}", e.getMessage(), e);
+            log.error("Error processing errorMessage: {}", e.getMessage(), e);
             
         } finally {
             MDC.clear(); // Limpa MDC

@@ -5,14 +5,17 @@ import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 
 public interface ExchangeAdapterRepositoryPort {
 
     void registerAdapter(ExchangeAdapterPort adapter);
 
-    ExchangeAdapterPort getAdapter(String exchangeName);
+    void registerPortfolioByAdapter(String exchangeName, UUID portfolioId);
 
-    Optional<ExchangeAdapterPort> findAdapter(String exchangeName);
+    Optional<ExchangeAdapterPort> findByName(String exchangeName);
+
+    Optional<ExchangeAdapterPort> findByPortfolioId(UUID portfolioId);
 
     boolean hasAdapter(String exchangeName);
 

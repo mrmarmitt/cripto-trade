@@ -1,15 +1,16 @@
 package com.marmitt.core.domain.portfolio;
 
 import com.marmitt.core.domain.Symbol;
+import com.marmitt.core.domain.strategy.PortfolioContext;
 import lombok.Getter;
 
+import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 @Getter
 public class Portfolio {
@@ -18,32 +19,42 @@ public class Portfolio {
     private final String name;
     private final UUID strategyId;
     private final String strategyName;
+    private final Symbol symbol;
     private final Balance balance;
-    private final Map<Symbol, Position> positions;
+    private Position position;
     private final List<Transaction> transactions;
     private boolean isActive;
     private final Instant createdAt;
+    private Instant lastExecutionTime;
+    
+    // Configurações de limitação
+    private static final BigDecimal MINIMUM_OPERATION_AMOUNT = new BigDecimal("10.00"); // $10 USD
+    private static final Duration EXECUTION_COOLDOWN = Duration.ofSeconds(30); // 30 segundos entre execuções
+    private static final BigDecimal DEFAULT_MAX_EXPOSURE_PERCENTAGE = new BigDecimal("0.20"); // 20% por símbolo
     
     public Portfolio(
             UUID id,
             String name,
             UUID strategyId,
             String strategyName,
+            Symbol symbol,
             Asset initialCapital
     ) {
         this.id = id;
         this.name = name;
         this.strategyId = strategyId;
         this.strategyName = strategyName;
+        this.symbol = Objects.requireNonNull(symbol, "Symbol cannot be null");
         this.balance = Balance.withInitialCapital(initialCapital);
-        this.positions = new ConcurrentHashMap<>();
+        this.position = null; // No initial position
         this.transactions = new ArrayList<>();
         this.isActive = true;
         this.createdAt = Instant.now();
+        this.lastExecutionTime = null;
     }
 
-    public void executeBuy(Symbol symbol, Asset quantity, Asset price, Asset fee) {
-        validateTradeParameters(symbol, quantity, price, fee);
+    public void executeBuy(Asset quantity, Asset price, Asset fee) {
+        validateTradeParameters(quantity, price, fee);
         
         Asset total = quantity.multiply(price.amount());
         Asset totalWithFee = total.add(fee);
@@ -56,17 +67,16 @@ public class Portfolio {
         balance.allocate(totalWithFee);
         
         // Update or create position
-        Position existingPosition = positions.get(symbol);
-        if (existingPosition != null) {
-            existingPosition.updatePosition(quantity, price);
+        if (position != null) {
+            position.updatePosition(quantity, price);
         } else {
-            positions.put(symbol, Position.create(symbol, quantity, price));
+            position = Position.create(this.symbol, quantity, price);
         }
         
         // Record transaction
         Transaction transaction = Transaction.builder()
                 .type(com.marmitt.core.enums.TransactionType.BUY)
-                .symbol(symbol)
+                .symbol(this.symbol)
                 .quantity(quantity)
                 .price(price)
                 .total(total)
@@ -76,12 +86,11 @@ public class Portfolio {
         transactions.add(transaction);
     }
     
-    public void executeSell(Symbol symbol, Asset quantity, Asset price, Asset fee) {
-        validateTradeParameters(symbol, quantity, price, fee);
+    public void executeSell(Asset quantity, Asset price, Asset fee) {
+        validateTradeParameters(quantity, price, fee);
         
-        Position position = positions.get(symbol);
         if (position == null) {
-            throw new IllegalArgumentException("No position found for symbol: " + symbol.value());
+            throw new IllegalArgumentException("No position found for currency: " + this.symbol.value());
         }
         
         if (!position.canSell(quantity)) {
@@ -94,7 +103,7 @@ public class Portfolio {
         // Update position
         position.reducePosition(quantity);
         if (position.isEmpty()) {
-            positions.remove(symbol);
+            position = null; // Clear empty position
         }
         
         // Update balance - get back the proceeds minus fee
@@ -103,7 +112,7 @@ public class Portfolio {
         // Record transaction
         Transaction transaction = Transaction.builder()
                 .type(com.marmitt.core.enums.TransactionType.SELL)
-                .symbol(symbol)
+                .symbol(this.symbol)
                 .quantity(quantity)
                 .price(price)
                 .total(total)
@@ -113,15 +122,26 @@ public class Portfolio {
         transactions.add(transaction);
     }
     
-    public void updatePositionPrice(Symbol symbol, Asset newPrice) {
-        Position position = positions.get(symbol);
+    public void updatePositionPrice(Asset newPrice) {
         if (position != null) {
             position.updateCurrentPrice(newPrice);
         }
     }
     
-    private void validateTradeParameters(Symbol symbol, Asset quantity, Asset price, Asset fee) {
-        Objects.requireNonNull(symbol, "Symbol cannot be null");
+    public boolean hasPosition() {
+        return position != null && !position.isEmpty();
+    }
+    
+    public Asset getCurrentPositionValue() {
+        return hasPosition() ? position.getCurrentValue() : 
+               Asset.fiat(BigDecimal.ZERO, balance.getAvailable().currency());
+    }
+    
+    public BigDecimal getCurrentPositionQuantity() {
+        return hasPosition() ? position.getQuantity().amount() : BigDecimal.ZERO;
+    }
+    
+    private void validateTradeParameters(Asset quantity, Asset price, Asset fee) {
         Objects.requireNonNull(quantity, "Quantity cannot be null");
         Objects.requireNonNull(price, "Price cannot be null");
         Objects.requireNonNull(fee, "Fee cannot be null");
@@ -146,5 +166,67 @@ public class Portfolio {
     public void deactivate() {
         this.isActive = false;
     }
+    
+    /**
+     * Verifica se o portfolio está elegível para execução de estratégia
+     */
+    public boolean isValid() {
+        if (!this.isActive) {
+            return false;
+        }
 
+        if (this.strategyId == null) {
+            return false;
+        }
+
+        if (!hasMinimumCapitalForOperation()) {
+            return false;
+        }
+
+        // 6. Deve respeitar cooldown entre execuções
+        if (isInCooldownPeriod()) {
+            return false;
+        }
+
+        return true;
+    }
+    
+    private boolean hasMinimumCapitalForOperation() {
+        return balance.getAvailable().amount().compareTo(MINIMUM_OPERATION_AMOUNT) >= 0;
+    }
+
+    private boolean isInCooldownPeriod() {
+        if (lastExecutionTime == null) {
+            return false; // Primeira execução
+        }
+        
+        Duration timeSinceLastExecution = Duration.between(lastExecutionTime, Instant.now());
+        return timeSinceLastExecution.compareTo(EXECUTION_COOLDOWN) < 0;
+    }
+    
+    /**
+     * Cria PortfolioContext para ser passado para a Strategy
+     * Contém todos os dados necessários para que a Strategy possa calcular quantities
+     */
+    public PortfolioContext createContext() {
+        return PortfolioContext.builder()
+            .portfolioId(this.id)
+            .portfolioName(this.name)
+            .symbol(this.symbol)
+            .totalCapital(this.balance.getTotal())
+            .availableBalance(this.balance.getAvailable())
+            .allocatedBalance(this.balance.getAllocated())
+            .position(this.position) // Single position
+            .minimumOperationAmount(MINIMUM_OPERATION_AMOUNT)
+            .maxExposurePerSymbol(DEFAULT_MAX_EXPOSURE_PERCENTAGE)
+            .build();
+    }
+    
+    /**
+     * Atualiza timestamp da última execução
+     * Deve ser chamado após execução bem-sucedida da estratégia
+     */
+    public void updateLastExecutionTime() {
+        this.lastExecutionTime = Instant.now();
+    }
 }

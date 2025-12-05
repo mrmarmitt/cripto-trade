@@ -1,11 +1,11 @@
 package com.marmitt.core.dto.websocket.mapper;
 
-import com.marmitt.core.domain.ConnectionResult;
+import com.marmitt.core.dto.connection.ConnectionResultDto;
 import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
 
 public class ConnectionResultMapper {
     
-    public static WebSocketConnectionResponse toResponse(ConnectionResult connectionResult, String exchangeName) {
+    public static WebSocketConnectionResponse toResponse(ConnectionResultDto connectionResult, String exchangeName) {
         return new WebSocketConnectionResponse(
                 connectionResult.status(),
                 connectionResult.message(),

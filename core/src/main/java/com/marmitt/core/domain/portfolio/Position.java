@@ -98,7 +98,7 @@ public class Position {
     public Asset getUnrealizedPnLPercentage() {
         Asset costBasis = quantity.multiply(averagePrice.amount());
         if (costBasis.isZero()) {
-            return Asset.fiat(BigDecimal.ZERO, costBasis.symbol());
+            return Asset.fiat(BigDecimal.ZERO, costBasis.currency());
         }
         
         Asset pnl = getUnrealizedPnL();
