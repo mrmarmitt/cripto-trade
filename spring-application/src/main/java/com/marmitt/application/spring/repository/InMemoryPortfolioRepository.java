@@ -51,6 +51,11 @@ public class InMemoryPortfolioRepository implements PortfolioRepositoryPort {
     }
 
     @Override
+    public List<Portfolio> findAll() {
+        return List.copyOf(portfolios.values());
+    }
+
+    @Override
     public void registerPortfolio(Portfolio portfolio) {
         Objects.requireNonNull(portfolio, "Portfolio cannot be null");
         Objects.requireNonNull(portfolio.getId(), "Portfolio ID cannot be null");

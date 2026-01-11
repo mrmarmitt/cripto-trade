@@ -1,6 +1,8 @@
 package com.marmitt.core.application.listener.portfolio;
 
+import com.marmitt.core.domain.portfolio.Asset;
 import com.marmitt.core.domain.portfolio.Portfolio;
+import com.marmitt.core.domain.portfolio.Transaction;
 import com.marmitt.core.domain.portfolio.TradingDecision;
 import com.marmitt.core.domain.strategy.PortfolioContext;
 import com.marmitt.core.domain.strategy.StrategyInput;
@@ -8,6 +10,8 @@ import com.marmitt.core.domain.strategy.StrategyOutput;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.enums.OrderSide;
 import com.marmitt.core.enums.OrderType;
+import com.marmitt.core.enums.TransactionStatus;
+import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.enums.TradingAction;
 import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
@@ -17,6 +21,8 @@ import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.strategy.TradingStrategy;
 import lombok.extern.slf4j.Slf4j;
 
+import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -150,24 +156,39 @@ class StrategyExecution {
             // 3. Converter TradingDecision para SendOrderRequest com correlationId
             SendOrderRequest sendOrderRequest = createSendOrderRequest(decision, exchangeAdapter.getExchangeName(), clientOrderId);
             
-            log.debug("Created send order request for portfolio: {}, Exchange: {}, Symbol: {}, ClientOrderId: {}", 
-                    portfolio.getId(), exchangeAdapter.getExchangeName(), 
+            log.debug("Created send order request for portfolio: {}, Exchange: {}, Symbol: {}, ClientOrderId: {}",
+                    portfolio.getId(), exchangeAdapter.getExchangeName(),
                     sendOrderRequest.getSymbol(), clientOrderId);
-            
-            // 4. TODO: PERSISTIR TRANSAÇÃO PENDENTE ANTES DO ENVIO
-            // OrderRepository.savePendingOrder(OrderPendingEntity.builder()
-            //     .clientOrderId(clientOrderId)
-            //     .portfolioId(portfolio.getId())
-            //     .symbol(decision.symbol())
-            //     .action(decision.decision())
-            //     .quantity(decision.quantity())
-            //     .price(decision.price())
-            //     .status(OrderStatus.PENDING_SUBMISSION)
-            //     .strategy(portfolio.getStrategyName())
-            //     .reasoning(decision.reasoning())
-            //     .requestedAt(Instant.now())
-            //     .build());
-            
+
+            // 4. Criar transaction PENDING antes do envio
+            TransactionType transactionType = decision.decision() == TradingAction.SHOULD_BUY ?
+                TransactionType.BUY : TransactionType.SELL;
+
+            Asset estimatedFee = Asset.of(BigDecimal.ZERO, decision.price().currency()); // Estimativa (será atualizado depois)
+
+            Transaction pendingTransaction = Transaction.builder()
+                    .id(UUID.randomUUID())
+                    .clientOrderId(clientOrderId)
+                    .status(TransactionStatus.PENDING)
+                    .type(transactionType)
+                    .symbol(decision.symbol())
+                    .quantity(Asset.of(decision.quantity(), portfolio.getSymbol().getBaseAsset()))
+                    .executedQuantity(null) // Será preenchido quando executar
+                    .price(decision.price())
+                    .executedPrice(null) // Será preenchido quando executar
+                    .total(decision.estimatedTotal())
+                    .fee(estimatedFee)
+                    .requestedAt(Instant.now())
+                    .executedAt(null) // Será preenchido quando executar
+                    .rejectReason(null)
+                    .build();
+
+            portfolio.addPendingTransaction(pendingTransaction);
+            portfolioRepository.save(portfolio);
+
+            log.debug("Pending transaction registered - ClientOrderId: {}, Type: {}, Quantity: {}",
+                    clientOrderId, transactionType, decision.quantity());
+
             // 5. Processar mensagem através do sender processor  
             String orderMessage = senderProcessor.execute(sendOrderRequest);
             
@@ -176,10 +197,11 @@ class StrategyExecution {
             
             // 6. Enviar mensagem via WebSocket
             exchangeAdapter.getWebSocketPort().sendMessage(orderMessage);
-            
-            // 7. TODO: ATUALIZAR STATUS PARA SUBMITTED APÓS ENVIO SUCESSO
-            // OrderRepository.updateOrderStatus(clientOrderId, OrderStatus.SUBMITTED, Instant.now());
-            
+
+            // 7. Atualizar status para SUBMITTED após envio bem-sucedido
+            portfolio.updateTransactionStatus(clientOrderId, TransactionStatus.SUBMITTED);
+            portfolioRepository.save(portfolio);
+
             log.info("Order sent via WebSocket - Portfolio: {}, Exchange: {}, ClientOrderId: {}, Action: {}, " +
                     "Symbol: {}, Quantity: {}, Price: {} - Awaiting async response", 
                     portfolio.getId(), 

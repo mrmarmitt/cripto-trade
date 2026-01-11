@@ -38,7 +38,7 @@ class PortfolioOrchestrator {
             ListenerRepositoryPort listenerRepository
     ) {
         this.strategyExecution = new StrategyExecution(strategyRepository, portfolioRepository, exchangeAdapterRepository);
-        this.orderUpdateListener = new PortfolioOrderUpdateListener(strategyExecution);
+        this.orderUpdateListener = new PortfolioOrderUpdateListener(portfolioRepository);
         this.listenerRepository = listenerRepository;
         
         // Registrar listener para receber callbacks assíncronos de ordens

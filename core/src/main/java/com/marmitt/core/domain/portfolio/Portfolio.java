@@ -2,6 +2,7 @@ package com.marmitt.core.domain.portfolio;
 
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.strategy.PortfolioContext;
+import com.marmitt.core.enums.TransactionStatus;
 import lombok.Getter;
 
 import java.math.BigDecimal;
@@ -10,6 +11,7 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.UUID;
 
 @Getter
@@ -228,5 +230,187 @@ public class Portfolio {
      */
     public void updateLastExecutionTime() {
         this.lastExecutionTime = Instant.now();
+    }
+
+    // ============================================================
+    // Transaction Management Methods
+    // ============================================================
+
+    /**
+     * Adiciona transaction pendente (antes de enviar ordem para exchange)
+     */
+    public void addPendingTransaction(Transaction transaction) {
+        Objects.requireNonNull(transaction, "Transaction cannot be null");
+
+        if (transaction.getStatus() != TransactionStatus.PENDING) {
+            throw new IllegalArgumentException("Transaction must be PENDING status");
+        }
+
+        transactions.add(transaction);
+    }
+
+    /**
+     * Encontra transaction por clientOrderId
+     */
+    public Optional<Transaction> findTransactionByClientOrderId(String clientOrderId) {
+        Objects.requireNonNull(clientOrderId, "ClientOrderId cannot be null");
+
+        return transactions.stream()
+                .filter(t -> clientOrderId.equals(t.getClientOrderId()))
+                .findFirst();
+    }
+
+    /**
+     * Atualiza status de uma transaction existente
+     */
+    public void updateTransactionStatus(String clientOrderId, TransactionStatus newStatus) {
+        Transaction transaction = findTransactionByClientOrderId(clientOrderId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Transaction not found for clientOrderId: " + clientOrderId));
+
+        // Transaction é imutável - criar nova com status atualizado
+        Transaction updated = transaction.withStatus(newStatus);
+
+        // Substituir transaction antiga pela atualizada
+        transactions.remove(transaction);
+        transactions.add(updated);
+    }
+
+    /**
+     * Atualiza transaction com motivo de rejeição
+     */
+    public void updateTransactionAsRejected(String clientOrderId, String rejectReason) {
+        Transaction transaction = findTransactionByClientOrderId(clientOrderId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Transaction not found for clientOrderId: " + clientOrderId));
+
+        Transaction rejected = transaction
+                .withStatus(TransactionStatus.REJECTED)
+                .withRejectReason(rejectReason);
+
+        transactions.remove(transaction);
+        transactions.add(rejected);
+    }
+
+    /**
+     * Atualiza transaction como executada e aplica mudanças no portfolio (balance e position)
+     */
+    public void updateTransactionAsExecuted(
+            String clientOrderId,
+            TransactionStatus finalStatus,
+            Asset executedQuantity,
+            Asset executedPrice,
+            Asset executedFee,
+            Instant executedAt
+    ) {
+        // Validar status
+        if (!finalStatus.isExecuted()) {
+            throw new IllegalArgumentException(
+                    "Final status must be FILLED or PARTIALLY_FILLED, got: " + finalStatus);
+        }
+
+        // Buscar transaction
+        Transaction transaction = findTransactionByClientOrderId(clientOrderId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "Transaction not found for clientOrderId: " + clientOrderId));
+
+        // Criar versão atualizada com dados de execução
+        Transaction executed = transaction
+                .withStatus(finalStatus)
+                .withExecutedQuantity(executedQuantity)
+                .withExecutedPrice(executedPrice)
+                .withFee(executedFee)
+                .withExecutedAt(executedAt);
+
+        // Substituir transaction
+        transactions.remove(transaction);
+        transactions.add(executed);
+
+        // Atualizar balance e position baseado no tipo
+        if (transaction.isBuy()) {
+            executeBuyInternal(executedQuantity, executedPrice, executedFee);
+        } else {
+            executeSellInternal(executedQuantity, executedPrice, executedFee);
+        }
+    }
+
+    /**
+     * Executa compra internamente (atualiza balance e position sem criar nova transaction)
+     * Usado por updateTransactionAsExecuted()
+     */
+    private void executeBuyInternal(Asset quantity, Asset price, Asset fee) {
+        validateTradeParameters(quantity, price, fee);
+
+        Asset total = quantity.multiply(price.amount());
+        Asset totalWithFee = total.add(fee);
+
+        if (balance.hasAvailableAmount(totalWithFee)) {
+            throw new IllegalArgumentException("Insufficient balance for purchase");
+        }
+
+        // Update balance
+        balance.allocate(totalWithFee);
+
+        // Update or create position
+        if (position != null) {
+            position.updatePosition(quantity, price);
+        } else {
+            position = Position.create(this.symbol, quantity, price);
+        }
+    }
+
+    /**
+     * Executa venda internamente (atualiza balance e position sem criar nova transaction)
+     * Usado por updateTransactionAsExecuted()
+     */
+    private void executeSellInternal(Asset quantity, Asset price, Asset fee) {
+        validateTradeParameters(quantity, price, fee);
+
+        if (position == null) {
+            throw new IllegalArgumentException("No position found for currency: " + this.symbol.value());
+        }
+
+        if (!position.canSell(quantity)) {
+            throw new IllegalArgumentException("Insufficient quantity to sell");
+        }
+
+        Asset total = quantity.multiply(price.amount());
+
+        // Update position
+        position.reducePosition(quantity);
+        if (position.isEmpty()) {
+            position = null; // Clear empty position
+        }
+
+        // Update balance - get back the proceeds minus fee
+        balance.deallocate(total);
+    }
+
+    /**
+     * Lista todas as transactions com sucesso (FILLED)
+     */
+    public List<Transaction> getSuccessfulTransactions() {
+        return transactions.stream()
+                .filter(t -> t.getStatus() == TransactionStatus.FILLED)
+                .toList();
+    }
+
+    /**
+     * Lista transactions pendentes (PENDING ou SUBMITTED)
+     */
+    public List<Transaction> getPendingTransactions() {
+        return transactions.stream()
+                .filter(t -> t.getStatus() == TransactionStatus.PENDING ||
+                            t.getStatus() == TransactionStatus.SUBMITTED)
+                .toList();
+    }
+
+    /**
+     * Lista transactions que falharam (REJECTED, CANCELED, EXPIRED)
+     */
+    public List<Transaction> getFailedTransactions() {
+        return transactions.stream()
+                .filter(Transaction::isFailed)
+                .toList();
     }
 }

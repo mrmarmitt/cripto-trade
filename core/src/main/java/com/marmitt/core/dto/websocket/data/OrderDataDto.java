@@ -10,12 +10,17 @@ import java.time.Instant;
  */
 public record OrderDataDto(
     String orderId,
+    String clientOrderId,
     Symbol symbol,
     OrderSide side,
     OrderType type,
     BigDecimal quantity,
+    BigDecimal executedQuantity,
     BigDecimal price,
+    BigDecimal executedPrice,
+    BigDecimal fee,
     OrderStatus status,
+    String rejectReason,
     Instant timestamp
 ) implements ProcessorResponse {
 

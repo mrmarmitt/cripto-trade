@@ -24,6 +24,11 @@ public interface PortfolioRepositoryPort {
      */
     Optional<Portfolio> findBySymbolAndStrategy(String symbol, UUID strategyId);
 
+    /**
+     * Lista todos os portfolios registrados
+     */
+    List<Portfolio> findAll();
+
     void registerPortfolio(Portfolio portfolio);
     
     /**

@@ -1,82 +1,178 @@
 package com.marmitt.core.application.listener.portfolio;
 
+import com.marmitt.core.domain.portfolio.Asset;
+import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
+import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
+
+import java.math.BigDecimal;
+import java.time.Instant;
 
 @Slf4j
 class PortfolioOrderUpdateListener implements OrderUpdateListener {
 
-    private final StrategyExecution strategyExecution;
+    private final PortfolioRepositoryPort portfolioRepository;
 
-    public PortfolioOrderUpdateListener(StrategyExecution strategyExecution) {
-        this.strategyExecution = strategyExecution;
+    public PortfolioOrderUpdateListener(PortfolioRepositoryPort portfolioRepository) {
+        this.portfolioRepository = portfolioRepository;
     }
 
     public void onOrderUpdate(OrderDataDto orderData) {
-        log.debug("Order update notification received - Order: {}, Status: {}",
-                orderData.orderId(), orderData.status());
+        log.debug("Order update notification received - OrderId: {}, ClientOrderId: {}, Status: {}",
+                orderData.orderId(), orderData.clientOrderId(), orderData.status());
 
-        // TODO: RECONCILIAÇÃO COM ORDEM PENDENTE
-        // String clientOrderId = orderResult.getClientOrderId(); // Vem da resposta da exchange
-        // OrderPendingEntity pendingOrder = orderRepository.findByClientOrderId(clientOrderId);
-        // if (pendingOrder == null) {
-        //     log.warn("Received order update for unknown clientOrderId: {}", clientOrderId);
-        //     return;
-        // }
+        String clientOrderId = orderData.clientOrderId();
 
-        // TODO: ATUALIZAR STATUS DA ORDEM PERSISTIDA
-        // orderRepository.updateOrderStatus(clientOrderId, orderResult.status(), Instant.now());
+        if (clientOrderId == null || clientOrderId.isBlank()) {
+            log.warn("Received order update without clientOrderId - OrderId: {}", orderData.orderId());
+            return;
+        }
+
+        // Buscar portfolio pela transaction (usando clientOrderId)
+        Portfolio portfolio = findPortfolioByClientOrderId(clientOrderId);
+
+        if (portfolio == null) {
+            log.warn("Portfolio not found for clientOrderId: {}", clientOrderId);
+            return;
+        }
+
+        log.debug("Processing order update for Portfolio: {} - ClientOrderId: {}, Status: {}",
+                portfolio.getName(), clientOrderId, orderData.status());
 
         // Roteamento baseado no status
         switch (orderData.status()) {
-            case OrderDataDto.OrderStatus.FILLED, OrderDataDto.OrderStatus.PARTIALLY_FILLED -> onOrderExecuted(orderData);
-            case OrderDataDto.OrderStatus.CANCELED -> onOrderCancelled(orderData);
-            case EXPIRED -> onOrderExpired(orderData);
+            case OrderDataDto.OrderStatus.FILLED, OrderDataDto.OrderStatus.PARTIALLY_FILLED ->
+                    handleExecutedOrder(portfolio, orderData);
+            case OrderDataDto.OrderStatus.CANCELED ->
+                    handleCanceledOrder(portfolio, orderData);
+            case OrderDataDto.OrderStatus.REJECTED ->
+                    handleRejectedOrder(portfolio, orderData);
+            case OrderDataDto.OrderStatus.EXPIRED ->
+                    handleExpiredOrder(portfolio, orderData);
             default -> {
-                log.debug("Order update for non-final status - Order: {}, Status: {}",
-                        orderData.orderId(), orderData.status());
-                // Estados SUBMITTED, ACCEPTED não requerem ação especial
-
-                // TODO: ATUALIZAR ORDEM PENDENTE COM STATUS INTERMEDIÁRIO
-                // orderRepository.updateOrderStatus(clientOrderId, orderResult.status(), Instant.now());
+                log.debug("Order update for non-final status - Portfolio: {}, Status: {}",
+                        portfolio.getName(), orderData.status());
+                // Estados SUBMITTED, ACCEPTED - apenas atualizar status
+                // Não precisa fazer nada além de log
             }
         }
     }
 
-    private void onOrderExecuted(OrderDataDto orderData) {
-        log.debug("Order executed notification received - Order: {}, Status: {}", 
-                 orderData.orderId(), orderData.status());
-        
+    /**
+     * Busca portfolio que contém transaction com o clientOrderId
+     */
+    private Portfolio findPortfolioByClientOrderId(String clientOrderId) {
+        // Buscar em todos os portfolios (poderia otimizar com um índice)
+        return portfolioRepository.findAll().stream()
+                .filter(p -> p.findTransactionByClientOrderId(clientOrderId).isPresent())
+                .findFirst()
+                .orElse(null);
+    }
+
+    /**
+     * Processa ordem executada (FILLED ou PARTIALLY_FILLED)
+     */
+    private void handleExecutedOrder(Portfolio portfolio, OrderDataDto orderData) {
+        log.info("Processing FILLED order - Portfolio: {}, Symbol: {}, Side: {}, Quantity: {}, Price: {}",
+                portfolio.getName(), orderData.symbol(), orderData.side(),
+                orderData.executedQuantity(), orderData.executedPrice());
+
         try {
-//            strategyExecution.handleAsyncOrderExecution(orderData);
+            TransactionStatus status = orderData.status() == OrderDataDto.OrderStatus.FILLED ?
+                    TransactionStatus.FILLED : TransactionStatus.PARTIALLY_FILLED;
+
+            BigDecimal fee = orderData.fee() != null ? orderData.fee() : BigDecimal.ZERO;
+
+            // Buscar moeda base do symbol para criar Asset corretamente
+            String baseCurrency = portfolio.getSymbol().getBaseAsset();
+            String quoteCurrency = portfolio.getSymbol().getQuoteAsset();
+
+            Asset executedQuantity = Asset.of(orderData.executedQuantity(), baseCurrency);
+            Asset executedPrice = Asset.of(orderData.executedPrice(), quoteCurrency);
+            Asset executedFee = Asset.of(fee, quoteCurrency);
+
+            // Atualizar transaction e portfolio (balance + position)
+            portfolio.updateTransactionAsExecuted(
+                    orderData.clientOrderId(),
+                    status,
+                    executedQuantity,
+                    executedPrice,
+                    executedFee,
+                    Instant.now()
+            );
+
+            portfolioRepository.save(portfolio);
+
+            log.info("Portfolio updated after FILLED order - Portfolio: {}, Available: {}, Position: {}",
+                    portfolio.getName(),
+                    portfolio.getBalance().getAvailable().amount(),
+                    portfolio.getPosition() != null ? portfolio.getPosition().getQuantity().amount() : "NONE");
+
         } catch (Exception e) {
-            log.error("Error handling order execution notification - Order: {}, Error: {}", 
-                     orderData.orderId(), e.getMessage(), e);
+            log.error("Error handling order execution - Portfolio: {}, ClientOrderId: {}, Error: {}",
+                    portfolio.getName(), orderData.clientOrderId(), e.getMessage(), e);
         }
     }
 
-    private void onOrderCancelled(OrderDataDto orderData) {
-        log.info("Order cancelled notification received - Order: {}",
-                orderData.orderId());
-        
+    /**
+     * Processa ordem cancelada
+     */
+    private void handleCanceledOrder(Portfolio portfolio, OrderDataDto orderData) {
+        log.info("Processing CANCELED order - Portfolio: {}, ClientOrderId: {}",
+                portfolio.getName(), orderData.clientOrderId());
+
         try {
-//            strategyExecution.handleAsyncOrderExecution(orderData);
+            portfolio.updateTransactionStatus(orderData.clientOrderId(), TransactionStatus.CANCELED);
+            portfolioRepository.save(portfolio);
+
+            log.info("Transaction marked as CANCELED - Portfolio: {}", portfolio.getName());
+
         } catch (Exception e) {
-            log.error("Error handling order cancellation notification - Order: {}, Error: {}",
-                    orderData.orderId(), e.getMessage(), e);
+            log.error("Error handling order cancellation - Portfolio: {}, ClientOrderId: {}, Error: {}",
+                    portfolio.getName(), orderData.clientOrderId(), e.getMessage(), e);
         }
     }
 
-    private void onOrderExpired(OrderDataDto orderData) {
-        log.warn("Order expired notification received - Order: {}",
-                orderData.orderId());
-        
+    /**
+     * Processa ordem rejeitada
+     */
+    private void handleRejectedOrder(Portfolio portfolio, OrderDataDto orderData) {
+        log.warn("Processing REJECTED order - Portfolio: {}, ClientOrderId: {}, Reason: {}",
+                portfolio.getName(), orderData.clientOrderId(), orderData.rejectReason());
+
         try {
-//            strategyExecution.handleAsyncOrderExecution(orderData);
+            String reason = orderData.rejectReason() != null ? orderData.rejectReason() : "Unknown reason";
+            portfolio.updateTransactionAsRejected(orderData.clientOrderId(), reason);
+            portfolioRepository.save(portfolio);
+
+            log.warn("Transaction marked as REJECTED - Portfolio: {}, Reason: {}",
+                    portfolio.getName(), reason);
+
         } catch (Exception e) {
-            log.error("Error handling order expiration notification - Order: {}, Error: {}",
-                    orderData.orderId(), e.getMessage(), e);
+            log.error("Error handling order rejection - Portfolio: {}, ClientOrderId: {}, Error: {}",
+                    portfolio.getName(), orderData.clientOrderId(), e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Processa ordem expirada
+     */
+    private void handleExpiredOrder(Portfolio portfolio, OrderDataDto orderData) {
+        log.warn("Processing EXPIRED order - Portfolio: {}, ClientOrderId: {}",
+                portfolio.getName(), orderData.clientOrderId());
+
+        try {
+            portfolio.updateTransactionStatus(orderData.clientOrderId(), TransactionStatus.EXPIRED);
+            portfolioRepository.save(portfolio);
+
+            log.warn("Transaction marked as EXPIRED - Portfolio: {}", portfolio.getName());
+
+        } catch (Exception e) {
+            log.error("Error handling order expiration - Portfolio: {}, ClientOrderId: {}, Error: {}",
+                    portfolio.getName(), orderData.clientOrderId(), e.getMessage(), e);
         }
     }
 
