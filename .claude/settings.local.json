@@ -18,7 +18,8 @@
       "Bash(cp:*)",
       "Bash(grep:*)",
       "WebFetch(domain:github.com)",
-      "Bash(true)"
+      "Bash(true)",
+      "Bash(tree:*)"
     ],
     "defaultMode": "acceptEdits"
   }
