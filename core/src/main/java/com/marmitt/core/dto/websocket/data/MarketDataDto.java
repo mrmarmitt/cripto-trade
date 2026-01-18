@@ -6,6 +6,7 @@ import java.math.BigDecimal;
 import java.time.Instant;
 
 public record MarketDataDto(
+        String exchangeName,
         Symbol symbol,
         BigDecimal price,
         BigDecimal bidPrice,

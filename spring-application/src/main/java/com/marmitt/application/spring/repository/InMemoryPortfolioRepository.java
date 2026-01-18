@@ -1,10 +1,18 @@
 package com.marmitt.application.spring.repository;
 
+import com.marmitt.core.domain.Symbol;
+import com.marmitt.core.domain.portfolio.Asset;
 import com.marmitt.core.domain.portfolio.Portfolio;
+import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
+import com.marmitt.core.ports.outbound.strategy.TradingStrategy;
+import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.context.annotation.Lazy;
 import org.springframework.stereotype.Repository;
 
+import java.math.BigDecimal;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
@@ -15,6 +23,57 @@ public class InMemoryPortfolioRepository implements PortfolioRepositoryPort {
 
     private final Map<UUID, Portfolio> portfolios = new ConcurrentHashMap<>();
     private final Map<String, UUID> portfoliosByName = new ConcurrentHashMap<>();
+
+    private final StrategyRepositoryPort strategyRepository;
+    private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
+
+    public InMemoryPortfolioRepository(
+            @Lazy StrategyRepositoryPort strategyRepository,
+            @Lazy ExchangeAdapterRepositoryPort exchangeAdapterRepository
+    ) {
+        this.strategyRepository = strategyRepository;
+        this.exchangeAdapterRepository = exchangeAdapterRepository;
+    }
+
+    @PostConstruct
+    public void init() {
+        log.info("Initializing InMemoryPortfolioRepository with sample portfolio...");
+
+        // Buscar a estratégia SimpleMovingAverageStrategy
+        Optional<TradingStrategy> strategyOpt = strategyRepository.findByName("SimpleMovingAverageStrategy");
+
+        if (strategyOpt.isEmpty()) {
+            log.warn("SimpleMovingAverageStrategy not found, skipping sample portfolio creation");
+            return;
+        }
+
+        TradingStrategy strategy = strategyOpt.get();
+
+        // Criar portfolio de exemplo
+        UUID portfolioId = UUID.randomUUID();
+        Portfolio samplePortfolio = new Portfolio(
+                portfolioId,
+                "Sample-BTC-Portfolio",
+                strategy.getStrategyId(),
+                strategy.getStrategyName(),
+                Symbol.of("BTCUSDT"),
+                Asset.of(new BigDecimal("10000.00"), "USDT"),
+                "MOCK",                          // Order execution na MOCK
+                Set.of("BINANCE")                // Market data apenas da BINANCE
+        );
+
+        // Registrar portfolio
+        registerPortfolio(samplePortfolio);
+
+        // Associar portfolio ao exchange adapter (MOCK)
+        exchangeAdapterRepository.registerPortfolioByAdapter("MOCK", portfolioId);
+
+        log.info("Sample portfolio created - ID: {}, Name: {}, Symbol: {}, Strategy: {}, OrderExecution: MOCK, MarketDataSources: [BINANCE]",
+                portfolioId,
+                samplePortfolio.getName(),
+                samplePortfolio.getSymbol().value(),
+                samplePortfolio.getStrategyName());
+    }
 
     @Override
     public Optional<Portfolio> findById(UUID portfolioId) {

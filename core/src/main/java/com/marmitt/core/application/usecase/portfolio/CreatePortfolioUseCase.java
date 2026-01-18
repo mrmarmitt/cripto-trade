@@ -86,7 +86,7 @@ public class CreatePortfolioUseCase implements CreatePortfolioPort {
                 return CreatePortfolioResponse.failure(errorMsg);
             }
 
-            // 6. Criar Portfolio
+            // 6. Criar Portfolio com exchange de execução explícita
             UUID portfolioId = UUID.randomUUID();
             Portfolio portfolio = new Portfolio(
                     portfolioId,
@@ -94,7 +94,9 @@ public class CreatePortfolioUseCase implements CreatePortfolioPort {
                     request.strategyId(),
                     request.strategyName(),
                     request.symbol(),
-                    request.initialCapital()
+                    request.initialCapital(),
+                    request.exchangeName(),  // Exchange para execução de ordens
+                    request.allowedMarketDataSources()  // Exchanges permitidas para market data (null = todas)
             );
 
             // 7. Registrar portfolio no repository

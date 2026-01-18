@@ -6,6 +6,7 @@ import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
+import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
@@ -23,39 +24,21 @@ import java.util.concurrent.CompletableFuture;
  */
 @Slf4j
 class PortfolioOrchestrator {
-    
+
     // Dependências injetadas
     private final StrategyExecution strategyExecution;
+    @Getter
     private final PortfolioOrderUpdateListener orderUpdateListener;
-    private final ListenerRepositoryPort listenerRepository;
     // private final RiskManagerPort riskManager;
     // private final ResourceManagerPort resourceManager;
-    
+
     public PortfolioOrchestrator(
             StrategyRepositoryPort strategyRepository,
             PortfolioRepositoryPort portfolioRepository,
-            ExchangeAdapterRepositoryPort exchangeAdapterRepository,
-            ListenerRepositoryPort listenerRepository
+            ExchangeAdapterRepositoryPort exchangeAdapterRepository
     ) {
         this.strategyExecution = new StrategyExecution(strategyRepository, portfolioRepository, exchangeAdapterRepository);
         this.orderUpdateListener = new PortfolioOrderUpdateListener(portfolioRepository);
-        this.listenerRepository = listenerRepository;
-        
-        // Registrar listener para receber callbacks assíncronos de ordens
-        registerOrderUpdateListener();
-    }
-    
-    /**
-     * Registra o listener para receber notificações assíncronas de execução de ordens
-     */
-    private void registerOrderUpdateListener() {
-        try {
-            listenerRepository.registerOrderUpdateListener(orderUpdateListener);
-            log.info("Portfolio order update listener registered successfully");
-        } catch (Exception e) {
-            log.error("Failed to register portfolio order update listener: {}", e.getMessage(), e);
-            throw new RuntimeException("Critical error: Cannot register order update listener", e);
-        }
     }
 
     public void processStrategyExecution(Portfolio portfolio, StrategyInput strategyInput) {
@@ -105,9 +88,10 @@ class PortfolioOrchestrator {
             * );
             * CompletableFuture.runAsync(() -> task, executorService);
             * */
-
             CompletableFuture<Void> execution = CompletableFuture.runAsync(
-                () -> strategyExecution.executeStrategy(portfolio, strategyInput)
+                () -> {
+                    strategyExecution.executeStrategy(portfolio, strategyInput);
+                }
             );
             
             execution.whenComplete((result, throwable) -> {

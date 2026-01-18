@@ -82,6 +82,6 @@ public record Asset(
     }
     
     public boolean isPositive() {
-        return amount.compareTo(BigDecimal.ZERO) <= 0;
+        return amount.compareTo(BigDecimal.ZERO) > 0;
     }
 }

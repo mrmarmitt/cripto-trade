@@ -139,15 +139,19 @@ class StrategyExecution {
                 portfolio.getId(), decision.decision(), decision.quantity(), decision.price().amount());
 
         try {
-            // 1. Buscar adapter da exchange apropriada para o portfolio
-            Optional<ExchangeAdapterPort> adapterOptional = exchangeAdapterRepository.findByPortfolioId(portfolio.getId());
-            
-            if (adapterOptional.isEmpty()) {
-                log.error("No exchange adapter found for portfolio: {}", portfolio.getId());
-                return;
-            }
-            
-            ExchangeAdapterPort exchangeAdapter = adapterOptional.get();
+            // 1. Buscar adapter da exchange configurada para execução de ordens
+            String targetExchange = portfolio.getOrderExecutionExchange();
+
+            log.debug("Portfolio {} configured to execute orders on exchange: {}",
+                    portfolio.getId(), targetExchange);
+
+            ExchangeAdapterPort exchangeAdapter = exchangeAdapterRepository
+                .findByName(targetExchange)
+                .orElseThrow(() -> new IllegalStateException(
+                    String.format("Exchange adapter '%s' not found for portfolio '%s' (%s)",
+                        targetExchange, portfolio.getName(), portfolio.getId())
+                ));
+
             SenderMessageProcessorPort senderProcessor = exchangeAdapter.getSenderMessageProcessor();
             
             // 2. Gerar ID único para correlação

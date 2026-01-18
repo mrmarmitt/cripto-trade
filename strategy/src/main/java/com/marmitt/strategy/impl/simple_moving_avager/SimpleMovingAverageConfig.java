@@ -17,12 +17,31 @@ public record SimpleMovingAverageConfig(
         }
     }
     
+    /**
+     * Configuração padrão para TESTES - ultra sensível
+     * Qualquer variação mínima de preço dispara decisão
+     *
+     * Para BTC a $95,000:
+     * - Threshold de 0.000001 (0.0001%) = ~$0.10 de variação
+     */
     public static SimpleMovingAverageConfig defaultConfig() {
         return new SimpleMovingAverageConfig(
-                10,                                    // 10 períodos para média móvel
-                BigDecimal.valueOf(-0.02),             // -2% para comprar
-                BigDecimal.valueOf(0.02),              // +2% para vender
-                BigDecimal.valueOf(0.1)                // 10% do capital por operação
+                3,                                      // 3 períodos (mais responsivo possível)
+                BigDecimal.valueOf(-0.000001),          // -0.0001% para comprar (~$0.10 para BTC)
+                BigDecimal.valueOf(0.000001),           // +0.0001% para vender (~$0.10 para BTC)
+                BigDecimal.valueOf(0.1)                 // 10% do capital por operação
+        );
+    }
+
+    /**
+     * Configuração para produção com thresholds mais conservadores
+     */
+    public static SimpleMovingAverageConfig productionConfig() {
+        return new SimpleMovingAverageConfig(
+                20,                                     // 20 períodos para média móvel
+                BigDecimal.valueOf(-0.02),              // -2% para comprar
+                BigDecimal.valueOf(0.02),               // +2% para vender
+                BigDecimal.valueOf(0.1)                 // 10% do capital por operação
         );
     }
     

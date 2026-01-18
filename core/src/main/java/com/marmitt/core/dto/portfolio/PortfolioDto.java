@@ -6,6 +6,7 @@ import lombok.Builder;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Set;
 import java.util.UUID;
 
 @Builder
@@ -15,6 +16,8 @@ public record PortfolioDto(
         UUID strategyId,
         String strategyName,
         String symbol,
+        String orderExecutionExchange,
+        Set<String> allowedMarketDataSources,
         BalanceDto balance,
         PositionDto position,
         int transactionCount,
@@ -74,6 +77,8 @@ public record PortfolioDto(
                 .strategyId(portfolio.getStrategyId())
                 .strategyName(portfolio.getStrategyName())
                 .symbol(portfolio.getSymbol().value())
+                .orderExecutionExchange(portfolio.getOrderExecutionExchange())
+                .allowedMarketDataSources(portfolio.getAllowedMarketDataSources())
                 .balance(balanceDto)
                 .position(positionDto)
                 .transactionCount(portfolio.getTransactions().size())

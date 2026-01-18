@@ -3,10 +3,13 @@ package com.marmitt.application.spring.repository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.application.spring.config.exchange.BinanceExchangeAdapter;
 import com.marmitt.application.spring.config.exchange.CoinbaseExchangeAdapter;
+import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
 import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
 import java.util.Map;
@@ -15,6 +18,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @Repository
 public class InMemoryExchangeAdapterRepository  implements ExchangeAdapterRepositoryPort {
 
@@ -24,7 +28,10 @@ public class InMemoryExchangeAdapterRepository  implements ExchangeAdapterReposi
     private final EventPublisherPort eventPublisher;
     private final ObjectMapper objectMapper;
 
-    public InMemoryExchangeAdapterRepository(EventPublisherPort eventPublisher, ObjectMapper objectMapper) {
+    public InMemoryExchangeAdapterRepository(
+            EventPublisherPort eventPublisher,
+            ObjectMapper objectMapper
+    ) {
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
     }
@@ -33,6 +40,7 @@ public class InMemoryExchangeAdapterRepository  implements ExchangeAdapterReposi
     public void initExchangeAdapters() {
         registerAdapter(new BinanceExchangeAdapter(objectMapper, eventPublisher));
         registerAdapter(new CoinbaseExchangeAdapter(objectMapper, eventPublisher));
+        registerAdapter(new MockExchangeAdapter(objectMapper, eventPublisher));
     }
 
     @Override
@@ -50,12 +58,6 @@ public class InMemoryExchangeAdapterRepository  implements ExchangeAdapterReposi
     @Override
     public Optional<ExchangeAdapterPort> findByName(String exchangeName) {
         return Optional.ofNullable(adapters.get(exchangeName.toUpperCase()));
-    }
-
-    @Override
-    public Optional<ExchangeAdapterPort> findByPortfolioId(UUID portfolioId) {
-        String exchangeName = adapterByPortfolio.get(portfolioId);
-        return findByName(exchangeName);
     }
 
     @Override

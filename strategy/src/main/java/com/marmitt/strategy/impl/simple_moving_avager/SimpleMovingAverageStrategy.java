@@ -14,10 +14,11 @@ import java.util.List;
 import java.util.UUID;
 
 public class SimpleMovingAverageStrategy implements TradingStrategy {
-    
+
     private static final String STRATEGY_NAME = "SimpleMovingAverageStrategy";
     private static final String STRATEGY_VERSION = "1.0.0";
-    private static final UUID STRATEGY_ID = UUID.randomUUID();
+    // UUID fixo para garantir consistência entre restarts
+    private static final UUID STRATEGY_ID = UUID.fromString("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
     
     private boolean enabled = true;
     private final SimpleMovingAverageConfig config;
@@ -63,30 +64,60 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
         BigDecimal movingAverage = calculateMovingAverage();
         BigDecimal currentPrice = inputData.currentPrice();
         BigDecimal priceDeviation = calculatePriceDeviation(currentPrice, movingAverage);
-        
-        String reasoning = String.format("Price: %s, MA(%d): %s, Deviation: %.2f%%", 
-                                        currentPrice, config.movingAveragePeriod(), movingAverage, 
+
+        // LOG DETALHADO para debug
+        System.out.println(String.format(
+            "[SMA-STRATEGY] Price: %s | MA(%d): %s | Deviation: %.6f%% | BuyThreshold: %.6f%% | SellThreshold: %.6f%%",
+            currentPrice,
+            config.movingAveragePeriod(),
+            movingAverage,
+            priceDeviation.multiply(BigDecimal.valueOf(100)).doubleValue(),
+            config.buyThreshold().multiply(BigDecimal.valueOf(100)).doubleValue(),
+            config.sellThreshold().multiply(BigDecimal.valueOf(100)).doubleValue()
+        ));
+
+        String reasoning = String.format("Price: %s, MA(%d): %s, Deviation: %.6f%%",
+                                        currentPrice, config.movingAveragePeriod(), movingAverage,
                                         priceDeviation.multiply(BigDecimal.valueOf(100)).doubleValue());
         
         // Decisão baseada no desvio da média móvel
         if (priceDeviation.compareTo(config.sellThreshold()) >= 0) {
             // Preço muito acima da média - VENDER
-            BigDecimal confidence = calculateConfidence(priceDeviation.abs(), config.sellThreshold().abs());
             BigDecimal quantity = calculateSellQuantity(portfolioContext);
-            
-            return StrategyOutput.sell(STRATEGY_NAME, confidence, quantity, 
+
+            // Se não tem posição para vender, HOLD
+            if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
+                System.out.println("[SMA-STRATEGY] --- HOLD (SELL signal but no position to sell)");
+                return StrategyOutput.hold(STRATEGY_NAME, reasoning + " - Price above MA but no position to sell");
+            }
+
+            BigDecimal confidence = calculateConfidence(priceDeviation.abs(), config.sellThreshold().abs());
+            System.out.println(String.format("[SMA-STRATEGY] >>> SELL SIGNAL! Quantity: %s, Confidence: %s, HasPosition: %s",
+                quantity, confidence, portfolioContext.hasPosition()));
+
+            return StrategyOutput.sell(STRATEGY_NAME, confidence, quantity,
                                            reasoning + " - Price above MA threshold");
-                                           
+
         } else if (priceDeviation.compareTo(config.buyThreshold()) <= 0) {
             // Preço muito abaixo da média - COMPRAR
-            BigDecimal confidence = calculateConfidence(priceDeviation.abs(), config.buyThreshold().abs());
             BigDecimal quantity = calculateBuyQuantity(inputData.currentPrice(), portfolioContext);
-            
-            return StrategyOutput.buy(STRATEGY_NAME, confidence, quantity, 
+
+            // Se não tem saldo para comprar, HOLD
+            if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
+                System.out.println("[SMA-STRATEGY] --- HOLD (BUY signal but insufficient balance)");
+                return StrategyOutput.hold(STRATEGY_NAME, reasoning + " - Price below MA but insufficient balance");
+            }
+
+            BigDecimal confidence = calculateConfidence(priceDeviation.abs(), config.buyThreshold().abs());
+            System.out.println(String.format("[SMA-STRATEGY] >>> BUY SIGNAL! Quantity: %s, Confidence: %s, AvailableBalance: %s",
+                quantity, confidence, portfolioContext.availableBalance().amount()));
+
+            return StrategyOutput.buy(STRATEGY_NAME, confidence, quantity,
                                           reasoning + " - Price below MA threshold");
-                                          
+
         } else {
             // Preço próximo da média - HOLD
+            System.out.println("[SMA-STRATEGY] --- HOLD (price within threshold range)");
             return StrategyOutput.hold(STRATEGY_NAME, reasoning + " - Price near MA");
         }
     }

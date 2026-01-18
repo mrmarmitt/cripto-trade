@@ -9,3 +9,8 @@ repositories {
     mavenCentral()
 }
 
+dependencies {
+    // Jackson annotations para serialização de domain objects
+    implementation 'com.fasterxml.jackson.core:jackson-annotations:2.17.2'
+}
+

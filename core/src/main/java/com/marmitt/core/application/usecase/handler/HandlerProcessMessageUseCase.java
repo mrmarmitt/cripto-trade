@@ -44,8 +44,12 @@ public class HandlerProcessMessageUseCase implements HandlerProcessMessagePort {
         if (context == null) {
             throw new IllegalArgumentException("Message context cannot be null");
         }
+
+        // Manager pode ser null para adapters que não usam WebSocket real (ex: Mock)
         WebSocketConnectionManager manager = connectionRepository.getConnection(context.exchangeName());
-        manager.onMessageReceived();
+        if (manager != null) {
+            manager.onMessageReceived();
+        }
 
         try {
             // Busca o processor apropriado para a exchange
@@ -69,7 +73,7 @@ public class HandlerProcessMessageUseCase implements HandlerProcessMessagePort {
                         .ifPresent(
                                 this::notifyListeners
                         );
-            } else {
+            } else if (manager != null) {
                 manager.onMessageError(result.getErrorMessage().orElse("No errorMessage error."));
             }
 
@@ -77,7 +81,9 @@ public class HandlerProcessMessageUseCase implements HandlerProcessMessagePort {
 
         } catch (Exception e) {
             // Retorna resultado com erro se algo deu errado
-            manager.onMessageError(e.getMessage());
+            if (manager != null) {
+                manager.onMessageError(e.getMessage());
+            }
             return ProcessingResult.error(context.correlationId().toString(), "Error processing errorMessage: " + e.getMessage(), e);
         }
     }

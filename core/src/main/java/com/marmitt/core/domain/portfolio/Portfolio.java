@@ -9,9 +9,11 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 
 @Getter
@@ -28,10 +30,14 @@ public class Portfolio {
     private boolean isActive;
     private final Instant createdAt;
     private Instant lastExecutionTime;
+
+    // Exchange configuration
+    private final String orderExecutionExchange;  // Exchange onde ordens são executadas
+    private final Set<String> allowedMarketDataSources;  // Exchanges permitidas para market data (null = todas)
     
     // Configurações de limitação
     private static final BigDecimal MINIMUM_OPERATION_AMOUNT = new BigDecimal("10.00"); // $10 USD
-    private static final Duration EXECUTION_COOLDOWN = Duration.ofSeconds(30); // 30 segundos entre execuções
+    private static final Duration EXECUTION_COOLDOWN = Duration.ofSeconds(0); // 30 segundos entre execuções
     private static final BigDecimal DEFAULT_MAX_EXPOSURE_PERCENTAGE = new BigDecimal("0.20"); // 20% por símbolo
     
     public Portfolio(
@@ -40,7 +46,9 @@ public class Portfolio {
             UUID strategyId,
             String strategyName,
             Symbol symbol,
-            Asset initialCapital
+            Asset initialCapital,
+            String orderExecutionExchange,
+            Set<String> allowedMarketDataSources
     ) {
         this.id = id;
         this.name = name;
@@ -53,6 +61,9 @@ public class Portfolio {
         this.isActive = true;
         this.createdAt = Instant.now();
         this.lastExecutionTime = null;
+        this.orderExecutionExchange = Objects.requireNonNull(orderExecutionExchange, "Order execution exchange cannot be null");
+        this.allowedMarketDataSources = allowedMarketDataSources != null ?
+                Collections.unmodifiableSet(allowedMarketDataSources) : null;
     }
 
     public void executeBuy(Asset quantity, Asset price, Asset fee) {
@@ -230,6 +241,18 @@ public class Portfolio {
      */
     public void updateLastExecutionTime() {
         this.lastExecutionTime = Instant.now();
+    }
+
+    /**
+     * Verifica se o portfolio pode receber market data de uma exchange específica
+     * @param exchangeName nome da exchange
+     * @return true se permitido, false caso contrário
+     */
+    public boolean canReceiveMarketDataFrom(String exchangeName) {
+        // Se allowedMarketDataSources for null ou vazio, aceita de todas as exchanges
+        return allowedMarketDataSources == null ||
+               allowedMarketDataSources.isEmpty() ||
+               allowedMarketDataSources.contains(exchangeName.toUpperCase());
     }
 
     // ============================================================

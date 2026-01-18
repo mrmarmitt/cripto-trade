@@ -4,9 +4,11 @@ import com.marmitt.application.spring.controller.dto.portfolio.CreatePortfolioDt
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.portfolio.Asset;
 import com.marmitt.core.domain.portfolio.Portfolio;
+import com.marmitt.core.domain.portfolio.Transaction;
 import com.marmitt.core.dto.portfolio.CreatePortfolioRequest;
 import com.marmitt.core.dto.portfolio.CreatePortfolioResponse;
 import com.marmitt.core.dto.portfolio.PortfolioDto;
+import com.marmitt.core.dto.portfolio.TransactionDto;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
@@ -49,8 +51,8 @@ public class PortfolioController {
     public ResponseEntity<CreatePortfolioResponse> createPortfolio(
             @Valid @RequestBody CreatePortfolioDto dto
     ) {
-        log.info("Received request to create portfolio - Name: {}, Symbol: {}, Exchange: {}",
-                dto.name(), dto.symbol(), dto.exchangeName());
+        log.info("Received request to create portfolio - Name: {}, Symbol: {}, OrderExecutionExchange: {}, AllowedMarketDataSources: {}",
+                dto.name(), dto.symbol(), dto.orderExecutionExchange(), dto.allowedMarketDataSources());
 
         try {
             // Buscar strategy para obter o nome
@@ -71,7 +73,8 @@ public class PortfolioController {
                     .strategyName(strategy.getStrategyName())
                     .symbol(Symbol.of(dto.symbol()))
                     .initialCapital(Asset.of(dto.initialCapitalAmount(), dto.currency()))
-                    .exchangeName(dto.exchangeName())
+                    .exchangeName(dto.orderExecutionExchange())
+                    .allowedMarketDataSources(dto.allowedMarketDataSources())
                     .build();
 
             // Executar use case
@@ -155,4 +158,45 @@ public class PortfolioController {
         PortfolioDto dto = PortfolioDto.fromDomain(portfolioOpt.get());
         return ResponseEntity.ok(dto);
     }
+
+    /**
+     * Lista transações de um portfolio
+     * GET /portfolios/{id}/transactions
+     */
+    @GetMapping("/{id}/transactions")
+    public ResponseEntity<TransactionsResponse> getTransactionsByPortfolioId(@PathVariable UUID id) {
+        log.debug("Received request to get transactions for portfolio: {}", id);
+
+        Optional<Portfolio> portfolioOpt = portfolioRepository.findById(id);
+
+        if (portfolioOpt.isEmpty()) {
+            log.warn("Portfolio not found with ID: {}", id);
+            return ResponseEntity.notFound().build();
+        }
+
+        Portfolio portfolio = portfolioOpt.get();
+        List<TransactionDto> transactions = portfolio.getTransactions().stream()
+                .map(TransactionDto::fromDomain)
+                .collect(Collectors.toList());
+
+        TransactionsResponse response = new TransactionsResponse(
+                portfolio.getId(),
+                portfolio.getName(),
+                transactions,
+                transactions.size()
+        );
+
+        log.debug("Found {} transactions for portfolio: {}", transactions.size(), id);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * Response wrapper para lista de transações
+     */
+    public record TransactionsResponse(
+            UUID portfolioId,
+            String portfolioName,
+            List<TransactionDto> transactions,
+            int totalCount
+    ) {}
 }

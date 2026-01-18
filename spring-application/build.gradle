@@ -25,6 +25,7 @@ dependencies {
     // Internal modules dependencies
     implementation project(':adapter-binance')
     implementation project(':adapter-coinbase')
+    implementation project(':adapter-mock')
     implementation project(':strategy')
     implementation project(':core')
 

@@ -15,8 +15,6 @@ public interface ExchangeAdapterRepositoryPort {
 
     Optional<ExchangeAdapterPort> findByName(String exchangeName);
 
-    Optional<ExchangeAdapterPort> findByPortfolioId(UUID portfolioId);
-
     boolean hasAdapter(String exchangeName);
 
     Set<String> getAllExchangeNames();

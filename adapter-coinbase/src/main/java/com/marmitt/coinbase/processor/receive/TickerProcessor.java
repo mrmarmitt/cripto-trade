@@ -29,9 +29,9 @@ public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketD
         
         try {
             TickerEvent tickerEvent = objectMapper.readValue(rawMessage, TickerEvent.class);
-            
+
             // Converter Coinbase ticker para MarketData
-            MarketDataDto marketData = convertTickerEventToMarketData(tickerEvent);
+            MarketDataDto marketData = convertTickerEventToMarketData(tickerEvent, context);
             
             // Validações básicas de sanidade
             if (!isValidMarketData(marketData)) {
@@ -74,32 +74,32 @@ public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketD
     /**
      * Converte TickerEvent da Coinbase para MarketData do domínio.
      */
-    private MarketDataDto convertTickerEventToMarketData(TickerEvent tickerEvent) {
+    private MarketDataDto convertTickerEventToMarketData(TickerEvent tickerEvent, MessageContext context) {
         // Symbol: Coinbase usa formato "BTC-USD", convertemos para Symbol
         Symbol symbol = Symbol.of(tickerEvent.product_id());
-        
+
         // Preço atual (obrigatório)
         BigDecimal price = tickerEvent.getLastPriceAsDecimal();
-        
+
         // Campos opcionais com fallbacks seguros
-        BigDecimal bidPrice = tickerEvent.best_bid() != null ? 
+        BigDecimal bidPrice = tickerEvent.best_bid() != null ?
             tickerEvent.getBestBidPriceAsDecimal() : null;
-        BigDecimal askPrice = tickerEvent.best_ask() != null ? 
+        BigDecimal askPrice = tickerEvent.best_ask() != null ?
             tickerEvent.getBestAskPriceAsDecimal() : null;
-        BigDecimal volume = tickerEvent.volume_24h() != null ? 
+        BigDecimal volume = tickerEvent.volume_24h() != null ?
             new BigDecimal(tickerEvent.volume_24h()) : BigDecimal.ZERO;
-        BigDecimal high24h = tickerEvent.high_24h() != null ? 
+        BigDecimal high24h = tickerEvent.high_24h() != null ?
             new BigDecimal(tickerEvent.high_24h()) : null;
-        BigDecimal low24h = tickerEvent.low_24h() != null ? 
+        BigDecimal low24h = tickerEvent.low_24h() != null ?
             new BigDecimal(tickerEvent.low_24h()) : null;
-        
+
         // Calcular change e change percent baseado no open_24h
         BigDecimal priceChange24h = null;
         BigDecimal priceChangePercent24h = null;
         if (tickerEvent.open_24h() != null) {
             BigDecimal open24h = new BigDecimal(tickerEvent.open_24h());
             priceChange24h = price.subtract(open24h);
-            
+
             // Evitar divisão por zero
             if (open24h.compareTo(BigDecimal.ZERO) > 0) {
                 priceChangePercent24h = priceChange24h
@@ -107,8 +107,9 @@ public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketD
                     .multiply(new BigDecimal("100"));
             }
         }
-        
+
         return new MarketDataDto(
+            context.exchangeName(),  // Exchange de origem
             symbol, price, bidPrice, askPrice, volume,
             high24h, low24h, priceChange24h, priceChangePercent24h,
             Instant.now()

@@ -1,10 +1,14 @@
 package com.marmitt.application.spring.repository;
 
+import com.marmitt.core.application.listener.portfolio.PortfolioStrategyListener;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
 import com.marmitt.core.ports.outbound.listener.PriceUpdateListener;
+import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
 import com.marmitt.core.application.listener.MarketDataPriceUpdateListener;
 import com.marmitt.core.application.listener.TradingOrderUpdateListener;
+import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Repository;
 
@@ -19,16 +23,43 @@ import java.util.concurrent.ConcurrentHashMap;
 @Repository
 public class InMemoryListenerRepository implements ListenerRepositoryPort {
     
-    private final Map<String, OrderUpdateListener> orderUpdateListeners = new ConcurrentHashMap<>();
-    private final Map<String, PriceUpdateListener> priceUpdateListeners = new ConcurrentHashMap<>();
+    private final Map<String, OrderUpdateListener> orderUpdateListeners;
+    private final Map<String, PriceUpdateListener> priceUpdateListeners;
+
+    private final PortfolioRepositoryPort portfolioRepository;
+    private final StrategyRepositoryPort strategyRepository;
+    private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
+
+    public InMemoryListenerRepository(
+            PortfolioRepositoryPort portfolioRepository,
+            StrategyRepositoryPort strategyRepository,
+            ExchangeAdapterRepositoryPort exchangeAdapterRepository) {
+
+        this.exchangeAdapterRepository = exchangeAdapterRepository;
+
+        this.orderUpdateListeners = new ConcurrentHashMap<>();
+        this.priceUpdateListeners = new ConcurrentHashMap<>();
+
+        this.portfolioRepository = portfolioRepository;
+        this.strategyRepository = strategyRepository;
+    }
 
     @PostConstruct
     public void init() {
         TradingOrderUpdateListener tradingOrderUpdateListener = new TradingOrderUpdateListener();
         MarketDataPriceUpdateListener marketDataPriceUpdateListener = new MarketDataPriceUpdateListener();
+        PortfolioStrategyListener portfolioStrategyListener = new PortfolioStrategyListener(
+                portfolioRepository,
+                strategyRepository,
+                exchangeAdapterRepository);
 
+        // OrderUpdateListeners
         addOrderUpdateListener(tradingOrderUpdateListener);
+        addOrderUpdateListener(portfolioStrategyListener.getOrderUpdateListener());  // Processa ordens FILLED
+
+        // PriceUpdateListeners
         addPriceUpdateListener(marketDataPriceUpdateListener);
+        addPriceUpdateListener(portfolioStrategyListener);
     }
 
     @Override

@@ -6,6 +6,7 @@ import jakarta.validation.constraints.NotNull;
 import lombok.Builder;
 
 import java.math.BigDecimal;
+import java.util.Set;
 import java.util.UUID;
 
 /**
@@ -30,6 +31,9 @@ public record CreatePortfolioDto(
         @NotBlank(message = "Currency is required")
         String currency,
 
-        @NotBlank(message = "Exchange name is required")
-        String exchangeName
+        @NotBlank(message = "Exchange name for order execution is required")
+        String orderExecutionExchange,
+
+        // Opcional: Se null ou vazio, aceita market data de todas as exchanges
+        Set<String> allowedMarketDataSources
 ) {}

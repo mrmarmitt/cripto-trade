@@ -5,6 +5,7 @@ import com.marmitt.core.domain.portfolio.Asset;
 import lombok.Builder;
 
 import java.util.Objects;
+import java.util.Set;
 import java.util.UUID;
 
 @Builder
@@ -14,7 +15,8 @@ public record CreatePortfolioRequest(
         String strategyName,
         Symbol symbol,
         Asset initialCapital,
-        String exchangeName
+        String exchangeName,
+        Set<String> allowedMarketDataSources
 ) {
     public CreatePortfolioRequest {
         Objects.requireNonNull(name, "Portfolio name cannot be null");

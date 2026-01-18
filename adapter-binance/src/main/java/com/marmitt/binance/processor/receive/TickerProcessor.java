@@ -28,9 +28,9 @@ public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketD
         
         try {
             TickerEvent tickerEvent = objectMapper.readValue(rawMessage, TickerEvent.class);
-            
+
             // Parse campos específicos Binance ticker
-            MarketDataDto marketData = convertTickerEventToMarketData(tickerEvent);
+            MarketDataDto marketData = convertTickerEventToMarketData(tickerEvent, context);
             
             // Validações básicas
             if (!isValidMarketData(marketData)) {
@@ -68,10 +68,10 @@ public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketD
         }
     }
     
-    private MarketDataDto convertTickerEventToMarketData(TickerEvent tickerEvent) {
+    private MarketDataDto convertTickerEventToMarketData(TickerEvent tickerEvent, MessageContext context) {
         Symbol symbol = Symbol.of(tickerEvent.s());
         BigDecimal price = tickerEvent.getLastPriceAsDecimal();
-        
+
         // Campos opcionais com fallbacks
         BigDecimal bidPrice = tickerEvent.b() != null ? tickerEvent.getBestBidPriceAsDecimal() : null;
         BigDecimal askPrice = tickerEvent.a() != null ? tickerEvent.getBestAskPriceAsDecimal() : null;
@@ -80,8 +80,9 @@ public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketD
         BigDecimal low24h = tickerEvent.l() != null ? new BigDecimal(tickerEvent.l()) : null;
         BigDecimal priceChange24h = tickerEvent.p() != null ? new BigDecimal(tickerEvent.p()) : null;
         BigDecimal priceChangePercent24h = tickerEvent.P() != null ? new BigDecimal(tickerEvent.P()) : null;
-        
+
         return new MarketDataDto(
+            context.exchangeName(),  // Exchange de origem
             symbol, price, bidPrice, askPrice, volume,
             high24h, low24h, priceChange24h, priceChangePercent24h,
             Instant.now()

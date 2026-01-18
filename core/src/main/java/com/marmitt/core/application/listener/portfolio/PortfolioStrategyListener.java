@@ -3,7 +3,9 @@ package com.marmitt.core.application.listener.portfolio;
 import com.marmitt.core.dto.websocket.data.MarketDataDto;
 import com.marmitt.core.domain.strategy.StrategyInput;
 import com.marmitt.core.domain.portfolio.Portfolio;
+import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
 import com.marmitt.core.ports.outbound.listener.PriceUpdateListener;
+import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
@@ -12,29 +14,53 @@ import java.util.List;
 
 @Slf4j
 public class PortfolioStrategyListener implements PriceUpdateListener {
-    
+
     private final PortfolioOrchestrator portfolioOrchestrator;
     private final PortfolioRepositoryPort portfolioRepository;
-    
+
     public PortfolioStrategyListener(PortfolioRepositoryPort portfolioRepository,
-                                     StrategyRepositoryPort strategyRepository) {
+                                     StrategyRepositoryPort strategyRepository,
+                                     ExchangeAdapterRepositoryPort exchangeAdapterRepository) {
         this.portfolioRepository = portfolioRepository;
         this.portfolioOrchestrator = new PortfolioOrchestrator(
                 strategyRepository,
                 portfolioRepository,
-                null,
-                null);
+                exchangeAdapterRepository);
+    }
+
+    /**
+     * Retorna o OrderUpdateListener para processar respostas de ordens executadas.
+     * Deve ser registrado no ListenerRepository para receber notificações.
+     */
+    public OrderUpdateListener getOrderUpdateListener() {
+        return portfolioOrchestrator.getOrderUpdateListener();
     }
     
     @Override
     public void onPriceUpdate(MarketDataDto marketData) {
         String symbol = marketData.symbol().value();
+        String exchangeName = marketData.exchangeName();
+
         List<Portfolio> portfolios = portfolioRepository.findBySymbol(symbol);
-        
+
         if (portfolios.isEmpty()) {
-            log.trace("No active portfolios for currency: {}", symbol);
+            log.trace("No active portfolios for symbol: {}", symbol);
             return;
         }
+
+        // Filtrar portfolios que aceitam market data desta exchange
+        List<Portfolio> eligiblePortfolios = portfolios.stream()
+                .filter(p -> p.canReceiveMarketDataFrom(exchangeName))
+                .toList();
+
+        if (eligiblePortfolios.isEmpty()) {
+            log.trace("No portfolios accept market data from exchange {} for symbol: {}",
+                    exchangeName, symbol);
+            return;
+        }
+
+        log.debug("Processing market data from {} for symbol {} - {} eligible portfolio(s) found",
+                exchangeName, symbol, eligiblePortfolios.size());
 
         StrategyInput strategyInput = StrategyInput.builder()
                 .symbol(marketData.symbol())
@@ -43,17 +69,17 @@ public class PortfolioStrategyListener implements PriceUpdateListener {
                 .timestamp(marketData.timestamp())
                 .build();
 
-        for (Portfolio portfolio : portfolios) {
+        for (Portfolio portfolio : eligiblePortfolios) {
             try {
                 portfolioOrchestrator.processStrategyExecution(portfolio, strategyInput);
-                
-                log.debug("Strategy execution initiated for portfolio: {} on currency: {}",
-                        portfolio.getId(), symbol);
-                        
+
+                log.debug("Strategy execution initiated for portfolio: {} on symbol: {} from exchange: {}",
+                        portfolio.getId(), symbol, exchangeName);
+
             } catch (Exception e) {
-                log.error("Error initiating strategy execution for portfolio: {} on currency: {} - Error: {}",
+                log.error("Error initiating strategy execution for portfolio: {} on symbol: {} - Error: {}",
                         portfolio.getId(), symbol, e.getMessage(), e);
-                
+
                 // Registrar erro mas continuar processamento de outros portfolios
                 // Implementar circuit breaker se necessário
             }
