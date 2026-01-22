@@ -30,7 +30,7 @@ public class Position {
             throw new IllegalArgumentException("Quantity cannot be negative");
         }
         
-        if (averagePrice.isPositive()) {
+        if (!averagePrice.isPositive()) {
             throw new IllegalArgumentException("Average price must be positive");
         }
     }
@@ -44,7 +44,7 @@ public class Position {
         Objects.requireNonNull(additionalQuantity, "Additional quantity cannot be null");
         Objects.requireNonNull(price, "Price cannot be null");
         
-        if (additionalQuantity.isPositive()) {
+        if (!additionalQuantity.isPositive()) {
             throw new IllegalArgumentException("Additional quantity must be positive");
         }
         
@@ -63,7 +63,7 @@ public class Position {
     public void reducePosition(Asset reduceQuantity) {
         Objects.requireNonNull(reduceQuantity, "Reduce quantity cannot be null");
         
-        if (reduceQuantity.isPositive()) {
+        if (!reduceQuantity.isPositive()) {
             throw new IllegalArgumentException("Reduce quantity must be positive");
         }
         
@@ -77,7 +77,7 @@ public class Position {
     public void updateCurrentPrice(Asset newPrice) {
         Objects.requireNonNull(newPrice, "New price cannot be null");
         
-        if (newPrice.isPositive()) {
+        if (!newPrice.isPositive()) {
             throw new IllegalArgumentException("Price must be positive");
         }
         

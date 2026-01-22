@@ -5,8 +5,6 @@ import com.marmitt.core.domain.strategy.StrategyInput;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
-import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
-import lombok.Getter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
@@ -27,8 +25,6 @@ class PortfolioOrchestrator {
 
     // Dependências injetadas
     private final StrategyExecution strategyExecution;
-    @Getter
-    private final PortfolioOrderUpdateListener orderUpdateListener;
     // private final RiskManagerPort riskManager;
     // private final ResourceManagerPort resourceManager;
 
@@ -38,7 +34,6 @@ class PortfolioOrchestrator {
             ExchangeAdapterRepositoryPort exchangeAdapterRepository
     ) {
         this.strategyExecution = new StrategyExecution(strategyRepository, portfolioRepository, exchangeAdapterRepository);
-        this.orderUpdateListener = new PortfolioOrderUpdateListener(portfolioRepository);
     }
 
     public void processStrategyExecution(Portfolio portfolio, StrategyInput strategyInput) {

@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.repository;
 
+import com.marmitt.core.application.listener.portfolio.PortfolioOrderUpdateListener;
 import com.marmitt.core.application.listener.portfolio.PortfolioStrategyListener;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
 import com.marmitt.core.ports.outbound.listener.PriceUpdateListener;
@@ -10,6 +11,7 @@ import com.marmitt.core.application.listener.TradingOrderUpdateListener;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
@@ -20,6 +22,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * Implementação em memória do repositório de listeners.
  * Utiliza Maps thread-safe para armazenar listeners registrados.
  */
+@Slf4j
 @Repository
 public class InMemoryListenerRepository implements ListenerRepositoryPort {
     
@@ -46,20 +49,29 @@ public class InMemoryListenerRepository implements ListenerRepositoryPort {
 
     @PostConstruct
     public void init() {
+        // Listeners de logging/debug
         TradingOrderUpdateListener tradingOrderUpdateListener = new TradingOrderUpdateListener();
         MarketDataPriceUpdateListener marketDataPriceUpdateListener = new MarketDataPriceUpdateListener();
+
+        // Listeners de Portfolio - independentes, comunicam via PortfolioRepository
         PortfolioStrategyListener portfolioStrategyListener = new PortfolioStrategyListener(
                 portfolioRepository,
                 strategyRepository,
                 exchangeAdapterRepository);
 
+        PortfolioOrderUpdateListener portfolioOrderUpdateListener = new PortfolioOrderUpdateListener(
+                portfolioRepository);
+
         // OrderUpdateListeners
         addOrderUpdateListener(tradingOrderUpdateListener);
-        addOrderUpdateListener(portfolioStrategyListener.getOrderUpdateListener());  // Processa ordens FILLED
+        addOrderUpdateListener(portfolioOrderUpdateListener);  // Processa ordens FILLED - atualiza portfolio
 
         // PriceUpdateListeners
         addPriceUpdateListener(marketDataPriceUpdateListener);
-        addPriceUpdateListener(portfolioStrategyListener);
+        addPriceUpdateListener(portfolioStrategyListener);  // Executa estratégias
+
+        log.info("Listeners initialized - OrderUpdateListeners: {}, PriceUpdateListeners: {}",
+                orderUpdateListeners.size(), priceUpdateListeners.size());
     }
 
     @Override

@@ -68,11 +68,13 @@ public class Portfolio {
 
     public void executeBuy(Asset quantity, Asset price, Asset fee) {
         validateTradeParameters(quantity, price, fee);
-        
-        Asset total = quantity.multiply(price.amount());
+
+        // Total em quote currency (USDT): quantidade × preço
+        BigDecimal totalAmount = quantity.amount().multiply(price.amount());
+        Asset total = Asset.of(totalAmount, price.currency());
         Asset totalWithFee = total.add(fee);
         
-        if (balance.hasAvailableAmount(totalWithFee)) {
+        if (!balance.hasAvailableAmount(totalWithFee)) {
             throw new IllegalArgumentException("Insufficient balance for purchase");
         }
         
@@ -101,37 +103,45 @@ public class Portfolio {
     
     public void executeSell(Asset quantity, Asset price, Asset fee) {
         validateTradeParameters(quantity, price, fee);
-        
+
         if (position == null) {
             throw new IllegalArgumentException("No position found for currency: " + this.symbol.value());
         }
-        
+
         if (!position.canSell(quantity)) {
             throw new IllegalArgumentException("Insufficient quantity to sell");
         }
-        
-        Asset total = quantity.multiply(price.amount());
-        Asset totalMinusFee = total.subtract(fee);
-        
+
+        // Calcular custo original (quantity × averagePrice) - ANTES de reduzir position
+        BigDecimal costAmount = quantity.amount().multiply(position.getAveragePrice().amount());
+        Asset cost = Asset.of(costAmount, price.currency());  // Usar quote currency (USDT)
+
+        // Calcular valor de venda (quantity × salePrice)
+        BigDecimal saleAmount = quantity.amount().multiply(price.amount());
+        Asset saleValue = Asset.of(saleAmount, price.currency());
+
+        // Subtrair fee do valor de venda
+        Asset saleValueMinusFee = saleValue.subtract(fee);
+
         // Update position
         position.reducePosition(quantity);
         if (position.isEmpty()) {
             position = null; // Clear empty position
         }
-        
-        // Update balance - get back the proceeds minus fee
-        balance.deallocate(total);
-        
+
+        // Update balance - remove custo do invested, adiciona valor de venda ao available
+        balance.realizeSale(cost, saleValueMinusFee);
+
         // Record transaction
         Transaction transaction = Transaction.builder()
                 .type(com.marmitt.core.enums.TransactionType.SELL)
                 .symbol(this.symbol)
                 .quantity(quantity)
                 .price(price)
-                .total(total)
+                .total(saleValue)
                 .fee(fee)
                 .build();
-        
+
         transactions.add(transaction);
     }
     
@@ -163,11 +173,11 @@ public class Portfolio {
             throw new IllegalStateException("Portfolio is not active");
         }
         
-        if (quantity.isPositive()) {
+        if (!quantity.isPositive()) {
             throw new IllegalArgumentException("Quantity must be positive");
         }
-        
-        if (price.isPositive()) {
+
+        if (!price.isPositive()) {
             throw new IllegalArgumentException("Price must be positive");
         }
     }
@@ -265,7 +275,7 @@ public class Portfolio {
     public void addPendingTransaction(Transaction transaction) {
         Objects.requireNonNull(transaction, "Transaction cannot be null");
 
-        if (transaction.getStatus() != TransactionStatus.PENDING) {
+        if (transaction.status() != TransactionStatus.PENDING) {
             throw new IllegalArgumentException("Transaction must be PENDING status");
         }
 
@@ -279,7 +289,7 @@ public class Portfolio {
         Objects.requireNonNull(clientOrderId, "ClientOrderId cannot be null");
 
         return transactions.stream()
-                .filter(t -> clientOrderId.equals(t.getClientOrderId()))
+                .filter(transaction -> clientOrderId.equals(transaction.clientOrderId()))
                 .findFirst();
     }
 
@@ -307,9 +317,10 @@ public class Portfolio {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Transaction not found for clientOrderId: " + clientOrderId));
 
+        // withStatus() deve ser chamado por último para que a validação encontre rejectReason preenchido
         Transaction rejected = transaction
-                .withStatus(TransactionStatus.REJECTED)
-                .withRejectReason(rejectReason);
+                .withRejectReason(rejectReason)
+                .withStatus(TransactionStatus.REJECTED);
 
         transactions.remove(transaction);
         transactions.add(rejected);
@@ -338,12 +349,13 @@ public class Portfolio {
                         "Transaction not found for clientOrderId: " + clientOrderId));
 
         // Criar versão atualizada com dados de execução
+        // withStatus() deve ser chamado por último para que a validação encontre os campos preenchidos
         Transaction executed = transaction
-                .withStatus(finalStatus)
                 .withExecutedQuantity(executedQuantity)
                 .withExecutedPrice(executedPrice)
                 .withFee(executedFee)
-                .withExecutedAt(executedAt);
+                .withExecutedAt(executedAt)
+                .withStatus(finalStatus);
 
         // Substituir transaction
         transactions.remove(transaction);
@@ -364,10 +376,12 @@ public class Portfolio {
     private void executeBuyInternal(Asset quantity, Asset price, Asset fee) {
         validateTradeParameters(quantity, price, fee);
 
-        Asset total = quantity.multiply(price.amount());
+        // Total em quote currency (USDT): quantidade × preço
+        BigDecimal totalAmount = quantity.amount().multiply(price.amount());
+        Asset total = Asset.of(totalAmount, price.currency());
         Asset totalWithFee = total.add(fee);
 
-        if (balance.hasAvailableAmount(totalWithFee)) {
+        if (!balance.hasAvailableAmount(totalWithFee)) {
             throw new IllegalArgumentException("Insufficient balance for purchase");
         }
 
@@ -397,7 +411,16 @@ public class Portfolio {
             throw new IllegalArgumentException("Insufficient quantity to sell");
         }
 
-        Asset total = quantity.multiply(price.amount());
+        // Calcular custo original (quantity × averagePrice) - ANTES de reduzir position
+        BigDecimal costAmount = quantity.amount().multiply(position.getAveragePrice().amount());
+        Asset cost = Asset.of(costAmount, price.currency());  // Usar quote currency (USDT)
+
+        // Calcular valor de venda (quantity × salePrice)
+        BigDecimal saleAmount = quantity.amount().multiply(price.amount());
+        Asset saleValue = Asset.of(saleAmount, price.currency());
+
+        // Subtrair fee do valor de venda
+        Asset saleValueMinusFee = saleValue.subtract(fee);
 
         // Update position
         position.reducePosition(quantity);
@@ -405,8 +428,8 @@ public class Portfolio {
             position = null; // Clear empty position
         }
 
-        // Update balance - get back the proceeds minus fee
-        balance.deallocate(total);
+        // Update balance - remove custo do invested, adiciona valor de venda ao available
+        balance.realizeSale(cost, saleValueMinusFee);
     }
 
     /**
@@ -414,7 +437,7 @@ public class Portfolio {
      */
     public List<Transaction> getSuccessfulTransactions() {
         return transactions.stream()
-                .filter(t -> t.getStatus() == TransactionStatus.FILLED)
+                .filter(transaction -> transaction.status() == TransactionStatus.FILLED)
                 .toList();
     }
 
@@ -423,8 +446,8 @@ public class Portfolio {
      */
     public List<Transaction> getPendingTransactions() {
         return transactions.stream()
-                .filter(t -> t.getStatus() == TransactionStatus.PENDING ||
-                            t.getStatus() == TransactionStatus.SUBMITTED)
+                .filter(transaction -> transaction.status() == TransactionStatus.PENDING ||
+                        transaction.status() == TransactionStatus.SUBMITTED)
                 .toList();
     }
 

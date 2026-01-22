@@ -11,8 +11,15 @@ import lombok.extern.slf4j.Slf4j;
 import java.math.BigDecimal;
 import java.time.Instant;
 
+/**
+ * Listener responsável por processar atualizações de ordens executadas.
+ * Atualiza o estado do Portfolio (balance, position, transaction status) quando
+ * uma ordem é confirmada (FILLED, CANCELED, REJECTED, etc).
+ *
+ * Independente do PortfolioStrategyListener - comunicação via clientOrderId no PortfolioRepository.
+ */
 @Slf4j
-class PortfolioOrderUpdateListener implements OrderUpdateListener {
+public class PortfolioOrderUpdateListener implements OrderUpdateListener {
 
     private final PortfolioRepositoryPort portfolioRepository;
 
@@ -20,8 +27,9 @@ class PortfolioOrderUpdateListener implements OrderUpdateListener {
         this.portfolioRepository = portfolioRepository;
     }
 
+    @Override
     public void onOrderUpdate(OrderDataDto orderData) {
-        log.debug("Order update notification received - OrderId: {}, ClientOrderId: {}, Status: {}",
+        log.info(">>> PortfolioOrderUpdateListener received order update - OrderId: {}, ClientOrderId: {}, Status: {}",
                 orderData.orderId(), orderData.clientOrderId(), orderData.status());
 
         String clientOrderId = orderData.clientOrderId();
@@ -32,12 +40,25 @@ class PortfolioOrderUpdateListener implements OrderUpdateListener {
         }
 
         // Buscar portfolio pela transaction (usando clientOrderId)
+        log.debug("Searching for portfolio with clientOrderId: {}", clientOrderId);
         Portfolio portfolio = findPortfolioByClientOrderId(clientOrderId);
 
         if (portfolio == null) {
-            log.warn("Portfolio not found for clientOrderId: {}", clientOrderId);
+            log.warn("Portfolio not found for clientOrderId: {} - Total portfolios in repository: {}",
+                    clientOrderId, portfolioRepository.findAll().size());
+            // Debug: listar transactions de todos os portfolios
+            portfolioRepository.findAll().forEach(p -> {
+                log.debug("Portfolio {} has {} transactions: {}",
+                        p.getName(),
+                        p.getTransactions().size(),
+                        p.getTransactions().stream()
+                                .map(transaction -> transaction.clientOrderId() + "=" + transaction.status())
+                                .toList());
+            });
             return;
         }
+
+        log.debug("Found portfolio: {} for clientOrderId: {}", portfolio.getName(), clientOrderId);
 
         log.debug("Processing order update for Portfolio: {} - ClientOrderId: {}, Status: {}",
                 portfolio.getName(), clientOrderId, orderData.status());

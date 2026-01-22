@@ -3,7 +3,6 @@ package com.marmitt.core.application.listener.portfolio;
 import com.marmitt.core.dto.websocket.data.MarketDataDto;
 import com.marmitt.core.domain.strategy.StrategyInput;
 import com.marmitt.core.domain.portfolio.Portfolio;
-import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
 import com.marmitt.core.ports.outbound.listener.PriceUpdateListener;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
@@ -12,6 +11,12 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 
+/**
+ * Listener responsável por processar atualizações de preço e executar estratégias.
+ * Recebe MarketDataDto e dispara execução de estratégias nos portfolios elegíveis.
+ *
+ * Independente do PortfolioOrderUpdateListener - comunicação via clientOrderId no PortfolioRepository.
+ */
 @Slf4j
 public class PortfolioStrategyListener implements PriceUpdateListener {
 
@@ -26,14 +31,6 @@ public class PortfolioStrategyListener implements PriceUpdateListener {
                 strategyRepository,
                 portfolioRepository,
                 exchangeAdapterRepository);
-    }
-
-    /**
-     * Retorna o OrderUpdateListener para processar respostas de ordens executadas.
-     * Deve ser registrado no ListenerRepository para receber notificações.
-     */
-    public OrderUpdateListener getOrderUpdateListener() {
-        return portfolioOrchestrator.getOrderUpdateListener();
     }
     
     @Override

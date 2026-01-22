@@ -39,24 +39,24 @@ public record TransactionDto(
 
     public static TransactionDto fromDomain(Transaction transaction) {
         return TransactionDto.builder()
-                .id(transaction.getId())
-                .clientOrderId(transaction.getClientOrderId())
-                .status(transaction.getStatus())
-                .type(transaction.getType())
-                .symbol(transaction.getSymbol().value())
-                .quantity(transaction.getQuantity().amount())
-                .quantityCurrency(transaction.getQuantity().currency())
-                .price(transaction.getPrice().amount())
-                .priceCurrency(transaction.getPrice().currency())
-                .total(transaction.getTotal().amount())
-                .executedQuantity(transaction.getExecutedQuantity() != null ?
-                        transaction.getExecutedQuantity().amount() : null)
-                .executedPrice(transaction.getExecutedPrice() != null ?
-                        transaction.getExecutedPrice().amount() : null)
-                .fee(transaction.getFee() != null ? transaction.getFee().amount() : null)
-                .requestedAt(transaction.getRequestedAt())
-                .executedAt(transaction.getExecutedAt())
-                .rejectReason(transaction.getRejectReason())
+                .id(transaction.id())
+                .clientOrderId(transaction.clientOrderId())
+                .status(transaction.status())
+                .type(transaction.type())
+                .symbol(transaction.symbol().value())
+                .quantity(transaction.quantity().amount())
+                .quantityCurrency(transaction.quantity().currency())
+                .price(transaction.price().amount())
+                .priceCurrency(transaction.price().currency())
+                .total(transaction.total().amount())
+                .executedQuantity(transaction.executedQuantity() != null ?
+                        transaction.executedQuantity().amount() : null)
+                .executedPrice(transaction.executedPrice() != null ?
+                        transaction.executedPrice().amount() : null)
+                .fee(transaction.fee() != null ? transaction.fee().amount() : null)
+                .requestedAt(transaction.requestedAt())
+                .executedAt(transaction.executedAt())
+                .rejectReason(transaction.rejectReason())
                 .build();
     }
 }
