@@ -19,7 +19,8 @@
       "Bash(grep:*)",
       "WebFetch(domain:github.com)",
       "Bash(true)",
-      "Bash(tree:*)"
+      "Bash(tree:*)",
+      "Bash(python -m json.tool:*)"
     ],
     "defaultMode": "acceptEdits"
   }

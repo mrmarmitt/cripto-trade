@@ -1,7 +1,7 @@
 package com.marmitt.core.application.listener.portfolio;
 
 import com.marmitt.core.domain.portfolio.Portfolio;
-import com.marmitt.core.domain.strategy.StrategyInput;
+import com.marmitt.core.dto.strategy.StrategyInputDto;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
@@ -36,7 +36,7 @@ class PortfolioOrchestrator {
         this.strategyExecution = new StrategyExecution(strategyRepository, portfolioRepository, exchangeAdapterRepository);
     }
 
-    public void processStrategyExecution(Portfolio portfolio, StrategyInput strategyInput) {
+    public void processStrategyExecution(Portfolio portfolio, StrategyInputDto strategyInput) {
         
         log.debug("Processing strategy execution for portfolio: {} on currency: {}",
                 portfolio.getId(), strategyInput.symbol());
@@ -111,7 +111,7 @@ class PortfolioOrchestrator {
     /**
      * Resolve conflitos quando múltiplos portfolios querem operar no mesmo currency
      */
-    private void resolvePortfolioConflicts(Portfolio portfolio, StrategyInput strategyInput) {
+    private void resolvePortfolioConflicts(Portfolio portfolio, StrategyInputDto strategyInput) {
         
         // String currency = strategyInput.getSymbol().value();
         // List<Portfolio> concurrentPortfolios = findConcurrentPortfolios(currency);
@@ -152,7 +152,7 @@ class PortfolioOrchestrator {
     /**
      * Gerencia recursos compartilhados entre portfolios
      */
-    private void manageSharedResources(Portfolio portfolio, StrategyInput strategyInput) {
+    private void manageSharedResources(Portfolio portfolio, StrategyInputDto strategyInput) {
         
         // 1. RATE LIMITING GLOBAL
         // - Limites de requests por segundo para exchanges
@@ -195,7 +195,7 @@ class PortfolioOrchestrator {
     /**
      * Trata erros de coordenação entre portfolios
      */
-    private void handleOrchestrationError(Portfolio portfolio, StrategyInput strategyInput, Exception error) {
+    private void handleOrchestrationError(Portfolio portfolio, StrategyInputDto strategyInput, Exception error) {
         
         // 1. CLASSIFICAR SEVERIDADE DO ERRO
         // - Erro individual de portfolio (isolado)
@@ -216,7 +216,7 @@ class PortfolioOrchestrator {
     /**
      * Trata erros na execução em lote
      */
-    private void handleBatchExecutionError(List<Portfolio> portfolios, StrategyInput strategyInput, Exception error) {
+    private void handleBatchExecutionError(List<Portfolio> portfolios, StrategyInputDto strategyInput, Exception error) {
         
         // Lógica similar ao handleOrchestrationError, mas para contexto de lote
         // - Identificar portfolios afetados
@@ -240,7 +240,7 @@ class PortfolioOrchestrator {
     /**
      * Validações específicas do Orchestrator (Coordenação)
      */
-    private boolean isPortfolioEligibleForExecution(Portfolio portfolio, StrategyInput strategyInput) {
+    private boolean isPortfolioEligibleForExecution(Portfolio portfolio, StrategyInputDto strategyInput) {
         
         // 1. CIRCUIT BREAKER POR PORTFOLIO
         // if (circuitBreakerService.isPortfolioBlocked(portfolio.getId())) {
@@ -276,7 +276,7 @@ class PortfolioOrchestrator {
         return true;
     }
 
-    private void handleExecutionCompletion(Portfolio portfolio, StrategyInput strategyInput, Throwable throwable) {
+    private void handleExecutionCompletion(Portfolio portfolio, StrategyInputDto strategyInput, Throwable throwable) {
         if (throwable != null) {
             // Execução falhou
             log.error("Async strategy execution failed for portfolio: {} on currency: {} - Error: {}",

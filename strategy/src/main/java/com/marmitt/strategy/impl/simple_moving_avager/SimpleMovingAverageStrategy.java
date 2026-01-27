@@ -1,16 +1,19 @@
 package com.marmitt.strategy.impl.simple_moving_avager;
 
 import com.marmitt.core.ports.outbound.strategy.TradingStrategy;
-import com.marmitt.core.domain.strategy.StrategyInput;
-import com.marmitt.core.domain.strategy.StrategyOutput;
-import com.marmitt.core.domain.strategy.PortfolioContext;
-import com.marmitt.core.domain.Symbol;
-import com.marmitt.core.domain.portfolio.Position;
+import com.marmitt.core.dto.strategy.StrategyInputDto;
+import com.marmitt.core.dto.strategy.StrategyOutputDto;
+import com.marmitt.core.dto.strategy.PortfolioContextDto;
+
+import com.marmitt.core.dto.strategy.OpenBuyEntryDto;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 public class SimpleMovingAverageStrategy implements TradingStrategy {
@@ -38,13 +41,13 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
     }
 
     @Override
-    public StrategyOutput executeStrategy(StrategyInput inputData, PortfolioContext portfolioContext) {
+    public StrategyOutputDto executeStrategy(StrategyInputDto inputData, PortfolioContextDto portfolioContext) {
         if (!enabled) {
-            return StrategyOutput.hold(STRATEGY_NAME, "Strategy is disabled");
+            return StrategyOutputDto.hold(STRATEGY_NAME, "Strategy is disabled");
         }
         
         if (inputData.currentPrice() == null) {
-            return StrategyOutput.hold(STRATEGY_NAME, "No current price available");
+            return StrategyOutputDto.hold(STRATEGY_NAME, "No current price available");
         }
         
         // Adiciona o preço atual ao histórico
@@ -57,7 +60,7 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
         
         // Precisa de pelo menos o período completo para calcular
         if (priceHistory.size() < config.movingAveragePeriod()) {
-            return StrategyOutput.hold(STRATEGY_NAME, 
+            return StrategyOutputDto.hold(STRATEGY_NAME,
                 String.format("Insufficient data: %d/%d prices", priceHistory.size(), config.movingAveragePeriod()));
         }
         
@@ -79,7 +82,13 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
         String reasoning = String.format("Price: %s, MA(%d): %s, Deviation: %.6f%%",
                                         currentPrice, config.movingAveragePeriod(), movingAverage,
                                         priceDeviation.multiply(BigDecimal.valueOf(100)).doubleValue());
-        
+
+        // Verificar timeout de posições abertas - força venda para liberar capital
+        Optional<StrategyOutputDto> timeoutSell = checkPositionTimeout(portfolioContext, reasoning);
+        if (timeoutSell.isPresent()) {
+            return timeoutSell.get();
+        }
+
         // Decisão baseada no desvio da média móvel
         if (priceDeviation.compareTo(config.sellThreshold()) >= 0) {
             // Preço muito acima da média - VENDER
@@ -88,14 +97,14 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
             // Se não tem posição para vender, HOLD
             if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
                 System.out.println("[SMA-STRATEGY] --- HOLD (SELL signal but no position to sell)");
-                return StrategyOutput.hold(STRATEGY_NAME, reasoning + " - Price above MA but no position to sell");
+                return StrategyOutputDto.hold(STRATEGY_NAME, reasoning + " - Price above MA but no position to sell");
             }
 
             BigDecimal confidence = calculateConfidence(priceDeviation.abs(), config.sellThreshold().abs());
             System.out.println(String.format("[SMA-STRATEGY] >>> SELL SIGNAL! Quantity: %s, Confidence: %s, HasPosition: %s",
                 quantity, confidence, portfolioContext.hasPosition()));
 
-            return StrategyOutput.sell(STRATEGY_NAME, confidence, quantity,
+            return StrategyOutputDto.sell(STRATEGY_NAME, confidence, quantity,
                                            reasoning + " - Price above MA threshold");
 
         } else if (priceDeviation.compareTo(config.buyThreshold()) <= 0) {
@@ -105,20 +114,20 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
             // Se não tem saldo para comprar, HOLD
             if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
                 System.out.println("[SMA-STRATEGY] --- HOLD (BUY signal but insufficient balance)");
-                return StrategyOutput.hold(STRATEGY_NAME, reasoning + " - Price below MA but insufficient balance");
+                return StrategyOutputDto.hold(STRATEGY_NAME, reasoning + " - Price below MA but insufficient balance");
             }
 
             BigDecimal confidence = calculateConfidence(priceDeviation.abs(), config.buyThreshold().abs());
             System.out.println(String.format("[SMA-STRATEGY] >>> BUY SIGNAL! Quantity: %s, Confidence: %s, AvailableBalance: %s",
                 quantity, confidence, portfolioContext.availableBalance().amount()));
 
-            return StrategyOutput.buy(STRATEGY_NAME, confidence, quantity,
+            return StrategyOutputDto.buy(STRATEGY_NAME, confidence, quantity,
                                           reasoning + " - Price below MA threshold");
 
         } else {
             // Preço próximo da média - HOLD
             System.out.println("[SMA-STRATEGY] --- HOLD (price within threshold range)");
-            return StrategyOutput.hold(STRATEGY_NAME, reasoning + " - Price near MA");
+            return StrategyOutputDto.hold(STRATEGY_NAME, reasoning + " - Price near MA");
         }
     }
     
@@ -153,9 +162,46 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
     }
     
     /**
+     * Verifica se há posições abertas além do timeout configurado.
+     * Se houver, força venda de toda a posição para liberar capital.
+     */
+    private Optional<StrategyOutputDto> checkPositionTimeout(PortfolioContextDto portfolioContext, String reasoning) {
+        if (config.positionTimeoutMinutes() == 0) {
+            return Optional.empty();
+        }
+
+        if (!portfolioContext.hasOpenTransactions() || !portfolioContext.hasPosition()) {
+            return Optional.empty();
+        }
+
+        Optional<OpenBuyEntryDto> oldest = portfolioContext.getOldestOpenTransaction();
+        if (oldest.isEmpty()) {
+            return Optional.empty();
+        }
+
+        Duration elapsed = Duration.between(oldest.get().executedAt(), Instant.now());
+        long timeoutMinutes = config.positionTimeoutMinutes();
+
+        if (elapsed.toMinutes() < timeoutMinutes) {
+            return Optional.empty();
+        }
+
+        // Timeout atingido - vender toda a posição
+        BigDecimal fullQuantity = portfolioContext.position().getQuantity().amount();
+
+        System.out.println(String.format(
+            "[SMA-STRATEGY] >>> TIMEOUT SELL! Position open for %d min (limit: %d min). Selling full quantity: %s",
+            elapsed.toMinutes(), timeoutMinutes, fullQuantity));
+
+        return Optional.of(StrategyOutputDto.sell(STRATEGY_NAME, BigDecimal.ONE, fullQuantity,
+                reasoning + String.format(" - Position timeout: %d min > %d min limit",
+                        elapsed.toMinutes(), timeoutMinutes)));
+    }
+
+    /**
      * Calcula quantity para compra baseada no portfolio context e allocation da strategy
      */
-    private BigDecimal calculateBuyQuantity(BigDecimal currentPrice, PortfolioContext portfolioContext) {
+    private BigDecimal calculateBuyQuantity(BigDecimal currentPrice, PortfolioContextDto portfolioContext) {
         // Verificar se há saldo mínimo
         if (!portfolioContext.hasMinimumBalance()) {
             return BigDecimal.ZERO;
@@ -181,7 +227,7 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
     /**
      * Calcula quantity para venda baseada no portfolio context e allocation da strategy
      */
-    private BigDecimal calculateSellQuantity(PortfolioContext portfolioContext) {
+    private BigDecimal calculateSellQuantity(PortfolioContextDto portfolioContext) {
         // Verificar se existe posição
         if (!portfolioContext.hasPosition()) {
             return BigDecimal.ZERO;

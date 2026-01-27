@@ -11,17 +11,20 @@ public class Balance {
     private Asset available;
     private Asset invested;
     private final Asset initialCapital;
+    private BigDecimal realizedPnL;
     
     public Balance(Asset initialCapital) {
         this.initialCapital = initialCapital;
         this.available = initialCapital;
         this.invested = Asset.fiat(BigDecimal.ZERO, initialCapital.currency());
+        this.realizedPnL = BigDecimal.ZERO;
     }
     
-    private Balance(Asset available, Asset invested, Asset initialCapital) {
+    private Balance(Asset available, Asset invested, Asset initialCapital, BigDecimal realizedPnL) {
         this.available = available;
         this.invested = invested;
         this.initialCapital = initialCapital;
+        this.realizedPnL = realizedPnL;
     }
 
     public static Balance withInitialCapital(Asset initialCapital) {
@@ -83,6 +86,7 @@ public class Balance {
 
         this.invested = invested.subtract(cost);
         this.available = available.add(saleValue);
+        this.realizedPnL = this.realizedPnL.add(saleValue.amount().subtract(cost.amount()));
     }
     
     public boolean hasAvailableAmount(Asset amount) {

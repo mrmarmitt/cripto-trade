@@ -6,14 +6,18 @@ public record SimpleMovingAverageConfig(
         int movingAveragePeriod,
         BigDecimal buyThreshold,
         BigDecimal sellThreshold,
-        BigDecimal allocationPercentage     // % do capital/posição a ser usado (0.0 - 1.0)
+        BigDecimal allocationPercentage,    // % do capital/posição a ser usado (0.0 - 1.0)
+        long positionTimeoutMinutes         // Tempo máximo (minutos) para manter posição aberta (0 = desabilitado)
 ) {
-    
+
     public SimpleMovingAverageConfig {
-        if (allocationPercentage == null || 
-            allocationPercentage.compareTo(BigDecimal.ZERO) <= 0 || 
+        if (allocationPercentage == null ||
+            allocationPercentage.compareTo(BigDecimal.ZERO) <= 0 ||
             allocationPercentage.compareTo(BigDecimal.ONE) > 0) {
             throw new IllegalArgumentException("Allocation percentage must be between 0.0 and 1.0");
+        }
+        if (positionTimeoutMinutes < 0) {
+            throw new IllegalArgumentException("Position timeout must be >= 0");
         }
     }
     
@@ -29,7 +33,8 @@ public record SimpleMovingAverageConfig(
                 3,                                      // 3 períodos (mais responsivo possível)
                 BigDecimal.valueOf(-0.000001),          // -0.0001% para comprar (~$0.10 para BTC)
                 BigDecimal.valueOf(0.000001),           // +0.0001% para vender (~$0.10 para BTC)
-                BigDecimal.valueOf(0.1)                 // 10% do capital por operação
+                BigDecimal.valueOf(0.1),                // 10% do capital por operação
+                1                                       // 5 minutos de timeout para testes
         );
     }
 
@@ -41,7 +46,8 @@ public record SimpleMovingAverageConfig(
                 20,                                     // 20 períodos para média móvel
                 BigDecimal.valueOf(-0.02),              // -2% para comprar
                 BigDecimal.valueOf(0.02),               // +2% para vender
-                BigDecimal.valueOf(0.1)                 // 10% do capital por operação
+                BigDecimal.valueOf(0.1),                // 10% do capital por operação
+                60                                      // 60 minutos de timeout
         );
     }
     
@@ -54,6 +60,7 @@ public record SimpleMovingAverageConfig(
         private BigDecimal buyThreshold = BigDecimal.valueOf(-0.02);
         private BigDecimal sellThreshold = BigDecimal.valueOf(0.02);
         private BigDecimal allocationPercentage = BigDecimal.valueOf(0.1);
+        private long positionTimeoutMinutes = 60;
         
         public Builder movingAveragePeriod(int movingAveragePeriod) {
             this.movingAveragePeriod = movingAveragePeriod;
@@ -74,10 +81,16 @@ public record SimpleMovingAverageConfig(
             this.allocationPercentage = BigDecimal.valueOf(allocationPercentage);
             return this;
         }
-        
+
+        public Builder positionTimeoutMinutes(long positionTimeoutMinutes) {
+            this.positionTimeoutMinutes = positionTimeoutMinutes;
+            return this;
+        }
+
         public SimpleMovingAverageConfig build() {
-            return new SimpleMovingAverageConfig(movingAveragePeriod, buyThreshold, 
-                                               sellThreshold, allocationPercentage);
+            return new SimpleMovingAverageConfig(movingAveragePeriod, buyThreshold,
+                                               sellThreshold, allocationPercentage,
+                                               positionTimeoutMinutes);
         }
     }
 }

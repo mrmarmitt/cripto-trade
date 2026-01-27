@@ -1,0 +1,1 @@
+2026-01-27 19:18:51.852 [OkHttp https://stream.binance.com:9443/...] INFO  c.m.c.a.u.h.c.HandleConnectionClosingUseCase - Processing connection closing event for exchange: BINANCE - Code: 1008, Reason: Pong timeout

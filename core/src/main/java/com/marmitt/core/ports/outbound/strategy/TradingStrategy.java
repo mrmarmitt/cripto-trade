@@ -1,8 +1,8 @@
 package com.marmitt.core.ports.outbound.strategy;
 
-import com.marmitt.core.domain.strategy.StrategyInput;
-import com.marmitt.core.domain.strategy.StrategyOutput;
-import com.marmitt.core.domain.strategy.PortfolioContext;
+import com.marmitt.core.dto.strategy.StrategyInputDto;
+import com.marmitt.core.dto.strategy.StrategyOutputDto;
+import com.marmitt.core.dto.strategy.PortfolioContextDto;
 
 import java.util.UUID;
 
@@ -17,7 +17,7 @@ public interface TradingStrategy {
      * @param portfolioContext Contexto do portfolio (capital, posições, limites)
      * @return Decisão da estratégia com quantity absoluta calculada
      */
-    StrategyOutput executeStrategy(StrategyInput inputData, PortfolioContext portfolioContext);
+    StrategyOutputDto executeStrategy(StrategyInputDto inputData, PortfolioContextDto portfolioContext);
 
     String getStrategyName();
 

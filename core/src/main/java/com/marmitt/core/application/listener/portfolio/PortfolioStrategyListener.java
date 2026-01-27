@@ -1,7 +1,7 @@
 package com.marmitt.core.application.listener.portfolio;
 
 import com.marmitt.core.dto.websocket.data.MarketDataDto;
-import com.marmitt.core.domain.strategy.StrategyInput;
+import com.marmitt.core.dto.strategy.StrategyInputDto;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.ports.outbound.listener.PriceUpdateListener;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
@@ -59,7 +59,7 @@ public class PortfolioStrategyListener implements PriceUpdateListener {
         log.debug("Processing market data from {} for symbol {} - {} eligible portfolio(s) found",
                 exchangeName, symbol, eligiblePortfolios.size());
 
-        StrategyInput strategyInput = StrategyInput.builder()
+        StrategyInputDto strategyInput = StrategyInputDto.builder()
                 .symbol(marketData.symbol())
                 .currentPrice(marketData.price())
                 .volume(marketData.volume())

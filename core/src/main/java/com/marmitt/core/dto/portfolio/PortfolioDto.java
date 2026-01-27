@@ -31,6 +31,7 @@ public record PortfolioDto(
             String totalCapital,
             String availableBalance,
             String allocatedBalance,
+            String realizedPnL,
             String currency
     ) {}
 
@@ -52,6 +53,7 @@ public record PortfolioDto(
                 .totalCapital(portfolio.getBalance().getTotal().amount().toPlainString())
                 .availableBalance(portfolio.getBalance().getAvailable().amount().toPlainString())
                 .allocatedBalance(portfolio.getBalance().getAllocated().amount().toPlainString())
+                .realizedPnL(portfolio.getBalance().getRealizedPnL().toPlainString())
                 .currency(portfolio.getBalance().getTotal().currency())
                 .build();
 

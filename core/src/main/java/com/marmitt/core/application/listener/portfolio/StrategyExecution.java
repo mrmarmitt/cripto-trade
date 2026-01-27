@@ -4,9 +4,9 @@ import com.marmitt.core.domain.portfolio.Asset;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.portfolio.Transaction;
 import com.marmitt.core.domain.portfolio.TradingDecision;
-import com.marmitt.core.domain.strategy.PortfolioContext;
-import com.marmitt.core.domain.strategy.StrategyInput;
-import com.marmitt.core.domain.strategy.StrategyOutput;
+import com.marmitt.core.dto.strategy.PortfolioContextDto;
+import com.marmitt.core.dto.strategy.StrategyInputDto;
+import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.enums.OrderSide;
 import com.marmitt.core.enums.OrderType;
@@ -44,7 +44,7 @@ class StrategyExecution {
         this.exchangeAdapterRepository = exchangeAdapterRepository;
     }
 
-    public void executeStrategy(Portfolio portfolio, StrategyInput strategyInput) {
+    public void executeStrategy(Portfolio portfolio, StrategyInputDto strategyInput) {
 
         log.debug("Executing strategy for portfolio: {} with input: {}",
                 portfolio.getId(), strategyInput);
@@ -62,10 +62,10 @@ class StrategyExecution {
             TradingStrategy strategy = strategyOptional.get();
             
             // Criar contexto do portfolio para a strategy
-            PortfolioContext portfolioContext = portfolio.createContext();
+            PortfolioContextDto portfolioContext = portfolio.createContext();
             
             // Strategy executa com contexto completo e retorna quantity absoluta
-            StrategyOutput output = strategy.executeStrategy(strategyInput, portfolioContext);
+            StrategyOutputDto output = strategy.executeStrategy(strategyInput, portfolioContext);
 
             if (output == null) {
                 log.warn("Strategy returned null output for portfolio: {}", portfolio.getId());
@@ -92,7 +92,7 @@ class StrategyExecution {
     /**
      * Processa resultado da estratégia e decide próximas ações
      */
-    private void processStrategyOutput(Portfolio portfolio, StrategyOutput output, StrategyInput input) {
+    private void processStrategyOutput(Portfolio portfolio, StrategyOutputDto output, StrategyInputDto input) {
 
         log.debug("Processing strategy output - Portfolio: {}, Action: {}, Quantity: {}",
                 portfolio.getId(), output.decision(), output.quantity());
@@ -281,7 +281,7 @@ class StrategyExecution {
         // 4. Fallback para exchange alternativa se disponível
     }
 
-    private void updatePerformanceMetrics(Portfolio portfolio, StrategyOutput output) {
+    private void updatePerformanceMetrics(Portfolio portfolio, StrategyOutputDto output) {
 
         log.debug("Updating performance metrics for portfolio: {} after action: {}",
                 portfolio.getId(), output.decision());
@@ -312,7 +312,7 @@ class StrategyExecution {
     /**
      * Trata erros durante execução da estratégia
      */
-    private void handleExecutionError(Portfolio portfolio, StrategyInput input, Exception error) {
+    private void handleExecutionError(Portfolio portfolio, StrategyInputDto input, Exception error) {
 
         // 1. CLASSIFICAR TIPO DE ERRO
         // - Erro de conexão com exchange

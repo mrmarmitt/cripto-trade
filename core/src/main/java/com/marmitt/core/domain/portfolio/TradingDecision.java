@@ -1,8 +1,8 @@
 package com.marmitt.core.domain.portfolio;
 
 import com.marmitt.core.domain.Symbol;
-import com.marmitt.core.domain.strategy.StrategyInput;
-import com.marmitt.core.domain.strategy.StrategyOutput;
+import com.marmitt.core.dto.strategy.StrategyInputDto;
+import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.enums.AssetType;
 import com.marmitt.core.enums.TradingAction;
 import lombok.Builder;
@@ -87,7 +87,7 @@ public record TradingDecision(
      * Cria TradingDecision a partir do StrategyOutput
      * Strategy já calculou quantity absoluta considerando portfolio context
      */
-    public static TradingDecision fromStrategy(StrategyInput input, StrategyOutput output) {
+    public static TradingDecision fromStrategy(StrategyInputDto input, StrategyOutputDto output) {
         Objects.requireNonNull(input, "StrategyInput cannot be null");
         Objects.requireNonNull(output, "StrategyOutput cannot be null");
         

@@ -17,10 +17,6 @@ public record Asset(
         Objects.requireNonNull(currency, "Currency cannot be null");
         Objects.requireNonNull(type, "AssetType cannot be null");
         
-        if (amount.compareTo(BigDecimal.ZERO) < 0) {
-            throw new IllegalArgumentException("Amount cannot be negative");
-        }
-        
         if (currency.isBlank()) {
             throw new IllegalArgumentException("Currency cannot be blank");
         }

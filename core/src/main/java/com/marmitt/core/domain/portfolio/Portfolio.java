@@ -1,7 +1,8 @@
 package com.marmitt.core.domain.portfolio;
 
 import com.marmitt.core.domain.Symbol;
-import com.marmitt.core.domain.strategy.PortfolioContext;
+import com.marmitt.core.dto.strategy.OpenBuyEntryDto;
+import com.marmitt.core.dto.strategy.PortfolioContextDto;
 import com.marmitt.core.enums.TransactionStatus;
 import lombok.Getter;
 
@@ -202,7 +203,7 @@ public class Portfolio {
             return false;
         }
 
-        if (!hasMinimumCapitalForOperation()) {
+        if (!hasMinimumCapitalForOperation() && !hasPosition()) {
             return false;
         }
 
@@ -231,15 +232,19 @@ public class Portfolio {
      * Cria PortfolioContext para ser passado para a Strategy
      * Contém todos os dados necessários para que a Strategy possa calcular quantities
      */
-    public PortfolioContext createContext() {
-        return PortfolioContext.builder()
+    public PortfolioContextDto createContext() {
+        return PortfolioContextDto.builder()
             .portfolioId(this.id)
             .portfolioName(this.name)
             .symbol(this.symbol)
             .totalCapital(this.balance.getTotal())
             .availableBalance(this.balance.getAvailable())
             .allocatedBalance(this.balance.getAllocated())
-            .position(this.position) // Single position
+            .position(this.position)
+            .openTransactions(getOpenBuyTransactions().stream()
+                .map(OpenBuyEntryDto::fromTransaction)
+                .toList())
+            .realizedPnL(this.balance.getRealizedPnL())
             .minimumOperationAmount(MINIMUM_OPERATION_AMOUNT)
             .maxExposurePerSymbol(DEFAULT_MAX_EXPOSURE_PERCENTAGE)
             .build();
@@ -430,6 +435,16 @@ public class Portfolio {
 
         // Update balance - remove custo do invested, adiciona valor de venda ao available
         balance.realizeSale(cost, saleValueMinusFee);
+    }
+
+    /**
+     * Lista compras executadas que representam posições abertas
+     */
+    public List<Transaction> getOpenBuyTransactions() {
+        return transactions.stream()
+                .filter(Transaction::isBuy)
+                .filter(Transaction::isExecuted)
+                .toList();
     }
 
     /**
