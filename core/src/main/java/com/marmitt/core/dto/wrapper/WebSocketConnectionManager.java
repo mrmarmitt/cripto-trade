@@ -100,7 +100,9 @@ public class WebSocketConnectionManager {
             case DISCONNECTING -> Set.of(ConnectionStatus.DISCONNECTED, ConnectionStatus.ERROR).contains(to);
             case DISCONNECTED -> Set.of(ConnectionStatus.CONNECTING, ConnectionStatus.IDLE, ConnectionStatus.ERROR).contains(to);
             case RECONNECTING -> Set.of(ConnectionStatus.CONNECTED, ConnectionStatus.ERROR, ConnectionStatus.DISCONNECTED).contains(to);
-            case ERROR, CLOSED -> true;
+            // ERROR/CLOSED podem ir para RECONNECTING (automático) ou IDLE (reset manual)
+            case ERROR -> Set.of(ConnectionStatus.RECONNECTING, ConnectionStatus.IDLE, ConnectionStatus.CONNECTING).contains(to);
+            case CLOSED -> Set.of(ConnectionStatus.RECONNECTING, ConnectionStatus.IDLE, ConnectionStatus.CONNECTING).contains(to);
         };
     }
 

@@ -34,6 +34,16 @@ public record ConnectionResultDto(
         );
     }
 
+    public static ConnectionResultDto reconnecting(int attempt, int maxAttempts) {
+        return new ConnectionResultDto(
+                ConnectionStatus.RECONNECTING,
+                String.format("Reconnecting... (attempt %d/%d)", attempt, maxAttempts),
+                Instant.now(),
+                UUID.randomUUID(),
+                Map.of("reconnectAttempt", attempt, "maxAttempts", maxAttempts)
+        );
+    }
+
     public static ConnectionResultDto connected(String message, UUID connectionId) {
         return new ConnectionResultDto(
                 ConnectionStatus.CONNECTED,

@@ -5,6 +5,7 @@ import com.marmitt.core.dto.websocket.mapper.ConnectionResultMapper;
 import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
+import com.marmitt.core.enums.ConnectionStatus;
 import com.marmitt.core.ports.inbound.websocket.ConnectWebSocketPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
@@ -30,15 +31,25 @@ public class ConnectWebSocketUseCase implements ConnectWebSocketPort {
 
         Optional<ExchangeAdapterPort> adapterOptional = adapterRepository.findByName(exchangeName);
         if (adapterOptional.isEmpty()) {
-            return ConnectionResultMapper.toResponse(ConnectionResultDto.failure(this.getClass().getSimpleName(), "Exchange does not exist"), exchangeName);
+            return ConnectionResultMapper.toResponse(
+                    ConnectionResultDto.failure(this.getClass().getSimpleName(), "Exchange does not exist"),
+                    exchangeName);
         }
 
-        manager.resetConnection();
-        manager.setConnectionResult(ConnectionResultDto.connecting());
+        ConnectionStatus currentStatus = manager.getConnectionResult().status();
+        boolean isReconnect = currentStatus == ConnectionStatus.ERROR
+                           || currentStatus == ConnectionStatus.CLOSED;
+
+        if (isReconnect) {
+            manager.setConnectionResult(ConnectionResultDto.reconnecting(1, 1));
+        } else {
+            manager.setConnectionResult(ConnectionResultDto.connecting());
+        }
+
         manager.addRequestToHistory(parameters);
 
         ExchangeAdapterPort adapter = adapterOptional.get();
-        String connectionUrl = adapterOptional.get().getUrlBuilder().buildConnectionUrl(parameters);
+        String connectionUrl = adapter.getUrlBuilder().buildConnectionUrl(parameters);
         adapter.getWebSocketPort().connect(connectionUrl, exchangeName, manager.getConnectionId());
 
         return ConnectionResultMapper.toResponse(manager.getConnectionResult(), exchangeName);

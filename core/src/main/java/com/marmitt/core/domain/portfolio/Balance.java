@@ -80,13 +80,13 @@ public class Balance {
             throw new IllegalArgumentException("Sale value must be positive");
         }
 
-        if (cost.amount().compareTo(invested.amount()) > 0) {
-            throw new IllegalArgumentException("Cost cannot exceed invested amount");
-        }
+        // Se cost exceder invested (devido a arredondamentos ou múltiplas compras com fees),
+        // usar o mínimo para evitar invested negativo
+        Asset effectiveCost = cost.amount().compareTo(invested.amount()) > 0 ? invested : cost;
 
-        this.invested = invested.subtract(cost);
+        this.invested = invested.subtract(effectiveCost);
         this.available = available.add(saleValue);
-        this.realizedPnL = this.realizedPnL.add(saleValue.amount().subtract(cost.amount()));
+        this.realizedPnL = this.realizedPnL.add(saleValue.amount().subtract(effectiveCost.amount()));
     }
     
     public boolean hasAvailableAmount(Asset amount) {
