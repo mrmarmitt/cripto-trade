@@ -108,6 +108,6 @@ public class ConnectionStatsMapper {
         long uptimeMinutes = stats.getTotalUptime().toMinutes();
         long expectedMessages = expectedMessagesPerMinute * uptimeMinutes;
 
-        return expectedMessages - stats.getTotalMessagesReceived();
+        return stats.getTotalMessagesReceived() - expectedMessages;
     }
 }

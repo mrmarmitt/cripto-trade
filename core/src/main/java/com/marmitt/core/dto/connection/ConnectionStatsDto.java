@@ -38,6 +38,8 @@ public class ConnectionStatsDto {
     
     // Métricas de timing
     private Instant connectionStartTime;
+    private Instant currentSessionStart;      // Início da sessão atual
+    private Duration accumulatedUptime;       // Tempo conectado acumulado de sessões anteriores
     private Instant disconnectionStartTime;
     private final List<Instant> messageTimestamps;
     @Getter
@@ -64,6 +66,8 @@ public class ConnectionStatsDto {
         this.lastDisconnectedAt = null;
         this.lastMessageAt = null;
         this.connectionStartTime = null;
+        this.currentSessionStart = null;
+        this.accumulatedUptime = Duration.ZERO;
         this.disconnectionStartTime = null;
         this.messageTimestamps = new ArrayList<>();
         this.lastSilenceStart = null;
@@ -88,7 +92,8 @@ public class ConnectionStatsDto {
         this.totalConnections++;
         Instant now = Instant.now();
         this.lastConnectedAt = now;
-        
+        this.currentSessionStart = now;
+
         if (this.connectionStartTime == null) {
             this.connectionStartTime = now;
         }
@@ -99,6 +104,13 @@ public class ConnectionStatsDto {
         Instant now = Instant.now();
         this.lastDisconnectedAt = now;
 
+        // Acumula o tempo da sessão atual
+        if (this.currentSessionStart != null) {
+            Duration sessionDuration = Duration.between(currentSessionStart, now);
+            this.accumulatedUptime = this.accumulatedUptime.plus(sessionDuration);
+            this.currentSessionStart = null;
+        }
+
         if (this.disconnectionStartTime == null) {
             this.disconnectionStartTime = now;
         }
@@ -108,7 +120,8 @@ public class ConnectionStatsDto {
         this.totalReconnections++;
         Instant now = Instant.now();
         this.lastConnectedAt = now;
-        
+        this.currentSessionStart = now;
+
         if (this.connectionStartTime == null) {
             this.connectionStartTime = now;
         }
@@ -160,10 +173,19 @@ public class ConnectionStatsDto {
     }
 
     public Duration getTotalUptime() {
-        if (connectionStartTime == null) {
+        // Se ainda não teve nenhuma conexão
+        if (accumulatedUptime.isZero() && currentSessionStart == null) {
             return Duration.ZERO;
         }
-        return Duration.between(connectionStartTime, Instant.now());
+
+        // Se desconectado, retorna apenas o acumulado
+        if (currentSessionStart == null) {
+            return accumulatedUptime;
+        }
+
+        // Se conectado, retorna acumulado + sessão atual
+        Duration currentSession = Duration.between(currentSessionStart, Instant.now());
+        return accumulatedUptime.plus(currentSession);
     }
 
     public double getErrorRate() {
@@ -285,15 +307,20 @@ public class ConnectionStatsDto {
     }
     
     public String getStabilityTrend() {
+        // Se desconectado, não há tendência de fluxo
+        if (currentSessionStart == null) {
+            return "DISCONNECTED";
+        }
+
         if (messageCountHistory.size() < 3) {
             return "INSUFFICIENT_DATA";
         }
-        
+
         List<Long> recent = messageCountHistory.subList(Math.max(0, messageCountHistory.size() - 3), messageCountHistory.size());
-        
+
         boolean increasing = recent.get(1) > recent.get(0) && recent.get(2) > recent.get(1);
         boolean decreasing = recent.get(1) < recent.get(0) && recent.get(2) < recent.get(1);
-        
+
         if (increasing) return "IMPROVING";
         if (decreasing) return "DEGRADING";
         return "STABLE";

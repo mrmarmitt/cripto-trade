@@ -50,7 +50,7 @@ public class InMemoryPortfolioRepository implements PortfolioRepositoryPort {
         TradingStrategy strategy = strategyOpt.get();
 
         // Criar portfolio de exemplo
-        UUID portfolioId = UUID.randomUUID();
+        UUID portfolioId = UUID.fromString("144d34e3-1a73-4f29-bd24-3871edface81");
         Portfolio samplePortfolio = new Portfolio(
                 portfolioId,
                 "Sample-BTC-Portfolio",
