@@ -10,6 +10,7 @@ import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.springframework.data.annotation.Id;
 import org.springframework.data.annotation.Version;
+import org.springframework.data.relational.core.mapping.Column;
 import org.springframework.data.relational.core.mapping.Table;
 
 import java.math.BigDecimal;
@@ -36,31 +37,37 @@ public class TransactionEntity {
     // Quantity
     private BigDecimal quantityAmount;
     private String quantityCurrency;
+    @Column("quantity_type")
     private AssetType quantityAssetType;
 
     // Executed Quantity (nullable)
     private BigDecimal executedQuantityAmount;
     private String executedQuantityCurrency;
+    @Column("executed_quantity_type")
     private AssetType executedQuantityAssetType;
 
     // Price
     private BigDecimal priceAmount;
     private String priceCurrency;
+    @Column("price_type")
     private AssetType priceAssetType;
 
     // Executed Price (nullable)
     private BigDecimal executedPriceAmount;
     private String executedPriceCurrency;
+    @Column("executed_price_type")
     private AssetType executedPriceAssetType;
 
     // Total
     private BigDecimal totalAmount;
     private String totalCurrency;
+    @Column("total_type")
     private AssetType totalAssetType;
 
     // Fee
     private BigDecimal feeAmount;
     private String feeCurrency;
+    @Column("fee_type")
     private AssetType feeAssetType;
 
     // Timestamps

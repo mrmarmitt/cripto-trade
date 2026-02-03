@@ -117,8 +117,8 @@ public class JdbcPortfolioRepositoryAdapter implements PortfolioRepositoryPort {
     @Override
     public void saveTransaction(UUID portfolioId, Transaction transaction) {
         TransactionEntity txEntity = PortfolioEntityMapper.toTransactionEntity(portfolioId, transaction);
-        transactionRepository.findById(transaction.id())
-                .ifPresent(existing -> txEntity.setVersion(existing.getVersion()));
+        transactionRepository.findVersionById(transaction.id())
+                .ifPresent(txEntity::setVersion);
         transactionRepository.save(txEntity);
 
         log.debug("Transaction saved - PortfolioId: {}, TxId: {}, Status: {}",
@@ -150,8 +150,8 @@ public class JdbcPortfolioRepositoryAdapter implements PortfolioRepositoryPort {
 
         // Save transaction
         TransactionEntity txEntity = PortfolioEntityMapper.toTransactionEntity(portfolioId, transaction);
-        transactionRepository.findById(transaction.id())
-                .ifPresent(existing -> txEntity.setVersion(existing.getVersion()));
+        transactionRepository.findVersionById(transaction.id())
+                .ifPresent(txEntity::setVersion);
         transactionRepository.save(txEntity);
 
         log.debug("Trade execution saved - PortfolioId: {}, TxId: {}, Status: {}",
