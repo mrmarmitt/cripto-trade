@@ -122,10 +122,10 @@ class StrategyExecution {
         }
 
         try {
-            portfolioRepository.save(portfolio);
-            log.debug("Portfolio {} saved after strategy execution", portfolio.getId());
+            portfolioRepository.saveBalance(portfolio.getId(), portfolio.getBalance(), portfolio.getLastExecutionTime());
+            log.debug("Portfolio {} balance saved after strategy execution", portfolio.getId());
         } catch (Exception e) {
-            log.error("Failed to save portfolio {} after strategy execution: {}",
+            log.error("Failed to save portfolio {} balance after strategy execution: {}",
                     portfolio.getId(), e.getMessage(), e);
         }
     }
@@ -188,7 +188,7 @@ class StrategyExecution {
                     .build();
 
             portfolio.addPendingTransaction(pendingTransaction);
-            portfolioRepository.save(portfolio);
+            portfolioRepository.saveTransaction(portfolio.getId(), pendingTransaction);
 
             log.debug("Pending transaction registered - ClientOrderId: {}, Type: {}, Quantity: {}",
                     clientOrderId, transactionType, decision.quantity());
@@ -204,7 +204,9 @@ class StrategyExecution {
 
             // 7. Atualizar status para SUBMITTED após envio bem-sucedido
             portfolio.updateTransactionStatus(clientOrderId, TransactionStatus.SUBMITTED);
-            portfolioRepository.save(portfolio);
+            Transaction submittedTransaction = portfolio.findTransactionByClientOrderId(clientOrderId)
+                    .orElseThrow(() -> new IllegalStateException("Transaction not found after status update: " + clientOrderId));
+            portfolioRepository.saveTransaction(portfolio.getId(), submittedTransaction);
 
             log.info("Order sent via WebSocket - Portfolio: {}, Exchange: {}, ClientOrderId: {}, Action: {}, " +
                     "Symbol: {}, Quantity: {}, Price: {} - Awaiting async response", 

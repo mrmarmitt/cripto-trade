@@ -1,8 +1,11 @@
 package com.marmitt.core.ports.outbound.repository;
 
+import com.marmitt.core.domain.portfolio.Balance;
 import com.marmitt.core.domain.portfolio.Portfolio;
-import com.marmitt.core.ports.outbound.strategy.TradingStrategy;
+import com.marmitt.core.domain.portfolio.Position;
+import com.marmitt.core.domain.portfolio.Transaction;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -13,29 +16,17 @@ public interface PortfolioRepositoryPort {
 
     Optional<Portfolio> findByName(String portfolioName);
 
-    /**
-     * Busca portfolios por símbolo (model 1:1:1 permite múltiplos portfolios para mesmo símbolo,
-     * mas cada portfolio gerencia apenas um símbolo)
-     */
     List<Portfolio> findBySymbol(String symbol);
     
-    /**
-     * Busca portfolio específico por símbolo e estratégia (deve retornar no máximo 1)
-     */
     Optional<Portfolio> findBySymbolAndStrategy(String symbol, UUID strategyId);
 
-    /**
-     * Lista todos os portfolios registrados
-     */
     List<Portfolio> findAll();
 
     void registerPortfolio(Portfolio portfolio);
-    
-    /**
-     * Salva ou atualiza um portfolio
-     * 
-     * @param portfolio Portfolio a ser salvo
-     * @return O portfolio salvo
-     */
-    Portfolio save(Portfolio portfolio);
+
+    void saveBalance(UUID portfolioId, Balance balance, Instant lastExecutionTime);
+
+    void saveTransaction(UUID portfolioId, Transaction transaction);
+
+    void saveTradeExecution(UUID portfolioId, Balance balance, Instant lastExecutionTime, Position position, Transaction transaction);
 }

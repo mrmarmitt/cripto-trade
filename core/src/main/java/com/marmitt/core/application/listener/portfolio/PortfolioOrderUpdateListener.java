@@ -2,6 +2,7 @@ package com.marmitt.core.application.listener.portfolio;
 
 import com.marmitt.core.domain.portfolio.Asset;
 import com.marmitt.core.domain.portfolio.Portfolio;
+import com.marmitt.core.domain.portfolio.Transaction;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
@@ -125,7 +126,17 @@ public class PortfolioOrderUpdateListener implements OrderUpdateListener {
                     Instant.now()
             );
 
-            portfolioRepository.save(portfolio);
+            Transaction executedTransaction = portfolio.findTransactionByClientOrderId(orderData.clientOrderId())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Transaction not found after execution update: " + orderData.clientOrderId()));
+
+            portfolioRepository.saveTradeExecution(
+                    portfolio.getId(),
+                    portfolio.getBalance(),
+                    portfolio.getLastExecutionTime(),
+                    portfolio.getPosition(),
+                    executedTransaction
+            );
 
             log.info("Portfolio updated after FILLED order - Portfolio: {}, Available: {}, Position: {}",
                     portfolio.getName(),
@@ -147,7 +158,10 @@ public class PortfolioOrderUpdateListener implements OrderUpdateListener {
 
         try {
             portfolio.updateTransactionStatus(orderData.clientOrderId(), TransactionStatus.CANCELED);
-            portfolioRepository.save(portfolio);
+            Transaction canceledTransaction = portfolio.findTransactionByClientOrderId(orderData.clientOrderId())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Transaction not found after cancel update: " + orderData.clientOrderId()));
+            portfolioRepository.saveTransaction(portfolio.getId(), canceledTransaction);
 
             log.info("Transaction marked as CANCELED - Portfolio: {}", portfolio.getName());
 
@@ -167,7 +181,10 @@ public class PortfolioOrderUpdateListener implements OrderUpdateListener {
         try {
             String reason = orderData.rejectReason() != null ? orderData.rejectReason() : "Unknown reason";
             portfolio.updateTransactionAsRejected(orderData.clientOrderId(), reason);
-            portfolioRepository.save(portfolio);
+            Transaction rejectedTransaction = portfolio.findTransactionByClientOrderId(orderData.clientOrderId())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Transaction not found after reject update: " + orderData.clientOrderId()));
+            portfolioRepository.saveTransaction(portfolio.getId(), rejectedTransaction);
 
             log.warn("Transaction marked as REJECTED - Portfolio: {}, Reason: {}",
                     portfolio.getName(), reason);
@@ -187,7 +204,10 @@ public class PortfolioOrderUpdateListener implements OrderUpdateListener {
 
         try {
             portfolio.updateTransactionStatus(orderData.clientOrderId(), TransactionStatus.EXPIRED);
-            portfolioRepository.save(portfolio);
+            Transaction expiredTransaction = portfolio.findTransactionByClientOrderId(orderData.clientOrderId())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Transaction not found after expiry update: " + orderData.clientOrderId()));
+            portfolioRepository.saveTransaction(portfolio.getId(), expiredTransaction);
 
             log.warn("Transaction marked as EXPIRED - Portfolio: {}", portfolio.getName());
 

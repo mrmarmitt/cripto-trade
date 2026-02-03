@@ -1,7 +1,9 @@
 package com.marmitt.application.spring.config.core;
 
 import com.marmitt.core.application.usecase.portfolio.CreatePortfolioUseCase;
+import com.marmitt.core.application.usecase.portfolio.QueryPortfolioUseCase;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
+import com.marmitt.core.ports.inbound.portfolio.QueryPortfolioPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
@@ -22,5 +24,12 @@ public class PortfolioConfig {
                 strategyRepository,
                 exchangeAdapterRepository
         );
+    }
+
+    @Bean
+    public QueryPortfolioPort queryPortfolio(
+            PortfolioRepositoryPort portfolioRepository
+    ) {
+        return new QueryPortfolioUseCase(portfolioRepository);
     }
 }

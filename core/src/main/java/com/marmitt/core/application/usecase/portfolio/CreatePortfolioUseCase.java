@@ -1,5 +1,7 @@
 package com.marmitt.core.application.usecase.portfolio;
 
+import com.marmitt.core.domain.Symbol;
+import com.marmitt.core.domain.portfolio.Asset;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.dto.portfolio.CreatePortfolioRequest;
 import com.marmitt.core.dto.portfolio.CreatePortfolioResponse;
@@ -33,10 +35,7 @@ public class CreatePortfolioUseCase implements CreatePortfolioPort {
     @Override
     public CreatePortfolioResponse execute(CreatePortfolioRequest request) {
         log.info("Creating portfolio - Name: {}, Symbol: {}, Strategy: {}, Exchange: {}",
-                request.name(),
-                request.symbol().value(),
-                request.strategyName(),
-                request.exchangeName());
+                request.name(), request.symbol(), request.strategyId(), request.exchangeName());
 
         try {
             // 1. Validar se já existe portfolio com mesmo nome
@@ -47,7 +46,7 @@ public class CreatePortfolioUseCase implements CreatePortfolioPort {
                 return CreatePortfolioResponse.failure(errorMsg);
             }
 
-            // 2. Validar se estratégia existe
+            // 2. Validar se estratégia existe e está ativa
             Optional<TradingStrategy> strategyOptional = strategyRepository.findById(request.strategyId());
             if (strategyOptional.isEmpty()) {
                 String errorMsg = "Strategy not found with ID: " + request.strategyId();
@@ -57,46 +56,47 @@ public class CreatePortfolioUseCase implements CreatePortfolioPort {
 
             TradingStrategy strategy = strategyOptional.get();
 
-            // 3. Validar se estratégia está ativa
             if (!strategy.isEnabled()) {
                 String errorMsg = "Strategy '" + strategy.getStrategyName() + "' is not enabled";
                 log.warn(errorMsg);
                 return CreatePortfolioResponse.failure(errorMsg);
             }
 
-            // 4. Validar se exchange adapter existe
+            // 3. Validar se exchange adapter existe
             if (!exchangeAdapterRepository.hasAdapter(request.exchangeName())) {
                 String errorMsg = "Exchange adapter not found: " + request.exchangeName();
                 log.error(errorMsg);
                 return CreatePortfolioResponse.failure(errorMsg);
             }
 
-            // 5. Validar se já existe portfolio com mesmo símbolo e estratégia (evitar duplicação)
+            // 4. Validar se já existe portfolio com mesmo símbolo e estratégia
             Optional<Portfolio> duplicatePortfolio = portfolioRepository.findBySymbolAndStrategy(
-                    request.symbol().value(),
-                    request.strategyId()
+                    request.symbol(), request.strategyId()
             );
             if (duplicatePortfolio.isPresent()) {
                 String errorMsg = String.format(
                         "Portfolio already exists for symbol '%s' with strategy '%s'",
-                        request.symbol().value(),
-                        request.strategyName()
+                        request.symbol(), strategy.getStrategyName()
                 );
                 log.warn(errorMsg);
                 return CreatePortfolioResponse.failure(errorMsg);
             }
 
-            // 6. Criar Portfolio com exchange de execução explícita
+            // 5. Criar objetos de domínio
+            Symbol symbol = Symbol.of(request.symbol());
+            Asset initialCapital = Asset.of(request.initialCapitalAmount(), request.currency());
+
+            // 6. Criar Portfolio
             UUID portfolioId = UUID.randomUUID();
             Portfolio portfolio = new Portfolio(
                     portfolioId,
                     request.name(),
                     request.strategyId(),
-                    request.strategyName(),
-                    request.symbol(),
-                    request.initialCapital(),
-                    request.exchangeName(),  // Exchange para execução de ordens
-                    request.allowedMarketDataSources()  // Exchanges permitidas para market data (null = todas)
+                    strategy.getStrategyName(),
+                    symbol,
+                    initialCapital,
+                    request.exchangeName(),
+                    request.allowedMarketDataSources()
             );
 
             // 7. Registrar portfolio no repository
@@ -106,21 +106,18 @@ public class CreatePortfolioUseCase implements CreatePortfolioPort {
             exchangeAdapterRepository.registerPortfolioByAdapter(request.exchangeName(), portfolioId);
 
             log.info("Portfolio created successfully - ID: {}, Name: {}, Symbol: {}, Strategy: {}, Exchange: {}",
-                    portfolioId,
-                    portfolio.getName(),
-                    portfolio.getSymbol().value(),
-                    portfolio.getStrategyName(),
-                    request.exchangeName());
+                    portfolioId, portfolio.getName(), portfolio.getSymbol().value(),
+                    portfolio.getStrategyName(), request.exchangeName());
 
-            // 9. Criar response de sucesso
+            // 9. Criar response
             return CreatePortfolioResponse.success(
                     portfolioId,
                     portfolio.getName(),
                     portfolio.getStrategyId(),
                     portfolio.getStrategyName(),
                     portfolio.getSymbol().value(),
-                    request.initialCapital().amount().toPlainString(),
-                    request.initialCapital().currency(),
+                    initialCapital.amount().toPlainString(),
+                    initialCapital.currency(),
                     request.exchangeName(),
                     portfolio.getCreatedAt()
             );
