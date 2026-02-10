@@ -1,5 +1,6 @@
 package com.marmitt.core.dto.portfolio;
 
+import com.marmitt.core.domain.portfolio.Asset;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.portfolio.Position;
 import lombok.Builder;
@@ -48,7 +49,18 @@ public record PortfolioDto(
             BigDecimal unrealizedPnLPercentage
     ) {}
 
+    /**
+     * Converte Portfolio para DTO sem preço de mercado (query/snapshot).
+     * Position mostra quantity e averagePrice, mas unrealizedPnL usa averagePrice como referência.
+     */
     public static PortfolioDto fromDomain(Portfolio portfolio) {
+        Asset fallbackPrice = portfolio.hasPosition()
+                ? portfolio.getPosition(Asset.of(BigDecimal.ONE, portfolio.getSymbol().getQuoteAsset())).getAveragePrice()
+                : Asset.of(BigDecimal.ZERO, portfolio.getSymbol().getQuoteAsset());
+        return fromDomain(portfolio, fallbackPrice);
+    }
+
+    public static PortfolioDto fromDomain(Portfolio portfolio, Asset currentMarketPrice) {
         BalanceDto balanceDto = BalanceDto.builder()
                 .totalCapital(portfolio.getBalance().getTotal().amount().toPlainString())
                 .availableBalance(portfolio.getBalance().getAvailable().amount().toPlainString())
@@ -58,8 +70,8 @@ public record PortfolioDto(
                 .build();
 
         PositionDto positionDto = null;
-        if (portfolio.getPosition() != null) {
-            Position position = portfolio.getPosition();
+        if (portfolio.hasPosition()) {
+            Position position = portfolio.getPosition(currentMarketPrice);
             positionDto = PositionDto.builder()
                     .symbol(position.getSymbol().value())
                     .quantity(position.getQuantity().amount().toPlainString())

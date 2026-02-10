@@ -10,6 +10,7 @@ import lombok.Builder;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Objects;
+import java.util.UUID;
 
 @Builder
 public record TradingDecision(
@@ -18,42 +19,44 @@ public record TradingDecision(
         BigDecimal quantity,        // Quantidade final calculada pelo Portfolio
         Asset price,               // Preço com tipo correto (fiat/stablecoin/crypto)
         Asset estimatedTotal,      // Valor total estimado da operação
+        UUID targetLotId,          // null = FIFO, UUID = lot especifico
         String reasoning,          // Combinação do reasoning da strategy + risk assessment
         BigDecimal confidence,     // Confidence da strategy
         Instant timestamp
 ) {
-    
+
     public TradingDecision {
         Objects.requireNonNull(decision, "Decision cannot be null");
         Objects.requireNonNull(symbol, "Symbol cannot be null");
         Objects.requireNonNull(reasoning, "Reasoning cannot be null");
         Objects.requireNonNull(timestamp, "Timestamp cannot be null");
-        
+
         if (shouldExecute()) {
             Objects.requireNonNull(quantity, "Quantity cannot be null for trade decisions");
             Objects.requireNonNull(price, "Price cannot be null for trade decisions");
             Objects.requireNonNull(estimatedTotal, "Estimated total cannot be null for trade decisions");
-            
+
             if (quantity.compareTo(BigDecimal.ZERO) <= 0) {
                 throw new IllegalArgumentException("Quantity must be positive for trade decisions");
             }
         }
     }
-    
+
     public static TradingDecision hold(Symbol symbol, String reasoning) {
         return new TradingDecision(
             TradingAction.SHOULD_HOLD,
             symbol,
             null,
-            null, 
+            null,
+            null,
             null,
             reasoning,
             BigDecimal.ZERO,
             Instant.now()
         );
     }
-    
-    public static TradingDecision buy(Symbol symbol, BigDecimal quantity, Asset price, 
+
+    public static TradingDecision buy(Symbol symbol, BigDecimal quantity, Asset price,
                                      String reasoning, BigDecimal confidence) {
         Asset estimatedTotal = price.multiply(quantity);
         return new TradingDecision(
@@ -62,14 +65,15 @@ public record TradingDecision(
             quantity,
             price,
             estimatedTotal,
+            null,
             reasoning,
             confidence,
             Instant.now()
         );
     }
-    
-    public static TradingDecision sell(Symbol symbol, BigDecimal quantity, Asset price, 
-                                      String reasoning, BigDecimal confidence) {
+
+    public static TradingDecision sell(Symbol symbol, BigDecimal quantity, Asset price,
+                                      UUID targetLotId, String reasoning, BigDecimal confidence) {
         Asset estimatedTotal = price.multiply(quantity);
         return new TradingDecision(
             TradingAction.SHOULD_SELL,
@@ -77,6 +81,7 @@ public record TradingDecision(
             quantity,
             price,
             estimatedTotal,
+            targetLotId,
             reasoning,
             confidence,
             Instant.now()
@@ -108,7 +113,7 @@ public record TradingDecision(
                     output.reasoning(), output.confidence());
         } else if (output.decision() == TradingAction.SHOULD_SELL) {
             return TradingDecision.sell(input.symbol(), output.quantity(), price,
-                    output.reasoning(), output.confidence());
+                    output.targetLotId(), output.reasoning(), output.confidence());
         }
         
         return TradingDecision.hold(input.symbol(), "Unknown strategy decision: " + output.decision());

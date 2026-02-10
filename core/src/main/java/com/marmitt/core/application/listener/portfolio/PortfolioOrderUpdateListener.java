@@ -3,6 +3,7 @@ package com.marmitt.core.application.listener.portfolio;
 import com.marmitt.core.domain.portfolio.Asset;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.portfolio.Transaction;
+import com.marmitt.core.domain.portfolio.TransactionMatch;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
@@ -11,6 +12,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 
 /**
  * Listener responsável por processar atualizações de ordens executadas.
@@ -116,8 +118,8 @@ public class PortfolioOrderUpdateListener implements OrderUpdateListener {
             Asset executedPrice = Asset.of(orderData.executedPrice(), quoteCurrency);
             Asset executedFee = Asset.of(fee, quoteCurrency);
 
-            // Atualizar transaction e portfolio (balance + position)
-            portfolio.updateTransactionAsExecuted(
+            // Atualizar transaction e portfolio (balance + position) — retorna matches do re-match
+            List<TransactionMatch> newMatches = portfolio.updateTransactionAsExecuted(
                     orderData.clientOrderId(),
                     status,
                     executedQuantity,
@@ -130,18 +132,23 @@ public class PortfolioOrderUpdateListener implements OrderUpdateListener {
                     .orElseThrow(() -> new IllegalStateException(
                             "Transaction not found after execution update: " + orderData.clientOrderId()));
 
+            // Deletar matches provisórios antigos antes de salvar os novos (re-match com executedQuantity)
+            if (executedTransaction.isSell()) {
+                portfolioRepository.deleteMatchesBySellTransactionId(executedTransaction.id());
+            }
+
             portfolioRepository.saveTradeExecution(
                     portfolio.getId(),
                     portfolio.getBalance(),
                     portfolio.getLastExecutionTime(),
-                    portfolio.getPosition(),
-                    executedTransaction
+                    portfolio.getPosition(executedPrice),
+                    executedTransaction,
+                    newMatches
             );
 
-            log.info("Portfolio updated after FILLED order - Portfolio: {}, Available: {}, Position: {}",
+            log.info("Portfolio updated after FILLED order - Portfolio: {}, Available: {}",
                     portfolio.getName(),
-                    portfolio.getBalance().getAvailable().amount(),
-                    portfolio.getPosition() != null ? portfolio.getPosition().getQuantity().amount() : "NONE");
+                    portfolio.getBalance().getAvailable().amount());
 
         } catch (Exception e) {
             log.error("Error handling order execution - Portfolio: {}, ClientOrderId: {}, Error: {}",
@@ -157,6 +164,9 @@ public class PortfolioOrderUpdateListener implements OrderUpdateListener {
                 portfolio.getName(), orderData.clientOrderId());
 
         try {
+            // Cleanup: remover matches provisórios se for SELL
+            cleanupMatchesForFailedSell(portfolio, orderData.clientOrderId());
+
             portfolio.updateTransactionStatus(orderData.clientOrderId(), TransactionStatus.CANCELED);
             Transaction canceledTransaction = portfolio.findTransactionByClientOrderId(orderData.clientOrderId())
                     .orElseThrow(() -> new IllegalStateException(
@@ -179,6 +189,9 @@ public class PortfolioOrderUpdateListener implements OrderUpdateListener {
                 portfolio.getName(), orderData.clientOrderId(), orderData.rejectReason());
 
         try {
+            // Cleanup: remover matches provisórios se for SELL
+            cleanupMatchesForFailedSell(portfolio, orderData.clientOrderId());
+
             String reason = orderData.rejectReason() != null ? orderData.rejectReason() : "Unknown reason";
             portfolio.updateTransactionAsRejected(orderData.clientOrderId(), reason);
             Transaction rejectedTransaction = portfolio.findTransactionByClientOrderId(orderData.clientOrderId())
@@ -203,6 +216,9 @@ public class PortfolioOrderUpdateListener implements OrderUpdateListener {
                 portfolio.getName(), orderData.clientOrderId());
 
         try {
+            // Cleanup: remover matches provisórios se for SELL
+            cleanupMatchesForFailedSell(portfolio, orderData.clientOrderId());
+
             portfolio.updateTransactionStatus(orderData.clientOrderId(), TransactionStatus.EXPIRED);
             Transaction expiredTransaction = portfolio.findTransactionByClientOrderId(orderData.clientOrderId())
                     .orElseThrow(() -> new IllegalStateException(
@@ -217,6 +233,21 @@ public class PortfolioOrderUpdateListener implements OrderUpdateListener {
         }
     }
 
+
+    /**
+     * Remove matches provisórios para um SELL que falhou (CANCELED/REJECTED/EXPIRED).
+     * Libera as quantidades dos buys vinculados de volta para "free".
+     */
+    private void cleanupMatchesForFailedSell(Portfolio portfolio, String clientOrderId) {
+        portfolio.findTransactionByClientOrderId(clientOrderId).ifPresent(tx -> {
+            if (tx.isSell()) {
+                portfolio.removeMatchesForSell(tx.id());
+                portfolioRepository.deleteMatchesBySellTransactionId(tx.id());
+                log.debug("Cleaned up provisional matches for failed SELL - Portfolio: {}, TxId: {}",
+                        portfolio.getName(), tx.id());
+            }
+        });
+    }
 
     @Override
     public boolean shouldProcess(OrderDataDto orderData) {

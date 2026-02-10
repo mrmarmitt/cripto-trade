@@ -77,6 +77,9 @@ public class TransactionEntity {
     // Rejection
     private String rejectReason;
 
+    // Lot targeting
+    private UUID targetLotId;
+
     @Version
     private Long version;
 }

@@ -4,6 +4,7 @@ import com.marmitt.core.domain.portfolio.Balance;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.portfolio.Position;
 import com.marmitt.core.domain.portfolio.Transaction;
+import com.marmitt.core.domain.portfolio.TransactionMatch;
 
 import java.time.Instant;
 import java.util.List;
@@ -17,7 +18,7 @@ public interface PortfolioRepositoryPort {
     Optional<Portfolio> findByName(String portfolioName);
 
     List<Portfolio> findBySymbol(String symbol);
-    
+
     Optional<Portfolio> findBySymbolAndStrategy(String symbol, UUID strategyId);
 
     List<Portfolio> findAll();
@@ -28,5 +29,11 @@ public interface PortfolioRepositoryPort {
 
     void saveTransaction(UUID portfolioId, Transaction transaction);
 
-    void saveTradeExecution(UUID portfolioId, Balance balance, Instant lastExecutionTime, Position position, Transaction transaction);
+    void saveTransactionWithMatches(UUID portfolioId, Transaction transaction, List<TransactionMatch> newMatches);
+
+    void deleteMatchesBySellTransactionId(UUID sellTransactionId);
+
+    void saveTradeExecution(UUID portfolioId, Balance balance, Instant lastExecutionTime,
+                            Position position, Transaction transaction,
+                            List<TransactionMatch> newMatches);
 }

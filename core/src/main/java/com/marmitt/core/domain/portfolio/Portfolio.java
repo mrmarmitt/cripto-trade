@@ -1,7 +1,9 @@
 package com.marmitt.core.domain.portfolio;
 
 import com.marmitt.core.domain.Symbol;
+import com.marmitt.core.domain.portfolio.contrats.AccountingPolicy;
 import com.marmitt.core.dto.strategy.OpenBuyEntryDto;
+import com.marmitt.core.dto.strategy.PendingSellEntryDto;
 import com.marmitt.core.dto.strategy.PortfolioContextDto;
 import com.marmitt.core.enums.TransactionStatus;
 import lombok.Getter;
@@ -19,34 +21,37 @@ import java.util.UUID;
 
 @Getter
 public class Portfolio {
-    
+
     private final UUID id;
     private final String name;
     private final UUID strategyId;
     private final String strategyName;
     private final Symbol symbol;
-    private final Balance balance;
-    private Position position;
-    private final List<Transaction> transactions;
     private boolean isActive;
     private final Instant createdAt;
     private Instant lastExecutionTime;
 
+    private final AccountingPolicy accountingPolicy;
+
+    private final Balance balance;
+    private final List<Transaction> transactions;
+    private final List<TransactionMatch> transactionMatches = new ArrayList<>();
+
     // Exchange configuration
-    private final String orderExecutionExchange;  // Exchange onde ordens são executadas
-    private final Set<String> allowedMarketDataSources;  // Exchanges permitidas para market data (null = todas)
-    
+    private final String orderExecutionExchange;
+    private final Set<String> allowedMarketDataSources;
+
     // Configurações de limitação
-    private static final BigDecimal MINIMUM_OPERATION_AMOUNT = new BigDecimal("10.00"); // $10 USD
-    private static final Duration EXECUTION_COOLDOWN = Duration.ofSeconds(0); // 30 segundos entre execuções
-    private static final BigDecimal DEFAULT_MAX_EXPOSURE_PERCENTAGE = new BigDecimal("0.20"); // 20% por símbolo
-    
+    private static final BigDecimal MINIMUM_OPERATION_AMOUNT = new BigDecimal("10.00");
+    private static final Duration EXECUTION_COOLDOWN = Duration.ofSeconds(0);
+    private static final BigDecimal DEFAULT_MAX_EXPOSURE_PERCENTAGE = new BigDecimal("0.20");
+
     public Portfolio(
             UUID id,
             String name,
             UUID strategyId,
             String strategyName,
-            Symbol symbol,
+            Symbol symbol, AccountingPolicy accountingPolicy,
             Asset initialCapital,
             String orderExecutionExchange,
             Set<String> allowedMarketDataSources
@@ -56,8 +61,8 @@ public class Portfolio {
         this.strategyId = strategyId;
         this.strategyName = strategyName;
         this.symbol = Objects.requireNonNull(symbol, "Symbol cannot be null");
+        this.accountingPolicy = accountingPolicy;
         this.balance = Balance.withInitialCapital(initialCapital);
-        this.position = null; // No initial position
         this.transactions = new ArrayList<>();
         this.isActive = true;
         this.createdAt = Instant.now();
@@ -67,113 +72,52 @@ public class Portfolio {
                 Collections.unmodifiableSet(allowedMarketDataSources) : null;
     }
 
-    public void executeBuy(Asset quantity, Asset price, Asset fee) {
-        validateTradeParameters(quantity, price, fee);
-
-        // Total em quote currency (USDT): quantidade × preço
-        BigDecimal totalAmount = quantity.amount().multiply(price.amount());
-        Asset total = Asset.of(totalAmount, price.currency());
-        Asset totalWithFee = total.add(fee);
-        
-        if (!balance.hasAvailableAmount(totalWithFee)) {
-            throw new IllegalArgumentException("Insufficient balance for purchase");
-        }
-        
-        // Update balance
-        balance.allocate(totalWithFee);
-        
-        // Update or create position
-        if (position != null) {
-            position.updatePosition(quantity, price);
-        } else {
-            position = Position.create(this.symbol, quantity, price);
-        }
-        
-        // Record transaction
-        Transaction transaction = Transaction.builder()
-                .type(com.marmitt.core.enums.TransactionType.BUY)
-                .symbol(this.symbol)
-                .quantity(quantity)
-                .price(price)
-                .total(total)
-                .fee(fee)
-                .build();
-        
-        transactions.add(transaction);
+    /**
+     * Position como View calculada a partir do inventário de lotes abertos.
+     * O preço de mercado é dado externo — sempre fornecido pelo caller.
+     */
+    public Position getPosition(Asset marketPrice) {
+        return accountingPolicy.calculatePosition(this.symbol, this.transactions,
+                this.transactionMatches, marketPrice);
     }
-    
-    public void executeSell(Asset quantity, Asset price, Asset fee) {
-        validateTradeParameters(quantity, price, fee);
 
-        if (position == null) {
-            throw new IllegalArgumentException("No position found for currency: " + this.symbol.value());
-        }
-
-        if (!position.canSell(quantity)) {
-            throw new IllegalArgumentException("Insufficient quantity to sell");
-        }
-
-        // Calcular custo original (quantity × averagePrice) - ANTES de reduzir position
-        BigDecimal costAmount = quantity.amount().multiply(position.getAveragePrice().amount());
-        Asset cost = Asset.of(costAmount, price.currency());  // Usar quote currency (USDT)
-
-        // Calcular valor de venda (quantity × salePrice)
-        BigDecimal saleAmount = quantity.amount().multiply(price.amount());
-        Asset saleValue = Asset.of(saleAmount, price.currency());
-
-        // Subtrair fee do valor de venda
-        Asset saleValueMinusFee = saleValue.subtract(fee);
-
-        // Update position
-        position.reducePosition(quantity);
-        if (position.isEmpty()) {
-            position = null; // Clear empty position
-        }
-
-        // Update balance - remove custo do invested, adiciona valor de venda ao available
-        balance.realizeSale(cost, saleValueMinusFee);
-
-        // Record transaction
-        Transaction transaction = Transaction.builder()
-                .type(com.marmitt.core.enums.TransactionType.SELL)
-                .symbol(this.symbol)
-                .quantity(quantity)
-                .price(price)
-                .total(saleValue)
-                .fee(fee)
-                .build();
-
-        transactions.add(transaction);
-    }
-    
-    public void updatePositionPrice(Asset newPrice) {
-        if (position != null) {
-            position.updateCurrentPrice(newPrice);
-        }
-    }
-    
+    /**
+     * Verifica se existem lotes de compra abertos (independente de preço de mercado).
+     */
     public boolean hasPosition() {
-        return position != null && !position.isEmpty();
+        return !getOpenBuyTransactions().isEmpty();
     }
-    
-    public Asset getCurrentPositionValue() {
-        return hasPosition() ? position.getCurrentValue() : 
-               Asset.fiat(BigDecimal.ZERO, balance.getAvailable().currency());
+
+    /**
+     * Adiciona uma transaction PENDING ao portfolio.
+     * Se for SELL, delega o matching para a AccountingPolicy e retorna os matches criados.
+     * @return matches criados (lista vazia se BUY)
+     */
+    public List<TransactionMatch> addPendingTransaction(Transaction transaction) {
+        Objects.requireNonNull(transaction, "Transaction cannot be null");
+        if (transaction.status() != TransactionStatus.PENDING) {
+            throw new IllegalArgumentException("Transaction must be PENDING status");
+        }
+        transactions.add(transaction);
+        if (transaction.isSell()) {
+            List<Transaction> availableBuys = getOpenBuyTransactions();
+            List<TransactionMatch> newMatches = accountingPolicy.matchOrder(
+                    transaction, availableBuys, transactionMatches);
+            transactionMatches.addAll(newMatches);
+            return List.copyOf(newMatches);
+        }
+        return List.of();
     }
-    
-    public BigDecimal getCurrentPositionQuantity() {
-        return hasPosition() ? position.getQuantity().amount() : BigDecimal.ZERO;
-    }
-    
+
     private void validateTradeParameters(Asset quantity, Asset price, Asset fee) {
         Objects.requireNonNull(quantity, "Quantity cannot be null");
         Objects.requireNonNull(price, "Price cannot be null");
         Objects.requireNonNull(fee, "Fee cannot be null");
-        
+
         if (!isActive) {
             throw new IllegalStateException("Portfolio is not active");
         }
-        
+
         if (!quantity.isPositive()) {
             throw new IllegalArgumentException("Quantity must be positive");
         }
@@ -183,14 +127,10 @@ public class Portfolio {
         }
     }
 
-    public void activate() {
-        this.isActive = true;
-    }
-
     public void deactivate() {
         this.isActive = false;
     }
-    
+
     /**
      * Verifica se o portfolio está elegível para execução de estratégia
      */
@@ -207,32 +147,31 @@ public class Portfolio {
             return false;
         }
 
-        // 6. Deve respeitar cooldown entre execuções
         if (isInCooldownPeriod()) {
             return false;
         }
 
         return true;
     }
-    
+
     private boolean hasMinimumCapitalForOperation() {
         return balance.getAvailable().amount().compareTo(MINIMUM_OPERATION_AMOUNT) >= 0;
     }
 
     private boolean isInCooldownPeriod() {
         if (lastExecutionTime == null) {
-            return false; // Primeira execução
+            return false;
         }
-        
+
         Duration timeSinceLastExecution = Duration.between(lastExecutionTime, Instant.now());
         return timeSinceLastExecution.compareTo(EXECUTION_COOLDOWN) < 0;
     }
-    
+
     /**
-     * Cria PortfolioContext para ser passado para a Strategy
-     * Contém todos os dados necessários para que a Strategy possa calcular quantities
+     * Cria PortfolioContext para ser passado para a Strategy.
+     * O preço de mercado atual é fornecido pelo caller.
      */
-    public PortfolioContextDto createContext() {
+    public PortfolioContextDto createContext(Asset currentMarketPrice) {
         return PortfolioContextDto.builder()
             .portfolioId(this.id)
             .portfolioName(this.name)
@@ -240,19 +179,19 @@ public class Portfolio {
             .totalCapital(this.balance.getTotal())
             .availableBalance(this.balance.getAvailable())
             .allocatedBalance(this.balance.getAllocated())
-            .position(this.position)
-            .openTransactions(getOpenBuyTransactions().stream()
-                .map(OpenBuyEntryDto::fromTransaction)
+            .position(getPosition(currentMarketPrice))
+            .openTransactions(getOpenBuyEntries())
+            .pendingSellOrders(getPendingSellTransactions().stream()
+                .map(PendingSellEntryDto::fromTransaction)
                 .toList())
             .realizedPnL(this.balance.getRealizedPnL())
             .minimumOperationAmount(MINIMUM_OPERATION_AMOUNT)
             .maxExposurePerSymbol(DEFAULT_MAX_EXPOSURE_PERCENTAGE)
             .build();
     }
-    
+
     /**
      * Atualiza timestamp da última execução
-     * Deve ser chamado após execução bem-sucedida da estratégia
      */
     public void updateLastExecutionTime() {
         this.lastExecutionTime = Instant.now();
@@ -260,11 +199,8 @@ public class Portfolio {
 
     /**
      * Verifica se o portfolio pode receber market data de uma exchange específica
-     * @param exchangeName nome da exchange
-     * @return true se permitido, false caso contrário
      */
     public boolean canReceiveMarketDataFrom(String exchangeName) {
-        // Se allowedMarketDataSources for null ou vazio, aceita de todas as exchanges
         return allowedMarketDataSources == null ||
                allowedMarketDataSources.isEmpty() ||
                allowedMarketDataSources.contains(exchangeName.toUpperCase());
@@ -273,19 +209,6 @@ public class Portfolio {
     // ============================================================
     // Transaction Management Methods
     // ============================================================
-
-    /**
-     * Adiciona transaction pendente (antes de enviar ordem para exchange)
-     */
-    public void addPendingTransaction(Transaction transaction) {
-        Objects.requireNonNull(transaction, "Transaction cannot be null");
-
-        if (transaction.status() != TransactionStatus.PENDING) {
-            throw new IllegalArgumentException("Transaction must be PENDING status");
-        }
-
-        transactions.add(transaction);
-    }
 
     /**
      * Encontra transaction por clientOrderId
@@ -306,10 +229,8 @@ public class Portfolio {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Transaction not found for clientOrderId: " + clientOrderId));
 
-        // Transaction é imutável - criar nova com status atualizado
         Transaction updated = transaction.withStatus(newStatus);
 
-        // Substituir transaction antiga pela atualizada
         transactions.remove(transaction);
         transactions.add(updated);
     }
@@ -322,7 +243,6 @@ public class Portfolio {
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Transaction not found for clientOrderId: " + clientOrderId));
 
-        // withStatus() deve ser chamado por último para que a validação encontre rejectReason preenchido
         Transaction rejected = transaction
                 .withRejectReason(rejectReason)
                 .withStatus(TransactionStatus.REJECTED);
@@ -332,9 +252,10 @@ public class Portfolio {
     }
 
     /**
-     * Atualiza transaction como executada e aplica mudanças no portfolio (balance e position)
+     * Atualiza transaction como executada e aplica mudanças no portfolio (balance e position).
+     * @return matches criados pelo re-match (lista vazia se BUY)
      */
-    public void updateTransactionAsExecuted(
+    public List<TransactionMatch> updateTransactionAsExecuted(
             String clientOrderId,
             TransactionStatus finalStatus,
             Asset executedQuantity,
@@ -342,19 +263,15 @@ public class Portfolio {
             Asset executedFee,
             Instant executedAt
     ) {
-        // Validar status
         if (!finalStatus.isExecuted()) {
             throw new IllegalArgumentException(
                     "Final status must be FILLED or PARTIALLY_FILLED, got: " + finalStatus);
         }
 
-        // Buscar transaction
         Transaction transaction = findTransactionByClientOrderId(clientOrderId)
                 .orElseThrow(() -> new IllegalArgumentException(
                         "Transaction not found for clientOrderId: " + clientOrderId));
 
-        // Criar versão atualizada com dados de execução
-        // withStatus() deve ser chamado por último para que a validação encontre os campos preenchidos
         Transaction executed = transaction
                 .withExecutedQuantity(executedQuantity)
                 .withExecutedPrice(executedPrice)
@@ -362,26 +279,23 @@ public class Portfolio {
                 .withExecutedAt(executedAt)
                 .withStatus(finalStatus);
 
-        // Substituir transaction
         transactions.remove(transaction);
         transactions.add(executed);
 
-        // Atualizar balance e position baseado no tipo
         if (transaction.isBuy()) {
             executeBuyInternal(executedQuantity, executedPrice, executedFee);
+            return List.of();
         } else {
-            executeSellInternal(executedQuantity, executedPrice, executedFee);
+            return executeSellInternal(executedQuantity, executedPrice, executedFee, executed.id());
         }
     }
 
     /**
-     * Executa compra internamente (atualiza balance e position sem criar nova transaction)
-     * Usado por updateTransactionAsExecuted()
+     * Executa compra internamente (atualiza balance sem criar nova transaction)
      */
     private void executeBuyInternal(Asset quantity, Asset price, Asset fee) {
         validateTradeParameters(quantity, price, fee);
 
-        // Total em quote currency (USDT): quantidade × preço
         BigDecimal totalAmount = quantity.amount().multiply(price.amount());
         Asset total = Asset.of(totalAmount, price.currency());
         Asset totalWithFee = total.add(fee);
@@ -390,88 +304,152 @@ public class Portfolio {
             throw new IllegalArgumentException("Insufficient balance for purchase");
         }
 
-        // Update balance
         balance.allocate(totalWithFee);
-
-        // Update or create position
-        if (position != null) {
-            position.updatePosition(quantity, price);
-        } else {
-            position = Position.create(this.symbol, quantity, price);
-        }
     }
 
     /**
-     * Executa venda internamente (atualiza balance e position sem criar nova transaction)
-     * Usado por updateTransactionAsExecuted()
+     * Executa venda internamente — delega matching e cost para a AccountingPolicy.
+     * @return matches criados pelo re-match
      */
-    private void executeSellInternal(Asset quantity, Asset price, Asset fee) {
+    private List<TransactionMatch> executeSellInternal(Asset quantity, Asset price, Asset fee, UUID sellTransactionId) {
         validateTradeParameters(quantity, price, fee);
 
-        if (position == null) {
+        Position currentPosition = getPosition(price);
+        if (currentPosition == null) {
             throw new IllegalArgumentException("No position found for currency: " + this.symbol.value());
         }
-
-        if (!position.canSell(quantity)) {
+        if (!currentPosition.canSell(quantity)) {
             throw new IllegalArgumentException("Insufficient quantity to sell");
         }
 
-        // Calcular custo original (quantity × averagePrice) - ANTES de reduzir position
-        BigDecimal costAmount = quantity.amount().multiply(position.getAveragePrice().amount());
-        Asset cost = Asset.of(costAmount, price.currency());  // Usar quote currency (USDT)
+        // Re-match via policy with actually executed quantity
+        Transaction sellTx = findTransactionById(sellTransactionId)
+                .orElseThrow(() -> new IllegalStateException("Sell transaction not found: " + sellTransactionId));
+        transactionMatches.removeIf(m -> m.sellTransactionId().equals(sellTransactionId));
+        List<TransactionMatch> newMatches = accountingPolicy.matchOrder(
+                sellTx, getOpenBuyTransactions(), transactionMatches);
+        transactionMatches.addAll(newMatches);
 
-        // Calcular valor de venda (quantity × salePrice)
+        // Compute cost via policy
+        BigDecimal costAmount = accountingPolicy.computeCost(sellTransactionId, transactions, transactionMatches);
+        Asset cost = Asset.of(costAmount, price.currency());
+
         BigDecimal saleAmount = quantity.amount().multiply(price.amount());
         Asset saleValue = Asset.of(saleAmount, price.currency());
-
-        // Subtrair fee do valor de venda
         Asset saleValueMinusFee = saleValue.subtract(fee);
 
-        // Update position
-        position.reducePosition(quantity);
-        if (position.isEmpty()) {
-            position = null; // Clear empty position
-        }
-
-        // Update balance - remove custo do invested, adiciona valor de venda ao available
         balance.realizeSale(cost, saleValueMinusFee);
+
+        return List.copyOf(newMatches);
     }
 
     /**
-     * Lista compras executadas que representam posições abertas
+     * Retorna lotes de compra abertos com quantidade disponível para a Strategy.
+     * Desconta tanto matches confirmados (sells FILLED) quanto reservados (sells PENDING/SUBMITTED).
+     * Exclui lotes sem quantidade livre.
+     */
+    public List<OpenBuyEntryDto> getOpenBuyEntries() {
+        return transactions.stream()
+                .filter(Transaction::isBuy)
+                .filter(Transaction::isExecuted)
+                .map(buy -> {
+                    BigDecimal confirmed = getConfirmedMatchedQuantity(buy.id());
+                    BigDecimal pending = getPendingMatchedQuantity(buy.id());
+                    BigDecimal free = buy.getEffectiveQuantity().amount()
+                            .subtract(confirmed).subtract(pending).max(BigDecimal.ZERO);
+                    return OpenBuyEntryDto.builder()
+                            .lotId(buy.id())
+                            .executedQuantity(buy.getEffectiveQuantity())
+                            .executedPrice(buy.getEffectivePrice())
+                            .remainingQuantity(Asset.of(free, buy.getEffectiveQuantity().currency()))
+                            .reservedQuantity(Asset.of(pending, buy.getEffectiveQuantity().currency()))
+                            .executedAt(buy.executedAt())
+                            .build();
+                })
+                .filter(dto -> dto.remainingQuantity().amount().compareTo(BigDecimal.ZERO) > 0)
+                .toList();
+    }
+
+    /**
+     * Lista compras executadas que ainda possuem quantidade remanescente (confirmed only).
+     * Usado internamente pela AccountingPolicy para matching.
      */
     public List<Transaction> getOpenBuyTransactions() {
         return transactions.stream()
                 .filter(Transaction::isBuy)
                 .filter(Transaction::isExecuted)
+                .filter(t -> getRemainingQuantity(t.id()).compareTo(BigDecimal.ZERO) > 0)
                 .toList();
     }
 
     /**
-     * Lista todas as transactions com sucesso (FILLED)
+     * Lista sells pendentes (PENDING ou SUBMITTED) em trânsito.
      */
-    public List<Transaction> getSuccessfulTransactions() {
+    public List<Transaction> getPendingSellTransactions() {
         return transactions.stream()
-                .filter(transaction -> transaction.status() == TransactionStatus.FILLED)
+                .filter(Transaction::isSell)
+                .filter(t -> t.status() == TransactionStatus.PENDING
+                          || t.status() == TransactionStatus.SUBMITTED)
                 .toList();
     }
 
+    // ============================================================
+    // Transaction Match Methods (buy-sell linking)
+    // ============================================================
+
     /**
-     * Lista transactions pendentes (PENDING ou SUBMITTED)
+     * Retorna quantidade remanescente de um BUY considerando apenas matches confirmados (sell FILLED).
      */
-    public List<Transaction> getPendingTransactions() {
-        return transactions.stream()
-                .filter(transaction -> transaction.status() == TransactionStatus.PENDING ||
-                        transaction.status() == TransactionStatus.SUBMITTED)
-                .toList();
+    public BigDecimal getRemainingQuantity(UUID buyTransactionId) {
+        Transaction buyTx = findTransactionById(buyTransactionId).orElse(null);
+
+        if (buyTx == null || buyTx.executedQuantity() == null) {
+            return BigDecimal.ZERO;
+        }
+
+        BigDecimal confirmed = getConfirmedMatchedQuantity(buyTransactionId);
+        return buyTx.executedQuantity().amount().subtract(confirmed).max(BigDecimal.ZERO);
     }
 
     /**
-     * Lista transactions que falharam (REJECTED, CANCELED, EXPIRED)
+     * Retorna quantidade matched com sells confirmados (FILLED/PARTIALLY_FILLED).
      */
-    public List<Transaction> getFailedTransactions() {
+    private BigDecimal getConfirmedMatchedQuantity(UUID buyTransactionId) {
+        return transactionMatches.stream()
+                .filter(m -> m.buyTransactionId().equals(buyTransactionId))
+                .filter(m -> findTransactionById(m.sellTransactionId())
+                        .map(Transaction::isExecuted).orElse(false))
+                .map(TransactionMatch::matchedQuantity)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * Retorna quantidade matched com sells pendentes (PENDING/SUBMITTED).
+     */
+    public BigDecimal getPendingMatchedQuantity(UUID buyTransactionId) {
+        return transactionMatches.stream()
+                .filter(m -> m.buyTransactionId().equals(buyTransactionId))
+                .filter(m -> findTransactionById(m.sellTransactionId())
+                        .map(t -> t.status() == TransactionStatus.PENDING
+                                || t.status() == TransactionStatus.SUBMITTED)
+                        .orElse(false))
+                .map(TransactionMatch::matchedQuantity)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * Remove todos os matches vinculados a um sell (cleanup em falha: CANCELED/REJECTED/EXPIRED).
+     */
+    public void removeMatchesForSell(UUID sellTransactionId) {
+        transactionMatches.removeIf(m -> m.sellTransactionId().equals(sellTransactionId));
+    }
+
+    /**
+     * Busca transaction por ID.
+     */
+    private Optional<Transaction> findTransactionById(UUID transactionId) {
         return transactions.stream()
-                .filter(Transaction::isFailed)
-                .toList();
+                .filter(t -> t.id().equals(transactionId))
+                .findFirst();
     }
 }

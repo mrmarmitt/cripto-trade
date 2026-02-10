@@ -27,7 +27,8 @@ public record Transaction(
         Asset fee,
         Instant requestedAt,
         Instant executedAt,
-        String rejectReason
+        String rejectReason,
+        UUID targetLotId
 ) {
     /**
      * Construtor compacto com validações

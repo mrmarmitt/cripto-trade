@@ -6,6 +6,7 @@ import lombok.Builder;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
+import java.util.UUID;
 
 @Builder
 public record StrategyOutputDto(
@@ -13,6 +14,7 @@ public record StrategyOutputDto(
         TradingAction decision,
         BigDecimal confidence,    // 0.0 - 1.0
         BigDecimal quantity,      // Quantidade absoluta a ser executada (ex: 0.05 BTC)
+        UUID targetLotId,         // null = FIFO, UUID = lot especifico
         String reasoning,
         Instant timestamp,
         Map<String, Object> metadata
@@ -20,7 +22,7 @@ public record StrategyOutputDto(
 
     public static StrategyOutputDto hold(String strategyName, String reasoning) {
         return new StrategyOutputDto(strategyName, TradingAction.SHOULD_HOLD,
-                                 BigDecimal.ZERO, BigDecimal.ZERO, reasoning,
+                                 BigDecimal.ZERO, BigDecimal.ZERO, null, reasoning,
                                  Instant.now(), Map.of());
     }
 
@@ -28,7 +30,7 @@ public record StrategyOutputDto(
                                         BigDecimal quantity, String reasoning) {
         validateTradeParams(confidence, quantity);
         return new StrategyOutputDto(strategyName, TradingAction.SHOULD_BUY,
-                                 confidence, quantity, reasoning,
+                                 confidence, quantity, null, reasoning,
                                  Instant.now(), Map.of());
     }
 
@@ -36,7 +38,15 @@ public record StrategyOutputDto(
                                          BigDecimal quantity, String reasoning) {
         validateTradeParams(confidence, quantity);
         return new StrategyOutputDto(strategyName, TradingAction.SHOULD_SELL,
-                                 confidence, quantity, reasoning,
+                                 confidence, quantity, null, reasoning,
+                                 Instant.now(), Map.of());
+    }
+
+    public static StrategyOutputDto sellLot(String strategyName, BigDecimal confidence,
+                                            BigDecimal quantity, UUID targetLotId, String reasoning) {
+        validateTradeParams(confidence, quantity);
+        return new StrategyOutputDto(strategyName, TradingAction.SHOULD_SELL,
+                                 confidence, quantity, targetLotId, reasoning,
                                  Instant.now(), Map.of());
     }
 

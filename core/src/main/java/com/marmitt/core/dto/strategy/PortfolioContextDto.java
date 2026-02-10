@@ -6,6 +6,7 @@ import com.marmitt.core.domain.portfolio.Position;
 import lombok.Builder;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
@@ -26,6 +27,7 @@ public record PortfolioContextDto(
         Asset allocatedBalance,             // Saldo já alocado em posições
         Position position,                  // Single position (can be null)
         List<OpenBuyEntryDto> openTransactions, // Compras executadas (posições abertas)
+        List<PendingSellEntryDto> pendingSellOrders, // Sells PENDING/SUBMITTED em trânsito
         BigDecimal realizedPnL,             // P&L acumulado das vendas realizadas
         BigDecimal minimumOperationAmount,  // Valor mínimo para operações
         BigDecimal maxExposurePerSymbol     // % máxima de exposição (agora sempre 100% para single currency)
@@ -97,14 +99,21 @@ public record PortfolioContextDto(
             return BigDecimal.ZERO;
         }
         BigDecimal currentValue = getCurrentPositionValue();
-        return currentValue.divide(totalCapital.amount(), 4, java.math.RoundingMode.HALF_UP);
+        return currentValue.divide(totalCapital.amount(), 4, RoundingMode.HALF_UP);
     }
 
     /**
-     * Verifica se existem transações de compra abertas
+     * Verifica se existem lotes de compra abertos
+     */
+    public boolean hasOpenLots() {
+        return openTransactions != null && !openTransactions.isEmpty();
+    }
+
+    /**
+     * Alias para hasOpenLots() — compatibilidade
      */
     public boolean hasOpenTransactions() {
-        return openTransactions != null && !openTransactions.isEmpty();
+        return hasOpenLots();
     }
 
     /**
@@ -116,5 +125,50 @@ public record PortfolioContextDto(
         }
         return openTransactions.stream()
                 .min(Comparator.comparing(OpenBuyEntryDto::executedAt));
+    }
+
+    /**
+     * Verifica se existem ordens de venda pendentes em trânsito
+     */
+    public boolean hasPendingSellOrders() {
+        return pendingSellOrders != null && !pendingSellOrders.isEmpty();
+    }
+
+    /**
+     * Retorna quantidade total de sells pendentes em trânsito
+     */
+    public BigDecimal getTotalPendingSellQuantity() {
+        if (pendingSellOrders == null) return BigDecimal.ZERO;
+        return pendingSellOrders.stream()
+                .map(s -> s.quantity().amount())
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * Retorna quantidade disponível para venda (posição - sells pendentes)
+     */
+    public BigDecimal getAvailableToSellQuantity() {
+        if (!hasPosition()) return BigDecimal.ZERO;
+        return position.getQuantity().amount().subtract(getTotalPendingSellQuantity()).max(BigDecimal.ZERO);
+    }
+
+    /**
+     * Calcula o percentual de lucro de um lote específico comparando o executedPrice com o preço atual.
+     * @param lotId ID do lote (buy transaction)
+     * @param currentPrice preço de mercado atual
+     * @return percentual de lucro (ex: 5.25 para +5.25%, -2.10 para -2.10%), ou empty se lote não encontrado
+     */
+    public Optional<BigDecimal> calculateLotProfit(UUID lotId, BigDecimal currentPrice) {
+        if (openTransactions == null || currentPrice == null) return Optional.empty();
+        return openTransactions.stream()
+                .filter(lot -> lot.lotId().equals(lotId))
+                .findFirst()
+                .map(lot -> {
+                    BigDecimal entryPrice = lot.executedPrice().amount();
+                    if (entryPrice.compareTo(BigDecimal.ZERO) == 0) return BigDecimal.ZERO;
+                    return currentPrice.subtract(entryPrice)
+                            .divide(entryPrice, 4, RoundingMode.HALF_UP)
+                            .multiply(BigDecimal.valueOf(100));
+                });
     }
 }

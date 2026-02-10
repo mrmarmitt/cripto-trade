@@ -3,6 +3,7 @@ package com.marmitt.core.application.listener.portfolio;
 import com.marmitt.core.domain.portfolio.Asset;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.portfolio.Transaction;
+import com.marmitt.core.domain.portfolio.TransactionMatch;
 import com.marmitt.core.domain.portfolio.TradingDecision;
 import com.marmitt.core.dto.strategy.PortfolioContextDto;
 import com.marmitt.core.dto.strategy.StrategyInputDto;
@@ -23,6 +24,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -61,8 +63,9 @@ class StrategyExecution {
 
             TradingStrategy strategy = strategyOptional.get();
             
-            // Criar contexto do portfolio para a strategy
-            PortfolioContextDto portfolioContext = portfolio.createContext();
+            // Criar contexto do portfolio para a strategy (preço de mercado vem do input)
+            Asset currentMarketPrice = Asset.of(strategyInput.currentPrice(), portfolio.getSymbol().getQuoteAsset());
+            PortfolioContextDto portfolioContext = portfolio.createContext(currentMarketPrice);
             
             // Strategy executa com contexto completo e retorna quantity absoluta
             StrategyOutputDto output = strategy.executeStrategy(strategyInput, portfolioContext);
@@ -185,10 +188,13 @@ class StrategyExecution {
                     .requestedAt(Instant.now())
                     .executedAt(null) // Será preenchido quando executar
                     .rejectReason(null)
+                    .targetLotId(decision.targetLotId())
                     .build();
 
-            portfolio.addPendingTransaction(pendingTransaction);
-            portfolioRepository.saveTransaction(portfolio.getId(), pendingTransaction);
+            // addPendingTransaction roda FIFO matching se for SELL e retorna os matches
+            List<TransactionMatch> newMatches = portfolio.addPendingTransaction(pendingTransaction);
+
+            portfolioRepository.saveTransactionWithMatches(portfolio.getId(), pendingTransaction, newMatches);
 
             log.debug("Pending transaction registered - ClientOrderId: {}, Type: {}, Quantity: {}",
                     clientOrderId, transactionType, decision.quantity());

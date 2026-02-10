@@ -4,6 +4,7 @@ import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.portfolio.Asset;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.dto.portfolio.CreatePortfolioRequest;
+import com.marmitt.core.domain.portfolio.contrats.FifoAccountingPolicy;
 import com.marmitt.core.dto.portfolio.CreatePortfolioResponse;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
@@ -94,6 +95,7 @@ public class CreatePortfolioUseCase implements CreatePortfolioPort {
                     request.strategyId(),
                     strategy.getStrategyName(),
                     symbol,
+                    new FifoAccountingPolicy(),
                     initialCapital,
                     request.exchangeName(),
                     request.allowedMarketDataSources()

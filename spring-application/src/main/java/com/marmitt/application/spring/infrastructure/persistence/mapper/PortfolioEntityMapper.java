@@ -5,12 +5,15 @@ import com.marmitt.application.spring.infrastructure.persistence.entity.MarketDa
 import com.marmitt.application.spring.infrastructure.persistence.entity.PortfolioEntity;
 import com.marmitt.application.spring.infrastructure.persistence.entity.PositionEntity;
 import com.marmitt.application.spring.infrastructure.persistence.entity.TransactionEntity;
+import com.marmitt.application.spring.infrastructure.persistence.entity.TransactionMatchEntity;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.portfolio.Asset;
 import com.marmitt.core.domain.portfolio.Balance;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.portfolio.Position;
 import com.marmitt.core.domain.portfolio.Transaction;
+import com.marmitt.core.domain.portfolio.TransactionMatch;
+import com.marmitt.core.domain.portfolio.contrats.FifoAccountingPolicy;
 
 import java.lang.reflect.Field;
 import java.math.BigDecimal;
@@ -97,7 +100,8 @@ public class PortfolioEntityMapper {
                 .feeAssetType(domain.fee().type())
                 .requestedAt(domain.requestedAt())
                 .executedAt(domain.executedAt())
-                .rejectReason(domain.rejectReason());
+                .rejectReason(domain.rejectReason())
+                .targetLotId(domain.targetLotId());
 
         if (domain.executedQuantity() != null) {
             builder.executedQuantityAmount(domain.executedQuantity().amount())
@@ -120,7 +124,8 @@ public class PortfolioEntityMapper {
             PortfolioEntity portfolioEntity,
             BalanceEntity balanceEntity,
             PositionEntity positionEntity,
-            List<TransactionEntity> transactionEntities
+            List<TransactionEntity> transactionEntities,
+            List<TransactionMatchEntity> matchEntities
     ) {
         Asset initialCapital = Asset.of(
                 portfolioEntity.getInitialCapitalAmount(),
@@ -139,6 +144,7 @@ public class PortfolioEntityMapper {
                 portfolioEntity.getStrategyId(),
                 portfolioEntity.getStrategyName(),
                 Symbol.of(portfolioEntity.getSymbol()),
+                new FifoAccountingPolicy(),
                 initialCapital,
                 portfolioEntity.getOrderExecutionExchange(),
                 marketDataSources == null || marketDataSources.isEmpty() ? null : marketDataSources
@@ -149,10 +155,7 @@ public class PortfolioEntityMapper {
             restoreBalanceState(portfolio, balanceEntity);
         }
 
-        // Restore position
-        if (positionEntity != null) {
-            restorePosition(portfolio, positionEntity);
-        }
+        // Position é computada sob demanda — currentMarketPrice não vive no Portfolio
 
         // Restore transactions
         if (transactionEntities != null && !transactionEntities.isEmpty()) {
@@ -160,6 +163,14 @@ public class PortfolioEntityMapper {
                     .map(PortfolioEntityMapper::toTransactionDomain)
                     .toList();
             restoreTransactions(portfolio, transactions);
+        }
+
+        // Restore transaction matches
+        if (matchEntities != null && !matchEntities.isEmpty()) {
+            List<TransactionMatch> matches = matchEntities.stream()
+                    .map(PortfolioEntityMapper::toMatchDomain)
+                    .toList();
+            restoreTransactionMatches(portfolio, matches);
         }
 
         // Restore state
@@ -183,20 +194,6 @@ public class PortfolioEntityMapper {
         setPrivateField(balance, "available", available);
         setPrivateField(balance, "invested", invested);
         setPrivateField(balance, "realizedPnL", entity.getRealizedPnL());
-    }
-
-    private static void restorePosition(Portfolio portfolio, PositionEntity entity) {
-        Asset quantity = Asset.of(entity.getQuantityAmount(), entity.getQuantityCurrency());
-        Asset avgPrice = Asset.of(entity.getAveragePriceAmount(), entity.getAveragePriceCurrency());
-
-        Position position = Position.create(Symbol.of(entity.getSymbol()), quantity, avgPrice);
-
-        if (entity.getCurrentPriceAmount() != null) {
-            Asset currentPrice = Asset.of(entity.getCurrentPriceAmount(), entity.getCurrentPriceCurrency());
-            position.updateCurrentPrice(currentPrice);
-        }
-
-        setPrivateField(portfolio, "position", position);
     }
 
     private static void restoreTransactions(Portfolio portfolio, List<Transaction> transactions) {
@@ -229,7 +226,33 @@ public class PortfolioEntityMapper {
                 .requestedAt(entity.getRequestedAt())
                 .executedAt(entity.getExecutedAt())
                 .rejectReason(entity.getRejectReason())
+                .targetLotId(entity.getTargetLotId())
                 .build();
+    }
+
+    // ==================== TransactionMatch Mapping ====================
+
+    public static TransactionMatchEntity toMatchEntity(TransactionMatch domain) {
+        return TransactionMatchEntity.builder()
+                .buyTransactionId(domain.buyTransactionId())
+                .sellTransactionId(domain.sellTransactionId())
+                .matchedQuantity(domain.matchedQuantity())
+                .createdAt(java.time.Instant.now())
+                .build();
+    }
+
+    public static TransactionMatch toMatchDomain(TransactionMatchEntity entity) {
+        return new TransactionMatch(
+                entity.getBuyTransactionId(),
+                entity.getSellTransactionId(),
+                entity.getMatchedQuantity()
+        );
+    }
+
+    private static void restoreTransactionMatches(Portfolio portfolio, List<TransactionMatch> matches) {
+        List<TransactionMatch> portfolioMatches = getPrivateField(portfolio, "transactionMatches");
+        portfolioMatches.clear();
+        portfolioMatches.addAll(matches);
     }
 
     @SuppressWarnings("unchecked")
