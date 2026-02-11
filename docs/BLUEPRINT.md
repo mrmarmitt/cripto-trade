@@ -1,4 +1,4 @@
-# Documentação de Arquitetura: Gestão de Capital e Execução (CTrade) v9
+# Documentação de Arquitetura: Gestão de Capital e Execução (CTrade) v13
 
 ## 1. Visão Geral
 
@@ -39,12 +39,17 @@ Define como as `Transactions` de fechamento são casadas com as de abertura:
 
 ## 3. Modelo de Dados e Relacionamentos
 
-| Entidade           | Relacionamento           | Responsabilidade / Atributo                                 |
-|--------------------|--------------------------|-------------------------------------------------------------|
-| **Portfolio**      | 1 : N (Runners)          | `GlobalBalance`, Auditoria de Margem.                       |
-| **StrategyRunner** | 1 : 1 (ExecutionPolicy)  | Define se aceita novos sinais (**Single**, Multi, Netting). |
-| **StrategyRunner** | 1 : 1 (AccountingPolicy) | Define a regra de Match (**FIFO**, LIFO, Specific).         |
-| **StrategyRunner** | 1 : N (Positions)        | Exposição líquida e PnL da estratégia.                      |
+| Contexto (Aggregate) | Entidade / VO      | Relacionamento     | Responsabilidade / Atributo Principal                                 |
+|----------------------|--------------------|--------------------|-----------------------------------------------------------------------|
+| **Portfolio**        | `GlobalBalance`    | Atributo Root      | Saldo real consolidado e auditoria de capital.                        |
+| **Portfolio**        | `MarginAccount`    | 1 : N (Accounts)   | Controle de colateral, manutenção e preço de liquidação por exchange. |
+| **StrategyRunner**   | `Position`         | 1 : N (Lotes)      | Exposição líquida, preço médio e PnL acumulado da estratégia.         |
+| **StrategyRunner**   | `Transaction`      | 1 : N (Matches)    | Ciclo de vida da ordem (Pending → Submitted → Final).                 |
+| **StrategyRunner**   | `TransactionMatch` | N : N (Lots/Trans) | Vinculação definitiva entre ordens de compra e venda (Realização).    |
+| **StrategyRunner**   | `ExecutionPolicy`  | Value Object       | Regra de entrada: **Single**, Multi ou Netting.                       |
+| **StrategyRunner**   | `AccountingPolicy` | Value Object       | Regra contábil: **FIFO**, LIFO ou Specific Match.                     |
+| **StrategyRunner**   | `Fee`              | Value Object       | Custo operacional (valor, asset e tipo) imutável por execução.        |
+| **Shared / Cross**   | `ClientOrderId`    | Value Object       | Chave única de roteamento e idempotência (padrão de 32/36 chars).     |
 
 ---
 
@@ -72,14 +77,12 @@ O Runner recebe o DTO e prepara o estado interno antes de qualquer comunicação
 * **Atomicidade:** O processo de busca e marcação de locks ocorre em uma **transação isolada de banco de dados** (Pessimistic Locking no nível da linha do lote) para evitar que dois sinais concorrentes selecionem o mesmo lote no mesmo milissegundo.
 * **Sanidade:** Executa o método `validateTradeParams` para garantir que a `confidence` e a `quantity` estejam dentro dos parâmetros operacionais permitidos.
 
-
 ### C. Reserva e Execução (Portfolio & Exchange)
 
 1. **Capital Request:** O Runner solicita ao **Portfolio** a reserva de margem baseada na transação `PENDING`. O Portfolio move o saldo de *Available* para *Reserved*.
 2. **Order Dispatch:** Com o estado salvo localmente e a margem garantida, o Runner despacha a ordem para a Exchange utilizando o protocolo de identificação única:
-* **Identificação Única (`clientOrderId`):** Utiliza o formato `{r}{runner_short}{t}{timestamp}{s}{sequence}{type}_{transaction_uuid}` (ex: `r01ft1700000000000s001N_8da233214f11b12a`).
-* **Validação de Segurança:** O Portfolio atua como *guardrail*, validando se o `runner_short` pertence ao Runner solicitante antes do envio para evitar *spoofing* entre estratégias.
-
+   * **Identificação Única (`clientOrderId`):** Utiliza o formato `{r}{runner_short}{t}{timestamp}{s}{sequence}{type}_{transaction_uuid}` (ex: `r01ft1700000000000s001N_8da233214f11b12a`).
+   * **Validação de Segurança:** O Portfolio atua como *guardrail*, validando se o `runner_short` pertence ao Runner solicitante antes do envio para evitar *spoofing* entre estratégias.
 3. **Status SUBMITTED:** Ao receber a confirmação de recebimento da Exchange (OrderID), o Runner atualiza a transação local para o estado `SUBMITTED`, confirmando que a ordem está "em voo".
 4. **Transaction Routing (Callback Assíncrono):** O Listener de ordens da exchange captura a execução e a entrega ao **Portfolio**, que atua como o ponto de entrada único. Ele realiza o *parsing* do prefixo do `clientOrderId` para identificar o **StrategyRunner** proprietário e rotear a `Transaction` via evento ou comando, eliminando a necessidade de busca exaustiva no banco de dados e permitindo que o Runner inicie sua contabilidade interna imediatamente.
 
@@ -88,20 +91,18 @@ O Runner recebe o DTO e prepara o estado interno antes de qualquer comunicação
 O Runner altera o status da transação para `FILLED` (ou gerencia o estado `PARTIALLY_FILLED`) e inicia o processamento contábil seguindo estas diretrizes:
 
 1. **Tratamento de Partial Fills (Execuções Parciais):**
-* **Contabilidade Incremental:** Para cada evento de execução parcial recebido da Exchange, o Runner registra um `TransactionMatch` proporcional. Isso garante que o PnL seja atualizado em tempo real, mesmo antes da ordem ser 100% completada.
-* **Ajuste de Margem Proporcional:** A cada fatia executada, o Runner notifica o **Portfolio** para converter a "Margem Reservada" correspondente em "Margem Realizada".
-
+   * **Contabilidade Incremental:** Para cada evento de execução parcial recebido da Exchange, o Runner registra um `TransactionMatch` proporcional. Isso garante que o PnL seja atualizado em tempo real, mesmo antes da ordem ser 100% completada.
+   * **Ajuste de Margem Proporcional:** A cada fatia executada, o Runner notifica o **Portfolio** para converter a "Margem Reservada" correspondente em "Margem Realizada".
 2. **Efetivação do Match:**
-* **Consolidação de Lotes:** Converte os *locks* provisórios criados no passo 4.B em fechamentos definitivos.
-* **Identificação de Lote:** Caso o `targetLotId` tenha sido fornecido no sinal original, o match é vinculado obrigatoriamente a este ID; caso contrário, a `AccountingPolicy` (ex: FIFO) determina o destino.
-
+   * **Consolidação de Lotes:** Converte os *locks* provisórios criados no passo 4.B em fechamentos definitivos.
+   * **Identificação de Lote:** Caso o `targetLotId` tenha sido fornecido no sinal original, o match é vinculado obrigatoriamente a este ID; caso contrário, a `AccountingPolicy` (ex: FIFO) determina o destino.
 3. **Sincronização Financeira e PnL:**
-* **Atualização de Saldo:** O Runner envia o sinal de "Confirmação de Execução" ao Portfolio com o preço e taxas reais.
-* **Cálculo de PnL Realizado:** O lucro ou prejuízo é calculado imediatamente após o match e refletido na `Position` da estratégia, atualizando o PnL acumulado.
-
+   * **Atualização de Saldo:** O Runner envia o sinal de "Confirmação de Execução" ao Portfolio com o preço e `Fees` reais.
+   * **Modelagem de Fees:** As taxas são tratadas como **Value Objects** imutáveis anexados a cada `TransactionMatch`. O sistema deve suportar taxas em ativos diferentes do par operado (ex: taxas em BNB para trades de BTC).
+   * **Cálculo de PnL Realizado:** O domínio opera exclusivamente com **PnL Líquido**. O lucro ou prejuízo é calculado imediatamente após o match, subtraindo-se as `Fees` da execução (ou da fatia, em caso de `PARTIAL`), e é refletido na `Position` da estratégia para atualizar o PnL acumulado.
 4. **Tratamento de Exceções e Auditoria:**
-* **Dead Letter Queue (DLQ):** Caso o ID retornado pela Exchange seja inválido ou o Runner proprietário não seja localizado pelo Portfolio, a transação é enviada para a DLQ para auditoria manual imediata.
-* **Estorno de Margem Remanescente:** Se uma ordem for parcialmente preenchida e o restante cancelado, o Runner instrui o Portfolio a estornar apenas a margem da fatia não executada, garantindo a integridade do saldo.
+   * **Dead Letter Queue (DLQ):** Caso o ID retornado pela Exchange seja inválido ou o Runner proprietário não seja localizado pelo Portfolio, a transação é enviada para a DLQ para auditoria manual imediata.
+   * **Estorno de Margem Remanescente:** Se uma ordem for parcialmente preenchida e o restante cancelado, o Runner instrui o Portfolio a estornar apenas a margem da fatia não executada, garantindo a integridade do saldo.
 
 ---
 
@@ -139,14 +140,14 @@ O sistema utiliza uma máquina de estados rigorosa para garantir que cada centav
 
 ### A. Mapa de Estados da Transaction
 
-| Estado                 | Significado                                  | Ação de Margem (Portfolio)                               |
-|------------------------|----------------------------------------------|----------------------------------------------------------|
-| **PENDING**            | Intenção criada; Lotes travados localmente.  | **Reserva:** Saldo movido para *Reserved*.               |
-| **SUBMITTED**          | Ordem aceita pela Exchange (OrderID gerado). | **Mantém:** Saldo continua em *Reserved*.                |
-| **PARTIAL**            | Execução parcial (fatia).                    | **Conversão:** Parte da margem vira *Realizada*.         |
-| **FILLED**             | Execução 100% concluída.                     | **Efetivação:** Toda margem vira *Realizada*.            |
-| **CANCELED / EXPIRED** | Ordem interrompida ou vencida.               | **Estorno:** Margem remanescente volta para *Available*. |
-| **REJECTED**           | Exchange recusou a ordem de imediato.        | **Estorno:** Margem total volta para *Available*.        |
+| Estado                 | Significado                                  | Ação de Margem (Portfolio)                                                                                            |
+|------------------------|----------------------------------------------|-----------------------------------------------------------------------------------------------------------------------|
+| **PENDING**            | Intenção criada; Lotes travados localmente.  | **Reserva:** Saldo movido para *Reserved*.                                                                            |
+| **SUBMITTED**          | Ordem aceita pela Exchange (OrderID gerado). | **Mantém:** Saldo continua em *Reserved*.                                                                             |
+| **PARTIAL**            | Execução parcial (fatia).                    | **Conversão:** Parte da margem vira *Realizada*.Dedução: `Fees` são subtraídas do saldo disponível.                   |
+| **FILLED**             | Execução 100% concluída.                     | **Efetivação:** Toda margem vira *Realizada*. **Liquidação**: Saldo final é ajustado pelo PnL líquido e taxas totais. |
+| **CANCELED / EXPIRED** | Ordem interrompida ou vencida.               | **Estorno:** Margem remanescente volta para *Available*.                                                              |
+| **REJECTED**           | Exchange recusou a ordem de imediato.        | **Estorno:** Margem total volta para *Available*.                                                                     |
 
 ### B. Matriz de Recuperação e Falhas (Resiliência)
 
@@ -199,26 +200,50 @@ Para garantir escalabilidade e evitar bloqueios excessivos no banco de dados, o 
 O Portfolio é o mestre financeiro da conta.
 
 * **Entidades Internas:** `Balance`, `MarginAccount`.
-* **Responsabilidade:** Garantir a consistência atômica do saldo global. Nenhuma margem é reservada sem que o estado interno do Portfolio seja atualizado.
+* **Responsabilidade:** Garantir a consistência atômica do saldo global. Nenhuma margem é reservada ou taxa deduzida sem a atualização síncrona do estado interno do `Portfolio`. É a autoridade final para a liquidação financeira de taxas e ajustes de `GlobalBalance` no momento da confirmação de execução.
 * **Persistência:** Possui seu próprio repositório (`PortfolioRepository`). Salva apenas dados de saldo e configurações globais de risco.
 
 ### B. Aggregate Root: StrategyRunner
 
 O Runner é o mestre operacional de uma estratégia específica.
 
-* **Entidades Internas:** `Position`, `Transaction`, `TransactionMatch`.
+* **Entidades Internas:** `Position`, `Transaction`, `TransactionMatch` (contendo o VO `Fee`).
 * **Value Objects:** `ExecutionPolicy`, `AccountingPolicy`.
 * **Responsabilidade:** Garantir a integridade do ciclo de vida das ordens e a acurácia do PnL da estratégia. Ele referencia o `PortfolioId`, mas não altera o saldo diretamente.
 * **Persistência:** Possui seu próprio repositório (`StrategyRunnerRepository`). Isso permite salvar milhões de transações de um robô de alta frequência sem travar a tabela de saldos do Portfolio.
 
-### C. Comunicação entre Agregados
-O Runner referencia o Portfolio por ID. A sincronização financeira (reserva/estorno de margem, atualização de PnL) ocorre via eventos ou mensagens após o processamento interno do Runner.
+### C. Comunicação entre Agregados: Padrão Híbrido
 
-A reconciliação financeira segue o modelo de Reserva e Confirmação:
+Para equilibrar a necessidade de consistência imediata com a escalabilidade de execução, o sistema utiliza chamadas síncronas para autorização e eventos assíncronos para liquidação.
 
-* O **Portfolio** bloqueia o capital (Margem Reservada) no momento do Capital Request.
-* O **Runner** processa a execução assíncrona.
-* O **Runner** envia um sinal de 'Confirmação de Execução' ao Portfolio, que então converte a 'Margem Reservada' em 'Margem Realizada', ajustando o Balance de acordo com o preço real de execução.
+#### 1. Capital Request (Runner → Portfolio): Síncrono e Direto
+
+* **Padrão:** Chamada de método direta (Request-Response).
+* **Natureza:** **Síncrona**.
+* **Justificativa:** O Runner não pode despachar a ordem sem a garantia de que o capital foi reservado. Uma falha aqui deve abortar a transação localmente antes de qualquer interação com a Exchange.
+* **Garantia:** Consistência forte (Strong Consistency). Se o Portfolio retornar `OK`, a margem está garantida.
+
+#### 2. Confirmação de Execução (Runner → Portfolio): Assíncrona via Domain Events
+
+* **Padrão:** Domain Events (Message Broker ou Event Bus interno).
+* **Natureza:** **Assíncrona**.
+* **Justificativa:** Após a ordem ser executada na Exchange, o Runner precisa atualizar sua contabilidade interna rapidamente. A liquidação final no Portfolio (conversão de Reserved para Realized) pode ocorrer milissegundos depois sem afetar a execução do trade.
+* **Garantia de Entrega:** **At-least-once** com Idempotência no receptor (Portfolio). O Portfolio deve ignorar notificações de execução para IDs de transação que já foram liquidados.
+
+#### 3. Rollback de Margem (Runner → Portfolio): Assíncrono com Retries
+
+* **Padrão:** Mensageria durável.
+* **Natureza:** Assíncrona.
+* **Cenário:** Casos de `REJECTED` ou `CANCELED`.
+* **Garantia:** O sistema deve garantir que o evento de "Unfreeze Capital" chegue ao Portfolio para evitar capital preso (Starvation).
+
+#### 4. Implicações Arquiteturais
+
+| Operação               | Acoplamento        | Garantia de Consistência                                                | Impacto de Falha                                         |
+|------------------------|--------------------|-------------------------------------------------------------------------|----------------------------------------------------------|
+| **Reserva de Margem**  | Forte (Síncrono)   | **Atómica**: Saldo bloqueado antes da persistência do `SUBMITTED`.      | Bloqueio imediato do sinal por falta de fundos.          |
+| **Liquidação de Fees** | Fraco (Assíncrono) | **Eventual**: O `GlobalBalance` atualiza após o processamento do match. | Discrepância temporária resolvida no próximo checkpoint. |
+| **Estorno (Refund)**   | Fraco (Assíncrono) | **Eventual**: O capital retorna ao `Available` após o evento de falha.  | Capital retido temporariamente até ao sucesso do retry.  |
 
 ---
 
@@ -267,3 +292,362 @@ Para evitar que o sistema trave quando múltiplos sinais chegam simultaneamente:
 
 * **Fila por Runner:** Cada `StrategyRunner` processa seus sinais de forma sequencial ou utiliza controle de concorrência otimista.
 * **Fail-Fast em Lotes Presos:** Se um sinal chega solicitando um `targetLotId` que já possui um lock ativo de outra transação, o sinal é rejeitado imediatamente (`Error: LotAlreadyLocked`), evitando esperas circulares.
+
+---
+
+### 10. Definições de Domínio
+
+#### 10.1 Política de Taxas (Fees)
+
+* **Captura:** As taxas são extraídas do callback da Exchange e nunca estimadas.
+* **Impacto:** Afetam simultaneamente o PnL do Runner (visão estratégica) e o Balance do Portfolio (visão financeira).
+* **Timing de Dedução:** A liquidação financeira das `Fees` no `GlobalBalance` segue rigorosamente a máquina de estados da transação descrita na **Seção 6.A**, ocorrendo de forma incremental em estados `PARTIAL` e finalizando em `FILLED`.
+* **Auditoria:** O Portfolio mantém o rastro de `totalFeesPaid` por Runner para cálculo de eficiência de capital.
+
+#### 10.2 Protocolo de Idempotência e Resiliência de Envio
+
+Para garantir que uma intenção de trade nunca resulte em ordens duplicadas, o sistema adota o padrão de **Idempotência Baseada em Estado Persistido**.
+
+##### A. O Papel do `clientOrderId`
+
+O `clientOrderId` é a **chave primária de idempotência** perante a Exchange.
+
+* **Unicidade:** Como o ID contém o `transaction_uuid` gerado no estado `PENDING`, ele vincula permanentemente uma tentativa de execução a um registro único no banco de dados.
+* **Suficiência:** Na maioria das exchanges modernas (Binance, OKX, etc.), o envio de uma ordem com um `clientOrderId` já existente resulta em rejeição automática, prevenindo a duplicidade no lado da corretora.
+
+##### B. Protocolo de Envio "Persist-First"
+
+O risco de crash entre a geração do ID e a persistência é mitigado pela ordem de operações:
+
+1. **Materialização:** O Runner cria a `Transaction` no banco de dados com status `PENDING`.
+2. **Reserva de Margem:** O Portfolio bloqueia o saldo.
+3. **Dispatch:** Somente após o banco de dados confirmar a persistência do estado `PENDING` e da reserva, a ordem é enviada à Exchange.
+
+* **Cenário de Crash antes do Dispatch:** No reboot, o Runner verá uma transação `PENDING` sem correspondente na Exchange e poderá cancelá-la com segurança, pois o `clientOrderId` nunca "saiu" do sistema.
+
+##### C. Tratamento de "Acknowledgment Perdido" (Timeout de Rede)
+
+Se o sistema enviar a ordem, a Exchange aceitar, mas a conexão cair antes da resposta (Status `SUBMITTED`), o protocolo de reconciliação assume o controle:
+
+* **Idempotency Store:** O próprio `StrategyRunnerRepository` atua como a loja de idempotência, eliminando a necessidade de um Redis externo para esta função específica.
+* **Ação de Recuperação:** O Runner utiliza o `clientOrderId` persistido para consultar o status da ordem na Exchange antes de qualquer tentativa de reenvio.
+* **Convergência:** Se a ordem for encontrada na Exchange, o estado local transita diretamente para `SUBMITTED` ou `FILLED`. Se não for encontrada, o Runner assume falha no envio e invalida a transação local.
+
+##### D. Implicações Arquiteturais
+
+| Problema                                        | Solução no Blueprint                                                            |
+|-------------------------------------------------|---------------------------------------------------------------------------------|
+| **Crash entre geração e persistência?**         | Impossível pelo fluxo: a ordem só é enviada *após* a persistência do `PENDING`. |
+| **Duplicação em Retry Manual?**                 | Bloqueada pelo `clientOrderId` único por `transaction_uuid`.                    |
+| **Ordem Fantasma (Aceita mas não confirmada)?** | Resolvida pela consulta obrigatória via `clientOrderId` no Boot Sequence.       |
+
+#### 10.3 Gestão de Cancelamento de Ordens Parciais
+
+O sistema trata ordens parcialmente executadas que são canceladas como **Transações Finalizadas por Fração**, seguindo um protocolo de liquidação proporcional.
+
+##### A. Modelagem de Estados (Composição de Sub-estados)
+
+Uma `Transaction` não possui múltiplos estados simultâneos, mas sim uma **Máquina de Estados Linear** onde o estado final reflete o último evento financeiro relevante:
+
+* **Fluxo:** `SUBMITTED` → `PARTIAL` → `CANCELED`.
+* **Estado Final:** Quando o restante de uma ordem parcial é cancelado, o status final da `Transaction` no banco de dados deve ser `CANCELED` (ou um estado terminal como `PARTIALLY_FILLED_CANCELED`), mas o registro de `TransactionMatch` já criado durante a fase `PARTIAL` permanece íntegro e imutável.
+
+##### B. Contabilidade e Preço Médio
+
+* **Preço Médio (Average Price):** O preço médio da `Position` é calculado exclusivamente com base nos `TransactionMatch` efetivados.
+* Se uma ordem de 10 BTC a $50.000 executou apenas 2 BTC e foi cancelada, o preço médio é $50.000 sobre o volume de 2 BTC. O volume não executado (8 BTC) é ignorado no cálculo de exposição.
+
+* **Tratamento de Fees:** As exchanges cobram `Fees` apenas sobre o montante **executado**. Portanto, a parte cancelada da ordem não gera custo financeiro nem registro de `Fee` no sistema.
+
+##### C. Fluxo de Liberação de Margem (Estorno Proporcional)
+
+O `StrategyRunner` deve garantir a precisão do saldo no `Portfolio` durante o cancelamento parcial:
+
+1. **Fatia Executada:** No estado `PARTIAL`, a margem proporcional já foi convertida de *Reserved* para *Realized*.
+2. **Fatia Cancelada:** Ao receber o evento `CANCELED`, o Runner instrui o `Portfolio` a realizar o **Estorno da Margem Remanescente** (apenas o que não foi executado) de *Reserved* para *Available*.
+
+##### D. Implicações Arquiteturais
+
+| Questão                         | Decisão do Blueprint                                                                                                       |
+|---------------------------------|----------------------------------------------------------------------------------------------------------------------------|
+| **Estado Atômico ou Composto?** | Atômico com histórico. O estado muda para `CANCELED`, mas os matches parciais já dispararam eventos contábeis definitivos. |
+| **Preço Médio?**                | Baseado apenas no volume preenchido (`filledQuantity`) e preço real de execução.                                           |
+| **Fees no Cancelamento?**       | Zero. Fees só existem onde há `TransactionMatch`.                                                                          |
+| **Segurança de Saldo?**         | O estorno deve ser calculado como: `Margem_Original - Margem_Executada`.                                                   |
+
+#### 10.4 Filosofia de Reconciliação e Fonte da Verdade
+
+O protocolo de recuperação pós-crash (Boot Sequence) adota uma filosofia de **Sincronismo Autoritário**, onde a Exchange é a fonte da verdade para a execução financeira, e o Banco de Dados local é a fonte da verdade para a intenção estratégica.
+
+##### A. Hierarquia de Confiança
+
+1. **Exchange (Autoridade Financeira):** Se a Exchange confirma que uma ordem foi executada (`FILLED`), o sistema local deve aceitar esse fato e ajustar as `Positions` e o `Balance`, mesmo que o estado local estivesse como `PENDING`.
+2. **Banco de Dados Local (Autoridade de Intenção):** Se o banco local possui um registro `PENDING`, mas a Exchange não conhece o `clientOrderId`, a intenção é considerada "não materializada" e deve ser descartada para proteger o saldo.
+
+##### B. Protocolo para "Ordens Fantasmas"
+
+"Ordens Fantasmas" são aquelas que existem no banco de dados, mas não na Exchange:
+
+* **Cenário:** O sistema caiu entre a persistência e o dispatch.
+* **Ação Automática:** O Runner marca a transação como `EXPIRED`, libera os locks de lotes e solicita o estorno da margem ao `Portfolio`.
+* **Justificativa:** É mais seguro perder um sinal de trade (custo de oportunidade) do que manter margem bloqueada para uma ordem que nunca será preenchida (custo de capital).
+
+##### C. Conflitos de Estado no Reboot
+
+| Divergência                                    | Resolução          | Ação do Sistema                                                      |
+|------------------------------------------------|--------------------|----------------------------------------------------------------------|
+| **Local: `SUBMITTED` / Exchange: Inexistente** | Confia na Exchange | Marca local como `EXPIRED` e libera margem.                          |
+| **Local: `PENDING` / Exchange: `FILLED**`      | Confia na Exchange | Transita para `FILLED`, processa `TransactionMatch` e liquida taxas. |
+| **Local: `SUBMITTED` / Exchange: `CANCELED**`  | Confia na Exchange | Transita local para `CANCELED` e estorna margem remanescente.        |
+
+##### D. Casos de Intervenção Manual (DLQ)
+
+Se a Exchange retornar um status que o sistema não consegue reconciliar (ex: ordem executada em um símbolo que o Runner não reconhece ou com quantidade divergente), a transação é movida para a **DLQ (Dead Letter Queue)**.
+
+* O `isReconciling` do Runner permanece `true`.
+* O sistema aguarda intervenção humana para corrigir o estado e garantir a integridade do `Portfolio`.
+
+#### 10.5 Circuit Breaker Global e Defesa de Capital
+
+O sistema implementa um mecanismo de interrupção em cascata para proteger o `GlobalBalance` contra falhas algorítmicas, erros de execução ou condições extremas de mercado.
+
+##### A. Gatilhos de Ativação (Métricas)
+
+O Circuit Breaker é acionado automaticamente pelo **Portfolio** ao detectar as seguintes anomalias:
+
+1. **Max Daily Drawdown:** Queda do `GlobalBalance` (realizado + flutuante) abaixo de um percentual pré-configurado nas últimas 24h.
+2. **Rejeições Consecutivas:** Se um Runner acumular $N$ estados `REJECTED` da Exchange em um curto intervalo, sinalizando erro de parâmetro ou falta de liquidez.
+3. **Divergência Crítica de Saldo:** Se, durante a reconciliação, a diferença entre o saldo da Exchange e o local exceder o limite de segurança.
+4. **Anomalia de Latência:** Timeouts excessivos detectados pelo Watchdog, sugerindo instabilidade na API da Exchange ou infraestrutura.
+
+##### B. Autoridade e Hierarquia
+
+* **Portfolio (Automático):** Possui autoridade para negar todos os `Capital Requests`, efetivamente impedindo novas ordens de todos os Runners.
+* **Intervenção Manual (Override):** Através de um comando administrativo, o operador pode forçar o estado de "Safe Mode", que interrompe sinais e tenta cancelar ordens `SUBMITTED`.
+
+##### C. Protocolo de Bloqueio e Retomada
+
+1. **Estado de Bloqueio:** O Portfolio sinaliza o bloqueio global. Os Runners entram em estado `isReconciling = true` ou `halted`, rejeitando novos `TradeSignals`.
+2. **Protocolo de Retomada (Cooldown):** * O sistema não retoma automaticamente após um Circuit Breaker de Drawdown ou Divergência.
+* Exige uma **limpeza de estado manual** (auditoria na DLQ) e um comando de "Reset de Risco" para voltar ao estado operacional.
+* Para bloqueios por latência, o sistema pode tentar uma retomada gradual (Warm-up) após $X$ minutos de estabilidade.
+
+##### D. Implicações Arquiteturais
+
+| Componente         | Papel no Circuit Breaker                                                     |
+|--------------------|------------------------------------------------------------------------------|
+| **Portfolio**      | Monitora métricas globais e atua como o gatekeeper de margem.                |
+| **StrategyRunner** | Implementa o flag de interrupção e suspende o ciclo de vida de novos sinais. |
+| **Watchdog**       | Monitora a saúde da conexão e o tempo de resposta das transações.            |
+
+#### 10.6 Modelagem de Alavancagem (Leverage) e Margem
+
+O sistema trata a alavancagem como uma ferramenta de **eficiência de capital**, onde a margem é o colateral real bloqueado no Portfolio para sustentar uma exposição maior no Runner.
+
+##### A. Separação de Conceitos
+
+1. **Margem (Conceito do Portfolio):** É o valor em "dinheiro vivo" (USDT, BTC, etc.) que a Exchange exige como garantia. O `Portfolio` é o único que gerencia o `MarginBalance`.
+2. **Alavancagem/Leverage (Conceito do Runner):** É um multiplicador de risco. O `StrategyRunner` define a alavancagem desejada (ex: 10x), mas quem autoriza se há colateral suficiente para essa alavancagem é o `Portfolio`.
+
+##### B. Cálculo de Margem Necessária
+
+O cálculo da margem no `Capital Request` segue a fórmula:
+
+* **`Margem_Requerida = (Quantidade * Preço_Estimado) / Alavancagem`**
+* O `StrategyRunner` envia tanto o **Valor Nocional** (total da ordem) quanto a **Alavancagem** no pedido de reserva.
+* O `Portfolio` valida se o `AvailableBalance` suporta essa `Margem_Requerida` antes de mover o saldo para `Reserved`.
+
+##### C. Entidade `MarginAccount`
+
+A `MarginAccount` é uma entidade interna ao Agregado **Portfolio**:
+
+* **Relacionamento:** 1 `Portfolio` : N `MarginAccounts` (uma para cada Exchange/Sub-conta).
+* **Função:** Rastreia o `MaintenanceMargin` (margem de manutenção) e o `LiquidationPrice`.
+* **Margin Calls:** Caso a Exchange envie um evento de risco ou o preço chegue perto da liquidação, o `Portfolio` dispara um evento de **`Emergency_Liquidation`** para o Runner proprietário, forçando o fechamento da posição para proteger o colateral restante.
+
+##### D. Implicações Arquiteturais
+
+| Responsabilidade          | Dono             | Justificativa                                                                 |
+|---------------------------|------------------|-------------------------------------------------------------------------------|
+| **Definição de Leverage** | `StrategyRunner` | É uma decisão da estratégia de trade.                                         |
+| **Validação de Limites**  | `Portfolio`      | Garante que a soma das margens de todos os Runners não exceda o risco global. |
+| **Cálculo de Colateral**  | `Portfolio`      | É quem detém a autoridade sobre o saldo real (`Balance`).                     |
+
+#### 10.7 Precisão Decimal e Arredondamento (Rounding Policy)
+
+Para evitar erros de precisão flutuante e rejeições por excesso de decimais, o sistema adota uma política de **Alta Precisão Interna com Truncamento na Borda**.
+
+##### A. Tipos de Dados e Precisão Interna
+
+1. **Banimento do tipo `Double/Float`:** Para cálculos financeiros, o sistema proíbe o uso de tipos de ponto flutuante nativos. Todo o domínio (Portfolio, Runner, Transaction) deve utilizar bibliotecas de precisão arbitrária (ex: `BigDecimal` em Java, `Decimal` em Python/C#, ou `Decimal.js/Big.js` em Node.js).
+2. **Precisão de Domínio:** Internamente, os cálculos de PnL e Balanço devem manter **8 a 12 casas decimais** (independente do ativo) para evitar erros acumulados em múltiplas operações parciais.
+
+##### B. Política de Arredondamento na Borda (Exchange)
+
+O truncamento para os limites da Exchange ocorre no **último momento possível**: dentro do `StrategyRunner`, imediatamente antes do `Order Dispatch`.
+
+1. **Filtros de Ativo (Exchange Info):** O Runner deve carregar as propriedades `lotStepSize` (decimais de quantidade) e `priceTickSize` (decimais de preço) da Exchange.
+2. **Direção do Arredondamento:**
+* **Quantidade (Quantity):** Sempre arredondar para **baixo** (Floor/Down). É preferível comprar 0.0001 a menos do que ter a ordem rejeitada por "Saldo Insuficiente" devido a um arredondamento para cima.
+* **Preço (Price):** Arredondar para **baixo em Compras** (mais conservador) e para **cima em Vendas**, respeitando o `tickSize`.
+
+##### C. Gestão de "Pó" (Dust Management)
+
+"Dust" ocorre quando restam frações minúsculas de um ativo que não podem ser vendidas por estarem abaixo do `minQty` da Exchange.
+
+* **Lotes Residuais:** No momento do `Match`, se a quantidade restante de um lote for menor que o `minQty` permitido, o Runner deve marcar o lote como **Totalmente Fechado** e enviar o resíduo para uma conta de "Ajuste de Arredondamento" no Portfolio.
+* **Impacto no PnL:** Essas micro-diferenças são contabilizadas como perda operacional irrelevante, evitando que o sistema tente "vender o impossível".
+
+##### D. Implicações Arquiteturais
+
+| Componente         | Responsabilidade                                                                  |
+|--------------------|-----------------------------------------------------------------------------------|
+| **StrategyRunner** | Conhece as regras de precisão do símbolo e aplica o truncamento antes do envio.   |
+| **Portfolio**      | Consolida saldos usando precisão máxima e absorve resíduos de "pó".               |
+| **Value Objects**  | Quantidades e Preços devem ser imutáveis e encapsular a lógica de arredondamento. |
+
+#### 10.8 Alocação de Capital e Governança de Concorrência
+
+O sistema gerencia a escassez de recursos através de uma política de **Priorização por Reserva e Precedência de Chegada**, garantindo que nenhum Runner desestabilize a saúde financeira do `GlobalBalance`.
+
+##### A. Política de Alocação: "First-Come, First-Served" (FIFO)
+
+Por padrão, o Portfolio processa os `Capital Requests` seguindo a ordem cronológica de recebimento:
+
+1. **Atendimento Imediato:** Se o `AvailableBalance` for suficiente para cobrir a `Margem_Requerida` (incluindo o buffer de segurança), a reserva é feita instantaneamente.
+2. **Rejeição por Insuficiência:** Se o saldo disponível for menor que o solicitado, o Portfolio **rejeita** o pedido imediatamente (`InsufficientFunds`). O sistema não mantém uma "fila de espera" para evitar que ordens sejam enviadas com preços defasados (Stale Orders).
+
+##### B. Proteção contra Starvation (Fome de Capital)
+
+Para evitar que um Runner de alta frequência consuma todo o capital, o sistema implementa **Limites de Exposição por Runner**:
+
+* **Max Allocation Per Runner:** Cada `StrategyRunner` possui um teto máximo de capital (ex: no máximo 20% do `GlobalBalance`).
+* **Hard vs Soft Limits:** * **Hard Limit:** Bloqueio imediato de novos `Capital Requests` se o teto for atingido.
+* **Soft Limit:** Alerta o monitoramento, mas permite a operação se ainda houver capital global ocioso.
+
+##### C. Estratégia de "Capital Pooling"
+
+O sistema pode ser configurado em dois modos de visibilidade de capital:
+
+1. **Shared Pool (Padrão):** Todos os Runners competem pelo mesmo saldo. Maximiza a eficiência do capital, mas aumenta o risco de concorrência.
+2. **Dedicated Buckets:** O Portfolio reserva fatias fixas do saldo para Runners específicos. Garante que uma estratégia crítica sempre tenha margem, sacrificando a flexibilidade global.
+
+##### D. Implicações Arquiteturais
+
+| Componente          | Responsabilidade                                                                                                |
+|---------------------|-----------------------------------------------------------------------------------------------------------------|
+| **Portfolio**       | Único ponto de sincronização (lock) para o `GlobalBalance`. Deve ser ultra-rápido para não gargalar os Runners. |
+| **StrategyRunner**  | Deve estar preparado para receber um "Não" (Rejeição) e descartar o sinal graciosamente.                        |
+| **Circuit Breaker** | Interrompe a alocação se o uso de margem global atingir níveis de risco (ex: 90% do total).                     |
+
+#### 10.9 Modelo de Concorrência e Processamento do Runner
+
+O `StrategyRunner` opera sob um modelo de **Fila Sequencial com Política de Descarte (Drop Policy)**, garantindo que a integridade do estado da posição nunca seja corrompida por processamento paralelo.
+
+##### A. Processamento Sequencial (Strict Serial)
+
+* **Modelo:** Cada Runner possui sua própria fila de mensagens (mailbox/queue).
+* **Execução:** Os sinais são processados um por vez (Single-threaded context). Se dois sinais chegam no mesmo milissegundo, o que for registrado primeiro no barramento de eventos/mensageria terá a precedência.
+* **Justificativa:** Operações de trading dependem do estado imediatamente anterior (Ex: Saldo atualizado, Lotes disponíveis). O processamento paralelo exigiria locks complexos que aumentariam a latência e o risco de deadlocks.
+
+##### B. Gestão de Acúmulo e Drop Policy
+
+Para evitar que uma estratégia "atropele" a capacidade de execução do sistema, aplicamos as seguintes regras:
+
+1. **Fila Limitada (Capacity 1):** Por padrão, a fila de entrada para novos sinais tem capacidade reduzida. Se o Runner estiver ocupado processando um sinal ou aguardando o `Capital Request`, novos sinais recebidos são **descartados** imediatamente.
+2. **Stale Signal Check:** Antes de iniciar a materialização (Seção 4.B), o Runner verifica o timestamp do sinal. Se o sinal tiver mais de $X$ milissegundos, ele é ignorado por estar "obsoleto" (Stale).
+3. **Bloqueio por Status:** Se o Runner estiver em estado `isReconciling` ou com uma transação em `PENDING`, ele ignora novos sinais de abertura conforme a **Execution Policy**.
+
+##### C. Processamento Durante Ordens em Voo
+
+O comportamento depende da **Execution Policy** definida na Seção 2.B.1:
+
+* **Modo Single:** O Runner ignora qualquer sinal de abertura enquanto houver uma transação `SUBMITTED` ou `PARTIAL`. Ele só processa novos sinais após a finalização (`FILLED/CANCELED`).
+* **Modo Netting/Scaling:** O Runner pode aceitar novos sinais para aumentar/diminuir a posição, mas estes entrarão na fila e serão processados sequencialmente, respeitando a atomicidade da margem no Portfolio.
+
+##### D. Implicações Arquiteturais
+
+| Desafio                               | Solução no Blueprint                                                                      |
+|---------------------------------------|-------------------------------------------------------------------------------------------|
+| **Sinais mais rápidos que execução?** | **Drop Policy**: Novos sinais são descartados se o Runner estiver ocupado.                |
+| **Sinal demorado?**                   | O Watchdog de Timeout (6.C) cancela a transação, liberando o Runner para o próximo ciclo. |
+| **Corrupção de Estado?**              | Evitada pelo modelo de **Actor/Single-thread** por Runner; o estado é local e isolado.    |
+
+#### 10.10 Metodologia de Cálculo e Exposição de Preço Médio
+
+O sistema adota o modelo de **Preço Médio Ponderado por Execução (WAP)**, garantindo que a `Position` reflita o custo real de aquisição do ativo antes de taxas.
+
+##### A. Fórmula de Cálculo (Weighted Average Price)
+
+O preço médio é calculado exclusivamente sobre o volume executado, seguindo a fórmula:
+
+* **`AvgPrice = Σ (Preço_Execução * Quantidade_Execução) / Σ Quantidade_Execução`**.
+* **Fees (Taxas):** No modelo CTrade, as taxas são tratadas como **dedução de saldo (PnL Realizado)** e não são incorporadas ao preço médio do ativo. Isso permite uma visão clara da performance bruta vs. líquida.
+
+##### B. Dinâmica de Atualização
+
+* **Partial Fills:** O `averagePrice` é recalculado em tempo real a cada novo `TransactionMatch` recebido. Se uma ordem de 1 BTC é preenchida em 10 frações, a posição terá 10 atualizações incrementais.
+* **Scaling (Aumento de Posição):** No modo `Netting`, novas compras são incorporadas ao preço médio atual. No modo `Hedging` (se suportado), cada posição mantém seu próprio preço médio isolado.
+* **Reduções Parciais:** Vendas parciais **não alteram** o preço médio da posição restante; elas apenas reduzem a quantidade e realizam PnL com base no preço médio atual.
+
+##### C. Persistência vs. Cálculo sob Demanda
+
+* **Estado Persistido:** O `averagePrice` deve ser um **campo persistido** na entidade `Position`.
+* **Justificativa:** Calcular o preço médio sob demanda através de milhares de `TransactionMatch` seria computacionalmente caro para o motor de decisão. A persistência garante que a Estratégia tenha acesso instantâneo ao valor.
+* **Integridade:** Em cada atualização, o sistema deve registrar o `audit_log` do cálculo para permitir reconstrução histórica se necessário.
+
+##### D. Exposição via Context Injection
+
+O `averagePrice` é injetado na Estratégia através do objeto `PositionContext`:
+
+1. O Runner lê o valor persistido.
+2. Formata conforme a precisão decimal (Seção 10.7).
+3. Disponibiliza como uma propriedade *read-only* para a lógica de decisão.
+
+| Atributo              | Regra de Negócio                                             |
+|-----------------------|--------------------------------------------------------------|
+| **Inclusão de Fees?** | Não. Fees são registradas separadamente para clareza fiscal. |
+| **Persistência?**     | Sim, campo físico na tabela `Positions`.                     |
+| **Atualização?**      | Atômica, disparada pelo evento de `TransactionMatch`.        |
+
+---
+
+## 11. Orquestração do Ciclo de Vida do Runner
+
+O ciclo de vida de um `StrategyRunner` é gerido pelo **Portfolio** através de comandos administrativos, garantindo que a alocação de capital e a execução estejam sempre sincronizadas com as diretrizes do operador.
+
+### A. Estados do Ciclo de Vida
+
+Um Runner transita pelos seguintes estados operacionais:
+
+1. **CREATED:** Persistido no banco de dados, mas sem recursos alocados ou conexão ativa com a Exchange.
+2. **INITIALIZING (Boot):** Executa a sequência de recuperação (Seção 6.D), reconciliando ordens "em voo" e verificando saldo.
+3. **ACTIVE:** Processando sinais e solicitando margem ao Portfolio.
+4. **HALTED (Circuit Breaker):** Suspenso por violação de risco; não aceita novos sinais, mas monitora ordens abertas.
+5. **TERMINATING:** Fase de encerramento onde o Runner tenta fechar posições e liberar toda a margem reservada.
+6. **ARCHIVED:** Estado terminal. Histórico preservado para auditoria, mas impossibilitado de retomar operações.
+
+### B. Criação e Unicidade
+
+* **Instanciação:** Novos Runners são criados via API administrativa, associados obrigatoriamente a um `PortfolioId`.
+* **Constraint de Unicidade:** O sistema impede a criação de múltiplos Runners para a mesma combinação de `(StrategyId, Symbol, PortfolioId)` em estado `ACTIVE` para evitar conflitos de execução e cálculos duplicados de margem.
+
+### C. Encerramento com Posições Abertas (Graceful Shutdown)
+
+O encerramento de um Runner ativo segue um protocolo de segurança:
+
+1. **Stop New Signals:** O Runner para de processar qualquer sinal de abertura (`SHOULD_BUY`).
+2. **Liquidação ou Transferência:**
+   * **Opção 1 (Close All):** O operador dispara um comando de liquidação; o Runner gera ordens de fechamento para todas as `Positions`.
+   * **Opção 2 (Detach):** Em casos críticos, as posições podem ser "desvinculadas" do Runner e movidas para uma fila de auditoria manual (DLQ), liberando o Runner para arquivamento.
+3. **Margem Clear:** O Runner só pode ser movido para `ARCHIVED` quando o Portfolio confirmar que `ReservedMargin` para este `RunnerId` é zero.
+
+### D. Implicações Arquiteturais
+
+| Ação                | Responsável           | Impacto                                                               |
+|---------------------|-----------------------|-----------------------------------------------------------------------|
+| **Start/Stop**      | Operador Humano / API | Altera o flag `isHalted` ou status operacional no DB.                 |
+| **Provisionamento** | Factory Service       | Garante a injeção da `ExecutionPolicy` e `AccountingPolicy` corretas. |
+| **Recuperação**     | Runner (Self-healing) | O Runner inicia-se de forma independente após um restart do sistema.  |
+
+---

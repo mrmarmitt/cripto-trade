@@ -53,3 +53,18 @@
 - **Implicação:** Define requisitos de infraestrutura e capacidade das estratégias.
 
 **Origem:** QUESTOES_SEM_CLASSIFICACAO.md #17
+
+---
+
+## Tratamento de Exchanges com Comportamento Não-Padrão
+
+**Pergunta:** Como adaptar o sistema para exchanges que não seguem o modelo assumido no Blueprint?
+
+**Detalhamento necessário:**
+- O modelo atual pressupõe que todas as exchanges implementam `clientOrderId`. E se alguma não suportar?
+- E se a exchange tem limites de caracteres menores que o formato proposto (ex: 20 chars)?
+- E se a exchange não permite cancelar ordens parciais?
+- Como adaptar o protocolo de identificação para exchanges sem suporte a `clientOrderId`?
+- **Implicação:** Define se o Blueprint precisa de uma camada de abstração para exchanges não-padrão ou se é uma limitação aceita.
+
+**Origem:** QUESTOES_SEM_CLASSIFICACAO.md #16

@@ -28,7 +28,7 @@
 
 ---
 
-## Monitoramento e Health Checks
+## Monitoramento, Health Checks e Observabilidade
 
 **Pergunta:** Como monitorar se os componentes do sistema (StrategyRunner, Portfolio, Exchange Connection) estão funcionando corretamente?
 
@@ -36,9 +36,11 @@
 - Quais métricas por componente? (latência sinal→ordem, taxa de sucesso, saldo divergente, margem órfã, etc.)
 - Quais thresholds disparam alertas?
 - Health checks via REST endpoints ou métricas Prometheus?
+- Qual é a diferença entre um Runner "lento", "travado" e "morto"? Como classificar?
+- Como auditar a causa raiz de uma perda de capital após uma falha?
 - **Implicação:** Define a estratégia de observabilidade e os pontos de integração com ferramentas de monitoramento.
 
-**Origem:** NOVAS_PONDERACOES.md #6
+**Origem:** NOVAS_PONDERACOES.md #6 + QUESTOES_SEM_CLASSIFICACAO.md #2 (enriquecido)
 
 ---
 
@@ -94,6 +96,27 @@
 - Um Runner com bug pode afetar outros Runners?
 - Há limites de recursos por Runner (CPU, memória, threads)?
 - Como prevenir que um Runner monopolize a conexão WebSocket?
+- Um Runner pode, intencionalmente ou por bug, acessar ou modificar dados de outro Runner?
+- Há limites individuais por Runner (número de ordens, posições simultâneas)?
+- O que impede um Runner mal configurado de drenar todo o saldo do Portfolio?
 - **Implicação:** Define os mecanismos de isolamento de recursos e fault containment entre Runners.
 
-**Origem:** QUESTOES_PENDENTES.md #21
+**Origem:** QUESTOES_PENDENTES.md #21 + QUESTOES_SEM_CLASSIFICACAO.md #5 (enriquecido)
+
+---
+
+## Gestão da Dead Letter Queue (DLQ)
+
+**Pergunta:** Como o sistema gerencia as transações que caem na DLQ?
+
+**Localização atual:** Mencionado na Seção 4.D.4 e 10.4.D do Blueprint
+
+**Detalhamento necessário:**
+- Quem consome a DLQ? É um processo automático ou manual?
+- Qual é o protocolo para reinserir uma transação da DLQ de volta ao fluxo normal?
+- Como evitar que a DLQ se torne um sumidouro de ordens órfãs sem solução?
+- Há alerta quando a DLQ acumula itens não processados?
+- Qual é a política de retenção da DLQ?
+- **Implicação:** Define o processo operacional de tratamento de exceções e a cadência de auditoria.
+
+**Origem:** QUESTOES_SEM_CLASSIFICACAO.md #10
