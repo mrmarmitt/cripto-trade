@@ -1,6 +1,63 @@
-# Documentação de Arquitetura: Gestão de Capital e Execução (CTrade) v17
+# Documentação de Arquitetura: Gestão de Capital e Execução (CTrade) v18
 
 > **Escopo V1 — Spot Only:** Esta versão opera exclusivamente em modo spot (custódia total, sem alavancagem). O design de alavancagem e margem para futuros está preservado em [`LEVERAGE_DESIGN.md`](LEVERAGE_DESIGN.md) para referência futura (V2).
+
+---
+
+## Sumário
+
+1. [Visão Geral](#1-visão-geral)
+2. [Hierarquia de Domínios](#2-hierarquia-de-domínios)
+   - A. Portfolio (O Orquestrador)
+   - B. StrategyRunner (O Gerenciador de Execução e Contabilidade)
+   - C. TradeStrategy (O Motor de Sinais)
+3. [Modelo de Dados e Relacionamentos](#3-modelo-de-dados-e-relacionamentos)
+   - 3.1 Considerações
+4. [Fluxo de Execução e Materialização (Ciclo de Vida do Sinal)](#4-fluxo-de-execução-e-materialização-ciclo-de-vida-do-sinal)
+   - A. Geração do Sinal (TradeStrategy)
+   - B. Materialização da Decisão (StrategyRunner)
+   - C. Reserva e Execução (Portfolio & Exchange)
+   - D. Reconciliação e Execuções Parciais (Matching & Update)
+5. [Fluxos de Falha e Resiliência (Fluxo Reverso)](#5-fluxos-de-falha-e-resiliência-fluxo-reverso)
+   - A. Negação de Margem (Portfolio Reject)
+   - B. Rejeição da Exchange (Order Rejected)
+   - C. Expiração ou Cancelamento (Order Expired/Canceled)
+6. [Ciclo de Vida da Transação e Resiliência](#6-ciclo-de-vida-da-transação-e-resiliência)
+   - A. Mapa de Estados da Transaction
+   - B. Matriz de Recuperação e Falhas (Resiliência)
+   - C. Responsabilidades de Monitorização
+   - D. Protocolo de Recuperação Pós-Crash (Boot Sequence)
+7. [Aggregate Boundaries (DDD)](#7-aggregate-boundaries-ddd)
+   - A. Aggregate Root: Portfolio
+   - B. Aggregate Root: StrategyRunner
+   - C. Comunicação entre Agregados: Padrão Híbrido
+8. [Guia de Migração e Decomposição (Refatoração)](#8-guia-de-migração-e-decomposição-refatoração)
+9. [Governança de Locks e Concorrência](#9-governança-de-locks-e-concorrência)
+   - 9.1 Ciclo de Vida do Lock
+   - 9.2 Prevenção de Deadlocks
+10. [Contabilidade e Precisão Financeira](#10-contabilidade-e-precisão-financeira)
+    - 10.1 Política de Taxas (Fees)
+    - 10.2 Precisão Decimal e Arredondamento (Rounding Policy)
+    - 10.3 Metodologia de Cálculo e Exposição de Preço Médio
+11. [Resiliência e Protocolo de Envio](#11-resiliência-e-protocolo-de-envio)
+    - 11.1 Protocolo de Idempotência e Resiliência de Envio
+    - 11.2 Gestão de Cancelamento de Ordens Parciais
+    - 11.3 Filosofia de Reconciliação e Fonte da Verdade
+    - 11.4 Escalabilidade de Conectividade (ExchangeAdapter)
+12. [Gestão de Risco e Defesa de Capital](#12-gestão-de-risco-e-defesa-de-capital)
+    - 12.1 Circuit Breaker Global e Defesa de Capital
+    - 12.2 Alocação de Capital e Governança de Concorrência
+13. [Modelo de Concorrência e Processamento do Runner](#13-modelo-de-concorrência-e-processamento-do-runner)
+    - A. Processamento Sequencial (Strict Serial)
+    - B. Gestão de Acúmulo e Drop Policy
+    - C. Processamento Durante Ordens em Voo
+    - D. Isolamento e Fault Containment
+14. [Orquestração do Ciclo de Vida do Runner](#14-orquestração-do-ciclo-de-vida-do-runner)
+    - A. Estados do Ciclo de Vida
+    - B. Criação e Unicidade
+    - C. Encerramento com Posições Abertas (Graceful Shutdown)
+
+---
 
 ## 1. Visão Geral
 
@@ -429,6 +486,7 @@ Para garantir que uma intenção de trade nunca resulte em ordens duplicadas, o 
 
 O `clientOrderId` é a **chave primária de idempotência** perante a Exchange.
 
+* **Premissa de Escopo:** Este blueprint assume que todas as exchanges suportadas implementam `clientOrderId`. Exchanges sem este recurso não são compatíveis com a V1.
 * **Unicidade:** Como o ID contém o `transaction_uuid` gerado no estado `PENDING`, ele vincula permanentemente uma tentativa de execução a um registro único no banco de dados.
 * **Suficiência:** Na maioria das exchanges modernas (Binance, OKX, etc.), o envio de uma ordem com um `clientOrderId` já existente resulta em rejeição automática, prevenindo a duplicidade no lado da Exchange.
 
@@ -558,14 +616,30 @@ O Circuit Breaker é acionado automaticamente pelo **Portfolio** ao detectar as 
 #### B. Autoridade e Hierarquia
 
 * **Portfolio (Automático):** Possui autoridade para negar todos os `Capital Requests`, efetivamente impedindo novas ordens de todos os Runners.
-* **Intervenção Manual (Override):** Através de um comando administrativo, o operador pode forçar o estado de "Safe Mode", que interrompe sinais e tenta cancelar ordens `SUBMITTED`.
+* **Intervenção Manual (Override):** Através de um comando administrativo, o operador pode acionar o Safe Mode em diferentes níveis de severidade (ver seção B.1).
+
+#### B.1 Níveis do Safe Mode (Protocolo de Intervenção Escalonada)
+
+O Safe Mode opera em **três níveis escaláveis**, onde cada nível inclui todas as ações do anterior:
+
+| Nível | Nome | Ação | Proteção contra Acionamento Acidental |
+|-------|------|------|---------------------------------------|
+| **1 — Halt** | Bloqueio de Sinais | Rejeita todos os novos `TradeSignal`. Ordens em voo (`SUBMITTED`/`PARTIAL`) continuam seu ciclo normal. | Sem confirmação adicional (baixo risco — apenas bloqueia novas entradas). |
+| **2 — Cancel All** | Cancelamento em Massa | Além do Halt, envia comandos de cancelamento para todas as ordens `SUBMITTED` de todos os Runners. | Requer confirmação explícita (ex: flag `--force` ou double-confirmation na API). |
+| **3 — Panic Sell** | Liquidação Total | Além do Cancel All, gera ordens de fechamento a mercado (Market Orders) para todas as `Positions` abertas. | Requer confirmação explícita com motivo registrado em auditoria. |
+
+* **Acionamento Automático:** Os gatilhos da seção 12.1.A acionam automaticamente o **Nível 1 (Halt)**. A escalação para Níveis 2 e 3 é exclusivamente manual.
+* **Execução Assíncrona com Feedback:** O comando é disparado de forma assíncrona. O operador acompanha o progresso via status (ex: "3/5 ordens canceladas", "2/4 posições liquidadas"). O sistema não bloqueia a API administrativa aguardando conclusão.
+* **Persistência de Estado:** O nível ativo do Safe Mode é persistido no banco de dados para sobreviver a restarts.
 
 #### C. Protocolo de Bloqueio e Retomada
 
 1. **Estado de Bloqueio:** O Portfolio sinaliza o bloqueio global. Os Runners entram em estado `isReconciling = true` ou `halted`, rejeitando novos `TradeSignal`.
-2. **Protocolo de Retomada (Cooldown):** * O sistema não retoma automaticamente após um Circuit Breaker de Drawdown ou Divergência.
-* Exige uma **limpeza de estado manual** (auditoria na DLQ) e um comando de "Reset de Risco" para voltar ao estado operacional.
-* Para bloqueios por latência, o sistema pode tentar uma retomada gradual (Warm-up) após $X$ minutos de estabilidade.
+2. **Protocolo de Retomada (Cooldown):**
+   * O sistema não retoma automaticamente após um Circuit Breaker de Drawdown ou Divergência.
+   * Exige uma **limpeza de estado manual** (auditoria na DLQ) e um comando de "Reset de Risco" para voltar ao estado operacional.
+   * Para bloqueios por latência, o sistema pode tentar uma retomada gradual (Warm-up) após $X$ minutos de estabilidade.
+   * A retomada segue o caminho inverso dos níveis: o operador deve reduzir o nível (3→2→1→Normal) explicitamente, garantindo validação em cada etapa.
 
 #### D. Implicações Arquiteturais
 
@@ -640,13 +714,43 @@ O comportamento depende da **Execution Policy** definida na Seção 2.B.1:
 * **Modo Single:** O Runner ignora qualquer sinal de abertura enquanto houver uma transação `SUBMITTED` ou `PARTIAL`. Ele só processa novos sinais após a finalização (`FILLED/CANCELED`).
 * **Modo Netting/Scaling:** O Runner pode aceitar novos sinais para aumentar/diminuir a posição, mas estes entrarão na fila e serão processados sequencialmente, respeitando a atomicidade da margem no Portfolio.
 
-### D. Implicações Arquiteturais
+### D. Isolamento e Fault Containment
+
+Para garantir que a falha de um Runner individual não comprometa a disponibilidade do sistema, cada Runner opera dentro de limites de recursos bem definidos:
+
+#### 1. Isolamento de Recursos por Runner
+
+* **Thread/Virtual Thread Dedicada:** Cada Runner executa em sua própria thread (ou virtual thread), impedindo que um Runner em loop ou deadlock bloqueie a execução dos demais.
+* **Timeout Forçado:** Toda operação do Runner (processamento de sinal, `Capital Request`, `Order Dispatch`) possui um timeout máximo. Se excedido, a operação é abortada e o Runner transita para `HALTED`.
+* **Limite de Memória:** O sistema deve monitorar o consumo de recursos por Runner (ex: número de locks ativos, transações em memória). Acúmulo anormal de estado indica bug e deve disparar alerta.
+
+#### 2. Proteção de Componentes Compartilhados
+
+O **Portfolio** e o **ExchangeAdapter** são componentes centrais compartilhados por todos os Runners. Sua resiliência é crítica:
+
+* **Circuit Breaker por Runner no Portfolio:** Se um Runner específico acumular $N$ chamadas com erro em sequência (ex: requests malformados, timeouts), o Portfolio suspende o atendimento apenas desse Runner sem afetar os demais.
+* **Quota no ExchangeAdapter:** O adaptador deve limitar o número de requests simultâneos por Runner, evitando que um Runner saturado consuma todo o pool de conexões ou o rate limit da Exchange em detrimento dos outros.
+
+#### 3. Detecção de Runner Mal Comportado
+
+O sistema mantém métricas de saúde por Runner que alimentam os mecanismos de proteção:
+
+| Métrica | Limite | Ação |
+|---------|--------|------|
+| **Taxa de erros** | $N$ erros em $T$ segundos | Circuit Breaker do Portfolio suspende o Runner |
+| **Tempo de processamento de sinal** | Acima de $X$ms | Alerta + candidato a `HALTED` automático |
+| **Locks ativos não resolvidos** | Acima de $N$ | Alerta de possível vazamento de estado |
+| **Requests ao ExchangeAdapter** | Acima de $N$/min | Throttling individual do Runner |
+
+#### E. Implicações Arquiteturais
 
 | Desafio                               | Solução no Blueprint                                                                      |
 |---------------------------------------|-------------------------------------------------------------------------------------------|
 | **Sinais mais rápidos que execução?** | **Drop Policy**: Novos sinais são descartados se o Runner estiver ocupado.                |
 | **Sinal demorado?**                   | O Watchdog de Timeout (6.C) cancela a transação, liberando o Runner para o próximo ciclo. |
 | **Corrupção de Estado?**              | Evitada pelo modelo de **Actor/Single-thread** por Runner; o estado é local e isolado.    |
+| **Runner em loop/crash?**             | Isolamento de thread + Circuit Breaker por Runner protegem o restante do sistema.         |
+| **Saturação de recursos compartilhados?** | Quota por Runner no ExchangeAdapter e Portfolio impedem monopolização.                |
 
 ---
 
