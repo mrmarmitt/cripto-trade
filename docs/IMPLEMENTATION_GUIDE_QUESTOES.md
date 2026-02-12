@@ -126,9 +126,54 @@
 **Origem:** QUESTOES_SEM_CLASSIFICACAO.md #14
 
 
+## Limites de Recursos por Runner (Hard/Soft Limits)
+
+**Pergunta:** O teto de capital por Runner (Max Allocation) cobre apenas margem, ou também número de posições e ordens?
+
+**Detalhamento necessário:**
+- Ordens `SUBMITTED` contam para o limite de posições?
+- Quem valida esses limites? Portfolio no `Capital Request`, ou Runner na `Execution Policy`?
+- O limite é dinâmico? Pode ser alterado em tempo real sem reiniciar o Runner?
+- Há soft limit com alerta, ou só hard limit com bloqueio?
+- **Implicação:** Runners podem consumir recursos além do desejado se apenas margem for limitada.
+
+**Origem:** BLUEPRINT_QUESTOES.md — GAP #6 (movido para Implementation Guide)
+
+---
+
+## Ordem de Processamento Concorrente no Portfolio
+
+**Pergunta:** Como garantir a ordem FIFO de `Capital Requests` em ambiente concorrente?
+
+**Detalhamento necessário:**
+- Se 10 Runners chamam `requestCapital` simultaneamente, quem chega "primeiro"?
+- O lock do Portfolio é por método ou por transação de banco de dados?
+- Há risco de starvation se um Runner for muito lento e outro muito rápido?
+- E se um Runner fizer 1000 requests por segundo? Ele domina a fila?
+- **Implicação:** Define o mecanismo de serialização (lock otimista, pessimista, fila).
+
+**Origem:** BLUEPRINT_QUESTOES.md — GAP #7 (movido para Implementation Guide)
+
+---
+
+## Testabilidade do Protocolo de Reconciliação
+
+**Pergunta:** Como testar o Boot Sequence (6.D) e cenários de reconciliação em ambiente de desenvolvimento?
+
+**Detalhamento necessário:**
+- Como simular uma Exchange que "perdeu" o estado de uma ordem (ordem fantasma)?
+- Como testar o cenário de crash entre persistência e dispatch?
+- O MockExchangeAdapter precisa de modos de falha configuráveis?
+- Testes de integração devem cobrir todos os cenários da tabela de reconciliação (11.3.C)?
+- **Implicação:** Define os modos de falha do mock e a cobertura mínima de testes de resiliência.
+
+**Origem:** BLUEPRINT_QUESTOES.md — GAP #13 (movido para Implementation Guide)
+
+---
+
 ## Notas de Implementação — Idempotência e Protocolo de Envio
 
-Requisitos técnicos derivados das seções 10.2 e 6.D do Blueprint.
+Requisitos técnicos derivados das seções 11.1 e 6.D do Blueprint.
 
 ---
 
@@ -176,7 +221,7 @@ Requisitos técnicos derivados das seções 10.2 e 6.D do Blueprint.
 
 ## Notas de Implementação — Fees e Cancelamento Parcial
 
-Requisitos técnicos derivados das seções 10.1 e 10.3 do Blueprint.
+Requisitos técnicos derivados das seções 10.1 e 11.2 do Blueprint.
 
 ---
 
@@ -211,7 +256,7 @@ Requisitos técnicos derivados das seções 10.1 e 10.3 do Blueprint.
 
 ## Notas de Implementação — Reconciliação e Boot Sequence
 
-Requisitos técnicos derivados das seções 6.D e 10.4 do Blueprint.
+Requisitos técnicos derivados das seções 6.D e 11.3 do Blueprint.
 
 ---
 
@@ -234,7 +279,7 @@ Requisitos técnicos derivados das seções 6.D e 10.4 do Blueprint.
 
 ## Notas de Implementação — Circuit Breaker e Defesa de Capital
 
-Requisitos técnicos derivados da seção 10.5 do Blueprint.
+Requisitos técnicos derivados da seção 12.1 do Blueprint.
 
 ---
 
@@ -255,7 +300,7 @@ Requisitos técnicos derivados da seção 10.5 do Blueprint.
 
 ## Notas de Implementação — Alavancagem e Margem
 
-Requisitos técnicos derivados da seção 10.6 do Blueprint.
+Requisitos técnicos derivados da seção 12.2 do Blueprint.
 
 ---
 
@@ -280,7 +325,7 @@ Requisitos técnicos derivados da seção 10.6 do Blueprint.
 
 ## Notas de Implementação — Precisão Decimal e Arredondamento
 
-Requisitos técnicos derivados da seção 10.7 do Blueprint.
+Requisitos técnicos derivados da seção 10.2 do Blueprint.
 
 ---
 
@@ -303,7 +348,7 @@ Requisitos técnicos derivados da seção 10.7 do Blueprint.
 
 ## Notas de Implementação — Alocação de Capital e Governança de Concorrência
 
-Requisitos técnicos derivados da seção 10.8 do Blueprint.
+Requisitos técnicos derivados da seção 12.3 do Blueprint.
 
 ---
 
@@ -347,7 +392,7 @@ Requisitos técnicos derivados da seção 10.8 do Blueprint.
 
 **Pergunta:** Como os valores são formatados para exibição em APIs, interfaces e relatórios?
 
-**Localização atual:** Blueprint seção 10.7 (focado na borda com Exchange, não na apresentação)
+**Localização atual:** Blueprint seção 10.2 (focado na borda com Exchange, não na apresentação)
 
 **Detalhamento necessário:**
 - O arredondamento para exibição é diferente do arredondamento para execução?
@@ -375,7 +420,7 @@ Requisitos técnicos derivados da seção 7.C do Blueprint.
 
 ## Notas de Implementação — Concorrência e Processamento do Runner
 
-Requisitos técnicos derivados da seção 10.9 do Blueprint.
+Requisitos técnicos derivados da seção 13 do Blueprint.
 
 ---
 
@@ -395,7 +440,7 @@ Requisitos técnicos derivados da seção 10.9 do Blueprint.
 
 ## Notas de Implementação — Ciclo de Vida do Runner
 
-Requisitos técnicos derivados da seção 11 do Blueprint.
+Requisitos técnicos derivados da seção 14 do Blueprint.
 
 ---
 
@@ -415,7 +460,7 @@ Requisitos técnicos derivados da seção 11 do Blueprint.
 
 ## Notas de Implementação — Preço Médio e Posição
 
-Requisitos técnicos derivados da seção 10.10 do Blueprint.
+Requisitos técnicos derivados da seção 10.3 do Blueprint.
 
 ---
 

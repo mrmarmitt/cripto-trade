@@ -109,7 +109,7 @@
 
 **Pergunta:** Como o sistema gerencia as transações que caem na DLQ?
 
-**Localização atual:** Mencionado na Seção 4.D.4 e 10.4.D do Blueprint
+**Localização atual:** Mencionado na Seção 4.D.4 e 11.3.D do Blueprint
 
 **Detalhamento necessário:**
 - Quem consome a DLQ? É um processo automático ou manual?
