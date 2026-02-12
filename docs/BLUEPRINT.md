@@ -1,4 +1,6 @@
-# Documentação de Arquitetura: Gestão de Capital e Execução (CTrade) v16
+# Documentação de Arquitetura: Gestão de Capital e Execução (CTrade) v17
+
+> **Escopo V1 — Spot Only:** Esta versão opera exclusivamente em modo spot (custódia total, sem alavancagem). O design de alavancagem e margem para futuros está preservado em [`LEVERAGE_DESIGN.md`](LEVERAGE_DESIGN.md) para referência futura (V2).
 
 ## 1. Visão Geral
 
@@ -42,7 +44,7 @@ Define como as `Transactions` de fechamento são casadas com as de abertura:
 | Contexto (Aggregate) | Entidade / VO      | Relacionamento     | Responsabilidade / Atributo Principal                                     |
 |----------------------|--------------------|--------------------|---------------------------------------------------------------------------|
 | **Portfolio**        | `GlobalBalance`    | Atributo Root      | Saldo consolidado (Available, Reserved, Realized) e auditoria de capital. |
-| **Portfolio**        | `MarginAccount`    | 1 : N (Accounts)   | Controle de colateral, manutenção e preço de liquidação por exchange.     |
+| **Portfolio**        | `MarginAccount`    | 1 : N (Accounts)   | Controle de capital reservado por Exchange/sub-conta (custódia spot).     |
 | **StrategyRunner**   | `Position`         | 1 : N (Lotes)      | Exposição líquida, preço médio e PnL acumulado da estratégia.             |
 | **StrategyRunner**   | `Transaction`      | 1 : N (Matches)    | Ciclo de vida da ordem (Pending → Submitted → Final).                     |
 | **StrategyRunner**   | `TransactionMatch` | N : N (Lots/Trans) | Vinculação definitiva entre ordens de compra e venda (Realização).        |
@@ -53,7 +55,7 @@ Define como as `Transactions` de fechamento são casadas com as de abertura:
 
 ### 3.1 Considerações
 
-* **Nota sobre Liquidação de Taxas (Fee Settlement):** O `AvailableBalance` é o garantidor final de todas as taxas operacionais. Caso uma taxa seja cobrada pela Exchange em um ativo secundário (ex: BNB, FTT), o **Portfolio** realizará uma conversão sintética imediata para a moeda base (ex: USDT) no momento do `TransactionMatch`. O valor equivalente será deduzido do `AvailableBalance`, garantindo que o saldo local reflita o poder de compra real e evite a manutenção de saldos negativos de ativos de utilidade no sistema.
+* **Nota sobre Liquidação de Taxas (Fee Settlement):** O `AvailableBalance` é o garantidor final de todas as taxas operacionais. Caso uma taxa seja cobrada pela Exchange em um ativo secundário (ex: BNB, FTT), o **Portfolio** realizará uma conversão sintética imediata para a moeda base (ex: USDT) no momento do `TransactionMatch`. O valor equivalente será deduzido do `AvailableBalance`, garantindo que o saldo local reflita o poder de compra real. Em caso de falha na precificação, o débito é registrado na `DustAccount` como Dívida Técnica de Ativo para reconciliação posterior (ver **Seção 10.1** e **10.2.C**).
 
 ---
 
@@ -83,9 +85,10 @@ O Runner recebe o DTO e prepara o estado interno antes de qualquer comunicação
 
 ### C. Reserva e Execução (Portfolio & Exchange)
 
-1. **Capital Request:** O Runner solicita ao **Portfolio** a reserva de margem baseada na transação `PENDING`. O Portfolio move o saldo de *Available* para *Reserved*.
+1. **Capital Request:** O Runner solicita ao **Portfolio** a reserva de capital baseada na transação `PENDING`. O Portfolio move o saldo de *Available* para *Reserved*. A fórmula spot é: `Capital_Requerido = Quantidade * Preço_Estimado`.
 2. **Order Dispatch:** Com o estado salvo localmente e a margem garantida, o Runner despacha a ordem para a Exchange utilizando o protocolo de identificação única:
-   * **Identificação Única (`clientOrderId`):** Utiliza o formato `{r}{runner_short}{t}{timestamp}{s}{sequence}{type}_{transaction_uuid}` (ex: `r01ft1700000000000s001N_8da233214f11b12a`).
+   * **Identificação Única (`clientOrderId`):** Utiliza o formato `{v}{version}{r}{runner_short}{t}{timestamp}{s}{sequence}{type}_{transaction_uuid}` (ex: `v1r01ft1700000000000s001N_8da233214f11b12a`). O prefixo de versão (`v1`) permite que o parser de reconciliação identifique o layout do ID, garantindo compatibilidade com IDs antigos caso o formato evolua.
+   * **Validação de Versão (Regra Geral do Parser):** Antes de interpretar qualquer campo do `clientOrderId`, o parser deve extrair e validar o prefixo de versão. Se a versão for desconhecida, o parser deve abortar o processamento e encaminhar a mensagem para a DLQ, evitando roteamento incorreto ou corrupção de estado por interpretação de layout incompatível.
    * **Validação de Segurança:** O Portfolio atua como *guardrail*, validando se o `runner_short` pertence ao Runner solicitante antes do envio para evitar *spoofing* entre estratégias.
 3. **Status SUBMITTED:** Ao receber a confirmação de recebimento da Exchange (OrderID), o Runner atualiza a transação local para o estado `SUBMITTED`, confirmando que a ordem está "em voo".
 4. **Transaction Routing (Callback Assíncrono):** O Listener de ordens da exchange captura a execução e a entrega ao **Portfolio**, que atua como o ponto de entrada único. Ele realiza o *parsing* do prefixo do `clientOrderId` para identificar o **StrategyRunner** proprietário e rotear a `Transaction` via evento ou comando, eliminando a necessidade de busca exaustiva no banco de dados e permitindo que o Runner inicie sua contabilidade interna imediatamente.
@@ -179,20 +182,28 @@ O processo é **descentralizado**. O `Portfolio` inicializa o estado do caixa, m
 #### 2. Passo a Passo do Boot:
 
 1. **Portfolio - Sincronização de Caixa:** O Portfolio conecta-se às Exchanges para atualizar o `GlobalBalance` (Available/Total). Ele assume que qualquer margem em `Reserved` no banco de dados deve ser reavaliada pelos Runners.
-2. **Runner - Identificação do Limbo:** Cada Runner busca no seu `StrategyRunnerRepository` todas as transações nos estados `PENDING`, `SUBMITTED` ou `PARTIAL`.
-3. **Runner - Consulta à Exchange:**
+2. **Runner - Saneamento de Locks Órfãos:** Antes de reconciliar ordens ativas, o Runner busca todas as transações `PENDING` vinculadas ao seu `RunnerId` que **não possuem** um `ExchangeOrderId` associado (indicando que o crash ocorreu entre a persistência do lock e o envio à Exchange). Essas transações são classificadas como **Zumbis** e sofrem rollback automático: o `ReservedBalance` associado é liberado no Portfolio, a transação é marcada como `FAILED_ON_CRASH` e o lock é removido.
+3. **Runner - Identificação do Limbo:** Cada Runner busca no seu `StrategyRunnerRepository` todas as transações restantes nos estados `PENDING`, `SUBMITTED` ou `PARTIAL`.
+4. **Runner - Consulta à Exchange:**
    * O Runner usa o `clientOrderId` (que contém o UUID da transação) para consultar o status real na Exchange.
    * **Cenário A (Ordem existe):** O Runner atualiza o status local (ex: de `SUBMITTED` para `FILLED` ou `CANCELED`) e notifica o Portfolio para converter/estornar a margem.
    * **Cenário B (Ordem NÃO existe):** Se a Exchange não reconhece o ID, o Runner assume que o sistema caiu antes do envio ou a Exchange também reiniciou e perdeu o estado. A transação é marcada como `EXPIRED` e a margem é devolvida ao Portfolio.
-4. **Runner - Sincronização de Alavancagem (Leverage Sync):** O Runner consulta a alavancagem real do símbolo na Exchange. Se houver divergência com a configuração local, o Runner atualiza sua `MarginAccount` interna para refletir a realidade da Exchange ("A Exchange é a Lei"), garantindo que novos cálculos de margem sejam precisos.
 5. **Runner - Destravamento de Lotes:** Após reconciliar a transação, os locks de lotes associados são limpos conforme a Seção 9.1.
 
 #### 3. Proteção contra Novos Trades (Circuit Breaker)
 
-Enquanto um `StrategyRunner` não finalizar sua reconciliação (Passo 3), ele mantém um flag interno `isReconciling = true`.
+Enquanto um `StrategyRunner` não finalizar sua reconciliação (Passos 2-4), ele mantém um flag interno `isReconciling = true`.
 
 * Neste estado, o Runner **rejeita automaticamente** qualquer novo `TradeSignal` da estratégia.
 * Isso evita o "Double Spending" de margem e garante que novos trades só ocorram após a limpeza do estado anterior.
+
+#### 4. TTL de Reservas no Portfolio (Defesa em Profundidade)
+
+O Saneamento de Locks (Passo 2) depende do reboot do Runner. Para cobrir o cenário em que o Runner permanece inativo por tempo prolongado, o **Portfolio** implementa uma segunda camada de proteção independente:
+
+* **Reservation TTL:** Toda reserva de `ReservedBalance` possui um tempo máximo de vida (TTL) configurável. Se o Runner não confirmar a reserva (via envio da ordem à Exchange) dentro do prazo, o Portfolio libera automaticamente o `ReservedBalance` de volta ao `AvailableBalance`.
+* **Escopo:** O TTL aplica-se exclusivamente a reservas vinculadas a transações `PENDING` sem `ExchangeOrderId` — reservas de ordens já submetidas (`SUBMITTED`) são geridas pelo fluxo normal de reconciliação.
+* **Independência:** Este mecanismo é responsabilidade do Portfolio e não depende da saúde do Runner. Um Worker periódico do Portfolio verifica reservas expiradas e executa o rollback.
 
 ---
 
@@ -321,7 +332,9 @@ O sistema adota políticas rigorosas para garantir a integridade de valores mone
   1. **Cenário Ideal:** Utiliza o Mark Price do milissegundo exato do `TransactionMatch`.
   2. **Fallback 1 (Cache):** Se a API de preço estiver instável, utiliza a última cotação conhecida (Last Price) com validade de até 60 segundos.
   3. **Fallback 2 (Preço da Execução):** Caso não haja cotação recente do ativo da taxa, utiliza o preço da própria transação executada (se houver correlação direta) ou o preço médio do dia.
-  4. **Fallback Crítico (Contabilidade Tardia):** Se a precificação falhar totalmente, o Portfolio registra o débito no ativo original (gerando um saldo negativo temporário no ativo da taxa) e encaminha a transação para a DLQ Contábil para liquidação manual posterior.
+  4. **Fallback Crítico (Dívida Técnica de Ativo):** Se a precificação falhar totalmente, o Portfolio registra uma **Dívida Técnica de Ativo** na `DustAccount`: o débito exato no ativo original (ex: -0.002 BNB) acompanhado do timestamp preciso da transação. A execução da estratégia nunca é interrompida por falta de cotação de moedas secundárias.
+
+* **Reconciliação Histórica Determinística:** Qualquer processo de reconciliação (Worker ou manual via DLQ) é obrigado a utilizar o **preço histórico correspondente ao timestamp original do trade**, não o preço atual. Isso garante que o PnL Líquido seja matematicamente idêntico ao que seria se o sistema estivesse 100% estável no momento da execução — o tempo de processamento não afeta o resultado financeiro.
 * **Irreversibilidade:** Uma vez calculada e debitada a taxa sintética no momento do `TransactionMatch`, o valor é final. Não existem ajustes posteriores por oscilação de câmbio, garantindo que o PnL Líquido seja imutável após a efetivação.
 
 ### 10.2 Precisão Decimal e Arredondamento (Rounding Policy)
@@ -342,19 +355,27 @@ O truncamento para os limites da Exchange ocorre no **último momento possível*
 * **Quantidade (Quantity):** Sempre arredondar para **baixo** (Floor/Down). É preferível comprar 0.0001 a menos do que ter a ordem rejeitada por "Saldo Insuficiente" devido a um arredondamento para cima.
 * **Preço (Price):** Arredondar para **baixo em Compras** (mais conservador) e para **cima em Vendas**, respeitando o `tickSize`.
 
-#### C. Gestão de "Pó" (Dust Management)
+#### C. Gestão de "Pó" e Resíduos Contábeis (DustAccount)
 
-"Dust" ocorre quando restam frações minúsculas de um ativo que não podem ser vendidas por estarem abaixo do `minQty` da Exchange.
+A `DustAccount` é uma **sub-entidade do Portfolio** que atua como receptor universal de débitos não resolvidos e resíduos operacionais. Seus valores são **excluídos** do cálculo de `AvailableBalance`, garantindo que o capital de giro permaneça "limpo".
 
-* **Lotes Residuais:** No momento do `Match`, se a quantidade restante de um lote for menor que o `minQty` permitido, o Runner deve marcar o lote como **Totalmente Fechado** e enviar o resíduo para uma conta de "Ajuste de Arredondamento" no Portfolio.
-* **Impacto no PnL:** Essas micro-diferenças são contabilizadas como perda operacional irrelevante, evitando que o sistema tente "vender o impossível".
+* **Fontes de Entrada:**
+  1. **Dust de Arredondamento:** No momento do `Match`, se a quantidade restante de um lote for menor que o `minQty` permitido pela Exchange, o Runner marca o lote como **Totalmente Fechado** e envia o resíduo para a `DustAccount`.
+  2. **Dívidas Técnicas de Ativo:** Quando a conversão de Fees cross-currency falha (Fallback Crítico da Seção 10.1), o débito no ativo original é registrado na `DustAccount` com o timestamp da transação.
+
+* **Processo de Sweep (Limpeza):** Um Worker de Reconciliação periódico converte os resíduos acumulados na `DustAccount` para a moeda base, utilizando o **preço histórico do timestamp original** (para Dívidas Técnicas) ou o preço atual (para Dust de Arredondamento). O saldo convertido é reintegrado ao `AvailableBalance` como lucro operacional recuperado.
+
+* **Auditoria:** O Portfolio mantém o rastro de acúmulo por origem (Dust vs Dívida Técnica) e por Runner, permitindo identificar estratégias que geram resíduos excessivos.
+
+* **Impacto no PnL:** Micro-diferenças de arredondamento são contabilizadas como perda operacional irrelevante. Dívidas Técnicas pendentes são transparentes para o operador — o patrimônio líquido (Equity) exibe separadamente o saldo operacional e o "pó" a ser processado.
 
 #### D. Implicações Arquiteturais
 
 | Componente         | Responsabilidade                                                                  |
 |--------------------|-----------------------------------------------------------------------------------|
 | **StrategyRunner** | Conhece as regras de precisão do símbolo e aplica o truncamento antes do envio.   |
-| **Portfolio**      | Consolida saldos usando precisão máxima e absorve resíduos de "pó".               |
+| **Portfolio**      | Consolida saldos usando precisão máxima e absorve resíduos na `DustAccount`.      |
+| **DustAccount**    | Isola débitos não resolvidos e resíduos do capital de giro operacional.            |
 | **Value Objects**  | Quantidades e Preços devem ser imutáveis e encapsular a lógica de arredondamento. |
 
 ### 10.3 Metodologia de Cálculo e Exposição de Preço Médio
@@ -554,44 +575,7 @@ O Circuit Breaker é acionado automaticamente pelo **Portfolio** ao detectar as 
 | **StrategyRunner** | Implementa o flag de interrupção e suspende o ciclo de vida de novos sinais. |
 | **Watchdog**       | Monitora a saúde da conexão e o tempo de resposta das transações.            |
 
-### 12.2 Modelagem de Alavancagem (Leverage) e Margem
-
-O sistema trata a alavancagem como uma ferramenta de **eficiência de capital**, onde a margem é o colateral real bloqueado no Portfolio para sustentar uma exposição maior no Runner.
-
-#### A. Separação de Conceitos
-
-1. **Margem (Conceito do Portfolio):** É o valor em "dinheiro vivo" (USDT, BTC, etc.) que a Exchange exige como garantia. O `Portfolio` é o único que gerencia a margem através da `MarginAccount`.
-2. **Alavancagem/Leverage (Conceito do Runner):** É um multiplicador de risco. O `StrategyRunner` define a alavancagem desejada (ex: 10x), mas quem autoriza se há colateral suficiente para essa alavancagem é o `Portfolio`.
-
-#### B. Cálculo de Margem Necessária
-
-O cálculo da margem no `Capital Request` segue a fórmula:
-
-* **`Margem_Requerida = (Quantidade * Preço_Estimado) / Alavancagem`**
-* O `StrategyRunner` envia tanto o **Valor Nocional** (total da ordem) quanto a **Alavancagem** no pedido de reserva.
-* O `Portfolio` valida se o `AvailableBalance` suporta essa `Margem_Requerida` antes de mover o saldo para `Reserved`.
-
-#### C. Entidade `MarginAccount`
-
-A `MarginAccount` é uma entidade interna ao Agregado **Portfolio**:
-
-* **Relacionamento:** 1 `Portfolio` : N `MarginAccounts` (uma para cada Exchange/Sub-conta).
-* **Função:** Rastreia o `MaintenanceMargin` (margem de manutenção) e o `LiquidationPrice`.
-* **Margin Calls:** Caso a Exchange envie um evento de risco ou o preço chegue perto da liquidação, o `Portfolio` dispara um evento de **`Emergency_Liquidation`** para o Runner proprietário, forçando o fechamento da posição para proteger o colateral restante.
-
-#### D. Sincronização e Divergência Externa
-
-A Exchange é a única fonte de verdade para a alavancagem ativa. O Runner valida a alavancagem no `Boot` e monitora alterações via WebSocket. Em caso de alteração manual externa, o Runner prioriza o valor real da Exchange para o cálculo de margem, garantindo que o `ReservedBalance` solicitado ao Portfolio seja tecnicamente viável na Exchange.
-
-#### E. Implicações Arquiteturais
-
-| Responsabilidade          | Dono             | Justificativa                                                                  |
-|---------------------------|------------------|--------------------------------------------------------------------------------|
-| **Definição de Leverage** | `StrategyRunner` | É uma decisão da estratégia de trade.                                          |
-| **Validação de Limites**  | `Portfolio`      | Garante que a soma das margens de todos os Runners não exceda o risco global.  |
-| **Cálculo de Colateral**  | `Portfolio`      | É quem detém a autoridade sobre o saldo real (`GlobalBalance`).                |
-
-### 12.3 Alocação de Capital e Governança de Concorrência
+### 12.2 Alocação de Capital e Governança de Concorrência
 
 O sistema gerencia a escassez de recursos através de uma política de **Priorização por Reserva e Precedência de Chegada**, garantindo que nenhum Runner desestabilize a saúde financeira do `GlobalBalance`.
 
@@ -599,7 +583,7 @@ O sistema gerencia a escassez de recursos através de uma política de **Prioriz
 
 Por padrão, o Portfolio processa os `Capital Requests` seguindo a ordem cronológica de recebimento:
 
-1. **Atendimento Imediato:** Se o `AvailableBalance` for suficiente para cobrir a `Margem_Requerida` (incluindo o buffer de segurança), a reserva é feita instantaneamente.
+1. **Atendimento Imediato:** Se o `AvailableBalance` for suficiente para cobrir o `Capital_Requerido` (incluindo o buffer de segurança), a reserva é feita instantaneamente.
 2. **Rejeição por Insuficiência:** Se o saldo disponível for menor que o solicitado, o Portfolio **rejeita** o pedido imediatamente (`InsufficientFunds`). O sistema não mantém uma "fila de espera" para evitar que ordens sejam enviadas com preços defasados (Stale Orders).
 
 #### B. Proteção contra Starvation (Fome de Capital)
@@ -607,8 +591,12 @@ Por padrão, o Portfolio processa os `Capital Requests` seguindo a ordem cronol�
 Para evitar que um Runner de alta frequência consuma todo o capital, o sistema implementa **Limites de Exposição por Runner**:
 
 * **Max Allocation Per Runner:** Cada `StrategyRunner` possui um teto máximo de capital (ex: no máximo 20% do `GlobalBalance`).
-* **Hard vs Soft Limits:** * **Hard Limit:** Bloqueio imediato de novos `Capital Requests` se o teto for atingido.
-* **Soft Limit:** Alerta o monitoramento, mas permite a operação se ainda houver capital global ocioso.
+* **Hard vs Soft Limits:** 
+  * **Hard Limit:** Bloqueio imediato de novos `Capital Requests` se o teto for atingido.
+  * **Soft Limit:** Alerta o monitoramento, mas permite a operação se ainda houver capital global ocioso.
+* **Max Open Positions:** Número máximo de posições abertas simultaneamente.
+* **Max Pending Orders:** Número máximo de ordens SUBMITTED simultâneas
+* **Max Cancel Rate:** Limite de cancelamentos por minuto
 
 #### C. Estratégia de "Capital Pooling"
 
@@ -680,7 +668,7 @@ Um Runner transita pelos seguintes estados operacionais:
 ### B. Criação e Unicidade
 
 * **Instanciação:** Novos Runners são criados via API administrativa, associados obrigatoriamente a um `PortfolioId`.
-* **Constraint de Unicidade:** O sistema impede a criação de múltiplos Runners para a mesma combinação de `(StrategyId, Symbol, PortfolioId)` em estado `ACTIVE` para evitar conflitos de execução e cálculos duplicados de margem.
+* **Constraint de Unicidade:** O sistema impede a criação de múltiplos Runners para a mesma combinação de `(StrategyId, Symbol, ExchangeId, PortfolioId)` em estado `ACTIVE` para evitar conflitos de execução e cálculos duplicados de capital. A inclusão do `ExchangeId` permite que a mesma estratégia opere o mesmo símbolo em exchanges diferentes simultaneamente.
 
 ### C. Encerramento com Posições Abertas (Graceful Shutdown)
 

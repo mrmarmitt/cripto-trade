@@ -126,16 +126,13 @@
 **Origem:** QUESTOES_SEM_CLASSIFICACAO.md #14
 
 
-## Limites de Recursos por Runner (Hard/Soft Limits)
+## ~~Limites de Recursos por Runner (Hard/Soft Limits)~~ — Respondido
 
-**Pergunta:** O teto de capital por Runner (Max Allocation) cobre apenas margem, ou também número de posições e ordens?
-
-**Detalhamento necessário:**
-- Ordens `SUBMITTED` contam para o limite de posições?
-- Quem valida esses limites? Portfolio no `Capital Request`, ou Runner na `Execution Policy`?
-- O limite é dinâmico? Pode ser alterado em tempo real sem reiniciar o Runner?
-- Há soft limit com alerta, ou só hard limit com bloqueio?
-- **Implicação:** Runners podem consumir recursos além do desejado se apenas margem for limitada.
+> **Resolvido no Blueprint v17, Seção 12.2.B.** O Blueprint agora define limites de exposição por Runner: Max Allocation (capital), Max Open Positions, Max Pending Orders, Max Cancel Rate, com suporte a Hard/Soft Limits.
+>
+> **Questões remanescentes para implementação:**
+> - Quem valida cada limite? Portfolio no `Capital Request`, ou Runner na `Execution Policy`?
+> - Os limites são dinâmicos (alteráveis em runtime sem reiniciar o Runner)?
 
 **Origem:** BLUEPRINT_QUESTOES.md — GAP #6 (movido para Implementation Guide)
 
@@ -298,28 +295,17 @@ Requisitos técnicos derivados da seção 12.1 do Blueprint.
 
 ---
 
-## Notas de Implementação — Alavancagem e Margem
+## Notas de Implementação — Capital e Margem Spot
 
 Requisitos técnicos derivados da seção 12.2 do Blueprint.
 
+> **Notas 14 e 15 originais (SET_LEVERAGE e MaintenanceMargin)** foram migradas para [`LEVERAGE_DESIGN.md`](LEVERAGE_DESIGN.md) (escopo V2).
+
 ---
 
-#### **14. Sincronização de Alavancagem na Exchange**
+#### **14. Arredondamento de Capital (Safety Buffer)**
 
-* **Requisito:** Antes de enviar a primeira ordem de um Runner, o sistema deve garantir que o comando `SET_LEVERAGE` foi executado com sucesso na Exchange para o símbolo correspondente.
-* **Implementação:** Adicionar um passo de "Handshake de Risco" no boot do Runner para configurar o modo de margem (Isolated vs Cross) e o nível de alavancagem.
-* **Detecção de Alteração Externa:** Se um administrador altera a alavancagem diretamente no site da Exchange, o sistema detecta?
-* **Persistência:** A alavancagem é estado do Runner ou do Portfolio?
-* **Rejeição:** Qual é o fluxo se a Exchange rejeitar uma tentativa de alteração de alavancagem?
-
-#### **15. Monitoramento de Margem de Manutenção**
-
-* **Desafio:** O valor da margem necessária muda conforme o preço do ativo oscila (Mark Price).
-* **Solução:** O `Portfolio` deve possuir um worker de background (ou ouvir websockets de conta) que atualiza o `MarginUsage` global em tempo real. Se o uso de margem ultrapassar 90%, o Circuit Breaker Global deve impedir novas aberturas.
-
-#### **16. Arredondamento de Margem (Safety Buffer)**
-
-* **Requisito:** No `Capital Request`, o Portfolio deve sempre reservar uma pequena porcentagem a mais (ex: 1.01 * Margem_Calculada) para cobrir variações de preço entre o envio e a execução (slippage), evitando rejeições por "insufficient margin" na Exchange.
+* **Requisito:** No `Capital Request`, o Portfolio deve sempre reservar uma pequena porcentagem a mais (ex: 1.01 * Capital_Calculado) para cobrir variações de preço entre o envio e a execução (slippage), evitando rejeições por "insufficient balance" na Exchange.
 
 ---
 
@@ -329,17 +315,17 @@ Requisitos técnicos derivados da seção 10.2 do Blueprint.
 
 ---
 
-#### **17. Centralização da RoundingPolicy**
+#### **15. Centralização da RoundingPolicy**
 
 * **Requisito:** Criar um serviço ou Value Object `AssetFormat` que receba a `quantity` bruta e retorne a `quantity` formatada conforme o `stepSize` da Exchange.
 * **Teste Unitário Obrigatório:** Validar se `0.1 + 0.2` resulta rigorosamente em `0.3`, e não em `0.30000000000000004` (erro clássico de Double).
 
-#### **18. Conversão de Tipos na I/O**
+#### **16. Conversão de Tipos na I/O**
 
 * **Entrada (API/WS):** Converter strings da Exchange para `Decimal` imediatamente no recebimento.
 * **Saída (JSON):** Converter `Decimal` para string na saída para garantir que a Exchange receba o número de casas decimais exato, sem notação científica.
 
-#### **19. Validação de `minNotional**`
+#### **17. Validação de `minNotional**`
 
 * **Desafio:** Além da precisão, as exchanges exigem um valor mínimo total (ex: 5 USDT).
 * **Implementação:** O Runner deve validar se `(Quantidade_Arredondada * Preço) > minNotional` antes de iniciar o `Capital Request`.
@@ -348,20 +334,20 @@ Requisitos técnicos derivados da seção 10.2 do Blueprint.
 
 ## Notas de Implementação — Alocação de Capital e Governança de Concorrência
 
-Requisitos técnicos derivados da seção 12.3 do Blueprint.
+Requisitos técnicos derivados da seção 12.2 do Blueprint.
 
 ---
 
-#### **20. Atomicidade no `requestCapital**`
+#### **18. Atomicidade no `requestCapital**`
 
 * **Requisito:** O método de reserva de margem deve ser **Thread-Safe**. Em implementações Java/C#, usar `synchronized` ou `locks` semafóricos. Em Node.js, garantir que a operação de `check-and-reserve` seja atômica no banco de dados (ex: `UPDATE Balance SET available = available - X WHERE available >= X`).
 
-#### **21. Ordem de Processamento de Sinais**
+#### **19. Ordem de Processamento de Sinais**
 
 * **Desafio:** Se dois Runners recebem sinais ao mesmo tempo, quem chega primeiro ao Portfolio?
 * **Solução:** A latência de rede interna e a velocidade de processamento do Runner determinam a ordem. Não deve haver lógica de "favorecimento" no nível de transporte.
 
-#### **22. Monitoramento de "Rejection Rate"**
+#### **20. Monitoramento de "Rejection Rate"**
 
 * **Implementação:** O Portfolio deve registrar quantas vezes cada Runner teve capital negado. Taxas altas de rejeição indicam que o Runner está "mal calibrado" para o tamanho da conta ou que o limite por Runner está muito baixo.
 
@@ -409,12 +395,12 @@ Requisitos técnicos derivados da seção 7.C do Blueprint.
 
 ---
 
-#### **23. Interface de Comunicação**
+#### **21. Interface de Comunicação**
 
 * **Requisito:** O `Portfolio` deve expor uma interface `CapitalManager` com métodos síncronos (`reserve`) e assíncronos (`confirmExecution`, `release`).
 * **Implementação:** Em arquiteturas monolíticas, usar um `EventBus` em memória (como o do Spring ou MediatR). Em microserviços, usar RabbitMQ ou Kafka com o padrão **Outbox Pattern** para garantir que a atualização da Transação e o disparo do evento ocorram na mesma transação de banco de dados.
 
-#### **24. Idempotência no Portfolio**
+#### **22. Idempotência no Portfolio**
 
 * **Regra:** O Portfolio deve rastrear o status da margem por `transaction_uuid`. Se receber dois eventos de execução para o mesmo ID, o segundo deve ser descartado silenciosamente para evitar dupla liquidação.
 
@@ -424,17 +410,17 @@ Requisitos técnicos derivados da seção 13 do Blueprint.
 
 ---
 
-#### **25. Implementação da Mailbox**
+#### **23. Implementação da Mailbox**
 
 * **Requisito:** Utilizar um padrão de Actor (ex: Akka, Proto.Actor) ou uma fila `Channel` (Go/C#) com limite de 1 elemento.
 * **Ação:** O processador deve usar um `TryEnqueue`. Se falhar (fila cheia), logar como `SignalDiscardedByCongestion`.
 
-#### **26. Monitoramento de Backpressure**
+#### **24. Monitoramento de Backpressure**
 
 * **Métrica:** Registrar o tempo de processamento de cada sinal (do recebimento à persistência do `SUBMITTED`).
 * **Alerta:** Se o tempo médio de processamento exceder o intervalo de geração de sinais da estratégia, o Circuit Breaker deve sugerir a revisão da lógica da estratégia ou infraestrutura.
 
-#### **27. Lock de Interface (UI/Admin)**
+#### **25. Lock de Interface (UI/Admin)**
 
 * **Regra:** Comandos manuais enviados via Portfolio/Admin (ex: Force Cancel) têm **prioridade máxima** e devem "furar a fila" ou interromper o processamento do sinal atual para garantir a segurança do capital.
 
@@ -444,16 +430,16 @@ Requisitos técnicos derivados da seção 14 do Blueprint.
 
 ---
 
-#### **28. Factory de Runners**
+#### **26. Factory de Runners**
 
 * **Requisito:** Implementar um `RunnerFactory` que valide as permissões do `Portfolio` antes de instanciar o Runner (ex: o Portfolio tem limite para mais um robô?).
 * **Implementação:** O Runner deve receber suas políticas via construtor para garantir imutabilidade durante a execução.
 
-#### **29. Soft Delete vs Archive**
+#### **27. Soft Delete vs Archive**
 
 * **Regra:** Nunca deletar um registro de `StrategyRunner` do banco de dados. Usar um campo `archived_at` para garantir que o histórico de `Transactions` e `PnL` permaneça íntegro para relatórios fiscais e de performance.
 
-#### **30. Health Check de Ativação**
+#### **28. Health Check de Ativação**
 
 * **Verificação:** Ao passar para `ACTIVE`, o Runner deve obrigatoriamente realizar um `ping` na API da Exchange e validar o `tickSize` do ativo. Se falhar, o status deve retroceder para `HALTED` com erro de configuração.
 
@@ -464,15 +450,15 @@ Requisitos técnicos derivados da seção 10.3 do Blueprint.
 
 ---
 
-#### **31. Precisão no Cálculo Ponderado**
+#### **29. Precisão no Cálculo Ponderado**
 
 * **Requisito:** O cálculo intermediário (`Preço * Quantidade`) deve usar precisão estendida (ex: 18 casas decimais) antes do arredondamento final para evitar a perda de centavos em posições massivas.
 
-#### **32. Sincronização de Cache**
+#### **30. Sincronização de Cache**
 
 * **Implementação:** Se o sistema usar um cache em memória para os Runners, o `averagePrice` no cache deve ser invalidado ou atualizado imediatamente após a escrita no banco de dados para evitar que a estratégia tome decisões baseadas em um custo médio defasado.
 
-#### **33. Tratamento de "Reset" de Posição**
+#### **31. Tratamento de "Reset" de Posição**
 
 * **Regra:** Quando a quantidade da posição chega a zero, o `averagePrice` deve ser zerado ou setado para `null`. O histórico de preço médio daquela operação deve ser movido para a entidade de `TradeHistory`.
 
