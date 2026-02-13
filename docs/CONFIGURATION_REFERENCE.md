@@ -13,6 +13,6 @@ Este documento serve como **referência centralizada** para todas as configuraç
 
 ## Relação com outros documentos
 
-- **Blueprint (BLUEPRINT_V9.md):** Define quem é dono de cada configuração (Runner vs Portfolio)
+- **[Blueprint](BLUEPRINT.md):** Define quem é dono de cada configuração (Runner vs Portfolio)
 - **Implementation Guide:** Detalha como as configurações são consumidas no código
 - **Operations Runbook:** Usa esta referência para troubleshooting e ajustes em produção

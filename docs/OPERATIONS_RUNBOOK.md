@@ -14,5 +14,5 @@ Este documento define **como operar, monitorar e manter** o sistema em produçã
 
 ## Relação com outros documentos
 
-- **Blueprint (BLUEPRINT_V9.md):** Define a arquitetura que este runbook monitora
+- **[Blueprint](BLUEPRINT.md):** Define a arquitetura que este runbook monitora
 - **Implementation Guide:** Fornece as decisões técnicas que impactam o comportamento operacional

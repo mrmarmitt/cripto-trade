@@ -31,28 +31,27 @@
    - A. Aggregate Root: Portfolio
    - B. Aggregate Root: StrategyRunner
    - C. Comunicação entre Agregados: Padrão Híbrido
-8. [Guia de Migração e Decomposição (Refatoração)](#8-guia-de-migração-e-decomposição-refatoração)
-9. [Governança de Locks e Concorrência](#9-governança-de-locks-e-concorrência)
-   - 9.1 Ciclo de Vida do Lock
-   - 9.2 Prevenção de Deadlocks
-10. [Contabilidade e Precisão Financeira](#10-contabilidade-e-precisão-financeira)
-    - 10.1 Política de Taxas (Fees)
-    - 10.2 Precisão Decimal e Arredondamento (Rounding Policy)
-    - 10.3 Metodologia de Cálculo e Exposição de Preço Médio
-11. [Resiliência e Protocolo de Envio](#11-resiliência-e-protocolo-de-envio)
-    - 11.1 Protocolo de Idempotência e Resiliência de Envio
-    - 11.2 Gestão de Cancelamento de Ordens Parciais
-    - 11.3 Filosofia de Reconciliação e Fonte da Verdade
-    - 11.4 Escalabilidade de Conectividade (ExchangeAdapter)
-12. [Gestão de Risco e Defesa de Capital](#12-gestão-de-risco-e-defesa-de-capital)
-    - 12.1 Circuit Breaker Global e Defesa de Capital
-    - 12.2 Alocação de Capital e Governança de Concorrência
-13. [Modelo de Concorrência e Processamento do Runner](#13-modelo-de-concorrência-e-processamento-do-runner)
+8. [Governança de Locks e Concorrência](#8-governança-de-locks-e-concorrência)
+   - 8.1 Ciclo de Vida do Lock
+   - 8.2 Prevenção de Deadlocks
+9. [Contabilidade e Precisão Financeira](#9-contabilidade-e-precisão-financeira)
+    - 9.1 Política de Taxas (Fees)
+    - 9.2 Precisão Decimal e Arredondamento (Rounding Policy)
+    - 9.3 Metodologia de Cálculo e Exposição de Preço Médio
+10. [Resiliência e Protocolo de Envio](#10-resiliência-e-protocolo-de-envio)
+    - 10.1 Protocolo de Idempotência e Resiliência de Envio
+    - 10.2 Gestão de Cancelamento de Ordens Parciais
+    - 10.3 Filosofia de Reconciliação e Fonte da Verdade
+    - 10.4 Escalabilidade de Conectividade (ExchangeAdapter)
+11. [Gestão de Risco e Defesa de Capital](#11-gestão-de-risco-e-defesa-de-capital)
+    - 11.1 Circuit Breaker Global e Defesa de Capital
+    - 11.2 Alocação de Capital e Governança de Concorrência
+12. [Modelo de Concorrência e Processamento do Runner](#12-modelo-de-concorrência-e-processamento-do-runner)
     - A. Processamento Sequencial (Strict Serial)
     - B. Gestão de Acúmulo e Drop Policy
     - C. Processamento Durante Ordens em Voo
     - D. Isolamento e Fault Containment
-14. [Orquestração do Ciclo de Vida do Runner](#14-orquestração-do-ciclo-de-vida-do-runner)
+13. [Orquestração do Ciclo de Vida do Runner](#13-orquestração-do-ciclo-de-vida-do-runner)
     - A. Estados do Ciclo de Vida
     - B. Criação e Unicidade
     - C. Encerramento com Posições Abertas (Graceful Shutdown)
@@ -112,7 +111,7 @@ Define como as `Transactions` de fechamento são casadas com as de abertura:
 
 ### 3.1 Considerações
 
-* **Nota sobre Liquidação de Taxas (Fee Settlement):** O `AvailableBalance` é o garantidor final de todas as taxas operacionais. Caso uma taxa seja cobrada pela Exchange em um ativo secundário (ex: BNB, FTT), o **Portfolio** realizará uma conversão sintética imediata para a moeda base (ex: USDT) no momento do `TransactionMatch`. O valor equivalente será deduzido do `AvailableBalance`, garantindo que o saldo local reflita o poder de compra real. Em caso de falha na precificação, o débito é registrado na `DustAccount` como Dívida Técnica de Ativo para reconciliação posterior (ver **Seção 10.1** e **10.2.C**).
+* **Nota sobre Liquidação de Taxas (Fee Settlement):** O `AvailableBalance` é o garantidor final de todas as taxas operacionais. Caso uma taxa seja cobrada pela Exchange em um ativo secundário (ex: BNB, FTT), o **Portfolio** realizará uma conversão sintética imediata para a moeda base (ex: USDT) no momento do `TransactionMatch`. O valor equivalente será deduzido do `AvailableBalance`, garantindo que o saldo local reflita o poder de compra real. Em caso de falha na precificação, o débito é registrado na `DustAccount` como Dívida Técnica de Ativo para reconciliação posterior (ver **Seção 9.1** e **9.2.C**).
 
 ---
 
@@ -245,7 +244,7 @@ O processo é **descentralizado**. O `Portfolio` inicializa o estado do caixa, m
    * O Runner usa o `clientOrderId` (que contém o UUID da transação) para consultar o status real na Exchange.
    * **Cenário A (Ordem existe):** O Runner atualiza o status local (ex: de `SUBMITTED` para `FILLED` ou `CANCELED`) e notifica o Portfolio para converter/estornar a margem.
    * **Cenário B (Ordem NÃO existe):** Se a Exchange não reconhece o ID, o Runner assume que o sistema caiu antes do envio ou a Exchange também reiniciou e perdeu o estado. A transação é marcada como `EXPIRED` e a margem é devolvida ao Portfolio.
-5. **Runner - Destravamento de Lotes:** Após reconciliar a transação, os locks de lotes associados são limpos conforme a Seção 9.1.
+5. **Runner - Destravamento de Lotes:** Após reconciliar a transação, os locks de lotes associados são limpos conforme a Seção 8.1.
 
 #### 3. Proteção contra Novos Trades (Circuit Breaker)
 
@@ -321,38 +320,11 @@ Para equilibrar a necessidade de consistência imediata com a escalabilidade de 
 
 ---
 
-## 8. Guia de Migração e Decomposição (Refatoração)
-
-Para transformar a arquitetura atual no modelo desse documento, as responsabilidades do `Portfolio` legado serão redistribuídas conforme o mapeamento abaixo:
-
-| Responsabilidade Atual do Portfolio      | Novo Dono (Destino)  | Justificativa Técnica                                                                              |
-|:-----------------------------------------|:---------------------|:---------------------------------------------------------------------------------------------------|
-| **GlobalBalance (Available, Reserved)**  | **Portfolio**        | Autoridade sobre o saldo real e reservas globais.                                                  |
-| **Margem Reservada (Shadow Balance)**    | **Portfolio**        | Mantém o saldo "congelado" enquanto a transação está `PENDING` ou `SUBMITTED`.                     |
-| **PnL Consolidado**                      | **Portfolio**        | Visão agregada dos resultados de todos os Runners ativos.                                          |
-| **Roteamento de Eventos (Parser)**       | **Portfolio**        | Identifica o Runner proprietário via prefixo do ID e despacha a mensagem.                          |
-| **Dead Letter Queue (DLQ)**              | **Portfolio**        | Captura execuções órfãs ou com IDs inválidos para intervenção manual.                              |
-| **Transactions + Status Lifecycle**      | **StrategyRunner**   | Gere o ciclo de vida (Pending → Submitted → Filled/Partial) das ordens.                            |
-| **TransactionMatches (Matching)**        | **StrategyRunner**   | O matching (FIFO/LIFO/Specific) é uma regra contábil da estratégia.                                |
-| **Position (Calculated View)**           | **StrategyRunner**   | A exposição líquida por ativo pertence ao contexto operacional do Runner.                          |
-| **Exchange Config (Symbol/Keys)**        | **StrategyRunner**   | Conhece as regras específicas (tick size, min qty) do seu ativo.                                   |
-| **Geração de clientOrderId**             | **StrategyRunner**   | Garante a inclusão do `runner_short` e do `transaction_uuid` para roteamento.                      |
-| **Locking de Lotes (Provisional)**       | **StrategyRunner**   | Impede que um lote em processo de venda seja usado por outro sinal concorrente.                    |
-| **Gestão de Partial Fills**              | **StrategyRunner**   | Controla a contabilidade incremental e solicita ajustes parciais de margem.                        |
-| **Watchdog de Timeouts**                 | **StrategyRunner**   | O Runner monitora se suas ordens "em voo" estão demorando mais do que o permitido pela estratégia. |
-### Notas de Implementação para a Refatoração:
-
-1. **Desacoplamento de Repositórios**: Iniciar pela criação do `StrategyRunnerRepository`, segregando as tabelas de `Positions` e `Transactions` do domínio financeiro do `Portfolio`.
-2. **Protocolo de Identificação**: Implementar o Value Object `ClientOrderId` para centralizar a lógica de geração e parsing do ID de 32/36 caracteres.
-3. **Atomicidade na Reserva**: A chamada de `Capital Request` deve ser o único ponto de sincronização impeditivo entre os Agregados para garantir integridade de saldo antes do envio à Exchange.
-
----
-
-## 9. Governança de Locks e Concorrência
+## 8. Governança de Locks e Concorrência
 
 Para resolver as brechas de "travamentos infinitos" e disputas de sinais:
 
-### 9.1. Ciclo de Vida do Lock
+### 8.1. Ciclo de Vida do Lock
 
 O Lock não possui um timer independente, ele herda o destino da Transação:
 
@@ -360,7 +332,7 @@ O Lock não possui um timer independente, ele herda o destino da Transação:
 2. **Liberação por Falha:** Se a Transação for `REJECTED`, `CANCELED` ou `EXPIRED`, o Runner dispara o gatilho de *Unlock* imediato, devolvendo os lotes ao estado "Disponível".
 3. **Timeout de Transação (Watchdog):** Como definido na seção 6.C, o Watchdog cancela ordens travadas. Ao cancelar a ordem, o fluxo de "Liberação por Falha" é ativado, garantindo que nenhum lote fique preso por erro de rede ou software.
 
-### 9.2. Prevenção de Deadlocks
+### 8.2. Prevenção de Deadlocks
 
 Para evitar que o sistema trave quando múltiplos sinais chegam simultaneamente:
 
@@ -369,11 +341,11 @@ Para evitar que o sistema trave quando múltiplos sinais chegam simultaneamente:
 
 ---
 
-## 10. Contabilidade e Precisão Financeira
+## 9. Contabilidade e Precisão Financeira
 
 O sistema adota políticas rigorosas para garantir a integridade de valores monetários, desde a captura de taxas até o cálculo de preço médio, eliminando erros de precisão flutuante e assegurando auditabilidade fiscal.
 
-### 10.1 Política de Taxas (Fees)
+### 9.1 Política de Taxas (Fees)
 
 * **Captura:** As taxas são extraídas do callback da Exchange e nunca estimadas.
 * **Impacto:** Afetam simultaneamente o PnL do Runner (visão estratégica) e o `GlobalBalance` do Portfolio (visão financeira).
@@ -394,7 +366,7 @@ O sistema adota políticas rigorosas para garantir a integridade de valores mone
 * **Reconciliação Histórica Determinística:** Qualquer processo de reconciliação (Worker ou manual via DLQ) é obrigado a utilizar o **preço histórico correspondente ao timestamp original do trade**, não o preço atual. Isso garante que o PnL Líquido seja matematicamente idêntico ao que seria se o sistema estivesse 100% estável no momento da execução — o tempo de processamento não afeta o resultado financeiro.
 * **Irreversibilidade:** Uma vez calculada e debitada a taxa sintética no momento do `TransactionMatch`, o valor é final. Não existem ajustes posteriores por oscilação de câmbio, garantindo que o PnL Líquido seja imutável após a efetivação.
 
-### 10.2 Precisão Decimal e Arredondamento (Rounding Policy)
+### 9.2 Precisão Decimal e Arredondamento (Rounding Policy)
 
 Para evitar erros de precisão flutuante e rejeições por excesso de decimais, o sistema adota uma política de **Alta Precisão Interna com Truncamento na Borda**.
 
@@ -418,7 +390,7 @@ A `DustAccount` é uma **sub-entidade do Portfolio** que atua como receptor univ
 
 * **Fontes de Entrada:**
   1. **Dust de Arredondamento:** No momento do `Match`, se a quantidade restante de um lote for menor que o `minQty` permitido pela Exchange, o Runner marca o lote como **Totalmente Fechado** e envia o resíduo para a `DustAccount`.
-  2. **Dívidas Técnicas de Ativo:** Quando a conversão de Fees cross-currency falha (Fallback Crítico da Seção 10.1), o débito no ativo original é registrado na `DustAccount` com o timestamp da transação.
+  2. **Dívidas Técnicas de Ativo:** Quando a conversão de Fees cross-currency falha (Fallback Crítico da Seção 9.1), o débito no ativo original é registrado na `DustAccount` com o timestamp da transação.
 
 * **Processo de Sweep (Limpeza):** Um Worker de Reconciliação periódico converte os resíduos acumulados na `DustAccount` para a moeda base, utilizando o **preço histórico do timestamp original** (para Dívidas Técnicas) ou o preço atual (para Dust de Arredondamento). O saldo convertido é reintegrado ao `AvailableBalance` como lucro operacional recuperado.
 
@@ -435,7 +407,7 @@ A `DustAccount` é uma **sub-entidade do Portfolio** que atua como receptor univ
 | **DustAccount**    | Isola débitos não resolvidos e resíduos do capital de giro operacional.            |
 | **Value Objects**  | Quantidades e Preços devem ser imutáveis e encapsular a lógica de arredondamento. |
 
-### 10.3 Metodologia de Cálculo e Exposição de Preço Médio
+### 9.3 Metodologia de Cálculo e Exposição de Preço Médio
 
 O sistema adota o modelo de **Preço Médio Ponderado por Execução (WAP)**, garantindo que a `Position` reflita o custo real de aquisição do ativo antes de taxas.
 
@@ -463,7 +435,7 @@ O preço médio é calculado exclusivamente sobre o volume executado, seguindo a
 O `averagePrice` é injetado na Estratégia através do objeto `PositionContext`:
 
 1. O Runner lê o valor persistido.
-2. Formata conforme a precisão decimal (Seção 10.2).
+2. Formata conforme a precisão decimal (Seção 9.2).
 3. Disponibiliza como uma propriedade *read-only* para a lógica de decisão.
 
 | Atributo              | Regra de Negócio                                             |
@@ -474,11 +446,11 @@ O `averagePrice` é injetado na Estratégia através do objeto `PositionContext`
 
 ---
 
-## 11. Resiliência e Protocolo de Envio
+## 10. Resiliência e Protocolo de Envio
 
 O sistema implementa camadas de proteção para garantir que ordens nunca sejam duplicadas, cancelamentos parciais sejam contabilizados com precisão, e o estado local seja reconciliável com a Exchange em qualquer cenário de falha.
 
-### 11.1 Protocolo de Idempotência e Resiliência de Envio
+### 10.1 Protocolo de Idempotência e Resiliência de Envio
 
 Para garantir que uma intenção de trade nunca resulte em ordens duplicadas, o sistema adota o padrão de **Idempotência Baseada em Estado Persistido**.
 
@@ -520,7 +492,7 @@ Se o sistema enviar a ordem, a Exchange aceitar, mas a conexão cair antes da re
 | **Duplicação em Retry Manual?**                 | Bloqueada pelo `clientOrderId` único por `transaction_uuid`.                    |
 | **Ordem Fantasma (Aceita mas não confirmada)?** | Resolvida pela consulta obrigatória via `clientOrderId` no Boot Sequence.       |
 
-### 11.2 Gestão de Cancelamento de Ordens Parciais
+### 10.2 Gestão de Cancelamento de Ordens Parciais
 
 O sistema trata ordens parcialmente executadas que são canceladas como **Transações Finalizadas por Fração**, seguindo um protocolo de liquidação proporcional.
 
@@ -554,7 +526,7 @@ O `StrategyRunner` deve garantir a precisão do saldo no `Portfolio` durante o c
 | **Fees no Cancelamento?**       | Zero. Fees só existem onde há `TransactionMatch`.                                                                          |
 | **Segurança de Saldo?**         | O estorno deve ser calculado como: `Margem_Original - Margem_Executada`.                                                   |
 
-### 11.3 Filosofia de Reconciliação e Fonte da Verdade
+### 10.3 Filosofia de Reconciliação e Fonte da Verdade
 
 O protocolo de recuperação pós-crash (Boot Sequence) adota uma filosofia de **Sincronismo Autoritário**, onde a Exchange é a fonte da verdade para a execução financeira, e o Banco de Dados local é a fonte da verdade para a intenção estratégica.
 
@@ -586,7 +558,7 @@ Se a Exchange retornar um status que o sistema não consegue reconciliar (ex: or
 * O `isReconciling` do Runner permanece `true`.
 * O sistema aguarda intervenção humana para corrigir o estado e garantir a integridade do `Portfolio`.
 
-### 11.4 Escalabilidade de Conectividade (ExchangeAdapter)
+### 10.4 Escalabilidade de Conectividade (ExchangeAdapter)
 
 O acesso às APIs das Exchanges é obrigatoriamente centralizado no ExchangeAdapter. Este componente atua como um Gateway inteligente entre os Runners e as Exchanges.
 
@@ -596,11 +568,11 @@ O acesso às APIs das Exchanges é obrigatoriamente centralizado no ExchangeAdap
 
 ---
 
-## 12. Gestão de Risco e Defesa de Capital
+## 11. Gestão de Risco e Defesa de Capital
 
 O sistema implementa mecanismos de proteção em múltiplas camadas para preservar o `GlobalBalance`, desde a interrupção automática por anomalias até a governança de margem e alocação entre Runners concorrentes.
 
-### 12.1 Circuit Breaker Global e Defesa de Capital
+### 11.1 Circuit Breaker Global e Defesa de Capital
 
 O sistema implementa um mecanismo de interrupção em cascata para proteger o `GlobalBalance` contra falhas algorítmicas, erros de execução ou condições extremas de mercado.
 
@@ -628,7 +600,7 @@ O Safe Mode opera em **três níveis escaláveis**, onde cada nível inclui toda
 | **2 — Cancel All** | Cancelamento em Massa | Além do Halt, envia comandos de cancelamento para todas as ordens `SUBMITTED` de todos os Runners. | Requer confirmação explícita (ex: flag `--force` ou double-confirmation na API). |
 | **3 — Panic Sell** | Liquidação Total | Além do Cancel All, gera ordens de fechamento a mercado (Market Orders) para todas as `Positions` abertas. | Requer confirmação explícita com motivo registrado em auditoria. |
 
-* **Acionamento Automático:** Os gatilhos da seção 12.1.A acionam automaticamente o **Nível 1 (Halt)**. A escalação para Níveis 2 e 3 é exclusivamente manual.
+* **Acionamento Automático:** Os gatilhos da seção 11.1.A acionam automaticamente o **Nível 1 (Halt)**. A escalação para Níveis 2 e 3 é exclusivamente manual.
 * **Execução Assíncrona com Feedback:** O comando é disparado de forma assíncrona. O operador acompanha o progresso via status (ex: "3/5 ordens canceladas", "2/4 posições liquidadas"). O sistema não bloqueia a API administrativa aguardando conclusão.
 * **Persistência de Estado:** O nível ativo do Safe Mode é persistido no banco de dados para sobreviver a restarts.
 
@@ -649,7 +621,7 @@ O Safe Mode opera em **três níveis escaláveis**, onde cada nível inclui toda
 | **StrategyRunner** | Implementa o flag de interrupção e suspende o ciclo de vida de novos sinais. |
 | **Watchdog**       | Monitora a saúde da conexão e o tempo de resposta das transações.            |
 
-### 12.2 Alocação de Capital e Governança de Concorrência
+### 11.2 Alocação de Capital e Governança de Concorrência
 
 O sistema gerencia a escassez de recursos através de uma política de **Priorização por Reserva e Precedência de Chegada**, garantindo que nenhum Runner desestabilize a saúde financeira do `GlobalBalance`.
 
@@ -689,7 +661,7 @@ O sistema pode ser configurado em dois modos de visibilidade de capital:
 
 ---
 
-## 13. Modelo de Concorrência e Processamento do Runner
+## 12. Modelo de Concorrência e Processamento do Runner
 
 O `StrategyRunner` opera sob um modelo de **Fila Sequencial com Política de Descarte (Drop Policy)**, garantindo que a integridade do estado da posição nunca seja corrompida por processamento paralelo.
 
@@ -754,7 +726,7 @@ O sistema mantém métricas de saúde por Runner que alimentam os mecanismos de 
 
 ---
 
-## 14. Orquestração do Ciclo de Vida do Runner
+## 13. Orquestração do Ciclo de Vida do Runner
 
 O ciclo de vida de um `StrategyRunner` é gerido pelo **Portfolio** através de comandos administrativos, garantindo que a alocação de capital e a execução estejam sempre sincronizadas com as diretrizes do operador.
 

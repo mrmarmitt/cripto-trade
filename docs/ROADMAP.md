@@ -11,5 +11,5 @@ Este documento registra **features futuras e evoluções planejadas** que não f
 
 ## Relação com outros documentos
 
-- **Blueprint (BLUEPRINT_V9.md):** As features futuras devem ser compatíveis com a arquitetura definida
+- **[Blueprint](BLUEPRINT.md):** As features futuras devem ser compatíveis com a arquitetura definida
 - **Implementation Guide:** Quando uma feature do roadmap for priorizada, suas decisões técnicas entram no Implementation Guide

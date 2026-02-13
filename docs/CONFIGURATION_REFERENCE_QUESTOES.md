@@ -16,7 +16,7 @@
 
 ## Defaults do Circuit Breaker e Risk Properties
 
-**Pergunta:** Quais são os valores default sensatos para os parâmetros configuráveis do Circuit Breaker Global (seção 12.1 do Blueprint)?
+**Pergunta:** Quais são os valores default sensatos para os parâmetros configuráveis do Circuit Breaker Global (seção 11.1 do Blueprint)?
 
 **Detalhamento necessário:**
 - **Max Daily Drawdown:** Qual percentual de queda do `GlobalBalance` aciona o bloqueio? (ex: 5%? 10%?)
@@ -25,7 +25,7 @@
 - **Timeout de Retomada por Latência:** Quantos minutos de estabilidade antes de permitir warm-up? (ex: 5 min?)
 - **Implicação:** Define os valores iniciais do `RiskProperties` e se devem variar por exchange ou por Runner.
 
-**Origem:** Blueprint seção 12.1 (valores marcados como configuráveis)
+**Origem:** Blueprint seção 11.1 (valores marcados como configuráveis)
 
 ---
 

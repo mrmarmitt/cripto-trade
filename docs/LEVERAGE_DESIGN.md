@@ -1,7 +1,7 @@
 # Design de Alavancagem (Leverage) e Margem — V2 (Futuro)
 
 > **Status:** Reservado para implementação futura (V2).
-> **Origem:** Extraído do Blueprint v16 (Seção 12.2) e documentos associados.
+> **Origem:** Extraído do Blueprint v16 (antiga Seção 12.2, atual 11.2) e documentos associados.
 > **Decisão:** A V1 do CTrade opera exclusivamente em modo **Spot (custódia total, sem alavancagem)**. Este documento preserva o design de alavancagem para referência futura.
 
 ---
@@ -57,7 +57,7 @@ O Runner consulta a alavancagem real do símbolo na Exchange. Se houver divergê
 
 > **Origem:** BLUEPRINT_QUESTOES.md, GAP #10.
 
-**Local:** Seção 12.2.C (do Blueprint original)
+**Local:** Seção 11.2.C (do Blueprint atual, antiga 12.2.C)
 
 **O que estava escrito:**
 > "MarginAccount rastreia o MaintenanceMargin e o LiquidationPrice."

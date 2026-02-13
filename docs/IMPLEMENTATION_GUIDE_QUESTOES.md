@@ -14,16 +14,9 @@
 
 ---
 
-## Migração do Tópico 8 do Blueprint
+## ~~Migração do Tópico 8 do Blueprint~~ — Concluído
 
-**Ação necessária:** Mover o conteúdo da seção "8. Guia de Migração e Decomposição (Refatoração)" do BLUEPRINT_V9.md para este documento (Implementation Guide).
-
-**Justificativa:**
-- O Blueprint define **o quê** a arquitetura é e **por quê** ela existe — não **como** implementá-la.
-- O Guia de Migração descreve passos práticos de refatoração (como decompor o Portfolio atual), o que é responsabilidade do Implementation Guide.
-- Após a migração, a seção 8 deve ser removida do Blueprint.
-
-**Origem:** Revisão arquitetural do BLUEPRINT_V9.md
+> **Resolvido.** O conteúdo da antiga seção 8 ("Guia de Migração e Decomposição") foi migrado para o IMPLEMENTATION_GUIDE.md e removido do Blueprint. As seções do Blueprint foram renumeradas (9→8, 10→9, ..., 14→13).
 
 ---
 
@@ -128,7 +121,7 @@
 
 ## ~~Limites de Recursos por Runner (Hard/Soft Limits)~~ — Respondido
 
-> **Resolvido no Blueprint v17, Seção 12.2.B.** O Blueprint agora define limites de exposição por Runner: Max Allocation (capital), Max Open Positions, Max Pending Orders, Max Cancel Rate, com suporte a Hard/Soft Limits.
+> **Resolvido no Blueprint v17, Seção 11.2.B.** O Blueprint agora define limites de exposição por Runner: Max Allocation (capital), Max Open Positions, Max Pending Orders, Max Cancel Rate, com suporte a Hard/Soft Limits.
 >
 > **Questões remanescentes para implementação:**
 > - Quem valida cada limite? Portfolio no `Capital Request`, ou Runner na `Execution Policy`?
@@ -276,7 +269,7 @@ Requisitos técnicos derivados das seções 6.D e 11.3 do Blueprint.
 
 ## Notas de Implementação — Circuit Breaker e Defesa de Capital
 
-Requisitos técnicos derivados da seção 12.1 do Blueprint.
+Requisitos técnicos derivados da seção 11.1 do Blueprint.
 
 ---
 
@@ -297,7 +290,7 @@ Requisitos técnicos derivados da seção 12.1 do Blueprint.
 
 ## Notas de Implementação — Capital e Margem Spot
 
-Requisitos técnicos derivados da seção 12.2 do Blueprint.
+Requisitos técnicos derivados da seção 11.2 do Blueprint.
 
 > **Notas 14 e 15 originais (SET_LEVERAGE e MaintenanceMargin)** foram migradas para [`LEVERAGE_DESIGN.md`](LEVERAGE_DESIGN.md) (escopo V2).
 
@@ -311,7 +304,7 @@ Requisitos técnicos derivados da seção 12.2 do Blueprint.
 
 ## Notas de Implementação — Precisão Decimal e Arredondamento
 
-Requisitos técnicos derivados da seção 10.2 do Blueprint.
+Requisitos técnicos derivados da seção 9.2 do Blueprint.
 
 ---
 
@@ -334,7 +327,7 @@ Requisitos técnicos derivados da seção 10.2 do Blueprint.
 
 ## Notas de Implementação — Alocação de Capital e Governança de Concorrência
 
-Requisitos técnicos derivados da seção 12.2 do Blueprint.
+Requisitos técnicos derivados da seção 11.2 do Blueprint.
 
 ---
 
@@ -378,7 +371,7 @@ Requisitos técnicos derivados da seção 12.2 do Blueprint.
 
 **Pergunta:** Como os valores são formatados para exibição em APIs, interfaces e relatórios?
 
-**Localização atual:** Blueprint seção 10.2 (focado na borda com Exchange, não na apresentação)
+**Localização atual:** Blueprint seção 9.2 (focado na borda com Exchange, não na apresentação)
 
 **Detalhamento necessário:**
 - O arredondamento para exibição é diferente do arredondamento para execução?
@@ -406,7 +399,7 @@ Requisitos técnicos derivados da seção 7.C do Blueprint.
 
 ## Notas de Implementação — Concorrência e Processamento do Runner
 
-Requisitos técnicos derivados da seção 13 do Blueprint.
+Requisitos técnicos derivados da seção 12 do Blueprint.
 
 ---
 
@@ -426,7 +419,7 @@ Requisitos técnicos derivados da seção 13 do Blueprint.
 
 ## Notas de Implementação — Ciclo de Vida do Runner
 
-Requisitos técnicos derivados da seção 14 do Blueprint.
+Requisitos técnicos derivados da seção 13 do Blueprint.
 
 ---
 
@@ -446,7 +439,7 @@ Requisitos técnicos derivados da seção 14 do Blueprint.
 
 ## Notas de Implementação — Preço Médio e Posição
 
-Requisitos técnicos derivados da seção 10.3 do Blueprint.
+Requisitos técnicos derivados da seção 9.3 do Blueprint.
 
 ---
 
