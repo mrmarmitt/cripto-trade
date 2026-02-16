@@ -353,15 +353,13 @@ O sistema adota políticas rigorosas para garantir a integridade de valores mone
 * **Auditoria:** O Portfolio mantém o rastro de `totalFeesPaid` por Runner para cálculo de eficiência de capital.
 * **Conversão de Ativos (Cross-Currency):** O sistema suporta taxas em ativos diferentes do par operado. O **Portfolio** realiza a conversão sintética no momento do `TransactionMatch`, debitando o valor equivalente do `AvailableBalance` na moeda base caso o saldo do ativo da taxa seja insuficiente.
 * **Impacto Financeiro:** As taxas afetam simultaneamente o PnL do Runner e o `GlobalBalance`. Em casos de moedas distintas, o Portfolio utiliza a taxa de câmbio do momento do evento para garantir a precisão da auditoria.
-* **Mecanismo de Conversão e Oráculo de Preço**: 
-  * O **ExchangeAdapter** é o provedor oficial do Mark Price (preço de mercado) para conversão
-  * O **Portfolio** mantém em cache o último preço recebido via WebSocket para os ativos de taxa (ex: BNB/USDT).
+* **Mecanismo de Conversão e Oráculo de Preço**:
+  * O **ExchangeAdapter** é o provedor oficial do Mark Price (preço de mercado) para conversão.
 
-* **Protocolo de Fallback (Falha de Precificação):** 
-  1. **Cenário Ideal:** Utiliza o Mark Price do milissegundo exato do `TransactionMatch`.
-  2. **Fallback 1 (Cache):** Se a API de preço estiver instável, utiliza a última cotação conhecida (Last Price) com validade de até 60 segundos.
-  3. **Fallback 2 (Preço da Execução):** Caso não haja cotação recente do ativo da taxa, utiliza o preço da própria transação executada (se houver correlação direta) ou o preço médio do dia.
-  4. **Fallback Crítico (Dívida Técnica de Ativo):** Se a precificação falhar totalmente, o Portfolio registra uma **Dívida Técnica de Ativo** na `DustAccount`: o débito exato no ativo original (ex: -0.002 BNB) acompanhado do timestamp preciso da transação. A execução da estratégia nunca é interrompida por falta de cotação de moedas secundárias.
+* **Protocolo de Fallback (Falha de Precificação) — 2 Níveis:**
+  1. **Mark Price (tempo real):** Utiliza o Mark Price do `ExchangeAdapter` no momento exato do `TransactionMatch`. Se obtido com sucesso, a conversão é imediata e o GlobalBalance é debitado.
+  2. **Dívida Técnica de Ativo (fallback):** Se a obtenção do Mark Price falhar por qualquer motivo, o Portfolio registra uma **Dívida Técnica de Ativo** na `DustAccount`: o débito exato no ativo original (ex: -0.002 BNB) acompanhado do timestamp preciso da transação. O GlobalBalance **não** é debitado até a reconciliação pelo Worker de Sweep. A execução da estratégia nunca é interrompida por falta de cotação de moedas secundárias.
+  * **Justificativa:** Preços em cache ou derivados de execuções podem comprometer a integridade do GlobalBalance. O sistema prioriza a precisão do saldo sobre a resolução imediata de fees cross-currency.
 
 * **Reconciliação Histórica Determinística:** Qualquer processo de reconciliação (Worker ou manual via DLQ) é obrigado a utilizar o **preço histórico correspondente ao timestamp original do trade**, não o preço atual. Isso garante que o PnL Líquido seja matematicamente idêntico ao que seria se o sistema estivesse 100% estável no momento da execução — o tempo de processamento não afeta o resultado financeiro.
 * **Irreversibilidade:** Uma vez calculada e debitada a taxa sintética no momento do `TransactionMatch`, o valor é final. Não existem ajustes posteriores por oscilação de câmbio, garantindo que o PnL Líquido seja imutável após a efetivação.
