@@ -5,6 +5,11 @@ import lombok.Getter;
 import java.math.BigDecimal;
 import java.util.Objects;
 
+/**
+ * @deprecated Substituído por {@link GlobalBalance} no modelo alvo (IG Seção 3.2.2).
+ *             Mantido temporariamente para compatibilidade durante a migração.
+ */
+@Deprecated(forRemoval = true)
 @Getter
 public class Balance {
 
