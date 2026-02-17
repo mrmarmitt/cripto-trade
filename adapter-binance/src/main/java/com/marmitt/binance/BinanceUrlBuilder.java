@@ -28,7 +28,7 @@ public class BinanceUrlBuilder implements ExchangeUrlBuilderPort {
         // Para múltiplos símbolos, usa combined stream
         List<String> streams = currencyPairs.stream()
                 .map(this::buildStreamName)
-//                .map(symbol -> symbol.toLowerCase() + "@ticker")
+//                .map(currency -> currency.toLowerCase() + "@ticker")
                 .collect(Collectors.toList());
         
         String streamQuery = String.join("/", streams);

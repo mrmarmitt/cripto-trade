@@ -1,6 +1,6 @@
 package com.marmitt.core.dto.websocket.mapper;
 
-import com.marmitt.core.domain.ConnectionStats;
+import com.marmitt.core.dto.connection.ConnectionStatsDto;
 import com.marmitt.core.dto.websocket.response.WebSocketStatsResponse;
 import com.marmitt.core.enums.ReliabilityRank;
 
@@ -8,7 +8,7 @@ import java.time.Duration;
 
 public class ConnectionStatsMapper {
 
-    public static WebSocketStatsResponse toResponse(ConnectionStats stats, String exchangeName) {
+    public static WebSocketStatsResponse toResponse(ConnectionStatsDto stats, String exchangeName) {
         if (stats == null) {
             return createEmptyResponse(exchangeName != null ? exchangeName : "UNKNOWN");
         }
@@ -100,7 +100,7 @@ public class ConnectionStatsMapper {
         return "BELOW_AVERAGE";
     }
 
-    private static long calculateExpectedVsActual(ConnectionStats stats, long expectedMessagesPerMinute) {
+    private static long calculateExpectedVsActual(ConnectionStatsDto stats, long expectedMessagesPerMinute) {
         if (stats.getTotalUptime().isZero()) {
             return 0L;
         }
@@ -108,6 +108,6 @@ public class ConnectionStatsMapper {
         long uptimeMinutes = stats.getTotalUptime().toMinutes();
         long expectedMessages = expectedMessagesPerMinute * uptimeMinutes;
 
-        return expectedMessages - stats.getTotalMessagesReceived();
+        return stats.getTotalMessagesReceived() - expectedMessages;
     }
 }

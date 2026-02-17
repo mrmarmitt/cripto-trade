@@ -3,26 +3,35 @@ package com.marmitt.application.spring.repository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.application.spring.config.exchange.BinanceExchangeAdapter;
 import com.marmitt.application.spring.config.exchange.CoinbaseExchangeAdapter;
+import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
 import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import jakarta.annotation.PostConstruct;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Slf4j
 @Repository
 public class InMemoryExchangeAdapterRepository  implements ExchangeAdapterRepositoryPort {
 
     private final Map<String, ExchangeAdapterPort> adapters = new ConcurrentHashMap<>();
+    private final Map<UUID, String> adapterByPortfolio = new ConcurrentHashMap<>();
 
     private final EventPublisherPort eventPublisher;
     private final ObjectMapper objectMapper;
 
-    public InMemoryExchangeAdapterRepository(EventPublisherPort eventPublisher, ObjectMapper objectMapper) {
+    public InMemoryExchangeAdapterRepository(
+            EventPublisherPort eventPublisher,
+            ObjectMapper objectMapper
+    ) {
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
     }
@@ -31,65 +40,41 @@ public class InMemoryExchangeAdapterRepository  implements ExchangeAdapterReposi
     public void initExchangeAdapters() {
         registerAdapter(new BinanceExchangeAdapter(objectMapper, eventPublisher));
         registerAdapter(new CoinbaseExchangeAdapter(objectMapper, eventPublisher));
+        registerAdapter(new MockExchangeAdapter(objectMapper, eventPublisher));
     }
 
-    /**
-     * Registra um adapter para uma exchange específica.
-     * Usado durante a inicialização do Spring.
-     */
     @Override
     public void registerAdapter(ExchangeAdapterPort adapter) {
         String exchangeName = adapter.getExchangeName().toUpperCase();
         adapters.put(exchangeName, adapter);
     }
 
-    /**
-     * Retorna o adapter para uma exchange específica.
-     * @param exchangeName Nome da exchange (case-insensitive)
-     * @return ExchangeAdapter ou null se não encontrado
-     */
     @Override
-    public ExchangeAdapterPort getAdapter(String exchangeName) {
-        return adapters.get(exchangeName.toUpperCase());
+    public void registerPortfolioByAdapter(String exchangeName, UUID portfolioId) {
+        exchangeName = exchangeName.toUpperCase();
+        adapterByPortfolio.put(portfolioId, exchangeName);
     }
 
-    /**
-     * Retorna o adapter para uma exchange específica de forma segura.
-     * @param exchangeName Nome da exchange (case-insensitive)
-     * @return Optional contendo o adapter se encontrado
-     */
     @Override
-    public Optional<ExchangeAdapterPort> findAdapter(String exchangeName) {
-        return Optional.ofNullable(getAdapter(exchangeName));
+    public Optional<ExchangeAdapterPort> findByName(String exchangeName) {
+        return Optional.ofNullable(adapters.get(exchangeName.toUpperCase()));
     }
 
-    /**
-     * Verifica se existe um adapter registrado para a exchange.
-     */
     @Override
     public boolean hasAdapter(String exchangeName) {
         return adapters.containsKey(exchangeName.toUpperCase());
     }
 
-    /**
-     * Retorna todos os nomes de exchanges registradas.
-     */
     @Override
     public Set<String> getAllExchangeNames() {
         return adapters.keySet();
     }
 
-    /**
-     * Retorna uma cópia imutável de todos os adapters registrados.
-     */
     @Override
     public Map<String, ExchangeAdapterPort> getAllAdapters() {
         return Map.copyOf(adapters);
     }
 
-    /**
-     * Retorna o número de adapters registrados.
-     */
     @Override
     public int getAdapterCount() {
         return adapters.size();

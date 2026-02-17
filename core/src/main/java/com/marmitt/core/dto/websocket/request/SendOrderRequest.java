@@ -15,15 +15,18 @@ public class SendOrderRequest extends MessageRequest {
     private final BigDecimal price;
     private final OrderType orderType;
     private final OrderSide orderSide;
+    private final String clientOrderId;  // ID interno para correlação
     
     public SendOrderRequest(String exchangeName, String symbol, BigDecimal quantity, 
-                           BigDecimal price, OrderType orderType, OrderSide orderSide) {
+                           BigDecimal price, OrderType orderType, OrderSide orderSide, 
+                           String clientOrderId) {
         super(exchangeName, MessageType.ORDER_PLACEMENT);
         this.symbol = symbol;
         this.quantity = quantity;
         this.price = price;
         this.orderType = orderType;
         this.orderSide = orderSide;
+        this.clientOrderId = clientOrderId;
     }
 
 }

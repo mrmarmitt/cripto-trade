@@ -18,7 +18,18 @@
       "Bash(cp:*)",
       "Bash(grep:*)",
       "WebFetch(domain:github.com)",
-      "Bash(true)"
+      "Bash(true)",
+      "Bash(tree:*)",
+      "Bash(python -m json.tool:*)",
+      "Bash(docker ps:*)",
+      "Bash(docker exec:*)",
+      "Bash(netstat:*)",
+      "Bash(taskkill:*)",
+      "Bash(timeout 25 ping:*)",
+      "Bash(docker stop:*)",
+      "Bash(docker rm:*)",
+      "Bash(docker volume rm:*)",
+      "Bash(python3:*)"
     ],
     "defaultMode": "acceptEdits"
   }

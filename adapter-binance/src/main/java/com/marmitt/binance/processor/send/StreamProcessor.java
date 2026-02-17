@@ -48,7 +48,7 @@ public class StreamProcessor implements SenderSpecializedProcessorPort {
 
             return objectMapper.writeValueAsString(message);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to process stream subscription message", e);
+            throw new RuntimeException("Failed to process stream subscription errorMessage", e);
         }
     }
 

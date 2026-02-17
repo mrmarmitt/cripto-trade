@@ -21,7 +21,10 @@ public class OkHttp3WebSocketAdapter implements WebSocketPort {
 
     public OkHttp3WebSocketAdapter(OkHttp3ListenerConverter okHttp3ListenerConverter) {
         this.okHttp3ListenerConverter = okHttp3ListenerConverter;
-        this.client = new OkHttpClient.Builder().readTimeout(Duration.ZERO).build();
+        this.client = new OkHttpClient.Builder()
+                .readTimeout(Duration.ZERO)
+                .pingInterval(Duration.ofSeconds(20))  // Envia ping a cada 20s para manter conexão ativa
+                .build();
     }
 
     @Override

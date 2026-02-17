@@ -3,6 +3,7 @@ package com.marmitt.application.spring.config.core;
 import com.marmitt.core.application.usecase.handler.HandlerProcessMessageUseCase;
 import com.marmitt.core.application.usecase.handler.connection.*;
 import com.marmitt.core.ports.inbound.handler.*;
+import com.marmitt.core.ports.inbound.websocket.ConnectWebSocketPort;
 import com.marmitt.core.ports.inbound.websocket.PostConnectionEstablishedPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
@@ -47,7 +48,8 @@ public class HandleConnectionConfig {
     }
 
     @Bean
-    public ConnectionFailedPort handleConnectionFailed(WebSocketConnectionRepositoryPort connectionManager) {
-        return new HandleConnectionFailedUseCase(connectionManager);
+    public ConnectionFailedPort handleConnectionFailed(WebSocketConnectionRepositoryPort connectionManager,
+                                                       ConnectWebSocketPort connectWebSocketPort) {
+        return new HandleConnectionFailedUseCase(connectionManager, connectWebSocketPort);
     }
 }

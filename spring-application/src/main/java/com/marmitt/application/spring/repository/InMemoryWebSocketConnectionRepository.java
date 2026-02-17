@@ -1,7 +1,11 @@
 package com.marmitt.application.spring.repository;
 
+import com.marmitt.application.spring.config.exchange.BinanceExchangeAdapter;
+import com.marmitt.application.spring.config.exchange.CoinbaseExchangeAdapter;
+import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
+import jakarta.annotation.PostConstruct;
 import org.springframework.stereotype.Repository;
 
 import java.util.Map;
@@ -12,6 +16,11 @@ import java.util.concurrent.ConcurrentHashMap;
 public class InMemoryWebSocketConnectionRepository implements WebSocketConnectionRepositoryPort {
 
     private final Map<String, WebSocketConnectionManager> connections = new ConcurrentHashMap<>();
+
+    @PostConstruct
+    public void initExchangeConnectionManager() {
+        registerConnection("MOCK");
+    }
 
     @Override
     public void registerConnection(String exchangeName) {

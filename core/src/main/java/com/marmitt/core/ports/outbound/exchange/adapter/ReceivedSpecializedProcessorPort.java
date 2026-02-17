@@ -1,8 +1,8 @@
 package com.marmitt.core.ports.outbound.exchange.adapter;
 
-import com.marmitt.core.domain.data.ProcessorResponse;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
+import com.marmitt.core.dto.websocket.data.ProcessorResponse;
 
 public interface ReceivedSpecializedProcessorPort<T extends ProcessorResponse> {
 

@@ -20,15 +20,20 @@ public class OrderManagementMapper {
                 request.quantity(),
                 request.price(),
                 orderType,
-                orderSide
+                orderSide,
+                generateClientOrderId() // TODO: Implementar geração de ID único
         );
+    }
+    
+    private static String generateClientOrderId() {
+        return "WEB_" + System.currentTimeMillis(); // Placeholder para ordens via web
     }
     
     public static SendCancelOrderRequest toSendCancelOrderRequest(@Valid OrderCancelRequest request) {
         return new SendCancelOrderRequest(
                 request.exchange(),
                 request.orderId(),
-                null // symbol não é obrigatório no cancel request do controller
+                null // currency não é obrigatório no cancel request do controller
         );
     }
     

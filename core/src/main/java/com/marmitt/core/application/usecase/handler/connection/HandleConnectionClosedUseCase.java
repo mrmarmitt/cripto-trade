@@ -1,6 +1,6 @@
 package com.marmitt.core.application.usecase.handler.connection;
 
-import com.marmitt.core.domain.ConnectionResult;
+import com.marmitt.core.dto.connection.ConnectionResultDto;
 import com.marmitt.core.dto.events.WebSocketClosedEvent;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.ports.inbound.handler.ConnectionClosedPort;
@@ -33,13 +33,13 @@ public class HandleConnectionClosedUseCase implements ConnectionClosedPort {
             WebSocketConnectionManager manager = connectionManagerPort.getConnection(event.exchange());
 
             if (manager.getConnectionResult().isDisconnecting()) {
-                ConnectionResult connectionResult = manager.getConnectionResult();
-                manager.setConnectionResult(ConnectionResult.disconnected(
+                ConnectionResultDto connectionResult = manager.getConnectionResult();
+                manager.setConnectionResult(ConnectionResultDto.disconnected(
                         connectionResult.message(),
                         event.connectionId())
                 );
             } else {
-                manager.setConnectionResult(ConnectionResult.closed(
+                manager.setConnectionResult(ConnectionResultDto.closed(
                         event.code(),
                         event.reason(),
                         event.connectionId())

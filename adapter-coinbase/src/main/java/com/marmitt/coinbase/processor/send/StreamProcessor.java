@@ -57,13 +57,13 @@ public class StreamProcessor implements SenderSpecializedProcessorPort {
             message.put("channels", buildChannels(channelsByType));
             
             String jsonMessage = objectMapper.writeValueAsString(message);
-            log.debug("Generated Coinbase {} stream message: {}", messageType, jsonMessage);
+            log.debug("Generated Coinbase {} stream errorMessage: {}", messageType, jsonMessage);
             
             return jsonMessage;
             
         } catch (Exception e) {
             log.error("Failed to process Coinbase stream subscription", e);
-            throw new RuntimeException("Failed to process Coinbase stream subscription message", e);
+            throw new RuntimeException("Failed to process Coinbase stream subscription errorMessage", e);
         }
     }
 

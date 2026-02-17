@@ -26,22 +26,43 @@ public class OrderProcessor implements SenderSpecializedProcessorPort {
         }
 
         try {
-            Map<String, Object> order = new HashMap<>();
-            order.put("symbol", orderRequest.getSymbol().toUpperCase());
-            order.put("side", mapOrderSide(orderRequest.getOrderSide()));
-            order.put("type", mapOrderType(orderRequest.getOrderType()));
-            order.put("quantity", orderRequest.getQuantity().toPlainString());
+            Map<String, Object> message = new HashMap<>();
+            message.put("id", orderRequest.getClientOrderId());  // Correlation ID
+            message.put("method", "order.place");
             
-            if (orderRequest.getPrice() != null) {
-                order.put("price", orderRequest.getPrice().toPlainString());
+            // Parâmetros da ordem dentro de "params"
+            Map<String, Object> params = new HashMap<>();
+            params.put("symbol", orderRequest.getSymbol().toUpperCase());
+            params.put("side", mapOrderSide(orderRequest.getOrderSide()));
+            params.put("type", mapOrderType(orderRequest.getOrderType()));
+            params.put("quantity", orderRequest.getQuantity().toPlainString());
+            params.put("newClientOrderId", orderRequest.getClientOrderId());
+            params.put("timestamp", System.currentTimeMillis());
+            
+            // Adicionar preço para ordens LIMIT
+            if (orderRequest.getPrice() != null && 
+                (orderRequest.getOrderType() == OrderType.LIMIT || 
+                 orderRequest.getOrderType() == OrderType.STOP_LOSS_LIMIT ||
+                 orderRequest.getOrderType() == OrderType.TAKE_PROFIT_LIMIT)) {
+                params.put("price", orderRequest.getPrice().toPlainString());
             }
             
-            order.put("timeInForce", "GTC");
-            order.put("timestamp", System.currentTimeMillis());
+            // TimeInForce obrigatório para ordens LIMIT
+            if (orderRequest.getOrderType() == OrderType.LIMIT ||
+                orderRequest.getOrderType() == OrderType.STOP_LOSS_LIMIT ||
+                orderRequest.getOrderType() == OrderType.TAKE_PROFIT_LIMIT) {
+                params.put("timeInForce", "GTC");
+            }
+            
+            // TODO: Adicionar apiKey e signature para autenticação
+            // params.put("apiKey", "your-api-key");
+            // params.put("signature", generateSignature(params));
+            
+            message.put("params", params);
 
-            return objectMapper.writeValueAsString(order);
+            return objectMapper.writeValueAsString(message);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to process order message", e);
+            throw new RuntimeException("Failed to process order errorMessage", e);
         }
     }
 

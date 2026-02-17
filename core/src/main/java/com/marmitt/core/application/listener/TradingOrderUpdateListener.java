@@ -1,6 +1,6 @@
 package com.marmitt.core.application.listener;
 
-import com.marmitt.core.domain.data.OrderData;
+import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
 import lombok.extern.slf4j.Slf4j;
 
@@ -14,7 +14,7 @@ public class TradingOrderUpdateListener implements OrderUpdateListener {
     
 
     @Override
-    public void onOrderUpdate(OrderData orderData) {
+    public void onOrderUpdate(OrderDataDto orderData) {
         log.info("Order Update Received - OrderId: {}, Symbol: {}, Status: {}, Quantity: {}, Price: {}", 
                 orderData.orderId(),
                 orderData.symbol(),

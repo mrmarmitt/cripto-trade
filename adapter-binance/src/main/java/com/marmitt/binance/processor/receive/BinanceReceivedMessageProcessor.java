@@ -1,9 +1,9 @@
 package com.marmitt.binance.processor.receive;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.marmitt.core.domain.data.ProcessorResponse;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
+import com.marmitt.core.dto.websocket.data.ProcessorResponse;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedSpecializedProcessorPort;
 import lombok.extern.slf4j.Slf4j;
@@ -38,7 +38,7 @@ public class BinanceReceivedMessageProcessor implements ReceivedMessageProcessor
         }
 
         return ProcessingResult.error(context.correlationId().toString(),
-                "No specialized processor found for Binance message",
+                "No specialized processor found for Binance errorMessage",
                 rawMessage
                 );
     }

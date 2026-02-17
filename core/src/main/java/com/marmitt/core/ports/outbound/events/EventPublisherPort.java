@@ -4,7 +4,7 @@ package com.marmitt.core.ports.outbound.events;
  * Outbound port para publicação de eventos no sistema.
  * 
  * Abstrai a implementação específica do mecanismo de eventos
- * (Spring Events, message broker, etc.) permitindo que os use cases
+ * (Spring Events, errorMessage broker, etc.) permitindo que os use cases
  * publiquem eventos sem depender de frameworks específicos.
  */
 public interface EventPublisherPort {
