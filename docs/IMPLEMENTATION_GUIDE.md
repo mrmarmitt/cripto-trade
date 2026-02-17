@@ -24,7 +24,7 @@ Este documento detalha **como construir** cada componente definido no Blueprint.
 
 ## 3. Modelo de Dados
 
-Esta sessão especifica campo-a-campo como transformar o modelo de dados atual (agregado único — Portfolio) no modelo alvo definido pelo Blueprint (dois agregados — Portfolio + StrategyRunner). Serve como referência autoritativa para a implementação das entidades, Value Objects, enums e schema do banco de dados.
+Esta seção especifica campo-a-campo como transformar o modelo de dados atual (agregado único — Portfolio) no modelo alvo definido pelo Blueprint (dois agregados — Portfolio + StrategyRunner). Serve como referência autoritativa para a implementação das entidades, Value Objects, enums e schema do banco de dados.
 
 > **Referência:** Blueprint Seção 3 (Modelo de Dados e Relacionamentos) e Seção 7 (Aggregate Boundaries).
 
@@ -832,7 +832,7 @@ Para transformar a arquitetura atual no modelo do Blueprint, as responsabilidade
 
 ## 5. Protocolo de Comunicação entre Agregados
 
-Esta sessão define **como** os dois agregados (Portfolio e StrategyRunner) se comunicam, incluindo interfaces, padrões de entrega, modelo de consistência e mecanismos de proteção contra falhas. É a fundação sobre a qual todas as seções seguintes (6-13) se apoiam.
+Esta seção define **como** os dois agregados (Portfolio e StrategyRunner) se comunicam, incluindo interfaces, padrões de entrega, modelo de consistência e mecanismos de proteção contra falhas. É a fundação sobre a qual todas as seções seguintes (6-13) se apoiam.
 
 > **Referência:** Blueprint Seção 7.C (Comunicação entre Agregados: Padrão Híbrido).
 > **Notas absorvidas:** #21 (Interface de Comunicação), #22 (Idempotência no Portfolio).
@@ -980,7 +980,7 @@ O uso de `AFTER_COMMIT` garante que o evento só é disparado **após** o Runner
 2. Portfolio tenta processar, mas a Transaction ainda não está commitada no DB
 3. Portfolio não encontra os dados e falha
 
-**Trade-off:** Se o sistema crashar entre o commit do Runner e o dispatch do evento, o evento é perdido. Isso é aceitável porque o **Boot Sequence** (Blueprint Seção 6.D; Implementation Guide Seção futura) reconcilia esses gaps.
+**Trade-off:** Se o sistema crashar entre o commit do Runner e o dispatch do evento, o evento é perdido. Isso é aceitável porque o **Boot Sequence** (Blueprint Seção 6.D; Seção 10) reconcilia esses gaps.
 
 #### 5.3.2 Evolução para Microserviços (V2+)
 
@@ -1019,7 +1019,7 @@ Toda margem reservada é rastreada por `transactionId`. O ciclo é fechado:
 - `confirmExecution` → converte reserva em realizado (parcial ou total)
 - `release` → devolve reserva ao disponível
 
-Se nenhum dos três eventos chegar (crash total), o **Boot Sequence** (Blueprint Seção 6.D; Implementation Guide Seção futura) reconcilia.
+Se nenhum dos três eventos chegar (crash total), o **Boot Sequence** (Blueprint Seção 6.D; Seção 10) reconcilia.
 
 **Invariante 3 — Nenhum evento duplicado altera o saldo:**
 A idempotência por `matchId` (confirmação) e `transactionId` (release) garante que reprocessamento não duplica movimentações.
@@ -1182,9 +1182,9 @@ Strategy    Runner                Portfolio            Exchange
 
 ## 6. Ciclo de Vida da Transação e Idempotência
 
-Esta sessão detalha **como implementar** a máquina de estados da Transaction, o protocolo de persistência "Persist-First", a estratégia de retry/timeout, e o tratamento de execuções parciais e cancelamentos. Cobre o ciclo completo desde a materialização do sinal até o estado terminal.
+Esta seção detalha **como implementar** a máquina de estados da Transaction, o protocolo de persistência "Persist-First", a estratégia de retry/timeout, e o tratamento de execuções parciais e cancelamentos. Cobre o ciclo completo desde a materialização do sinal até o estado terminal.
 
-> **Referência:** Blueprint Sessões 4 (Fluxo de Execução), 6 (Ciclo de Vida), 10.1 (Idempotência), 10.2 (Cancelamento Parcial).
+> **Referência:** Blueprint Seções 4 (Fluxo de Execução), 6 (Ciclo de Vida), 10.1 (Idempotência), 10.2 (Cancelamento Parcial).
 > **Notas absorvidas:** #1 (Persistência Atômica Pre-Flight), #3 (Retry e Timeout), #4 (Boot Sequence Safe Mode), #6 (Transição Parcial→Cancelado).
 > **Nota #2** (ClientOrderId) foi absorvida na Seção 3.4.1.
 
@@ -1636,11 +1636,11 @@ Runner ──► ExchangeAdapter ──► Exchange API
 
 ## 7. Gestão de Capital e Margem
 
-Esta sessão detalha **como implementar** a alocação de capital, a validação de limites por Runner, o cálculo de margem com safety buffer, e os modos de visibilidade de capital (Shared Pool vs Dedicated Buckets). Cobre toda a cadeia de validação desde a decisão da Strategy até a reserva efetiva no GlobalBalance.
+Esta seção detalha **como implementar** a alocação de capital, a validação de limites por Runner, o cálculo de margem com safety buffer, e os modos de visibilidade de capital (Shared Pool vs Dedicated Buckets). Cobre toda a cadeia de validação desde a decisão da Strategy até a reserva efetiva no GlobalBalance.
 
 > **Referência:** Blueprint Seção 11.2 (Alocação de Capital e Governança de Concorrência), Seção 4.C (Capital Request).
 > **Notas absorvidas:** #14 (Safety Buffer / Arredondamento de Capital), #17 (Validação minNotional), #20 (Monitoramento de Rejection Rate).
-> **Dependência:** Seção 5 (Interface `CapitalManager`) define o contrato de comunicação. Esta sessão detalha a **lógica interna** do Portfolio ao processar um `reserve()`.
+> **Dependência:** Seção 5 (Interface `CapitalManager`) define o contrato de comunicação. Esta seção detalha a **lógica interna** do Portfolio ao processar um `reserve()`.
 
 ### 7.1 Cadeia de Validação do Capital Request
 
@@ -2056,7 +2056,7 @@ Runner (continuação)
 
 ## 8. Contabilidade: Fees, Precisão e Arredondamento
 
-Esta sessão detalha **como implementar** a política de taxas (captura, conversão cross-currency, fallback), a precisão decimal com BigDecimal, a política de arredondamento na borda com a Exchange, o cálculo de preço médio ponderado (WAP) e a gestão de resíduos contábeis (DustAccount).
+Esta seção detalha **como implementar** a política de taxas (captura, conversão cross-currency, fallback), a precisão decimal com BigDecimal, a política de arredondamento na borda com a Exchange, o cálculo de preço médio ponderado (WAP) e a gestão de resíduos contábeis (DustAccount).
 
 > **Referência:** Blueprint Seção 9 (Contabilidade e Precisão Financeira).
 > **Notas absorvidas:** #5 (Gestão de Fees Cross-Currency), #15 (RoundingPolicy Centralizada), #16 (Conversão de Tipos I/O), #29 (Precisão WAP), #30 (Sincronização de Cache), #31 (Reset de Posição).
@@ -2414,7 +2414,7 @@ Se o Runner mantiver estado em memória (cache local para o `PositionContext` in
 | **Invalidação imediata** | Após cada `TransactionMatch`, o cache de `averagePrice` é invalidado                                                           |
 | **Write-through**        | O Runner atualiza DB **e** cache na mesma operação                                                                             |
 | **Fallback**             | Se o cache estiver stale (flag de invalidação), o Runner lê do DB antes de montar o `PositionContext`                          |
-| **Single-thread**        | O modelo de concorrência do Runner (Seção futura) garante que apenas uma thread acessa o cache por Runner — sem race condition |
+| **Single-thread**        | O modelo de concorrência do Runner (Seção 12) garante que apenas uma thread acessa o cache por Runner — sem race condition |
 
 ### 8.5 Gestão de Resíduos Contábeis (DustAccount)
 
@@ -2563,7 +2563,7 @@ totalPnl = totalRealizedPnl + totalUnrealizedPnl
 
 ## 9. Governança de Locks e Concorrência
 
-Esta sessão detalha **como implementar** o sistema de locks provisórios que garantem que dois sinais concorrentes nunca disputem o mesmo lote de compra. O lock é o mecanismo que protege a integridade contábil entre a intenção de venda e a execução efetiva na exchange.
+Esta seção detalha **como implementar** o sistema de locks provisórios que garantem que dois sinais concorrentes nunca disputem o mesmo lote de compra. O lock é o mecanismo que protege a integridade contábil entre a intenção de venda e a execução efetiva na exchange.
 
 > **Referência:** Blueprint Seção 8 (Governança de Locks e Concorrência), Seção 4.B (Locking Provisório), Seção 6.D (Saneamento de Locks Órfãos).
 > **Nota de Implementação absorvida:** #7 (Governança de Locks em Cancelamentos).
@@ -2785,7 +2785,7 @@ fun acquireLock(runnerId, sellTransaction, targetLotId):
 
 #### 9.5.1 Fila Sequencial por Runner
 
-Cada `StrategyRunner` processa sinais de forma **sequencial** (modelo de concorrência definido na Seção futura — Blueprint §12). Isso elimina a possibilidade de dois sinais do **mesmo Runner** disputarem lotes simultaneamente.
+Cada `StrategyRunner` processa sinais de forma **sequencial** (modelo de concorrência definido na Seção 12). Isso elimina a possibilidade de dois sinais do **mesmo Runner** disputarem lotes simultaneamente.
 
 **Cenário eliminado:** Runner A recebe SELL para Lote 1, e simultaneamente Runner A recebe SELL para Lote 2 que também tenta Lote 1 → impossível com processamento sequencial.
 
@@ -2815,7 +2815,7 @@ Runners diferentes operam sobre **lotes diferentes** (cada Position pertence a u
 
 | Cenário                              | Risco de Deadlock  | Motivo                                                                   |
 |--------------------------------------|--------------------|--------------------------------------------------------------------------|
-| Dois sinais do mesmo Runner          | Nenhum             | Processamento sequencial (Seção futura)                                  |
+| Dois sinais do mesmo Runner          | Nenhum             | Processamento sequencial (Seção 12)                                      |
 | Sinais de Runners diferentes         | Nenhum             | Lotes isolados por `runner_id`                                           |
 | Runner + Portfolio (Capital Request) | Nenhum             | Lock de lote (Runner) e lock de saldo (Portfolio) são recursos distintos |
 
@@ -2920,7 +2920,7 @@ Métricas para monitoramento de locks:
 
 ## 10. Reconciliação e Boot Sequence
 
-Esta sessão detalha **como implementar** a reconciliação holística do sistema ao reiniciar, indo além do fluxo individual por Transaction (Seção 6.6) para cobrir: validação de integridade financeira (Sanity Check), detecção de ordens externas (Zumbis da Exchange), corte temporal, TTL de reservas e o protocolo de intervenção manual via DLQ.
+Esta seção detalha **como implementar** a reconciliação holística do sistema ao reiniciar, indo além do fluxo individual por Transaction (Seção 6.6) para cobrir: validação de integridade financeira (Sanity Check), detecção de ordens externas (Zumbis da Exchange), corte temporal, TTL de reservas e o protocolo de intervenção manual via DLQ.
 
 > **Referência:** Blueprint Seção 6.D (Boot Sequence), Seção 10.3 (Filosofia de Reconciliação e Fonte da Verdade).
 > **Notas de Implementação absorvidas:** #8 (Sanity Check no Boot), #9 (Identificação de Zumbis da Exchange), #10 (Timestamp de Corte).
@@ -3349,7 +3349,7 @@ AssetReconciliation (Portfolio, após Phase 3):
 
 ## 11. Circuit Breaker e Defesa de Capital
 
-Esta sessão detalha **como implementar** o sistema de proteção multicamada que interrompe operações quando anomalias são detectadas. O Circuit Breaker opera em três níveis de severidade (Halt → Cancel All → Panic Sell), com acionamento automático para o nível 1 e escalação exclusivamente manual para os níveis superiores.
+Esta seção detalha **como implementar** o sistema de proteção multicamada que interrompe operações quando anomalias são detectadas. O Circuit Breaker opera em três níveis de severidade (Halt → Cancel All → Panic Sell), com acionamento automático para o nível 1 e escalação exclusivamente manual para os níveis superiores.
 
 > **Referência:** Blueprint Seção 11.1 (Circuit Breaker Global e Defesa de Capital).
 > **Notas de Implementação absorvidas:** #11 (Ponto de Injeção de Parada / Gatekeeper), #12 (Persistência do Estado de Alerta), #13 (Kill-Switch Externo).
@@ -3827,7 +3827,7 @@ RunnerCircuitBreaker (Portfolio, event-driven):
 
 ## 12. Modelo de Concorrência e Processamento do Runner
 
-Esta sessão detalha **como implementar** o modelo de concorrência de cada StrategyRunner — a fila de sinais, a política de descarte, o isolamento de threads, e os mecanismos de proteção contra Runners mal comportados. O modelo garante que o estado de posição nunca seja corrompido por processamento paralelo.
+Esta seção detalha **como implementar** o modelo de concorrência de cada StrategyRunner — a fila de sinais, a política de descarte, o isolamento de threads, e os mecanismos de proteção contra Runners mal comportados. O modelo garante que o estado de posição nunca seja corrompido por processamento paralelo.
 
 > **Referência:** Blueprint Seção 12 (Modelo de Concorrência e Processamento do Runner).
 > **Notas de Implementação absorvidas:** #23 (Implementação da Mailbox), #24 (Monitoramento de Backpressure), #25 (Lock de Interface / Prioridade de Comandos Admin).
@@ -4067,7 +4067,7 @@ private void processCommand(AdminCommand cmd) {
 }
 ```
 
-**Garantia:** Comandos admin são processados **antes** de qualquer sinal no loop principal (Sessão 12.2.1). Se o Runner estiver bloqueado aguardando um sinal (`mailbox.poll()`), o `submitCommand()` interrompe a thread via `interrupt()`.
+**Garantia:** Comandos admin são processados **antes** de qualquer sinal no loop principal (Seção 12.2.1). Se o Runner estiver bloqueado aguardando um sinal (`mailbox.poll()`), o `submitCommand()` interrompe a thread via `interrupt()`.
 
 ### 12.6 Isolamento de Threads
 
@@ -4252,7 +4252,7 @@ public class ExchangeAdapterWithQuota implements ExchangeAdapter {
 
 ## 13. Orquestração do Ciclo de Vida do Runner
 
-Esta sessão detalha **como implementar** a máquina de estados do StrategyRunner — desde a criação via API administrativa até o arquivamento definitivo — incluindo o protocolo de provisionamento (Factory), as transições válidas, o Graceful Shutdown com posições abertas, e o Health Check de ativação.
+Esta seção detalha **como implementar** a máquina de estados do StrategyRunner — desde a criação via API administrativa até o arquivamento definitivo — incluindo o protocolo de provisionamento (Factory), as transições válidas, o Graceful Shutdown com posições abertas, e o Health Check de ativação.
 
 > **Referência:** Blueprint Seção 13 (Orquestração do Ciclo de Vida do Runner).
 > **Notas de Implementação absorvidas:** #26 (Factory de Runners), #27 (Soft Delete vs Archive — já absorvida na Seção 3.3.1), #28 (Health Check de Ativação).
@@ -4706,7 +4706,7 @@ public class RunnerAdminController {
 
 ## 14. Context Injection e Contrato da Strategy
 
-Esta sessão detalha **como implementar** o contrato entre o StrategyRunner e a TradeStrategy — o que o Runner injeta como contexto, o que a Strategy retorna como decisão, e as regras de acoplamento e isolamento que garantem que a Strategy permaneça stateless.
+Esta seção detalha **como implementar** o contrato entre o StrategyRunner e a TradeStrategy — o que o Runner injeta como contexto, o que a Strategy retorna como decisão, e as regras de acoplamento e isolamento que garantem que a Strategy permaneça stateless.
 
 > **Referência:** Blueprint Seção 2.C (TradeStrategy — Motor de Sinais), Seção 4.A (Geração do Sinal), Seção 9.3.D (Exposição via Context Injection).
 > **Questão aberta respondida:** "O que exatamente compõe o contexto injetado no motor de sinais?" (IMPLEMENTATION_GUIDE_QUESTOES.md — Context Injection para Strategy).
@@ -5369,7 +5369,7 @@ CompletableFuture<Void> checkKeyHealth(ApiKeyEntry key) {
 
 Exchanges como Binance usam um modelo de **peso por requisição** em vez de um simples "N requests/minuto". Cada endpoint REST tem um peso específico:
 
-> **Nota importante:** O acompanhamento de ordens (execution reports — FILL, PARTIAL_FILL, CANCELED) é feito via **WebSocket** (`userDataStream`), que é uma conexão persistente e **não consome peso REST**. O rate limiting desta sessão aplica-se exclusivamente a chamadas REST API. As operações REST de execução (`POST /order`, `DELETE /order`) são usadas apenas para **submissão e cancelamento** de ordens. O `GET /order` (status) é usado apenas como fallback em cenários de reconciliação (Seção 10) ou quando o WebSocket não confirma a execução dentro do timeout esperado.
+> **Nota importante:** O acompanhamento de ordens (execution reports — FILL, PARTIAL_FILL, CANCELED) é feito via **WebSocket** (`userDataStream`), que é uma conexão persistente e **não consome peso REST**. O rate limiting desta seção aplica-se exclusivamente a chamadas REST API. As operações REST de execução (`POST /order`, `DELETE /order`) são usadas apenas para **submissão e cancelamento** de ordens. O `GET /order` (status) é usado apenas como fallback em cenários de reconciliação (Seção 10) ou quando o WebSocket não confirma a execução dentro do timeout esperado.
 
 | Operação                 | Peso Típico (Binance) | Categoria                      |
 |--------------------------|-----------------------|--------------------------------|
@@ -5542,7 +5542,7 @@ O ExchangeAdapter monitora métricas por Runner para detectar comportamentos an�
 
 #### 15.6.1 O Problema
 
-O `clientOrderId` (Sessão 6) embute um timestamp do sistema. Se o relógio local estiver dessincronizado com a Exchange, podem ocorrer:
+O `clientOrderId` (Seção 6) embute um timestamp do sistema. Se o relógio local estiver dessincronizado com a Exchange, podem ocorrer:
 
 | Cenário                     | Impacto                                                                                          |
 |-----------------------------|--------------------------------------------------------------------------------------------------|
@@ -5853,13 +5853,13 @@ public interface ExchangeRestPort {
 
 ## 16. Registro de Questões em Aberto
 
-Esta sessão consolida todas as questões de implementação identificadas durante a elaboração do Implementation Guide. Cada questão é classificada por status de resolução e referenciada à sessão que a aborda (quando aplicável).
+Esta seção consolida todas as questões de implementação identificadas durante a elaboração do Implementation Guide. Cada questão é classificada por status de resolução e referenciada à seção que a aborda (quando aplicável).
 
 ### 16.1 Legenda de Status
 
 | Status        | Significado                                                                                         |
 |---------------|-----------------------------------------------------------------------------------------------------|
-| **RESOLVIDA** | Questão completamente respondida em uma sessão do IG                                                |
+| **RESOLVIDA** | Questão completamente respondida em uma seção do IG                                                |
 | **PARCIAL**   | Questão parcialmente endereçada — aspectos principais cobertos, detalhes de implementação pendentes |
 | **ABERTA**    | Questão ainda não endereçada — requer decisão arquitetural ou investigação durante implementação    |
 | **ADIADA**    | Questão explicitamente adiada para V2+ ou escopo futuro                                             |
@@ -5926,12 +5926,12 @@ Todas as 31 notas de implementação do `IMPLEMENTATION_GUIDE_QUESTOES.md` foram
 
 #### 16.3.3 Questões Abertas
 
-| #    | Questão                                          | Origem                         | Impacto                                                                    | Prioridade | Notas                                                                                                                                                                                                                                                                                               |
-|------|--------------------------------------------------|--------------------------------|----------------------------------------------------------------------------|------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Q-01 | **Testing Strategy**                             | QUESTOES_PENDENTES #22         | Define cobertura de testes para os dois agregados e comunicação entre eles | Alta | Inclui: (a) mocks do Portfolio em testes de Runner, (b) testes de integração inter-agregado, (c) simulação de falhas de rede, (d) testes de carga com múltiplos Runners. O `MockExchangeAdapter` existente precisa de modos de falha configuráveis                                                  |
-| Q-02 | **Testabilidade do Protocolo de Reconciliação**  | BLUEPRINT_QUESTOES #13         | Define como testar boot sequence e cenários de crash recovery              | Alta | Inclui: (a) simular Exchange que "perdeu" uma ordem (ordem fantasma), (b) simular crash entre persistência e dispatch, (c) modos de falha no `MockExchangeAdapter`, (d) cobertura dos cenários da tabela de reconciliação (Seção 10.3)                                                              |
-| Q-03 | **Tratamento de Ordens Pós-Mercado (Expiração)** | QUESTOES_SEM_CLASSIFICACAO #12 | Define o mecanismo de detecção e tratamento de ordens expiradas            | Média | Parcialmente coberta pelo Watchdog (Seção 6.7) e Circuit Breaker (Seção 11). Falta definir: (a) quem detecta expiração — Watchdog local vs evento da Exchange, (b) diferença entre CANCELED e EXPIRED no impacto contábil, (c) tempo máximo configurável em SUBMITTED, (d) se Strategy é notificada |
-| Q-04 | **Precisão na Camada de Apresentação**           | QUESTOES_SEM_CLASSIFICACAO #14 | Define formatação de valores em APIs REST e UI                             | Baixa | Seção 8 cobre precisão na borda com Exchange. Falta definir: (a) regras de arredondamento para exibição (truncar vs round), (b) número de casas por tipo de ativo, (c) tratamento de dust values na UI (ex: "0.00000001 BTC" → esconder ou agregar)                                                 |
+| #    | Questão                                          | Origem                         | Impacto                                                                    | Prioridade  | Notas                                                                                                                                                                                                                                                                                               |
+|------|--------------------------------------------------|--------------------------------|----------------------------------------------------------------------------|-------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Q-01 | **Testing Strategy**                             | QUESTOES_PENDENTES #22         | Define cobertura de testes para os dois agregados e comunicação entre eles | Alta        | Inclui: (a) mocks do Portfolio em testes de Runner, (b) testes de integração inter-agregado, (c) simulação de falhas de rede, (d) testes de carga com múltiplos Runners. O `MockExchangeAdapter` existente precisa de modos de falha configuráveis                                                  |
+| Q-02 | **Testabilidade do Protocolo de Reconciliação**  | BLUEPRINT_QUESTOES #13         | Define como testar boot sequence e cenários de crash recovery              | Alta        | Inclui: (a) simular Exchange que "perdeu" uma ordem (ordem fantasma), (b) simular crash entre persistência e dispatch, (c) modos de falha no `MockExchangeAdapter`, (d) cobertura dos cenários da tabela de reconciliação (Seção 10.3)                                                              |
+| Q-03 | **Tratamento de Ordens Pós-Mercado (Expiração)** | QUESTOES_SEM_CLASSIFICACAO #12 | Define o mecanismo de detecção e tratamento de ordens expiradas            | Média       | Parcialmente coberta pelo Watchdog (Seção 6.7) e Circuit Breaker (Seção 11). Falta definir: (a) quem detecta expiração — Watchdog local vs evento da Exchange, (b) diferença entre CANCELED e EXPIRED no impacto contábil, (c) tempo máximo configurável em SUBMITTED, (d) se Strategy é notificada |
+| Q-04 | **Precisão na Camada de Apresentação**           | QUESTOES_SEM_CLASSIFICACAO #14 | Define formatação de valores em APIs REST e UI                             | Baixa       | Seção 8 cobre precisão na borda com Exchange. Falta definir: (a) regras de arredondamento para exibição (truncar vs round), (b) número de casas por tipo de ativo, (c) tratamento de dust values na UI (ex: "0.00000001 BTC" → esconder ou agregar)                                                 |
 
 ### 16.4 Questões Adiadas (Escopo V2+)
 
@@ -5960,26 +5960,26 @@ Q-01 (Testing Strategy)
 
 > **Recomendação:** Resolver Q-01 e Q-02 juntas durante a fase de implementação — a definição do framework de testes (mocks, modos de falha, fixtures) serve como fundação para todos os cenários de teste.
 
-### 16.6 Rastreabilidade: Questões → Sessões
+### 16.6 Rastreabilidade: Questões → Seções
 
 Mapa reverso para localizar rapidamente onde cada fonte de questões foi absorvida:
 
 | Fonte                                          | Questões                      | Destino no IG                   |
 |------------------------------------------------|-------------------------------|---------------------------------|
 | `BLUEPRINT_QUESTOES.md` #3                     | Rate Limiting                 | Seção 15.4                      |
-| `BLUEPRINT_QUESTOES.md` #6                     | Limites por Runner            | Sessões 7.4, 13.3               |
-| `BLUEPRINT_QUESTOES.md` #7                     | Concorrência no Portfolio     | Sessões 9.2, 12.3 (parcial)     |
+| `BLUEPRINT_QUESTOES.md` #6                     | Limites por Runner            | Seções 7.4, 13.3               |
+| `BLUEPRINT_QUESTOES.md` #7                     | Concorrência no Portfolio     | Seções 9.2, 12.3 (parcial)     |
 | `BLUEPRINT_QUESTOES.md` #13                    | Testabilidade Reconciliação   | Q-02 (aberta)                   |
 | `QUESTOES_PENDENTES.md` #2                     | Comunicação entre Agregados   | Seção 5                         |
 | `QUESTOES_PENDENTES.md` #4                     | Consistência de Dados         | Seção 5, 10 (parcial)           |
-| `QUESTOES_PENDENTES.md` #11                    | Validação de Trade Parameters | Sessões 7, 8, 13 (parcial)      |
+| `QUESTOES_PENDENTES.md` #11                    | Validação de Trade Parameters | Seções 7, 8, 13 (parcial)      |
 | `QUESTOES_PENDENTES.md` #12                    | Context Injection             | Seção 14                        |
 | `QUESTOES_PENDENTES.md` #13                    | Cooldown                      | Seção 14.9                      |
 | `QUESTOES_PENDENTES.md` #22                    | Testing Strategy              | Q-01 (aberta)                   |
 | `QUESTOES_SEM_CLASSIFICACAO.md` #12            | Expiração de Ordens           | Q-03 (aberta)                   |
 | `QUESTOES_SEM_CLASSIFICACAO.md` #14 (Clock)    | Clock Drift                   | Seção 15.6                      |
 | `QUESTOES_SEM_CLASSIFICACAO.md` #14 (Precisão) | Precisão Apresentação         | Q-04 (aberta)                   |
-| Notas de Impl. #1–#31                          | Detalhes técnicos             | Sessões 5–15 (todas resolvidas) |
+| Notas de Impl. #1–#31                          | Detalhes técnicos             | Seções 5–15 (todas resolvidas) |
 
 ### 16.7 Sumário Estatístico
 
