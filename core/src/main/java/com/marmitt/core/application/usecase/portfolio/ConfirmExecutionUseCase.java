@@ -5,14 +5,17 @@ import com.marmitt.core.ports.inbound.portfolio.ConfirmExecutionPort;
 
 /**
  * Implementação de {@link ConfirmExecutionPort} — Confirmação de execução assíncrona.
- * <b>Não implementado — ver F1-11.</b>
  *
+ * @implNote Implementação pendente para F1-11. Quando implementado, converterá margem de
+ *           Reserved → Realized no {@code GlobalBalance} via {@code ApplicationEventPublisher}
+ *           com {@code @TransactionalEventListener(phase = AFTER_COMMIT)} e retry exponencial.
  * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 5.2.2</a>
  */
 public class ConfirmExecutionUseCase implements ConfirmExecutionPort {
 
     /**
-     * @throws UnsupportedOperationException sempre — implementação prevista para F1-11
+     * @implNote Não implementado — ver F1-11.
+     * @throws UnsupportedOperationException sempre
      */
     @Override
     public void confirmExecution(ExecutionConfirmation confirmation) {

@@ -5,14 +5,17 @@ import com.marmitt.core.ports.inbound.portfolio.ReleaseMarginPort;
 
 /**
  * Implementação de {@link ReleaseMarginPort} — Estorno de margem assíncrono.
- * <b>Não implementado — ver F1-11.</b>
  *
+ * @implNote Implementação pendente para F1-11. Quando implementado, devolverá margem de
+ *           Reserved → Available no {@code GlobalBalance} via {@code ApplicationEventPublisher}
+ *           com retries ilimitados (capital preso é inaceitável — IG Seção 5.2.3).
  * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 5.2.3</a>
  */
 public class ReleaseMarginUseCase implements ReleaseMarginPort {
 
     /**
-     * @throws UnsupportedOperationException sempre — implementação prevista para F1-11
+     * @implNote Não implementado — ver F1-11.
+     * @throws UnsupportedOperationException sempre
      */
     @Override
     public void release(MarginRelease release) {

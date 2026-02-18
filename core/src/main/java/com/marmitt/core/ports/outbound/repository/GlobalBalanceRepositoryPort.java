@@ -52,7 +52,8 @@ public interface GlobalBalanceRepositoryPort {
      * </ul>
      *
      * @param portfolioId portfolio alvo da reserva
-     * @param amount      valor a reservar (deve ser positivo)
+     * @param amount      valor a reservar — deve ser positivo e já incluir o safety buffer do Runner
+     *                    (calculado pelo Runner antes de invocar {@code ReserveCapitalPort.reserve()})
      * @return {@code true} se reserva aplicada com sucesso; {@code false} se saldo insuficiente
      * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 5.2.1 (Thread-safety)</a>
      */
