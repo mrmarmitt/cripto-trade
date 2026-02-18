@@ -1,6 +1,7 @@
 package com.marmitt.core.domain.runner;
 
 import com.marmitt.core.enums.PositionStatus;
+import lombok.Builder;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -93,7 +94,9 @@ public class Position {
 
     /**
      * Construtor completo para reconstituição a partir do banco de dados.
+     * Use {@code Position.reconstitute().id(...).runnerId(...) ... .build()} via o Builder gerado.
      */
+    @Builder(builderMethodName = "reconstitute")
     public Position(
             UUID id,
             UUID runnerId,
@@ -170,6 +173,9 @@ public class Position {
         requirePositive(soldQuantity, "soldQuantity");
         requirePositive(salePrice, "salePrice");
         Objects.requireNonNull(feePaid, "feePaid cannot be null");
+        if (feePaid.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("feePaid cannot be negative");
+        }
 
         if (soldQuantity.compareTo(this.quantity) > 0) {
             throw new IllegalArgumentException(
