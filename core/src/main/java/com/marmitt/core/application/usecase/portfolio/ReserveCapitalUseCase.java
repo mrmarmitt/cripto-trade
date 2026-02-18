@@ -5,12 +5,10 @@ import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.capital.CapitalRequest;
-import com.marmitt.core.dto.capital.ExecutionConfirmation;
-import com.marmitt.core.dto.capital.MarginRelease;
 import com.marmitt.core.dto.capital.ReservationResult;
 import com.marmitt.core.enums.RejectionReason;
 import com.marmitt.core.enums.TransactionStatus;
-import com.marmitt.core.ports.inbound.portfolio.CapitalManager;
+import com.marmitt.core.ports.inbound.portfolio.ReserveCapitalPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
@@ -21,13 +19,12 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Implementação do {@link CapitalManager} — único ponto de acoplamento entre
- * StrategyRunner e Portfolio para operações de capital.
+ * Implementação de {@link ReserveCapitalPort} — Capital Request síncrono (F1-10).
  * <p>
- * <b>F1-10:</b> implementa {@link #reserve} (síncrono).
- * <b>F1-11:</b> implementará {@link #confirmExecution} e {@link #release} (assíncronos).
+ * Ponto de serialização do {@code GlobalBalance}: move capital de Available → Reserved
+ * com lock pessimista no banco, garantindo que dois Runners não façam double-spend.
  * <p>
- * Sequência de validações do {@code reserve()} (IG Seção 5.2.1):
+ * Sequência de validações (IG Seção 5.2.1):
  * <ol>
  *   <li>Runner existe e está operacional → {@code UNKNOWN_RUNNER}</li>
  *   <li>Portfolio existe e SafeMode está NORMAL → {@code RISK_VIOLATION}</li>
@@ -35,10 +32,10 @@ import java.util.UUID;
  *   <li>Reserva atômica com lock pessimista → {@code INSUFFICIENT_FUNDS}</li>
  * </ol>
  *
- * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seções 5.2, 5.3.1</a>
+ * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seções 5.2.1, 7.1</a>
  */
 @Slf4j
-public class CapitalManagerService implements CapitalManager {
+public class ReserveCapitalUseCase implements ReserveCapitalPort {
 
     private static final List<TransactionStatus> INFLIGHT_STATUSES = List.of(
             TransactionStatus.PENDING,
@@ -50,7 +47,7 @@ public class CapitalManagerService implements CapitalManager {
     private final PortfolioRepositoryPort portfolioRepository;
     private final GlobalBalanceRepositoryPort globalBalanceRepository;
 
-    public CapitalManagerService(
+    public ReserveCapitalUseCase(
             StrategyRunnerRepositoryPort runnerRepository,
             PortfolioRepositoryPort portfolioRepository,
             GlobalBalanceRepositoryPort globalBalanceRepository
@@ -135,34 +132,6 @@ public class CapitalManagerService implements CapitalManager {
                 runner.getPortfolioId(), reservationId);
         return ReservationResult.approved(reservationId);
     }
-
-    /**
-     * Notifica o Portfolio sobre execução (total ou parcial) de uma ordem.
-     * <b>Não implementado — ver F1-11.</b>
-     *
-     * @throws UnsupportedOperationException sempre
-     */
-    @Override
-    public void confirmExecution(ExecutionConfirmation confirmation) {
-        throw new UnsupportedOperationException(
-                "confirmExecution not yet implemented — scheduled for F1-11");
-    }
-
-    /**
-     * Solicita devolução de margem reservada.
-     * <b>Não implementado — ver F1-11.</b>
-     *
-     * @throws UnsupportedOperationException sempre
-     */
-    @Override
-    public void release(MarginRelease release) {
-        throw new UnsupportedOperationException(
-                "release not yet implemented — scheduled for F1-11");
-    }
-
-    // ============================================================
-    // Private helpers
-    // ============================================================
 
     /**
      * Calcula a exposição corrente do Runner:
