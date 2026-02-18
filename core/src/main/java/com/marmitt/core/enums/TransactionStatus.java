@@ -16,9 +16,17 @@ public enum TransactionStatus {
     SUBMITTED,
 
     /**
-     * Transação parcialmente executada
+     * Transação parcialmente executada.
+     *
+     * @deprecated Substituído por {@link #PARTIAL} no modelo alvo (F1-06). Removido em F1-08.
      */
+    @Deprecated(forRemoval = true)
     PARTIALLY_FILLED,
+
+    /**
+     * Transação parcialmente executada — pelo menos um TransactionMatch existe.
+     */
+    PARTIAL,
 
     /**
      * Transação completamente executada com sucesso
@@ -53,8 +61,9 @@ public enum TransactionStatus {
     /**
      * Verifica se a transação foi executada (total ou parcialmente)
      */
+    @SuppressWarnings("deprecation")
     public boolean isExecuted() {
-        return this == FILLED || this == PARTIALLY_FILLED;
+        return this == FILLED || this == PARTIALLY_FILLED || this == PARTIAL;
     }
 
     /**
