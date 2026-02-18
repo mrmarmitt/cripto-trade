@@ -37,8 +37,11 @@ public record CapitalRequest(
         if (symbol.isBlank()) {
             throw new IllegalArgumentException("symbol cannot be blank");
         }
-        if (amount.compareTo(BigDecimal.ZERO) <= 0) {
-            throw new IllegalArgumentException("amount must be positive");
+        if (amount.compareTo(BigDecimal.ZERO) == 0) {
+            throw new IllegalArgumentException("amount cannot be zero");
+        }
+        if (amount.compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("amount cannot be negative");
         }
     }
 }

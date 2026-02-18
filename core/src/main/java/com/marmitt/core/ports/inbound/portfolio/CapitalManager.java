@@ -51,7 +51,9 @@ public interface CapitalManager {
      * <p>
      * Deve ser invocado após cada {@code TransactionMatch} ser persistido.
      * O Portfolio garante idempotência via {@code matchId} — duplicatas descartadas.
-     * Em caso de falha, o evento é reenfileirado com backoff exponencial (max 5 tentativas).
+     * Em caso de falha, o evento é reenfileirado com backoff exponencial. O número máximo de
+     * tentativas (default: 5) e o backoff são configuráveis via {@code @Retryable} na implementação
+     * do Portfolio (IG Seção 5.2.2). Após esgotar as tentativas, o evento vai para a DLQ.
      *
      * @param confirmation payload com matchId, quantidade executada, preço, fee e totalCost
      */
