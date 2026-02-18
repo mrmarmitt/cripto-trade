@@ -7,6 +7,13 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Objects;
 
+/**
+ * @deprecated Substituído por {@link com.marmitt.core.domain.runner.Position} no modelo alvo.
+ *             A nova Position é 1:N com StrategyRunner (não 1:1 com Portfolio),
+ *             usa BigDecimal em vez de Asset, e suporta locking de lotes.
+ *             Mantida temporariamente para compatibilidade durante a migração (F1-08).
+ */
+@Deprecated(forRemoval = true)
 @Getter
 public class Position {
 
