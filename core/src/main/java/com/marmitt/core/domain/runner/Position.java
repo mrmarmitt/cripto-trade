@@ -13,9 +13,16 @@ import java.util.UUID;
  * Deixa de ser 1:1 com Portfolio e passa a ser 1:N com StrategyRunner,
  * permitindo múltiplas posições simultâneas (Hedging).
  * <p>
- * Simplificação: campos que antes usavam padrão Asset (amount + currency + type)
- * passam a ser {@code BigDecimal} puro. A moeda é inferida do {@code symbol} do Runner
- * (ex: para BTCUSDT, {@code quantity} é em BTC e preços são em USDT).
+ * <b>Convenção de moeda:</b> os campos numéricos seguem o padrão de pares da exchange
+ * (base asset + quote asset concatenados, ex: "BTCUSDT"):
+ * <ul>
+ *   <li>{@code quantity} — em base asset (ex: BTC para BTCUSDT)</li>
+ *   <li>{@code averagePrice}, {@code currentPrice} — em quote asset (ex: USDT para BTCUSDT)</li>
+ *   <li>{@code realizedPnl} — em quote asset</li>
+ * </ul>
+ * A separação entre base e quote asset é responsabilidade do caller — tipicamente inferida
+ * pelo {@code StrategyRunner} a partir da configuração do par ({@code baseCurrency} / {@code quoteCurrency})
+ * registrada no próprio Runner. Não há lógica de parsing de symbol dentro desta classe.
  * <p>
  * O campo {@code lockedByTransactionId} implementa o locking provisório de lotes:
  * impede que uma posição em processo de venda seja usada por outro sinal concorrente.
@@ -147,10 +154,17 @@ public class Position {
 
     /**
      * Reduz a posição após execução de venda e acumula PnL realizado.
+     * <p>
+     * {@code feePaid} deve estar <b>já convertida para a quote currency do símbolo</b>
+     * (ex: USDT para BTCUSDT) antes de ser passada. Se a exchange cobrou a fee em outro
+     * ativo (ex: BNB), a conversão é responsabilidade do caller — tipicamente o StrategyRunner
+     * ao processar o callback da exchange via {@code Fee.convertedAmount()}.
+     * Em caso de falha na conversão, o débito deve ser registrado na {@code DustAccount}
+     * como {@code TECHNICAL_DEBT} e {@code feePaid = ZERO} usado aqui.
      *
-     * @param soldQuantity quantidade vendida
-     * @param salePrice    preço de execução da venda
-     * @param feePaid      fee paga (em quote currency)
+     * @param soldQuantity quantidade vendida (em base asset, ex: BTC)
+     * @param salePrice    preço de execução da venda (em quote asset, ex: USDT)
+     * @param feePaid      fee já convertida para quote asset (ex: USDT); nunca negativo
      */
     public void reduceQuantity(BigDecimal soldQuantity, BigDecimal salePrice, BigDecimal feePaid) {
         requirePositive(soldQuantity, "soldQuantity");
