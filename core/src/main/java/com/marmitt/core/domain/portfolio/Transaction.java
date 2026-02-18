@@ -11,6 +11,14 @@ import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
 
+/**
+ * @deprecated Substituído por {@link com.marmitt.core.domain.runner.Transaction} no modelo alvo.
+ *             A nova Transaction é FK para StrategyRunner (não Portfolio), usa BigDecimal em vez de Asset,
+ *             adiciona exchangeOrderId, confidence, reasoning e version, e remove o campo fee
+ *             (fee migra para TransactionMatch).
+ *             Mantida temporariamente para compatibilidade durante a migração (F1-08).
+ */
+@Deprecated(forRemoval = true)
 @Builder
 @With
 public record Transaction(
