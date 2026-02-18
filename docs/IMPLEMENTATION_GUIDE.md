@@ -863,24 +863,28 @@ O sistema adota um **Padrão Híbrido**: operações que requerem consistência 
 └───────────────────┘         └────────────────────┘
 ```
 
-### 5.2 Interface `CapitalManager`
+### 5.2 Ports de Comunicação entre Agregados
 
-O Portfolio expõe uma interface única — `CapitalManager` — que centraliza toda a comunicação entre agregados. Esta interface é o **único ponto de acoplamento** entre Runner e Portfolio.
+O Portfolio expõe **três ports de entrada** — `ReserveCapitalPort`, `ConfirmExecutionPort` e `ReleaseMarginPort` — cada um com uma única responsabilidade. O Runner acessa apenas os ports necessários, nunca o Portfolio diretamente.
 
 > **Nota de Implementação #21 absorvida.**
 
-#### Definição da Interface
+#### Definição dos Ports
 
 ```
-interface CapitalManager {
+// ── Síncrono (Request-Response) ──────────────────────────
 
-    // ── Síncrono (Request-Response) ──────────────────────────
-
+interface ReserveCapitalPort {
     ReservationResult reserve(CapitalRequest request)
+}
 
-    // ── Assíncrono (Fire-and-Forget com garantia) ────────────
+// ── Assíncrono (Fire-and-Forget com garantia) ────────────
 
+interface ConfirmExecutionPort {
     void confirmExecution(ExecutionConfirmation confirmation)
+}
+
+interface ReleaseMarginPort {
     void release(MarginRelease release)
 }
 ```
@@ -967,7 +971,7 @@ Runner                          Portfolio
 
 | Componente           | Padrão                                                            | Notas                                                                                          |
 |----------------------|-------------------------------------------------------------------|------------------------------------------------------------------------------------------------|
-| `reserve()`          | Chamada direta de método via interface `CapitalManager`           | Injetada via Spring DI. O Runner nunca referencia `Portfolio` diretamente — apenas a interface |
+| `reserve()`          | Chamada direta de método via `ReserveCapitalPort`                 | Injetada via Spring DI. O Runner nunca referencia `Portfolio` diretamente — apenas o port      |
 | `confirmExecution()` | `ApplicationEventPublisher.publishEvent(ExecutionConfirmedEvent)` | Listener no Portfolio com `@TransactionalEventListener(phase = AFTER_COMMIT)`                  |
 | `release()`          | `ApplicationEventPublisher.publishEvent(MarginReleaseEvent)`      | Idem. Listener garante que o evento só é processado após o commit do Runner                    |
 | Retry                | `@Retryable` (Spring Retry) no listener                           | Com backoff exponencial configurável                                                           |
@@ -991,9 +995,9 @@ Para evolução futura, o padrão muda para **Outbox Pattern** com broker duráv
 | **Transporte**   | Spring ApplicationEvents (in-memory)    | RabbitMQ / Kafka                                                  |
 | **Durabilidade** | Perdido em crash (reconciliado no boot) | Persistido no broker                                              |
 | **Atomicidade**  | `@TransactionalEventListener`           | Outbox Pattern: evento salvo na mesma tx do Runner                |
-| **Interface**    | `CapitalManager` (sem alteração)        | `CapitalManager` (sem alteração — a interface isola o transporte) |
+| **Ports**        | `ReserveCapitalPort`, `ConfirmExecutionPort`, `ReleaseMarginPort` (sem alteração) | Idem — os ports isolam o transporte |
 
-A interface `CapitalManager` abstrai o transporte — mudar de EventBus para Outbox+Kafka exige apenas nova implementação, sem alterar o domínio.
+Os ports `ReserveCapitalPort`, `ConfirmExecutionPort` e `ReleaseMarginPort` abstraem o transporte — mudar de EventBus para Outbox+Kafka exige apenas novas implementações, sem alterar o domínio.
 
 ### 5.4 Modelo de Consistência
 
@@ -1029,7 +1033,7 @@ A idempotência por `matchId` (confirmação) e `transactionId` (release) garant
 O StrategyRunner **nunca consulta** o saldo do Portfolio diretamente. O fluxo é:
 
 1. A **Strategy** decide quanto comprar/vender (baseada em regras próprias)
-2. O **Runner** solicita reserva via `CapitalManager.reserve()`
+2. O **Runner** solicita reserva via `ReserveCapitalPort.reserve()`
 3. O **Portfolio** aprova ou rejeita
 
 Isso elimina a questão de "decisão com saldo desatualizado" — o Runner não precisa de uma visão atualizada do saldo para operar. A validação de saldo ocorre atomicamente no momento da reserva.
@@ -1175,7 +1179,7 @@ Strategy    Runner                Portfolio            Exchange
 | `release()` assíncrono sem limite de retry | Capital preso é pior que latência de liberação                            | Em cenário extremo, retries podem acumular                             |
 | Runner nunca lê GlobalBalance              | Elimina stale reads e simplifica consistência                             | Runner não sabe "quanto sobra" — mas não precisa                       |
 | EventBus in-memory (V1)                    | Sem dependência externa, simplicidade operacional                         | Eventos perdidos em crash (reconciliados no boot)                      |
-| Interface `CapitalManager` como abstração  | Permite migrar de monólito para microserviços sem alterar domínio         | Indireção adicional                                                    |
+| Ports de comunicação como abstração (`ReserveCapitalPort`, `ConfirmExecutionPort`, `ReleaseMarginPort`) | Permite migrar de monólito para microserviços sem alterar domínio | Indireção adicional |
 | Idempotência via estrutura de domínio      | Sem Redis/tabela auxiliar; menos infraestrutura                           | Queries de verificação em cada evento (impacto negligível com indexes) |
 
 ---
@@ -1214,13 +1218,13 @@ A Transaction segue uma máquina de estados linear e determinística. Cada trans
 
 | Estado        | Significado                                                                                                              | Quem Transiciona                   | Ação de Margem (via Seção 5)                                                               |
 |---------------|--------------------------------------------------------------------------------------------------------------------------|------------------------------------|--------------------------------------------------------------------------------------------|
-| **PENDING**   | Intenção criada e persistida no DB. Lotes de venda travados (se SELL). Capital Request ainda não enviado ou em andamento | Runner (criação)                   | `CapitalManager.reserve()` → Reserved                                                      |
+| **PENDING**   | Intenção criada e persistida no DB. Lotes de venda travados (se SELL). Capital Request ainda não enviado ou em andamento | Runner (criação)                   | `ReserveCapitalPort.reserve()` → Reserved                                                      |
 | **SUBMITTED** | Ordem aceita pela Exchange (ExchangeOrderId recebido). Ordem "em voo"                                                    | Runner (após ACK da exchange)      | Mantém Reserved                                                                            |
-| **PARTIAL**   | Execução parcial recebida. Pelo menos um `TransactionMatch` existe                                                       | Runner (via callback da exchange)  | `CapitalManager.confirmExecution()` → converte fatia proporcional de Reserved → Realized   |
-| **FILLED**    | Execução 100% concluída                                                                                                  | Runner (via callback)              | `CapitalManager.confirmExecution(isFinal=true)` → converte restante de Reserved → Realized |
-| **CANCELED**  | Ordem cancelada (pelo Runner, pelo operador, ou pela exchange)                                                           | Runner (via callback ou Watchdog)  | `CapitalManager.release()` → estorna Reserved remanescente → Available                     |
-| **EXPIRED**   | Ordem expirou (timeout do Watchdog) ou intenção não materializada (crash recovery)                                       | Runner (Watchdog ou Boot Sequence) | `CapitalManager.release()` → estorno total → Available                                     |
-| **REJECTED**  | Portfolio negou Capital Request, ou exchange rejeitou a ordem                                                            | Runner (imediato)                  | Se já reservado: `CapitalManager.release()`. Se antes da reserva: nenhuma ação             |
+| **PARTIAL**   | Execução parcial recebida. Pelo menos um `TransactionMatch` existe                                                       | Runner (via callback da exchange)  | `ConfirmExecutionPort.confirmExecution()` → converte fatia proporcional de Reserved → Realized   |
+| **FILLED**    | Execução 100% concluída                                                                                                  | Runner (via callback)              | `ConfirmExecutionPort.confirmExecution(isFinal=true)` → converte restante de Reserved → Realized |
+| **CANCELED**  | Ordem cancelada (pelo Runner, pelo operador, ou pela exchange)                                                           | Runner (via callback ou Watchdog)  | `ReleaseMarginPort.release()` → estorna Reserved remanescente → Available                     |
+| **EXPIRED**   | Ordem expirou (timeout do Watchdog) ou intenção não materializada (crash recovery)                                       | Runner (Watchdog ou Boot Sequence) | `ReleaseMarginPort.release()` → estorno total → Available                                     |
+| **REJECTED**  | Portfolio negou Capital Request, ou exchange rejeitou a ordem                                                            | Runner (imediato)                  | Se já reservado: `ReleaseMarginPort.release()`. Se antes da reserva: nenhuma ação             |
 
 #### 6.1.2 Transições Válidas
 
@@ -1303,7 +1307,7 @@ O risco de crash entre a geração do ID e a persistência é eliminado pela ord
        ├─ 6b. Se SELL: criar locks nos lotes alvo
        │       (pessimistic lock nas linhas da Position)
        │
-       └─ 6c. CapitalManager.reserve() [síncrono]
+       └─ 6c. ReserveCapitalPort.reserve() [síncrono]
        │      │
        │      ├─ APPROVED → commit tx de banco
        │      │
@@ -1318,7 +1322,7 @@ O risco de crash entre a geração do ID e a persistência é eliminado pela ord
        ├─ ACK recebido → Transaction → SUBMITTED
        ├─ Timeout      → ver Seção 6.3
        └─ Rejeição     → Transaction → REJECTED
-                         CapitalManager.release()
+                         ReleaseMarginPort.release()
 ```
 
 **Decisões críticas:**
@@ -1363,7 +1367,7 @@ Runner envia ordem → Timeout/ConnectionClosed
        │     └─ Atualiza local para SUBMITTED/PARTIAL, aguarda callbacks
        │
        ├─ Exchange retorna: "Order Not Found"
-       │     └─ Marca local como EXPIRED, CapitalManager.release()
+       │     └─ Marca local como EXPIRED, ReleaseMarginPort.release()
        │
        └─ Consulta também falha (exchange inacessível)
               └─ Mantém SUBMITTED, agenda retry da consulta
@@ -1458,7 +1462,7 @@ Quando uma ordem parcialmente executada é cancelada (pelo Watchdog, operador ou
        │
 3. ── FIM DA TRANSAÇÃO DE BANCO ──
        │
-4. CapitalManager.release(releaseAmount) [assíncrono]
+4. ReleaseMarginPort.release(releaseAmount) [assíncrono]
 ```
 
 **Regras contábeis:**
@@ -1516,7 +1520,7 @@ Boot do Runner (INITIALIZING, isReconciling=true)
        │
 Step 1: Saneamento de Zumbis
        │ Busca: Transactions PENDING sem exchangeOrderId
-       │ Ação: marca EXPIRED, CapitalManager.release()
+       │ Ação: marca EXPIRED, ReleaseMarginPort.release()
        │ Justificativa: crash entre persist e dispatch
        │
 Step 2: Identificação do Limbo
@@ -1640,14 +1644,14 @@ Esta seção detalha **como implementar** a alocação de capital, a validação
 
 > **Referência:** Blueprint Seção 11.2 (Alocação de Capital e Governança de Concorrência), Seção 4.C (Capital Request).
 > **Notas absorvidas:** #14 (Safety Buffer / Arredondamento de Capital), #17 (Validação minNotional), #20 (Monitoramento de Rejection Rate).
-> **Dependência:** Seção 5 (Interface `CapitalManager`) define o contrato de comunicação. Esta seção detalha a **lógica interna** do Portfolio ao processar um `reserve()`.
+> **Dependência:** Seção 5 (`ReserveCapitalPort`) define o contrato de comunicação. Esta seção detalha a **lógica interna** do Portfolio ao processar um `reserve()`.
 
 ### 7.1 Cadeia de Validação do Capital Request
 
-Quando o Runner invoca `CapitalManager.reserve()`, o Portfolio executa uma cadeia de validações ordenada. A falha em qualquer passo resulta em rejeição imediata — não há "continue apesar do erro".
+Quando o Runner invoca `ReserveCapitalPort.reserve()`, o Portfolio executa uma cadeia de validações ordenada. A falha em qualquer passo resulta em rejeição imediata — não há "continue apesar do erro".
 
 ```
-CapitalManager.reserve(CapitalRequest)
+ReserveCapitalPort.reserve(CapitalRequest)
        │
 Step 1: Circuit Breaker Check
        │ if (safeModeStatus != NORMAL) → reject RISK_VIOLATION
@@ -1722,7 +1726,7 @@ Após a execução (FILLED ou PARTIAL+CANCELED), haverá uma diferença entre o 
 Buffer_Excedente = Capital_Reservado - Capital_Efetivo
 ```
 
-Este excedente é devolvido ao `AvailableBalance` como parte do `CapitalManager.confirmExecution()` (Seção 5.2.2) ou `release()` (Seção 5.2.3). O cálculo:
+Este excedente é devolvido ao `AvailableBalance` como parte do `ConfirmExecutionPort.confirmExecution()` (Seção 5.2.2) ou `ReleaseMarginPort.release()` (Seção 5.2.3). O cálculo:
 
 | Cenário            | Cálculo do Estorno                                                                    |
 |--------------------|---------------------------------------------------------------------------------------|
@@ -1732,7 +1736,7 @@ Este excedente é devolvido ao `AvailableBalance` como parte do `CapitalManager.
 
 ### 7.3 Validação Pre-Reserve (Runner-Side)
 
-Antes de invocar `CapitalManager.reserve()`, o Runner executa validações locais para evitar chamadas desnecessárias ao Portfolio.
+Antes de invocar `ReserveCapitalPort.reserve()`, o Runner executa validações locais para evitar chamadas desnecessárias ao Portfolio.
 
 > **Nota de Implementação #17 absorvida.**
 
@@ -1760,7 +1764,7 @@ V4: minNotional Validation
 V5: Price Sanity Check
        │ if (price desvio > 10% do lastPrice) → log WARNING, descarta sinal
        │
-       └─ Todas validações passaram → CapitalManager.reserve()
+       └─ Todas validações passaram → ReserveCapitalPort.reserve()
 ```
 
 **Decisão: Duas camadas de validação (Runner + Portfolio).**
@@ -2006,7 +2010,7 @@ Runner ────────────────────────�
    │
    │── persist Transaction(PENDING, clientOrderId=v1r01ft...)
    │
-   │── CapitalManager.reserve(amount=2500 × 1.005 = 2512.50)
+   │── ReserveCapitalPort.reserve(amount=2500 × 1.005 = 2512.50)
    │                          ──────────────────────────────
 Portfolio ──────────────────────────────────────────────
    │
@@ -4228,7 +4232,7 @@ public class ExchangeAdapterWithQuota implements ExchangeAdapter {
 | `runner.mailbox.capacity`                      | `1`       | Capacidade da fila de sinais (0 = sem buffer, apenas processamento direto) |
 | `runner.stale-signal-threshold-ms`             | `5000`    | Idade máxima de um sinal antes de ser descartado como obsoleto             |
 | `runner.signal-processing-timeout-ms`          | `60000`   | Timeout total do processamento de sinal                                    |
-| `runner.capital-request-timeout-ms`            | `10000`   | Timeout para `CapitalManager.reserve()`                                    |
+| `runner.capital-request-timeout-ms`            | `10000`   | Timeout para `ReserveCapitalPort.reserve()`                                |
 | `runner.lock-acquisition-timeout-ms`           | `5000`    | Timeout para aquisição de lock pessimista                                  |
 | `runner.poll-timeout-ms`                       | `1000`    | Timeout do `mailbox.poll()` antes de verificar comandos admin              |
 | `runner.thread.type`                           | `VIRTUAL` | Tipo de thread: `VIRTUAL` (Java 21+) ou `PLATFORM`                         |
@@ -5015,7 +5019,7 @@ public class RunnerContextAssembler {
             ))
             .toList();
 
-        // 4. Capital disponível (consulta ao CapitalManager)
+        // 4. Capital disponível (consulta ao Portfolio via ReserveCapitalPort)
         BigDecimal availableCapital = capitalManager
             .getAvailableForRunner(runner.id());
         BigDecimal maxOperation = calculateMaxOperation(runner, availableCapital);
@@ -5890,7 +5894,7 @@ Todas as 31 notas de implementação do `IMPLEMENTATION_GUIDE_QUESTOES.md` foram
 | #18   | Atomicidade no `requestCapital`                       | 7.2, 9.2                         | RESOLVIDA |
 | #19   | Ordem de Processamento de Sinais                      | 12.3, 12.4                       | RESOLVIDA |
 | #20   | Monitoramento de "Rejection Rate"                     | 7.8                              | RESOLVIDA |
-| #21   | Interface de Comunicação (CapitalManager)             | 5.2, 5.3                         | RESOLVIDA |
+| #21   | Ports de Comunicação (ReserveCapitalPort, ConfirmExecutionPort, ReleaseMarginPort) | 5.2, 5.3 | RESOLVIDA |
 | #22   | Idempotência no Portfolio                             | 5.4, 6.3                         | RESOLVIDA |
 | #23   | Implementação da Mailbox                              | 12.2                             | RESOLVIDA |
 | #24   | Monitoramento de Backpressure                         | 12.8                             | RESOLVIDA |
@@ -5912,7 +5916,7 @@ Todas as 31 notas de implementação do `IMPLEMENTATION_GUIDE_QUESTOES.md` foram
 | Sincronia de Relógio (Clock Drift) | QUESTOES_SEM_CLASSIFICACAO #14 | 15.5      | `ExchangeTimeService` com offset calculado via `getServerTime()`, sincronização periódica (5 min) + no boot                                                                         |
 | Context Injection para Strategy    | QUESTOES_PENDENTES #12         | 14.3–14.6 | `StrategyContextDto` com `PositionContext` (VO read-only), `OpenLotDto`, `PendingOrderDto`. Strategy stateless, recebe contexto assembrado pelo `RunnerContextAssembler`            |
 | Cooldown Implementation            | QUESTOES_PENDENTES #13         | 14.9      | Cooldown implícito via Execution Policy (Single mode) + Mailbox (capacity=1). Timer explícito reservado para V2+ (`cooldown.explicit-ms`)                                           |
-| Comunicação entre Agregados        | QUESTOES_PENDENTES #2          | 5.2–5.5   | Chamadas síncronas in-process (monolito V1). Portfolio expõe `CapitalManager` com `reserve()`, `confirmExecution()`, `release()`. Outbox Pattern reservado para decomposição futura |
+| Comunicação entre Agregados        | QUESTOES_PENDENTES #2          | 5.2–5.5   | Chamadas síncronas in-process (monolito V1). Portfolio expõe três ports: `ReserveCapitalPort` (síncrono), `ConfirmExecutionPort` e `ReleaseMarginPort` (assíncronos). Outbox Pattern reservado para decomposição futura |
 | Migração do Tópico 8 do Blueprint  | —                              | 4.x       | Conteúdo migrado para IG Seção 4 (Migração e Decomposição). Blueprint renumerado                                                                                                    |
 | Limites de Recursos por Runner     | BLUEPRINT_QUESTOES #6          | 13.3, 7.4 | Validados no `RunnerFactory` (hard limits) e no `reserve()` do Portfolio. Imutáveis durante execução, alteráveis via HALTED→reconfigure→ACTIVE                                      |
 
