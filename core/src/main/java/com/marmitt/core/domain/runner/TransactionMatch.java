@@ -105,7 +105,8 @@ public record TransactionMatch(
         BigDecimal grossPnl = sellPrice.subtract(buyPrice)
                 .multiply(matchedQuantity)
                 .setScale(8, RoundingMode.HALF_UP);
-        BigDecimal pnlRealized = grossPnl.subtract(fee.getConvertedAmountOrZero());
+        BigDecimal pnlRealized = grossPnl.subtract(fee.getConvertedAmountOrZero())
+                .setScale(8, RoundingMode.HALF_UP);
 
         return new TransactionMatch(
                 UUID.randomUUID(),

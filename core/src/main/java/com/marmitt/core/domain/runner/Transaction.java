@@ -3,6 +3,7 @@ package com.marmitt.core.domain.runner;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
 import lombok.Builder;
+import lombok.Getter;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -26,6 +27,7 @@ import java.util.UUID;
  *
  * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 3.3.3, Blueprint 4, 6.A, 10.1</a>
  */
+@Getter
 public class Transaction {
 
     private final UUID id;
@@ -60,7 +62,11 @@ public class Transaction {
     /** Preço médio ponderado de execução (em quote asset). Null enquanto PENDING/SUBMITTED. */
     private BigDecimal executedPrice;
 
-    /** Valor total estimado: {@code quantity × price} (em quote asset). */
+    /**
+     * Valor total estimado: {@code quantity × price} (em quote asset).
+     * O caller é responsável pelo arredondamento antes de passar este valor
+     * (convenção: {@code setScale(8, RoundingMode.HALF_UP)}).
+     */
     private final BigDecimal total;
 
     /**
@@ -293,30 +299,6 @@ public class Transaction {
         }
         return executedQuantity.multiply(executedPrice).setScale(8, RoundingMode.HALF_UP);
     }
-
-    // ============================================================
-    // Getters
-    // ============================================================
-
-    public UUID getId()                  { return id; }
-    public UUID getRunnerId()            { return runnerId; }
-    public String getClientOrderId()     { return clientOrderId; }
-    public String getExchangeOrderId()   { return exchangeOrderId; }
-    public TransactionStatus getStatus() { return status; }
-    public TransactionType getType()     { return type; }
-    public String getSymbol()            { return symbol; }
-    public BigDecimal getQuantity()      { return quantity; }
-    public BigDecimal getExecutedQuantity() { return executedQuantity; }
-    public BigDecimal getPrice()         { return price; }
-    public BigDecimal getExecutedPrice() { return executedPrice; }
-    public BigDecimal getTotal()         { return total; }
-    public BigDecimal getConfidence()    { return confidence; }
-    public String getReasoning()         { return reasoning; }
-    public UUID getTargetLotId()         { return targetLotId; }
-    public Instant getRequestedAt()      { return requestedAt; }
-    public Instant getExecutedAt()       { return executedAt; }
-    public String getRejectReason()      { return rejectReason; }
-    public Long getVersion()             { return version; }
 
     // ============================================================
     // Helpers
