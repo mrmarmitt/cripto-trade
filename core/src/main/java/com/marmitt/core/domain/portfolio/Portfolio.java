@@ -5,6 +5,8 @@ import com.marmitt.core.domain.portfolio.contrats.AccountingPolicy;
 import com.marmitt.core.dto.strategy.OpenBuyEntryDto;
 import com.marmitt.core.dto.strategy.PendingSellEntryDto;
 import com.marmitt.core.dto.strategy.PortfolioContextDto;
+import com.marmitt.core.enums.CapitalPoolingMode;
+import com.marmitt.core.enums.SafeModeStatus;
 import com.marmitt.core.enums.TransactionStatus;
 import lombok.Getter;
 
@@ -24,12 +26,13 @@ public class Portfolio {
 
     private final UUID id;
     private final String name;
-    private final UUID strategyId;
-    private final String strategyName;
-    private final Symbol symbol;
     private boolean isActive;
     private final Instant createdAt;
     private Instant lastExecutionTime;
+
+    // Novos campos — modelo alvo (IG 3.2.1)
+    private SafeModeStatus safeModeStatus;
+    private CapitalPoolingMode capitalPoolingMode;
 
     private final AccountingPolicy accountingPolicy;
 
@@ -37,8 +40,26 @@ public class Portfolio {
     private final List<Transaction> transactions;
     private final List<TransactionMatch> transactionMatches = new ArrayList<>();
 
-    // Exchange configuration
+    // === Campos deprecados — migram para StrategyRunner (F1-04) ===
+
+    /** @deprecated Migra para StrategyRunner.strategyId */
+    @Deprecated(forRemoval = true)
+    private final UUID strategyId;
+
+    /** @deprecated Migra para StrategyRunner.strategyName */
+    @Deprecated(forRemoval = true)
+    private final String strategyName;
+
+    /** @deprecated Migra para StrategyRunner.symbol */
+    @Deprecated(forRemoval = true)
+    private final Symbol symbol;
+
+    /** @deprecated Migra para StrategyRunner.exchangeId */
+    @Deprecated(forRemoval = true)
     private final String orderExecutionExchange;
+
+    /** @deprecated Migra para runner_market_data_sources */
+    @Deprecated(forRemoval = true)
     private final Set<String> allowedMarketDataSources;
 
     // Configurações de limitação
@@ -70,6 +91,30 @@ public class Portfolio {
         this.orderExecutionExchange = Objects.requireNonNull(orderExecutionExchange, "Order execution exchange cannot be null");
         this.allowedMarketDataSources = allowedMarketDataSources != null ?
                 Collections.unmodifiableSet(allowedMarketDataSources) : null;
+        this.safeModeStatus = SafeModeStatus.NORMAL;
+        this.capitalPoolingMode = CapitalPoolingMode.SHARED;
+    }
+
+    // ============================================================
+    // Safe Mode Management
+    // ============================================================
+
+    /**
+     * Atualiza o nível do Safe Mode do Portfolio.
+     *
+     * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 3.2.1, Blueprint 11.1.B.1</a>
+     */
+    public void setSafeModeStatus(SafeModeStatus status) {
+        this.safeModeStatus = Objects.requireNonNull(status, "SafeModeStatus cannot be null");
+    }
+
+    /**
+     * Atualiza o modo de pooling de capital.
+     *
+     * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 3.2.1, Blueprint 11.2.C</a>
+     */
+    public void setCapitalPoolingMode(CapitalPoolingMode mode) {
+        this.capitalPoolingMode = Objects.requireNonNull(mode, "CapitalPoolingMode cannot be null");
     }
 
     /**
