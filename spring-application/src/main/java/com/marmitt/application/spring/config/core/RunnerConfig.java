@@ -8,9 +8,11 @@ import com.marmitt.core.application.usecase.portfolio.ReleaseMarginService;
 import com.marmitt.core.application.usecase.runner.HandleOrderTerminationUseCase;
 import com.marmitt.core.application.usecase.runner.PortfolioContextBuilder;
 import com.marmitt.core.application.usecase.runner.ProcessTradeSignalService;
+import com.marmitt.core.application.usecase.runner.ProcessTradeSignalUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerLifecycleUseCase;
 import com.marmitt.core.ports.inbound.runner.HandleOrderTerminationPort;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
+import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalTransactionPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
@@ -89,6 +91,17 @@ public class RunnerConfig {
             OrderDispatchPort orderDispatchPort
     ) {
         return new ProcessTradeSignalService(runnerRepository, reserveCapitalService, orderDispatchPort);
+    }
+
+    // ── UseCase do fluxo ProcessTradeSignal (F2-01) ──────────────────────────
+
+    @Bean
+    public ProcessTradeSignalUseCase processTradeSignalUseCase(
+            ProcessTradeSignalService processTradeSignalService,
+            ProcessTradeSignalTransactionPort transactionPort,
+            HandleOrderTerminationPort terminationPort
+    ) {
+        return new ProcessTradeSignalUseCase(processTradeSignalService, transactionPort, terminationPort);
     }
 
     // ── Serviços do fluxo Runner Lifecycle (F2-04) ────────────────────────────
