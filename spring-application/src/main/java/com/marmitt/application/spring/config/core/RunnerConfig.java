@@ -5,6 +5,7 @@ import com.marmitt.core.application.usecase.portfolio.HandleExecutionConfirmedSe
 import com.marmitt.core.application.usecase.portfolio.HandleMarginReleaseService;
 import com.marmitt.core.application.usecase.portfolio.ReserveCapitalService;
 import com.marmitt.core.application.usecase.portfolio.ReleaseMarginService;
+import com.marmitt.core.application.usecase.runner.HandleOrderTerminationService;
 import com.marmitt.core.application.usecase.runner.ProcessTradeSignalService;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
@@ -72,5 +73,15 @@ public class RunnerConfig {
             OrderDispatchPort orderDispatchPort
     ) {
         return new ProcessTradeSignalService(runnerRepository, reserveCapitalService, orderDispatchPort);
+    }
+
+    // ── Serviços do fluxo HandleOrderTermination (F2-03) ─────────────────────
+
+    @Bean
+    public HandleOrderTerminationService handleOrderTermination(
+            StrategyRunnerRepositoryPort runnerRepository,
+            ReleaseMarginService releaseMarginService
+    ) {
+        return new HandleOrderTerminationService(runnerRepository, releaseMarginService);
     }
 }

@@ -30,8 +30,9 @@ import java.util.Optional;
  *   <li>{@link #persistAndReserve}: {@code @Transactional(rollbackFor = ...)} — persiste
  *       Transaction PENDING, aplica lock de Position (SELL) e reserva capital atomicamente.
  *       Lança {@link CapitalReservationRejectedException} para acionar rollback.</li>
- *   <li>{@link #handleAck}: {@code @Transactional} — atualiza status da Transaction
- *       após receber ACK da exchange.</li>
+ *   <li>{@link #handleAck}: {@code @Transactional} — ACCEPTED: persiste SUBMITTED.
+ *       REJECTED: delega a {@link HandleOrderTerminationHandler} (unlock + margin release).
+ *       TIMEOUT: não persiste (Transaction permanece PENDING para Boot Sequence).</li>
  * </ul>
  *
  * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 6.2.1</a>
@@ -42,13 +43,16 @@ public class ProcessTradeSignalHandler {
 
     private final ProcessTradeSignalService service;
     private final StrategyRunnerRepositoryPort runnerRepository;
+    private final HandleOrderTerminationHandler terminationHandler;
 
     public ProcessTradeSignalHandler(
             ProcessTradeSignalService service,
-            StrategyRunnerRepositoryPort runnerRepository
+            StrategyRunnerRepositoryPort runnerRepository,
+            HandleOrderTerminationHandler terminationHandler
     ) {
         this.service = service;
         this.runnerRepository = runnerRepository;
+        this.terminationHandler = terminationHandler;
     }
 
     /**
@@ -123,10 +127,15 @@ public class ProcessTradeSignalHandler {
     }
 
     /**
-     * Persiste o status da Transaction após o ACK da exchange.
+     * Processa o ACK recebido da exchange após o dispatch.
      * <p>
-     * {@code @Transactional} — ACCEPTED e REJECTED resultam em salvar status atualizado.
-     * TIMEOUT não salva (Transaction permanece PENDING para reconciliação no Boot Sequence).
+     * <ul>
+     *   <li>ACCEPTED: persiste Transaction como SUBMITTED</li>
+     *   <li>REJECTED: delega ao {@link HandleOrderTerminationHandler} —
+     *       unlock de Position (SELL) + persistência + release de margem</li>
+     *   <li>TIMEOUT: não persiste — Transaction permanece PENDING para
+     *       reconciliação no Boot Sequence (F2-06)</li>
+     * </ul>
      *
      * @param transaction transaction com status já atualizado pelo {@code dispatchAndApplyAck}
      * @param ack         ACK retornado pela exchange
@@ -137,6 +146,12 @@ public class ProcessTradeSignalHandler {
             // Transaction permanece PENDING — Boot Sequence (F2-06) reconcilia
             return;
         }
+        if (ack.isRejected()) {
+            // Delega ao HandleOrderTerminationHandler: unlock + save + margin release
+            terminationHandler.handle(transaction);
+            return;
+        }
+        // ACCEPTED: persiste Transaction como SUBMITTED
         runnerRepository.saveTransaction(transaction);
     }
 }
