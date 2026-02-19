@@ -9,6 +9,7 @@ import com.marmitt.core.dto.capital.CapitalRequest;
 import com.marmitt.core.dto.runner.OrderAck;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.enums.TransactionType;
+import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -39,7 +40,7 @@ import java.util.Optional;
  */
 @Component
 @Slf4j
-public class ProcessTradeSignalHandler {
+public class ProcessTradeSignalHandler implements ProcessTradeSignalPort {
 
     private final ProcessTradeSignalService service;
     private final StrategyRunnerRepositoryPort runnerRepository;

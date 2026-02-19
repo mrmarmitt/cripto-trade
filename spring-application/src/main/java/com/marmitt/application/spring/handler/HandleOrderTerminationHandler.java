@@ -3,6 +3,7 @@ package com.marmitt.application.spring.handler;
 import com.marmitt.core.application.usecase.runner.HandleOrderTerminationService;
 import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.Transaction;
+import com.marmitt.core.ports.inbound.runner.HandleOrderTerminationPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
@@ -36,7 +37,7 @@ import java.util.Optional;
  */
 @Component
 @Slf4j
-public class HandleOrderTerminationHandler {
+public class HandleOrderTerminationHandler implements HandleOrderTerminationPort {
 
     private final HandleOrderTerminationService service;
     private final StrategyRunnerRepositoryPort runnerRepository;

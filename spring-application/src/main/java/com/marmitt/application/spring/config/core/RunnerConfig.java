@@ -6,11 +6,17 @@ import com.marmitt.core.application.usecase.portfolio.HandleMarginReleaseService
 import com.marmitt.core.application.usecase.portfolio.ReserveCapitalService;
 import com.marmitt.core.application.usecase.portfolio.ReleaseMarginService;
 import com.marmitt.core.application.usecase.runner.HandleOrderTerminationService;
+import com.marmitt.core.application.usecase.runner.PortfolioContextBuilder;
 import com.marmitt.core.application.usecase.runner.ProcessTradeSignalService;
+import com.marmitt.core.application.usecase.runner.RunnerLifecycleUseCase;
+import com.marmitt.core.ports.inbound.runner.HandleOrderTerminationPort;
+import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -83,5 +89,29 @@ public class RunnerConfig {
             ReleaseMarginService releaseMarginService
     ) {
         return new HandleOrderTerminationService(runnerRepository, releaseMarginService);
+    }
+
+    // ── Serviços do fluxo Runner Lifecycle (F2-04) ────────────────────────────
+
+    @Bean
+    public PortfolioContextBuilder portfolioContextBuilder(
+            StrategyRunnerRepositoryPort runnerRepository,
+            GlobalBalanceRepositoryPort globalBalanceRepository
+    ) {
+        return new PortfolioContextBuilder(runnerRepository, globalBalanceRepository);
+    }
+
+    @Bean
+    public RunnerLifecycleUseCase runnerLifecycle(
+            StrategyRunnerRepositoryPort runnerRepository,
+            StrategyRepositoryPort strategyRepository,
+            ListenerRepositoryPort listenerRepository,
+            PortfolioContextBuilder portfolioContextBuilder,
+            ProcessTradeSignalPort processTradeSignalPort,
+            HandleOrderTerminationPort terminationPort
+    ) {
+        return new RunnerLifecycleUseCase(
+                runnerRepository, strategyRepository, listenerRepository,
+                portfolioContextBuilder, processTradeSignalPort, terminationPort);
     }
 }
