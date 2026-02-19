@@ -1,9 +1,9 @@
 package com.marmitt.application.spring.handler;
 
+import com.marmitt.core.application.usecase.portfolio.HandleExecutionConfirmedService;
+import com.marmitt.core.application.usecase.portfolio.HandleMarginReleaseService;
 import com.marmitt.core.dto.events.ExecutionConfirmedEvent;
 import com.marmitt.core.dto.events.MarginReleaseEvent;
-import com.marmitt.core.ports.inbound.portfolio.HandleExecutionConfirmedPort;
-import com.marmitt.core.ports.inbound.portfolio.HandleMarginReleasePort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.retry.annotation.Backoff;
 import org.springframework.retry.annotation.Recover;
@@ -16,7 +16,7 @@ import org.springframework.transaction.event.TransactionalEventListener;
  * Listener Spring para eventos de capital entre agregados (F1-11).
  * <p>
  * Processa {@link ExecutionConfirmedEvent} e {@link MarginReleaseEvent} publicados pelo Runner
- * e delega o processamento para os ports de entrada do Portfolio.
+ * e delega o processamento para os serviços de Portfolio.
  * <p>
  * <b>Garantias de entrega:</b>
  * <ul>
@@ -33,12 +33,12 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Slf4j
 public class CapitalEventListener {
 
-    private final HandleExecutionConfirmedPort handleExecutionConfirmed;
-    private final HandleMarginReleasePort handleMarginRelease;
+    private final HandleExecutionConfirmedService handleExecutionConfirmed;
+    private final HandleMarginReleaseService handleMarginRelease;
 
     public CapitalEventListener(
-            HandleExecutionConfirmedPort handleExecutionConfirmed,
-            HandleMarginReleasePort handleMarginRelease
+            HandleExecutionConfirmedService handleExecutionConfirmed,
+            HandleMarginReleaseService handleMarginRelease
     ) {
         this.handleExecutionConfirmed = handleExecutionConfirmed;
         this.handleMarginRelease = handleMarginRelease;

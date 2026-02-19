@@ -4,14 +4,14 @@ import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.capital.MarginRelease;
 import com.marmitt.core.dto.events.MarginReleaseEvent;
-import com.marmitt.core.ports.inbound.portfolio.HandleMarginReleasePort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Implementação de {@link HandleMarginReleasePort} — processa estorno de margem
- * no Portfolio, devolvendo capital de Reserved → Available no {@code GlobalBalance} (F1-11).
+ * Serviço de processamento de estorno de margem no Portfolio (F1-11).
+ * <p>
+ * Devolve capital de Reserved → Available no {@code GlobalBalance}.
  * <p>
  * Sequência de processamento:
  * <ol>
@@ -27,15 +27,17 @@ import lombok.extern.slf4j.Slf4j;
  * Se insuficiente, o release é descartado com WARN — indica possível duplicata.
  * Rastreamento por {@code transactionId} está previsto para V2+ com Outbox Pattern.
  *
+ * @implNote Pertence ao fluxo <b>HandleOrderTermination</b> — lado Portfolio (processamento).
+ *           Será absorvido por esse fluxo em refatoração futura.
  * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seções 5.2.3, 5.5.1</a>
  */
 @Slf4j
-public class HandleMarginReleaseUseCase implements HandleMarginReleasePort {
+public class HandleMarginReleaseService {
 
     private final StrategyRunnerRepositoryPort runnerRepository;
     private final GlobalBalanceRepositoryPort globalBalanceRepository;
 
-    public HandleMarginReleaseUseCase(
+    public HandleMarginReleaseService(
             StrategyRunnerRepositoryPort runnerRepository,
             GlobalBalanceRepositoryPort globalBalanceRepository
     ) {
@@ -43,7 +45,6 @@ public class HandleMarginReleaseUseCase implements HandleMarginReleasePort {
         this.globalBalanceRepository = globalBalanceRepository;
     }
 
-    @Override
     public void handle(MarginReleaseEvent event) {
         MarginRelease release = event.release();
 

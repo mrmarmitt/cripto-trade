@@ -4,7 +4,6 @@ import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.capital.ExecutionConfirmation;
 import com.marmitt.core.dto.events.ExecutionConfirmedEvent;
-import com.marmitt.core.ports.inbound.portfolio.HandleExecutionConfirmedPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
@@ -12,8 +11,9 @@ import lombok.extern.slf4j.Slf4j;
 import java.math.BigDecimal;
 
 /**
- * Implementação de {@link HandleExecutionConfirmedPort} — processa confirmação de execução
- * no Portfolio, convertendo margem de Reserved → Realized no {@code GlobalBalance} (F1-11).
+ * Serviço de processamento de confirmação de execução no Portfolio (F1-11).
+ * <p>
+ * Converte margem de Reserved → Realized no {@code GlobalBalance}.
  * <p>
  * Sequência de processamento:
  * <ol>
@@ -29,15 +29,17 @@ import java.math.BigDecimal;
  * {@code available += totalCost + pnlAmount}. Em V1, {@code pnlAmount = 0} — o available
  * é restaurado pelo valor total da operação, com o PnL real acompanhado via Runner.
  *
+ * @implNote Pertence ao fluxo <b>HandleExecutionCallback</b> — lado Portfolio (processamento).
+ *           Será absorvido por esse fluxo em refatoração futura.
  * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seções 5.2.2, 5.5.1</a>
  */
 @Slf4j
-public class HandleExecutionConfirmedUseCase implements HandleExecutionConfirmedPort {
+public class HandleExecutionConfirmedService {
 
     private final StrategyRunnerRepositoryPort runnerRepository;
     private final GlobalBalanceRepositoryPort globalBalanceRepository;
 
-    public HandleExecutionConfirmedUseCase(
+    public HandleExecutionConfirmedService(
             StrategyRunnerRepositoryPort runnerRepository,
             GlobalBalanceRepositoryPort globalBalanceRepository
     ) {
@@ -45,7 +47,6 @@ public class HandleExecutionConfirmedUseCase implements HandleExecutionConfirmed
         this.globalBalanceRepository = globalBalanceRepository;
     }
 
-    @Override
     public void handle(ExecutionConfirmedEvent event) {
         ExecutionConfirmation confirmation = event.confirmation();
 
