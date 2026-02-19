@@ -136,44 +136,52 @@ public class HandleOrderTerminationService {
                 .multiply(SAFETY_BUFFER)
                 .setScale(8, RoundingMode.HALF_UP);
 
-        MarginRelease release;
-
-        if (status == TransactionStatus.REJECTED || status == TransactionStatus.EXPIRED) {
-            release = MarginRelease.fullRelease(
-                    transaction.getId(),
-                    transaction.getRunnerId(),
-                    reserved,
-                    mapToReleaseReason(status)
-            );
-
-        } else { // CANCELED
-            BigDecimal executedValue = transaction.getExecutedValue();
-            BigDecimal toRelease = reserved.subtract(executedValue)
-                    .setScale(8, RoundingMode.HALF_UP);
-
-            if (toRelease.compareTo(BigDecimal.ZERO) <= 0) {
-                log.info("handleOrderTermination: no margin to release for CANCELED " +
-                                "transactionId={} (reserved={} executedValue={})",
-                        transaction.getId(), reserved, executedValue);
-                return;
-            }
-
-            release = MarginRelease.partialRelease(
-                    transaction.getId(),
-                    transaction.getRunnerId(),
-                    toRelease,
-                    executedValue
-            );
-        }
-
-        releaseMarginService.release(release);
-        log.info("handleOrderTermination: margin release published transactionId={} amount={} reason={}",
-                transaction.getId(), release.releaseAmount(), release.reason());
+        buildMarginRelease(transaction, reserved, status).ifPresent(release -> {
+            releaseMarginService.release(release);
+            log.info("handleOrderTermination: margin release published transactionId={} amount={} reason={}",
+                    transaction.getId(), release.releaseAmount(), release.reason());
+        });
     }
 
     // ============================================================
     // Private helpers
     // ============================================================
+
+    /**
+     * Constrói o {@link MarginRelease} apropriado para o status terminal.
+     * Retorna {@code null} para CANCELED cujo executedValue já cobre a reserva integralmente
+     * (nenhum release necessário).
+     */
+    private Optional<MarginRelease> buildMarginRelease(Transaction transaction, BigDecimal reserved,
+                                                       TransactionStatus status) {
+        if (status == TransactionStatus.REJECTED || status == TransactionStatus.EXPIRED) {
+            return Optional.of(MarginRelease.fullRelease(
+                    transaction.getId(),
+                    transaction.getRunnerId(),
+                    reserved,
+                    mapToReleaseReason(status)
+            ));
+        }
+
+        // CANCELED
+        BigDecimal executedValue = transaction.getExecutedValue();
+        BigDecimal toRelease = reserved.subtract(executedValue)
+                .setScale(8, RoundingMode.HALF_UP);
+
+        if (toRelease.compareTo(BigDecimal.ZERO) <= 0) {
+            log.info("handleOrderTermination: no margin to release for CANCELED " +
+                            "transactionId={} (reserved={} executedValue={})",
+                    transaction.getId(), reserved, executedValue);
+            return Optional.empty();
+        }
+
+        return Optional.of(MarginRelease.partialRelease(
+                transaction.getId(),
+                transaction.getRunnerId(),
+                toRelease,
+                executedValue
+        ));
+    }
 
     private ReleaseReason mapToReleaseReason(TransactionStatus status) {
         return switch (status) {
