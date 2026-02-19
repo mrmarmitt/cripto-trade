@@ -8,7 +8,6 @@ import com.marmitt.core.dto.capital.CapitalRequest;
 import com.marmitt.core.dto.capital.ReservationResult;
 import com.marmitt.core.enums.RejectionReason;
 import com.marmitt.core.enums.TransactionStatus;
-import com.marmitt.core.ports.inbound.portfolio.ReserveCapitalPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
@@ -19,7 +18,7 @@ import java.util.List;
 import java.util.UUID;
 
 /**
- * Implementação de {@link ReserveCapitalPort} — Capital Request síncrono (F1-10).
+ * Serviço de reserva de capital síncrona (F1-10).
  * <p>
  * Ponto de serialização do {@code GlobalBalance}: move capital de Available → Reserved
  * com lock pessimista no banco, garantindo que dois Runners não façam double-spend.
@@ -32,10 +31,12 @@ import java.util.UUID;
  *   <li>Reserva atômica com lock pessimista → {@code INSUFFICIENT_FUNDS}</li>
  * </ol>
  *
+ * @implNote Pertence ao fluxo <b>ProcessTradeSignal</b> — executado entre {@code persist(PENDING)}
+ *           e o Order Dispatch. Será absorvido por esse fluxo em refatoração futura.
  * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seções 5.2.1, 7.1</a>
  */
 @Slf4j
-public class ReserveCapitalUseCase implements ReserveCapitalPort {
+public class ReserveCapitalService {
 
     private static final List<TransactionStatus> INFLIGHT_STATUSES = List.of(
             TransactionStatus.PENDING,
@@ -47,7 +48,7 @@ public class ReserveCapitalUseCase implements ReserveCapitalPort {
     private final PortfolioRepositoryPort portfolioRepository;
     private final GlobalBalanceRepositoryPort globalBalanceRepository;
 
-    public ReserveCapitalUseCase(
+    public ReserveCapitalService(
             StrategyRunnerRepositoryPort runnerRepository,
             PortfolioRepositoryPort portfolioRepository,
             GlobalBalanceRepositoryPort globalBalanceRepository
@@ -68,7 +69,6 @@ public class ReserveCapitalUseCase implements ReserveCapitalPort {
      * @param request payload com transactionId, runnerId, symbol, amount e tipo
      * @return {@link ReservationResult} APPROVED (com reservationId) ou REJECTED (com motivo)
      */
-    @Override
     public ReservationResult reserve(CapitalRequest request) {
         log.debug("reserve: transactionId={} runnerId={} amount={}",
                 request.transactionId(), request.runnerId(), request.amount());
