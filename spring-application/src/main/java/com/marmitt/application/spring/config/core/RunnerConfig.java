@@ -5,6 +5,7 @@ import com.marmitt.core.application.usecase.portfolio.HandleExecutionConfirmedSe
 import com.marmitt.core.application.usecase.portfolio.HandleMarginReleaseService;
 import com.marmitt.core.application.usecase.portfolio.ReserveCapitalService;
 import com.marmitt.core.application.usecase.portfolio.ReleaseMarginService;
+import com.marmitt.core.application.usecase.runner.HandleOrderTerminationUseCase;
 import com.marmitt.core.application.usecase.runner.PortfolioContextBuilder;
 import com.marmitt.core.application.usecase.runner.ProcessTradeSignalService;
 import com.marmitt.core.application.usecase.runner.RunnerLifecycleUseCase;
@@ -67,6 +68,16 @@ public class RunnerConfig {
             GlobalBalanceRepositoryPort globalBalanceRepository
     ) {
         return new HandleMarginReleaseService(runnerRepository, globalBalanceRepository);
+    }
+
+    // ── UseCase do fluxo HandleOrderTermination (F2-03) ──────────────────────
+
+    @Bean
+    public HandleOrderTerminationUseCase handleOrderTermination(
+            StrategyRunnerRepositoryPort runnerRepository,
+            ReleaseMarginService releaseMarginService
+    ) {
+        return new HandleOrderTerminationUseCase(runnerRepository, releaseMarginService);
     }
 
     // ── Serviços do fluxo ProcessTradeSignal (F2-01) ─────────────────────────
