@@ -38,6 +38,25 @@ class RunnerExposureService {
     }
 
     /**
+     * Snapshot de exposicao para decisoes de policy e reserva.
+     */
+    public ExposureSnapshot loadSnapshot(StrategyRunner runner) {
+        List<Position> openPositions = strategyRunnerRepository.findOpenPositionsByRunnerId(runner.getId());
+        List<Transaction> inFlight = strategyRunnerRepository.findByRunnerIdAndStatuses(runner.getId(), List.of(
+                TransactionStatus.PENDING,
+                TransactionStatus.SUBMITTED,
+                TransactionStatus.PARTIAL
+        ));
+
+        BigDecimal inFlightExposure = inFlight.stream()
+                .map(Transaction::getTotal)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+
+        boolean hasOpenOrInFlight = !openPositions.isEmpty() || !inFlight.isEmpty();
+        return new ExposureSnapshot(hasOpenOrInFlight, inFlightExposure);
+    }
+
+    /**
      * Indica se o runner possui posicao aberta ou ordens em voo.
      * Usado pela policy de execucao SINGLE antes de aceitar novo BUY.
      */
@@ -53,5 +72,8 @@ class RunnerExposureService {
                 TransactionStatus.PARTIAL
         ));
         return !inFlight.isEmpty();
+    }
+
+    public record ExposureSnapshot(boolean hasOpenOrInFlight, BigDecimal inFlightExposure) {
     }
 }

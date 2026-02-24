@@ -1,9 +1,7 @@
 package com.marmitt.core.application.usecase.runner.processsignal;
 
 import com.marmitt.core.application.exception.CapitalReservationRejectedException;
-import com.marmitt.core.domain.runner.StrategyRunner;
-import com.marmitt.core.domain.runner.Transaction;
-import com.marmitt.core.dto.capital.CapitalRequest;
+import com.marmitt.core.dto.capital.BuyExecutionContext;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import lombok.extern.slf4j.Slf4j;
 
@@ -25,22 +23,18 @@ class BuySignalHandler {
     /**
      * Processa intencao de compra para o runner.
      */
-    public void handle(StrategyRunner runner,
-                       Transaction transaction,
-                       BuyPersistenceAction persistenceAction) {
-        CapitalRequest capitalRequest = intentFactory.buildCapitalRequest(runner, transaction);
-
+    public void handle(BuyExecutionContext context, BuyPersistenceAction persistenceAction) {
         try {
-            persistenceAction.persist(transaction, capitalRequest, runner);
+            persistenceAction.persist(context);
         } catch (CapitalReservationRejectedException ex) {
             log.warn("processBuySignal: signal discarded - capital rejected transactionId={} reason={}",
                     ex.getTransactionId(), ex.getReason());
             return;
         }
 
-        orderDispatch.dispatch(intentFactory.buildDispatchCommand(runner, transaction));
+        orderDispatch.dispatch(intentFactory.buildDispatchCommand(context.runner(), context.transaction()));
         log.debug("dispatch: order sent - clientOrderId={} stays PENDING until exchange confirms",
-                transaction.getClientOrderId());
+                context.transaction().getClientOrderId());
     }
 
     @FunctionalInterface
@@ -48,6 +42,6 @@ class BuySignalHandler {
         /**
          * Fronteira transacional para persistencia de BUY e reserva de capital.
          */
-        void persist(Transaction transaction, CapitalRequest capitalRequest, StrategyRunner runner);
+        void persist(BuyExecutionContext context);
     }
 }

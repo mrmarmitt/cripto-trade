@@ -3,12 +3,13 @@ package com.marmitt.core.application.usecase.runner.processsignal;
 import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
-import com.marmitt.core.dto.capital.CapitalRequest;
+import com.marmitt.core.dto.capital.BuyExecutionContext;
 import com.marmitt.core.dto.strategy.PortfolioContextDto;
 import com.marmitt.core.dto.strategy.StrategyInputDto;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.dto.websocket.data.MarketDataDto;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
+import com.marmitt.core.ports.outbound.strategy.TradingStrategy;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
@@ -18,6 +19,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Optional;
 
 /**
  * Caso de uso principal para processamento de sinais de trade por market data.
@@ -67,9 +69,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                 portfolioRepository, globalBalanceRepository, this.runnerExposureService);
     }
 
-    public abstract void transactionalPersistBuyAndReserve(Transaction transaction,
-                                                           CapitalRequest capitalRequest,
-                                                           StrategyRunner runner);
+    public abstract void transactionalPersistBuyAndReserve(BuyExecutionContext context);
 
     public abstract void transactionalPersistSellAndLockPosition(Transaction transaction,
                                                                  Position targetPosition);
@@ -78,12 +78,16 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
      * Fluxo de persistencia para BUY dentro de uma fronteira transacional externa.
      * Salva a transacao PENDING e delega validacao/reserva para a politica de capital.
      */
-    protected void persistBuyAndReserve(Transaction transaction, CapitalRequest capitalRequest, StrategyRunner runner) {
-        strategyRunnerRepository.saveTransaction(transaction);
-        capitalReservationPolicy.validateAndReserve(capitalRequest, runner);
+    protected void persistBuyAndReserve(BuyExecutionContext context) {
+        strategyRunnerRepository.saveTransaction(context.transaction());
+        capitalReservationPolicy.validateAndReserve(
+                context.capitalRequest(), context.runner(), context.precomputedExposure());
 
         log.info("persistBuyAndReserve: capital reserved transactionId={} runnerId={} amount={} portfolioId={}",
-                capitalRequest.transactionId(), runner.getId(), capitalRequest.amount(), runner.getPortfolioId());
+                context.capitalRequest().transactionId(),
+                context.runner().getId(),
+                context.capitalRequest().amount(),
+                context.runner().getPortfolioId());
     }
 
     protected void persistSellAndLockPosition(Transaction transaction, Position targetPosition) {
@@ -123,8 +127,13 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     }
 
     private void processRunner(StrategyRunner runner, StrategyInputDto input, BigDecimal currentPrice) {
+        Optional<TradingStrategy> activeStrategy = signalEvaluator.resolveActiveStrategy(runner);
+        if (activeStrategy.isEmpty()) {
+            return;
+        }
+
         PortfolioContextDto context = contextAssembler.assemble(runner);
-        StrategyOutputDto strategyOutput = signalEvaluator.evaluate(runner, input, context);
+        StrategyOutputDto strategyOutput = signalEvaluator.evaluate(runner, activeStrategy.get(), input, context);
         if (signalEvaluator.isHold(strategyOutput)) {
             log.debug("priceUpdate: HOLD signal for runner={} - no action", runner.getId());
             return;
@@ -137,15 +146,24 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     }
 
     private void processTradeSignal(StrategyRunner runner, StrategyOutputDto signal, BigDecimal currentPrice) {
-        boolean hasOpenOrInflight = signalPolicy.requiresOpenPositionCheck(runner, signal)
-                && runnerExposureService.hasOpenPositionOrInflight(runner);
+        RunnerExposureService.ExposureSnapshot exposureSnapshot = null;
+        boolean hasOpenOrInflight = false;
+        if (signalPolicy.requiresOpenPositionCheck(runner, signal)) {
+            exposureSnapshot = runnerExposureService.loadSnapshot(runner);
+            hasOpenOrInflight = exposureSnapshot.hasOpenOrInFlight();
+        }
         if (!signalPolicy.canExecuteSignal(runner, signal, hasOpenOrInflight)) {
             return;
         }
 
         Transaction transaction = tradeIntentFactory.buildTransaction(runner, signal, currentPrice);
         if (transaction.isBuy()) {
-            buySignalHandler.handle(runner, transaction, this::transactionalPersistBuyAndReserve);
+            BigDecimal precomputedExposure = exposureSnapshot != null
+                    ? exposureSnapshot.inFlightExposure()
+                    : null;
+            BuyExecutionContext buyContext = tradeIntentFactory
+                    .buildBuyExecutionContext(runner, transaction, precomputedExposure);
+            buySignalHandler.handle(buyContext, this::transactionalPersistBuyAndReserve);
         } else {
             sellSignalHandler.handle(runner, signal, transaction, this::transactionalPersistSellAndLockPosition);
         }

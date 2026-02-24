@@ -41,6 +41,16 @@ class CapitalReservationPolicy {
      * @throws CapitalReservationRejectedException quando qualquer regra de aprovacao falha
      */
     public void validateAndReserve(CapitalRequest capitalRequest, StrategyRunner runner) {
+        validateAndReserve(capitalRequest, runner, null);
+    }
+
+    /**
+     * Mesmo fluxo de validacao/reserva, permitindo receber exposicao pre-calculada
+     * para evitar consulta duplicada no caminho de BUY.
+     */
+    public void validateAndReserve(CapitalRequest capitalRequest,
+                                   StrategyRunner runner,
+                                   BigDecimal precomputedExposure) {
         Portfolio portfolio = portfolioRepository.findById(runner.getPortfolioId()).orElse(null);
         if (portfolio == null) {
             log.error("persistBuyAndReserve: portfolio {} not found for runner {}",
@@ -60,7 +70,9 @@ class CapitalReservationPolicy {
             throw new CapitalReservationRejectedException(capitalRequest.transactionId(), RejectionReason.INSUFFICIENT_FUNDS);
         }
 
-        BigDecimal currentExposure = exposureService.calculateInFlightExposure(runner.getId());
+        BigDecimal currentExposure = precomputedExposure != null
+                ? precomputedExposure
+                : exposureService.calculateInFlightExposure(runner.getId());
         BigDecimal maxAllocation = runner.getMaxAllocationPercent().multiply(balance.getTotalBalance());
         if (currentExposure.add(capitalRequest.amount()).compareTo(maxAllocation) > 0) {
             log.warn("persistBuyAndReserve: RUNNER_LIMIT_EXCEEDED runner={} currentExposure={} requested={} maxAllocation={}",
@@ -76,6 +88,5 @@ class CapitalReservationPolicy {
         }
     }
 }
-
 
 

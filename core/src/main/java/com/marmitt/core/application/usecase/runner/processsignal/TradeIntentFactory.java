@@ -3,6 +3,7 @@ package com.marmitt.core.application.usecase.runner.processsignal;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
+import com.marmitt.core.dto.capital.BuyExecutionContext;
 import com.marmitt.core.dto.capital.CapitalRequest;
 import com.marmitt.core.dto.runner.OrderDispatchCommand;
 import com.marmitt.core.dto.strategy.StrategyInputDto;
@@ -70,6 +71,20 @@ class TradeIntentFactory {
                 runner.getSymbol(),
                 transaction.getTotal(),
                 transaction.getType()
+        );
+    }
+
+    /**
+     * Construtor do contexto completo de execucao BUY.
+     */
+    public BuyExecutionContext buildBuyExecutionContext(StrategyRunner runner,
+                                                        Transaction transaction,
+                                                        BigDecimal precomputedExposure) {
+        return new BuyExecutionContext(
+                transaction,
+                buildCapitalRequest(runner, transaction),
+                runner,
+                precomputedExposure
         );
     }
 

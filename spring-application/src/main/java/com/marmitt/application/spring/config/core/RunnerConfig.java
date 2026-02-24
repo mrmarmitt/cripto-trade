@@ -3,9 +3,8 @@ package com.marmitt.application.spring.config.core;
 import com.marmitt.core.application.usecase.runner.OrderConciliationUseCase;
 import com.marmitt.core.application.usecase.runner.processsignal.ProcessTradeSignalUseCase;
 import com.marmitt.core.domain.runner.Position;
-import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
-import com.marmitt.core.dto.capital.CapitalRequest;
+import com.marmitt.core.dto.capital.BuyExecutionContext;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
@@ -80,9 +79,8 @@ public class RunnerConfig {
                 orderDispatch) {
 
             @Override
-            public void transactionalPersistBuyAndReserve(Transaction transaction, CapitalRequest capitalRequest,
-                                                          StrategyRunner runner) {
-                txTemplate.executeWithoutResult(status -> persistBuyAndReserve(transaction, capitalRequest, runner));
+            public void transactionalPersistBuyAndReserve(BuyExecutionContext context) {
+                txTemplate.executeWithoutResult(status -> persistBuyAndReserve(context));
             }
 
             @Override
