@@ -10,4 +10,6 @@ public interface OrderConciliationPort {
     void releaseMargin(Transaction transaction);
 
     void transactionalReleaseMargin(Transaction transaction);
+
+    void transactionalSubmit(Transaction transaction);
 }

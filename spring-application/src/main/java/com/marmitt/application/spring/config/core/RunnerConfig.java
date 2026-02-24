@@ -48,6 +48,11 @@ public class RunnerConfig {
         return new OrderConciliationUseCase(strategyRunnerRepository, eventPublisher) {
 
             @Override
+            public void transactionalSubmit(Transaction transaction) {
+                txTemplate.executeWithoutResult(status -> submitTransaction(transaction));
+            }
+
+            @Override
             public void transactionalReleaseMargin(Transaction transaction) {
                 txTemplate.executeWithoutResult(status -> releaseMargin(transaction));
             }
