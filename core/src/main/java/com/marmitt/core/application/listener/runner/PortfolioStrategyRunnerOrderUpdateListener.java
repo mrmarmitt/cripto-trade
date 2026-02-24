@@ -1,6 +1,5 @@
 package com.marmitt.core.application.listener.runner;
 
-import com.marmitt.core.application.usecase.runner.OrderConciliationUseCase;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
@@ -20,7 +19,7 @@ import lombok.extern.slf4j.Slf4j;
  *   <li>Roteia para o port correto conforme o status:
  *     <ul>
  *       <li>FILLED / PARTIALLY_FILLED → to do </li>
- *       <li>CANCELED / EXPIRED → {@link HandleOrderTerminationPort}</li>
+ *       <li>CANCELED / EXPIRED → {@link OrderConciliationPort}</li>
  *     </ul>
  *   </li>
  * </ol>
