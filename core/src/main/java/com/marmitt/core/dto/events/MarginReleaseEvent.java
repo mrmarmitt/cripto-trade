@@ -8,7 +8,7 @@ import java.util.Objects;
  * Evento publicado pelo Runner quando uma Transaction atinge estado terminal
  * (REJECTED, CANCELED ou EXPIRED). Dispara o estorno de margem no Portfolio (Reserved → Available).
  * <p>
- * Publicado via {@code EventPublisherPort} e processado por {@code HandleMarginReleaseService}
+ * Publicado via {@code EventPublisherPort} e processado por {@code MarginReleasedReaction}
  * com retries ilimitados — capital preso (starvation) é inaceitável.
  * A idempotência é garantida por verificação de saldo disponível na reserva.
  *

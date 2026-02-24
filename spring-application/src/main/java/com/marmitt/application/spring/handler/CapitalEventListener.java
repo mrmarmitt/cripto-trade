@@ -1,7 +1,7 @@
 package com.marmitt.application.spring.handler;
 
-import com.marmitt.core.application.usecase.portfolio.HandleExecutionConfirmedService;
-import com.marmitt.core.application.usecase.portfolio.HandleMarginReleaseService;
+import com.marmitt.core.application.reaction.ExecutionConfirmedReaction;
+import com.marmitt.core.application.reaction.MarginReleasedReaction;
 import com.marmitt.core.dto.events.ExecutionConfirmedEvent;
 import com.marmitt.core.dto.events.MarginReleaseEvent;
 import lombok.extern.slf4j.Slf4j;
@@ -33,12 +33,12 @@ import org.springframework.transaction.event.TransactionalEventListener;
 @Slf4j
 public class CapitalEventListener {
 
-    private final HandleExecutionConfirmedService handleExecutionConfirmed;
-    private final HandleMarginReleaseService handleMarginRelease;
+    private final ExecutionConfirmedReaction handleExecutionConfirmed;
+    private final MarginReleasedReaction handleMarginRelease;
 
     public CapitalEventListener(
-            HandleExecutionConfirmedService handleExecutionConfirmed,
-            HandleMarginReleaseService handleMarginRelease
+            ExecutionConfirmedReaction handleExecutionConfirmed,
+            MarginReleasedReaction handleMarginRelease
     ) {
         this.handleExecutionConfirmed = handleExecutionConfirmed;
         this.handleMarginRelease = handleMarginRelease;

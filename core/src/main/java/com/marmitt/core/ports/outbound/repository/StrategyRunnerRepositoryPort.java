@@ -28,10 +28,6 @@ import java.util.UUID;
  */
 public interface StrategyRunnerRepositoryPort {
 
-    // ============================================================
-    // StrategyRunner
-    // ============================================================
-
     /**
      * Persiste o StrategyRunner (INSERT ou UPDATE).
      * Usa optimistic locking via campo {@code version}.
@@ -56,6 +52,23 @@ public interface StrategyRunnerRepositoryPort {
     List<StrategyRunner> findOperationalByPortfolioId(UUID portfolioId);
 
     /**
+     * Busca Runners operacionais pelo símbolo e exchange, filtrando apenas portfolios ativos.
+     * <p>
+     * Faz JOIN com o Portfolio para garantir que apenas Runners de portfolios com
+     * {@code isActive = true} sejam retornados. O filtro {@code canAcceptSignals()}
+     * é aplicado em memória pelo caller após esta query.
+     * <p>
+     * Usado por {@link com.marmitt.core.application.listener.runner.PortfolioStrategyRunnerPriceUpdateListener}
+     * para rotear market data aos Runners elegíveis.
+     *
+     * @param symbol     par de trading (ex: "BTCUSDT")
+     * @param exchangeId identificador da exchange (ex: "BINANCE")
+     * @return lista de Runners com {@code status.isOperational()} de portfolios ativos
+     * @see com.marmitt.core.enums.RunnerStatus#isOperational()
+     */
+    List<StrategyRunner> findOperationalBySymbol(String symbol, String exchangeId);
+
+    /**
      * Busca Runner pelo shortCode dentro de um Portfolio.
      * Usado pelo Portfolio para rotear callbacks via {@code clientOrderId}
      * ({@code v1r{shortCode}...}).
@@ -63,10 +76,6 @@ public interface StrategyRunnerRepositoryPort {
      * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 5.6 (Roteamento de Callbacks)</a>
      */
     Optional<StrategyRunner> findByShortCodeAndPortfolioId(String shortCode, UUID portfolioId);
-
-    // ============================================================
-    // Position
-    // ============================================================
 
     /**
      * Persiste a Position (INSERT ou UPDATE).
@@ -89,10 +98,6 @@ public interface StrategyRunnerRepositoryPort {
      * Usado na lógica de Execution Policy (Single mode).
      */
     Optional<Position> findOpenPositionByRunnerIdAndSymbol(UUID runnerId, String symbol);
-
-    // ============================================================
-    // Transaction
-    // ============================================================
 
     /**
      * Persiste a Transaction (INSERT ou UPDATE).
@@ -129,10 +134,6 @@ public interface StrategyRunnerRepositoryPort {
      */
     List<Transaction> findByRunnerIdAndStatuses(UUID runnerId, Collection<TransactionStatus> statuses);
 
-    // ============================================================
-    // TransactionMatch
-    // ============================================================
-
     /**
      * Persiste o TransactionMatch (INSERT apenas — imutável após criação).
      */
@@ -152,10 +153,6 @@ public interface StrategyRunnerRepositoryPort {
      * Usado para cálculo de PnL realizado e auditoria.
      */
     List<TransactionMatch> findMatchesByTransactionId(UUID transactionId);
-
-    // ============================================================
-    // Operações atômicas
-    // ============================================================
 
     /**
      * Persiste atomicamente uma Transaction PENDING e aplica o lock na Position alvo.

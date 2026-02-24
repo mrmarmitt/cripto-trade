@@ -2,24 +2,39 @@ package com.marmitt.core.application.usecase.portfolio;
 
 import com.marmitt.core.dto.portfolio.PortfolioDto;
 import com.marmitt.core.dto.portfolio.TransactionDto;
-import com.marmitt.core.domain.portfolio.Portfolio;
+import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.ports.inbound.portfolio.QueryPortfolioPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.stream.Collectors;
 
 @Slf4j
 public class QueryPortfolioUseCase implements QueryPortfolioPort {
 
-    private final PortfolioRepositoryPort portfolioRepository;
+    private static final List<TransactionStatus> ALL_ACTIVE_STATUSES = List.of(
+            TransactionStatus.PENDING,
+            TransactionStatus.SUBMITTED,
+            TransactionStatus.PARTIAL,
+            TransactionStatus.FILLED,
+            TransactionStatus.CANCELED,
+            TransactionStatus.REJECTED,
+            TransactionStatus.EXPIRED
+    );
 
-    public QueryPortfolioUseCase(PortfolioRepositoryPort portfolioRepository) {
+    private final PortfolioRepositoryPort portfolioRepository;
+    private final StrategyRunnerRepositoryPort strategyRunnerRepository;
+
+    public QueryPortfolioUseCase(
+            PortfolioRepositoryPort portfolioRepository,
+            StrategyRunnerRepositoryPort strategyRunnerRepository
+    ) {
         this.portfolioRepository = portfolioRepository;
+        this.strategyRunnerRepository = strategyRunnerRepository;
     }
 
     @Override
@@ -41,21 +56,22 @@ public class QueryPortfolioUseCase implements QueryPortfolioPort {
         log.debug("Querying portfolios by symbol: {}", symbol);
         return portfolioRepository.findBySymbol(symbol).stream()
                 .map(PortfolioDto::fromDomain)
-                .collect(Collectors.toList());
+                .toList();
     }
 
     @Override
     public List<TransactionDto> findTransactionsByPortfolioId(UUID portfolioId) {
         log.debug("Querying transactions for portfolio: {}", portfolioId);
-        Optional<Portfolio> portfolioOpt = portfolioRepository.findById(portfolioId);
 
-        if (portfolioOpt.isEmpty()) {
+        if (portfolioRepository.findById(portfolioId).isEmpty()) {
             log.warn("Portfolio not found with ID: {}", portfolioId);
             return Collections.emptyList();
         }
 
-        return portfolioOpt.get().getTransactions().stream()
+        return strategyRunnerRepository.findByPortfolioId(portfolioId).stream()
+                .flatMap(runner -> strategyRunnerRepository
+                        .findByRunnerIdAndStatuses(runner.getId(), ALL_ACTIVE_STATUSES).stream())
                 .map(TransactionDto::fromDomain)
-                .collect(Collectors.toList());
+                .toList();
     }
 }

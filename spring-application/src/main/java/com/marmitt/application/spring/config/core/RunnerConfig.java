@@ -1,130 +1,94 @@
 package com.marmitt.application.spring.config.core;
 
-import com.marmitt.core.application.usecase.portfolio.ConfirmExecutionService;
-import com.marmitt.core.application.usecase.portfolio.HandleExecutionConfirmedService;
-import com.marmitt.core.application.usecase.portfolio.HandleMarginReleaseService;
-import com.marmitt.core.application.usecase.portfolio.ReserveCapitalService;
-import com.marmitt.core.application.usecase.portfolio.ReleaseMarginService;
-import com.marmitt.core.application.usecase.runner.HandleOrderTerminationUseCase;
-import com.marmitt.core.application.usecase.runner.PortfolioContextBuilder;
-import com.marmitt.core.application.usecase.runner.ProcessTradeSignalService;
+import com.marmitt.core.application.usecase.runner.OrderConciliationUseCase;
 import com.marmitt.core.application.usecase.runner.ProcessTradeSignalUseCase;
-import com.marmitt.core.application.usecase.runner.RunnerLifecycleUseCase;
-import com.marmitt.core.ports.inbound.runner.HandleOrderTerminationPort;
-import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
-import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalTransactionPort;
+import com.marmitt.core.domain.runner.Position;
+import com.marmitt.core.domain.runner.StrategyRunner;
+import com.marmitt.core.domain.runner.Transaction;
+import com.marmitt.core.dto.capital.CapitalRequest;
+import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
-import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.transaction.support.TransactionTemplate;
+
+import java.math.BigDecimal;
 
 /**
- * Configuração Spring dos serviços do fluxo Runner (F2-01 e subsequentes).
+ * Configuração Spring dos serviços do domínio Runner e Portfolio (capital).
  * <p>
- * Registra os serviços provisórios de capital e o {@code ProcessTradeSignalService}.
- * Os serviços marcados com {@code @implNote} serão absorvidos pelos fluxos corretos
- * durante refatoração futura (F2-xx).
+ * Declara beans para:
+ * <ul>
+ *   <li>Use cases do ciclo de vida de ordens ({@code NewProcessTradeSignal}, {@code OrderConciliation})</li>
+ *   <li>Listeners de mercado e ordem do Runner ({@code PortfolioStrategyRunner*})</li>
+ * </ul>
+ * <p>
+ * Os use cases são classes abstratas cujas fronteiras {@code @Transactional} são definidas
+ * aqui via subclasses anônimas — mesmo padrão de {@link OrderConciliationUseCase}.
  *
- * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 6.2.1</a>
+ * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 6.2.1, 6.3</a>
  */
 @Configuration
 public class RunnerConfig {
 
-    // ── Serviços de capital provisórios (F1-11, absorção futura em F2-xx) ────
-
+    /**
+     * Retorna {@code OrderConciliationUseCase} (tipo concreto) para que Spring possa injetá-lo
+     * tanto como {@code OrderConciliationPort} quanto como {@code HandleOrderTerminationPort}.
+     */
     @Bean
-    public ReserveCapitalService reserveCapital(
-            StrategyRunnerRepositoryPort runnerRepository,
-            PortfolioRepositoryPort portfolioRepository,
-            GlobalBalanceRepositoryPort globalBalanceRepository
-    ) {
-        return new ReserveCapitalService(runnerRepository, portfolioRepository, globalBalanceRepository);
+    public OrderConciliationUseCase createOrderConciliation(TransactionTemplate txTemplate,
+                                                         StrategyRunnerRepositoryPort strategyRunnerRepository,
+                                                         EventPublisherPort eventPublisher) {
+
+        return new OrderConciliationUseCase(strategyRunnerRepository, eventPublisher) {
+
+            @Override
+            public void transactionalReleaseMargin(Transaction transaction) {
+                txTemplate.executeWithoutResult(status -> releaseMargin(transaction));
+            }
+
+            @Override
+            public void transactionalProcessFill(Transaction transaction, OrderDataDto orderData,
+                                                 BigDecimal fillIncrement, BigDecimal fillPrice,
+                                                 boolean isFinal) {
+                txTemplate.executeWithoutResult(status ->
+                        processFill(transaction, orderData, fillIncrement, fillPrice, isFinal));
+            }
+        };
     }
 
     @Bean
-    public ConfirmExecutionService confirmExecution(EventPublisherPort eventPublisher) {
-        return new ConfirmExecutionService(eventPublisher);
-    }
-
-    @Bean
-    public ReleaseMarginService releaseMargin(EventPublisherPort eventPublisher) {
-        return new ReleaseMarginService(eventPublisher);
-    }
-
-    @Bean
-    public HandleExecutionConfirmedService handleExecutionConfirmed(
-            StrategyRunnerRepositoryPort runnerRepository,
-            GlobalBalanceRepositoryPort globalBalanceRepository
-    ) {
-        return new HandleExecutionConfirmedService(runnerRepository, globalBalanceRepository);
-    }
-
-    @Bean
-    public HandleMarginReleaseService handleMarginRelease(
-            StrategyRunnerRepositoryPort runnerRepository,
-            GlobalBalanceRepositoryPort globalBalanceRepository
-    ) {
-        return new HandleMarginReleaseService(runnerRepository, globalBalanceRepository);
-    }
-
-    // ── UseCase do fluxo HandleOrderTermination (F2-03) ──────────────────────
-
-    @Bean
-    public HandleOrderTerminationUseCase handleOrderTermination(
-            StrategyRunnerRepositoryPort runnerRepository,
-            ReleaseMarginService releaseMarginService
-    ) {
-        return new HandleOrderTerminationUseCase(runnerRepository, releaseMarginService);
-    }
-
-    // ── Serviços do fluxo ProcessTradeSignal (F2-01) ─────────────────────────
-
-    @Bean
-    public ProcessTradeSignalService processTradeSignal(
-            StrategyRunnerRepositoryPort runnerRepository,
-            ReserveCapitalService reserveCapitalService,
-            OrderDispatchPort orderDispatchPort
-    ) {
-        return new ProcessTradeSignalService(runnerRepository, reserveCapitalService, orderDispatchPort);
-    }
-
-    // ── UseCase do fluxo ProcessTradeSignal (F2-01) ──────────────────────────
-
-    @Bean
-    public ProcessTradeSignalUseCase processTradeSignalUseCase(
-            ProcessTradeSignalService processTradeSignalService,
-            ProcessTradeSignalTransactionPort transactionPort,
-            HandleOrderTerminationPort terminationPort
-    ) {
-        return new ProcessTradeSignalUseCase(processTradeSignalService, transactionPort, terminationPort);
-    }
-
-    // ── Serviços do fluxo Runner Lifecycle (F2-04) ────────────────────────────
-
-    @Bean
-    public PortfolioContextBuilder portfolioContextBuilder(
-            StrategyRunnerRepositoryPort runnerRepository,
-            GlobalBalanceRepositoryPort globalBalanceRepository
-    ) {
-        return new PortfolioContextBuilder(runnerRepository, globalBalanceRepository);
-    }
-
-    @Bean
-    public RunnerLifecycleUseCase runnerLifecycle(
-            StrategyRunnerRepositoryPort runnerRepository,
+    public ProcessTradeSignalUseCase createProcessTradeSignal(
+            TransactionTemplate txTemplate,
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
             StrategyRepositoryPort strategyRepository,
-            ListenerRepositoryPort listenerRepository,
-            PortfolioContextBuilder portfolioContextBuilder,
-            ProcessTradeSignalPort processTradeSignalPort,
-            HandleOrderTerminationPort terminationPort
-    ) {
-        return new RunnerLifecycleUseCase(
-                runnerRepository, strategyRepository, listenerRepository,
-                portfolioContextBuilder, processTradeSignalPort, terminationPort);
+            GlobalBalanceRepositoryPort globalBalanceRepository,
+            PortfolioRepositoryPort portfolioRepository,
+            OrderDispatchPort orderDispatch) {
+
+        return new ProcessTradeSignalUseCase(
+                strategyRunnerRepository,
+                strategyRepository,
+                globalBalanceRepository,
+                portfolioRepository,
+                orderDispatch) {
+
+            @Override
+            public void transactionalPersistBuyAndReserve(Transaction transaction, CapitalRequest capitalRequest,
+                                                          StrategyRunner runner) {
+                txTemplate.executeWithoutResult(status -> persistBuyAndReserve(transaction, capitalRequest, runner));
+            }
+
+            @Override
+            public void transactionalPersistSellAndLockPosition(Transaction transaction, Position targetPosition) {
+                txTemplate.executeWithoutResult(status -> persistSellAndLockPosition(transaction, targetPosition));
+            }
+        };
     }
+
 }
