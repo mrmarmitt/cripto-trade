@@ -16,14 +16,19 @@ public interface PortfolioJdbcRepository extends CrudRepository<PortfolioEntity,
     @Query("SELECT * FROM portfolios WHERE LOWER(name) = LOWER(:name)")
     Optional<PortfolioEntity> findByNameIgnoreCase(@Param("name") String name);
 
-    @Query("SELECT * FROM portfolios WHERE UPPER(symbol) = UPPER(:symbol)")
-    List<PortfolioEntity> findBySymbolIgnoreCase(@Param("symbol") String symbol);
-
-    @Query("SELECT * FROM portfolios WHERE UPPER(symbol) = UPPER(:symbol) AND strategy_id = :strategyId")
-    Optional<PortfolioEntity> findBySymbolAndStrategyId(
-            @Param("symbol") String symbol,
-            @Param("strategyId") UUID strategyId
-    );
+    /**
+     * Finds portfolios that have at least one operational runner for the given symbol.
+     * Delegates symbol lookup to strategy_runners (symbol moved from Portfolio to StrategyRunner).
+     */
+    @Query("""
+            SELECT * FROM portfolios
+             WHERE id IN (
+                   SELECT portfolio_id FROM strategy_runners
+                    WHERE UPPER(symbol) = UPPER(:symbol)
+                      AND status NOT IN ('ARCHIVED', 'TERMINATING')
+             )
+            """)
+    List<PortfolioEntity> findBySymbol(@Param("symbol") String symbol);
 
     @Query("SELECT * FROM portfolios WHERE is_active = true")
     List<PortfolioEntity> findByIsActiveTrue();
