@@ -16,7 +16,7 @@ import lombok.extern.slf4j.Slf4j;
  *   <li>Filtra em memória por {@link StrategyRunner#canAcceptSignals()} e
  *       {@link StrategyRunner#canReceiveMarketDataFrom(String)}</li>
  *   <li>Executa a estratégia com o contexto atual do Runner</li>
- *   <li>Encaminha o sinal (BUY/SELL) para {@link ProcessTradeSignalUseCase}</li>
+ *   <li>Encaminha o sinal (BUY/SELL) para {@link ProcessTradeSignalPort}</li>
  * </ol>
  * <p>
  * Um único listener que roteia internamente, sem caching — consulta o banco a cada mensagem.

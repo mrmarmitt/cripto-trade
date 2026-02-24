@@ -7,6 +7,7 @@ import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.capital.CapitalRequest;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
@@ -63,7 +64,7 @@ public class RunnerConfig {
     }
 
     @Bean
-    public ProcessTradeSignalUseCase createProcessTradeSignal(
+    public ProcessTradeSignalPort createProcessTradeSignal(
             TransactionTemplate txTemplate,
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             StrategyRepositoryPort strategyRepository,

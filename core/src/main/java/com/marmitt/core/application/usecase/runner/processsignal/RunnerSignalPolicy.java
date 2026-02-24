@@ -50,4 +50,9 @@ class RunnerSignalPolicy {
 
         return true;
     }
+
+    public boolean requiresOpenPositionCheck(StrategyRunner runner, StrategyOutputDto signal) {
+        return runner.getExecutionPolicy() == ExecutionPolicy.SINGLE
+                && signal.decision() == TradingAction.SHOULD_BUY;
+    }
 }
