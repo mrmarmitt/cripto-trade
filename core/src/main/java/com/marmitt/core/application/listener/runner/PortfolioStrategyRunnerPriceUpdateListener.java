@@ -1,6 +1,5 @@
 package com.marmitt.core.application.listener.runner;
 
-import com.marmitt.core.application.usecase.runner.ProcessTradeSignalUseCase;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.websocket.data.MarketDataDto;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;

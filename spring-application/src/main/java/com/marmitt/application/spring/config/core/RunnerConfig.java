@@ -1,7 +1,7 @@
 package com.marmitt.application.spring.config.core;
 
 import com.marmitt.core.application.usecase.runner.OrderConciliationUseCase;
-import com.marmitt.core.application.usecase.runner.ProcessTradeSignalUseCase;
+import com.marmitt.core.application.usecase.runner.processsignal.ProcessTradeSignalUseCase;
 import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;

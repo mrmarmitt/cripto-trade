@@ -1,12 +1,6 @@
-package com.marmitt.core.application.usecase.runner;
+package com.marmitt.core.application.usecase.runner.processsignal;
 
 import com.marmitt.core.application.exception.CapitalReservationRejectedException;
-import com.marmitt.core.application.usecase.runner.processsignal.BuySignalHandler;
-import com.marmitt.core.application.usecase.runner.processsignal.RunnerContextAssembler;
-import com.marmitt.core.application.usecase.runner.processsignal.RunnerSignalPolicy;
-import com.marmitt.core.application.usecase.runner.processsignal.SellSignalHandler;
-import com.marmitt.core.application.usecase.runner.processsignal.StrategySignalEvaluator;
-import com.marmitt.core.application.usecase.runner.processsignal.TradeIntentFactory;
 import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.Position;
@@ -37,7 +31,7 @@ import java.util.UUID;
  * - responsabilidades internas divididas em colaboradores package-level.
  */
 @Slf4j
-public abstract class CodexProcessTradeSignalUseCase implements ProcessTradeSignalPort {
+public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPort {
 
     private static final BigDecimal MINIMUM_OPERATION_AMOUNT = BigDecimal.valueOf(10);
 
@@ -52,11 +46,11 @@ public abstract class CodexProcessTradeSignalUseCase implements ProcessTradeSign
     private final BuySignalHandler buySignalHandler;
     private final SellSignalHandler sellSignalHandler;
 
-    protected CodexProcessTradeSignalUseCase(StrategyRunnerRepositoryPort strategyRunnerRepository,
-                                             StrategyRepositoryPort strategyRepository,
-                                             GlobalBalanceRepositoryPort globalBalanceRepository,
-                                             PortfolioRepositoryPort portfolioRepository,
-                                             OrderDispatchPort orderDispatch) {
+    protected ProcessTradeSignalUseCase(StrategyRunnerRepositoryPort strategyRunnerRepository,
+                                        StrategyRepositoryPort strategyRepository,
+                                        GlobalBalanceRepositoryPort globalBalanceRepository,
+                                        PortfolioRepositoryPort portfolioRepository,
+                                        OrderDispatchPort orderDispatch) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.globalBalanceRepository = globalBalanceRepository;
         this.portfolioRepository = portfolioRepository;
@@ -77,7 +71,7 @@ public abstract class CodexProcessTradeSignalUseCase implements ProcessTradeSign
     public abstract void transactionalPersistSellAndLockPosition(Transaction transaction,
                                                                  Position targetPosition);
 
-    public void persistBuyAndReserve(Transaction transaction, CapitalRequest capitalRequest, StrategyRunner runner) {
+    protected void persistBuyAndReserve(Transaction transaction, CapitalRequest capitalRequest, StrategyRunner runner) {
         strategyRunnerRepository.saveTransaction(transaction);
 
         Portfolio portfolio = portfolioRepository.findById(runner.getPortfolioId()).orElse(null);
@@ -118,7 +112,7 @@ public abstract class CodexProcessTradeSignalUseCase implements ProcessTradeSign
                 capitalRequest.transactionId(), runner.getId(), capitalRequest.amount(), runner.getPortfolioId());
     }
 
-    public void persistSellAndLockPosition(Transaction transaction, Position targetPosition) {
+    protected void persistSellAndLockPosition(Transaction transaction, Position targetPosition) {
         targetPosition.lock(transaction.getId(), transaction.getQuantity());
         targetPosition.startClosing();
         strategyRunnerRepository.saveAtomicTransactionAndPositionLock(transaction, targetPosition);

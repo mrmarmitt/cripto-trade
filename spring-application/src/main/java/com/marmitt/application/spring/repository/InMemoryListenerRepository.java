@@ -4,7 +4,7 @@ import com.marmitt.core.application.listener.MarketDataPriceUpdateListener;
 import com.marmitt.core.application.listener.runner.PortfolioStrategyRunnerOrderUpdateListener;
 import com.marmitt.core.application.listener.runner.PortfolioStrategyRunnerPriceUpdateListener;
 import com.marmitt.core.application.usecase.runner.OrderConciliationUseCase;
-import com.marmitt.core.application.usecase.runner.ProcessTradeSignalUseCase;
+import com.marmitt.core.application.usecase.runner.processsignal.ProcessTradeSignalUseCase;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
 import com.marmitt.core.ports.outbound.listener.PriceUpdateListener;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;

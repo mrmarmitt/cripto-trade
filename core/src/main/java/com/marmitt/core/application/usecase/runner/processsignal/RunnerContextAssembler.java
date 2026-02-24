@@ -15,7 +15,7 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
-public class RunnerContextAssembler {
+class RunnerContextAssembler {
 
     private final GlobalBalanceRepositoryPort globalBalanceRepository;
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;

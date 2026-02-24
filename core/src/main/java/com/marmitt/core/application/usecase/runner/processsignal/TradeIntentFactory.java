@@ -14,7 +14,7 @@ import com.marmitt.core.enums.TransactionType;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
-public class TradeIntentFactory {
+class TradeIntentFactory {
 
     public StrategyInputDto buildStrategyInput(MarketDataDto marketData) {
         return StrategyInputDto.builder()

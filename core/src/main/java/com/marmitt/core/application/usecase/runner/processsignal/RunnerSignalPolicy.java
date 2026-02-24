@@ -7,7 +7,7 @@ import com.marmitt.core.enums.TradingAction;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class RunnerSignalPolicy {
+class RunnerSignalPolicy {
 
     public boolean canProcessRunner(StrategyRunner runner, String exchangeId) {
         if (!runner.canAcceptSignals()) {

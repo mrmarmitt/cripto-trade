@@ -8,7 +8,7 @@ import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class BuySignalHandler {
+class BuySignalHandler {
 
     private final TradeIntentFactory intentFactory;
     private final OrderDispatchPort orderDispatch;
