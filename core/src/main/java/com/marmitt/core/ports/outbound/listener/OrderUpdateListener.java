@@ -6,7 +6,5 @@ public interface OrderUpdateListener {
 
     void onOrderUpdate(OrderDataDto orderData);
 
-    default boolean shouldProcess(OrderDataDto orderData) {
-        return true;
-    }
+    boolean shouldProcess(OrderDataDto orderData);
 }

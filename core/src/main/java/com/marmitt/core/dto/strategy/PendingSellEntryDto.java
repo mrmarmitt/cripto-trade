@@ -1,10 +1,9 @@
 package com.marmitt.core.dto.strategy;
 
-import com.marmitt.core.domain.portfolio.Asset;
-import com.marmitt.core.domain.portfolio.Transaction;
 import com.marmitt.core.enums.TransactionStatus;
 import lombok.Builder;
 
+import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -16,8 +15,8 @@ import java.util.UUID;
 @Builder
 public record PendingSellEntryDto(
         UUID transactionId,
-        Asset quantity,
-        Asset price,
+        BigDecimal quantity,
+        BigDecimal price,
         TransactionStatus status,
         Instant requestedAt
 ) {
@@ -27,15 +26,5 @@ public record PendingSellEntryDto(
         Objects.requireNonNull(price, "Price cannot be null");
         Objects.requireNonNull(status, "Status cannot be null");
         Objects.requireNonNull(requestedAt, "RequestedAt cannot be null");
-    }
-
-    public static PendingSellEntryDto fromTransaction(Transaction tx) {
-        return PendingSellEntryDto.builder()
-                .transactionId(tx.id())
-                .quantity(tx.quantity())
-                .price(tx.price())
-                .status(tx.status())
-                .requestedAt(tx.requestedAt())
-                .build();
     }
 }

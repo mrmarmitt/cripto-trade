@@ -73,6 +73,13 @@ public class Position {
     private Instant lockedAt;
     // ───────────────────────────────────────────────────────────────────────
 
+    /**
+     * FK para a Transaction de compra que originou esta posição.
+     * Usado para criar o {@code TransactionMatch} quando a posição for vendida.
+     * Nullable para posições abertas antes da introdução deste campo.
+     */
+    private UUID openedByTransactionId;
+
     private Long version;
 
     /**
@@ -111,6 +118,7 @@ public class Position {
             UUID lockedByTransactionId,
             BigDecimal lockedQuantity,
             Instant lockedAt,
+            UUID openedByTransactionId,
             Instant updatedAt,
             Long version
     ) {
@@ -127,6 +135,7 @@ public class Position {
         this.lockedByTransactionId = lockedByTransactionId;
         this.lockedQuantity = lockedQuantity;
         this.lockedAt = lockedAt;
+        this.openedByTransactionId = openedByTransactionId;
         this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt cannot be null");
         this.version = version;
     }
@@ -204,6 +213,18 @@ public class Position {
         this.updatedAt = Instant.now();
     }
 
+    /**
+     * Associa esta posição à Transaction de compra que a originou.
+     * No-op se já associado (idempotência para PARTIALLY_FILLED sequenciais).
+     */
+    public void associateBuyTransaction(UUID transactionId) {
+        Objects.requireNonNull(transactionId, "transactionId cannot be null");
+        if (this.openedByTransactionId == null) {
+            this.openedByTransactionId = transactionId;
+            this.updatedAt = Instant.now();
+        }
+    }
+
     // ============================================================
     // Lifecycle
     // ============================================================
@@ -263,11 +284,33 @@ public class Position {
     /**
      * Remove o lock provisório (ex: venda cancelada ou expirada).
      */
-    public void unlock() {
+    private void unlock() {
         this.lockedByTransactionId = null;
         this.lockedQuantity = null;
         this.lockedAt = null;
         this.updatedAt = Instant.now();
+    }
+
+    /**
+     * Libera a posição após falha de venda (CANCELED ou EXPIRED).
+     * Remove o lock e restaura o status para OPEN se a posição estava em CLOSING.
+     */
+    public void releaseFromFailedSell() {
+        unlock();
+        if (this.status == PositionStatus.CLOSING) {
+            reopen();
+        }
+    }
+
+    /**
+     * Remove o lock após fill bem-sucedido de venda.
+     * Se há quantidade residual em CLOSING, restaura para OPEN.
+     */
+    public void unlockAfterFill() {
+        unlock();
+        if (this.status == PositionStatus.CLOSING) {
+            reopen();
+        }
     }
 
     public boolean isLocked() {
@@ -314,6 +357,7 @@ public class Position {
     public UUID getLockedByTransactionId() { return lockedByTransactionId; }
     public BigDecimal getLockedQuantity() { return lockedQuantity; }
     public Instant getLockedAt() { return lockedAt; }
+    public UUID getOpenedByTransactionId() { return openedByTransactionId; }
     public Instant getUpdatedAt() { return updatedAt; }
     public Long getVersion() { return version; }
 

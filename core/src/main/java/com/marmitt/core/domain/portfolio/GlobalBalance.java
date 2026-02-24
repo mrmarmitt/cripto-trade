@@ -8,7 +8,6 @@ import java.util.Objects;
 import java.util.UUID;
 
 /**
- * Saldo global do Portfolio — substitui o {@link Balance} no modelo alvo.
  * Opera em moeda única ({@code baseCurrency}), eliminando a redundância de currency/type por campo.
  * <p>
  * Semântica dos campos:
