@@ -10,6 +10,10 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Optional;
 
+/**
+ * Handler do ramo SELL do fluxo de sinal.
+ * Resolve lote alvo, persiste lock transacional e despacha ordem.
+ */
 @Slf4j
 class SellSignalHandler {
 
@@ -25,6 +29,9 @@ class SellSignalHandler {
         this.orderDispatch = orderDispatch;
     }
 
+    /**
+     * Processa intencao de venda para o runner.
+     */
     public void handle(StrategyRunner runner,
                        StrategyOutputDto signal,
                        Transaction transaction,
@@ -52,6 +59,9 @@ class SellSignalHandler {
 
     @FunctionalInterface
     public interface SellPersistenceAction {
+        /**
+         * Fronteira transacional para persistencia de SELL e lock da posicao alvo.
+         */
         void persist(Transaction transaction, Position targetPosition);
     }
 }

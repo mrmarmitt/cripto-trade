@@ -12,6 +12,14 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 
+/**
+ * Politica de reserva de capital para ordens BUY.
+ *
+ * Centraliza as regras de aprovacao de reserva:
+ * - Portfolio existente e fora de Safe Mode.
+ * - Limite de exposicao do runner.
+ * - Reserva atomica de saldo no GlobalBalance.
+ */
 @Slf4j
 class CapitalReservationPolicy {
 
@@ -27,6 +35,11 @@ class CapitalReservationPolicy {
         this.exposureService = exposureService;
     }
 
+    /**
+     * Valida pre-condicoes de risco/capital e aplica a reserva atomica.
+     *
+     * @throws CapitalReservationRejectedException quando qualquer regra de aprovacao falha
+     */
     public void validateAndReserve(CapitalRequest capitalRequest, StrategyRunner runner) {
         Portfolio portfolio = portfolioRepository.findById(runner.getPortfolioId()).orElse(null);
         if (portfolio == null) {
@@ -63,3 +76,6 @@ class CapitalReservationPolicy {
         }
     }
 }
+
+
+

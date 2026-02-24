@@ -20,9 +20,17 @@ import java.math.BigDecimal;
 import java.util.List;
 
 /**
- * Versao refatorada de estudo para o ProcessTradeSignal:
- * - use case continua como unico entrypoint
- * - responsabilidades internas divididas em colaboradores package-level.
+ * Caso de uso principal para processamento de sinais de trade por market data.
+ *
+ * Responsabilidades:
+ * - Rotear ticks para runners elegiveis.
+ * - Montar contexto e executar estrategia.
+ * - Materializar intencao de BUY/SELL.
+ * - Delegar validacoes e persistencia para colaboradores especializados.
+ *
+ * Observacao:
+ * As fronteiras transacionais continuam na camada de composicao (Spring),
+ * via metodos abstratos {@code transactional*}.
  */
 @Slf4j
 public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPort {
@@ -66,6 +74,10 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     public abstract void transactionalPersistSellAndLockPosition(Transaction transaction,
                                                                  Position targetPosition);
 
+    /**
+     * Fluxo de persistencia para BUY dentro de uma fronteira transacional externa.
+     * Salva a transacao PENDING e delega validacao/reserva para a politica de capital.
+     */
     protected void persistBuyAndReserve(Transaction transaction, CapitalRequest capitalRequest, StrategyRunner runner) {
         strategyRunnerRepository.saveTransaction(transaction);
         capitalReservationPolicy.validateAndReserve(capitalRequest, runner);
@@ -80,6 +92,10 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         strategyRunnerRepository.saveAtomicTransactionAndPositionLock(transaction, targetPosition);
     }
 
+    /**
+     * Entry point do caso de uso.
+     * Recebe market data e processa runners operacionais para simbolo/exchange.
+     */
     @Override
     public void execute(MarketDataDto marketData) {
         String symbol = marketData.symbol().value();

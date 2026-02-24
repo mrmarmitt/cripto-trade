@@ -11,6 +11,10 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.util.Optional;
 
+/**
+ * Resolve e executa a estrategia associada ao runner.
+ * Converte ausencia/estrategia desabilitada em decisao HOLD.
+ */
 @Slf4j
 class StrategySignalEvaluator {
 
@@ -20,6 +24,9 @@ class StrategySignalEvaluator {
         this.strategyRepository = strategyRepository;
     }
 
+    /**
+     * Avalia o sinal da estrategia para o contexto atual do runner.
+     */
     public StrategyOutputDto evaluate(StrategyRunner runner,
                                       StrategyInputDto input,
                                       PortfolioContextDto context) {
@@ -45,6 +52,9 @@ class StrategySignalEvaluator {
         return output;
     }
 
+    /**
+     * Helper de leitura para simplificar o fluxo no use case.
+     */
     public boolean isHold(StrategyOutputDto output) {
         return output.decision() == TradingAction.SHOULD_HOLD;
     }

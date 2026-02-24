@@ -6,9 +6,15 @@ import com.marmitt.core.enums.ExecutionPolicy;
 import com.marmitt.core.enums.TradingAction;
 import lombok.extern.slf4j.Slf4j;
 
+/**
+ * Politicas de elegibilidade e aceitacao de sinais para o runner.
+ */
 @Slf4j
 class RunnerSignalPolicy {
 
+    /**
+     * Filtro rapido antes de processar market data para um runner.
+     */
     public boolean canProcessRunner(StrategyRunner runner, String exchangeId) {
         if (!runner.canAcceptSignals()) {
             log.debug("priceUpdate: skipping runner={} - canAcceptSignals=false (status={} reconciling={})",
@@ -25,6 +31,9 @@ class RunnerSignalPolicy {
         return true;
     }
 
+    /**
+     * Valida se o sinal pode ser materializado no estado atual do runner.
+     */
     public boolean canExecuteSignal(StrategyRunner runner,
                                     StrategyOutputDto signal,
                                     boolean hasOpenPositionOrInFlight) {
@@ -51,6 +60,9 @@ class RunnerSignalPolicy {
         return true;
     }
 
+    /**
+     * Indica se este sinal exige consulta de posicao/ordens em voo.
+     */
     public boolean requiresOpenPositionCheck(StrategyRunner runner, StrategyOutputDto signal) {
         return runner.getExecutionPolicy() == ExecutionPolicy.SINGLE
                 && signal.decision() == TradingAction.SHOULD_BUY;

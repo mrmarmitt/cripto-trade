@@ -14,8 +14,15 @@ import com.marmitt.core.enums.TransactionType;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
+/**
+ * Fabrica de objetos de intencao do fluxo de sinal:
+ * input para estrategia, transaction, capital request e dispatch command.
+ */
 class TradeIntentFactory {
 
+    /**
+     * Converte market data em input padronizado para estrategia.
+     */
     public StrategyInputDto buildStrategyInput(MarketDataDto marketData) {
         return StrategyInputDto.builder()
                 .symbol(marketData.symbol())
@@ -29,6 +36,9 @@ class TradeIntentFactory {
                 .build();
     }
 
+    /**
+     * Materializa a transacao local (status inicial PENDING).
+     */
     public Transaction buildTransaction(StrategyRunner runner, StrategyOutputDto signal, BigDecimal currentPrice) {
         TransactionType type = signal.decision() == TradingAction.SHOULD_BUY
                 ? TransactionType.BUY : TransactionType.SELL;
@@ -49,6 +59,9 @@ class TradeIntentFactory {
         );
     }
 
+    /**
+     * Construtor do pedido de reserva de capital para BUY.
+     */
     public CapitalRequest buildCapitalRequest(StrategyRunner runner, Transaction transaction) {
         return new CapitalRequest(
                 transaction.getId(),
@@ -60,6 +73,9 @@ class TradeIntentFactory {
         );
     }
 
+    /**
+     * Construtor do comando de envio de ordem para o adapter de exchange.
+     */
     public OrderDispatchCommand buildDispatchCommand(StrategyRunner runner, Transaction transaction) {
         return new OrderDispatchCommand(
                 transaction.getClientOrderId(),

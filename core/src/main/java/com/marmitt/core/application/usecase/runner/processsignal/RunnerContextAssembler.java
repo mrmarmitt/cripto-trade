@@ -15,6 +15,10 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
+/**
+ * Monta o {@link PortfolioContextDto} consumido pela estrategia.
+ * Reune saldo global, posicoes abertas e ordens de venda pendentes.
+ */
 class RunnerContextAssembler {
 
     private final GlobalBalanceRepositoryPort globalBalanceRepository;
@@ -29,6 +33,9 @@ class RunnerContextAssembler {
         this.minimumOperationAmount = minimumOperationAmount;
     }
 
+    /**
+     * Constroi o contexto de portfolio para execucao da estrategia do runner.
+     */
     public PortfolioContextDto assemble(StrategyRunner runner) {
         GlobalBalance balance = globalBalanceRepository
                 .findByPortfolioId(runner.getPortfolioId())

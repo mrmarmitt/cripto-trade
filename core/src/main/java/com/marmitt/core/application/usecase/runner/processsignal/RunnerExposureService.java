@@ -10,6 +10,10 @@ import java.math.BigDecimal;
 import java.util.List;
 import java.util.UUID;
 
+/**
+ * Servico de leitura de exposicao operacional do StrategyRunner.
+ * Encapsula consultas de posicoes e transacoes em voo.
+ */
 class RunnerExposureService {
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
@@ -18,6 +22,10 @@ class RunnerExposureService {
         this.strategyRunnerRepository = strategyRunnerRepository;
     }
 
+    /**
+     * Soma o valor total de transacoes em voo (PENDING/SUBMITTED/PARTIAL)
+     * para o runner informado.
+     */
     public BigDecimal calculateInFlightExposure(UUID runnerId) {
         List<Transaction> inflight = strategyRunnerRepository.findByRunnerIdAndStatuses(runnerId, List.of(
                 TransactionStatus.PENDING,
@@ -29,6 +37,10 @@ class RunnerExposureService {
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
+    /**
+     * Indica se o runner possui posicao aberta ou ordens em voo.
+     * Usado pela policy de execucao SINGLE antes de aceitar novo BUY.
+     */
     public boolean hasOpenPositionOrInflight(StrategyRunner runner) {
         List<Position> openPositions = strategyRunnerRepository.findOpenPositionsByRunnerId(runner.getId());
         if (!openPositions.isEmpty()) {
