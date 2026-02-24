@@ -1,6 +1,8 @@
 package com.marmitt.core.dto.strategy;
 
 import com.marmitt.core.domain.Symbol;
+import com.marmitt.core.domain.portfolio.Asset;
+import com.marmitt.core.domain.portfolio.Position;
 import lombok.Builder;
 
 import java.math.BigDecimal;
@@ -20,9 +22,10 @@ public record PortfolioContextDto(
         UUID portfolioId,
         String portfolioName,
         Symbol symbol,                      // Single currency this portfolio manages
-        BigDecimal totalCapital,                 // Capital total do portfolio
-        BigDecimal availableBalance,             // Saldo disponível para novas operações
-        BigDecimal allocatedBalance,             // Saldo já alocado em posições
+        Asset totalCapital,                 // Capital total do portfolio
+        Asset availableBalance,             // Saldo disponível para novas operações
+        Asset allocatedBalance,             // Saldo já alocado em posições
+        Position position,                  // Single position (can be null)
         List<OpenBuyEntryDto> openTransactions, // Compras executadas (posições abertas)
         List<PendingSellEntryDto> pendingSellOrders, // Sells PENDING/SUBMITTED em trânsito
         BigDecimal realizedPnL,             // P&L acumulado das vendas realizadas
@@ -48,16 +51,56 @@ public record PortfolioContextDto(
      * Verifica se há saldo suficiente para uma operação
      */
     public boolean hasAvailableBalance(BigDecimal amount) {
-        return availableBalance.compareTo(amount) >= 0;
+        return availableBalance.amount().compareTo(amount) >= 0;
     }
 
     /**
      * Verifica se há saldo mínimo para operação
      */
     public boolean hasMinimumBalance() {
-        return availableBalance.compareTo(minimumOperationAmount) >= 0;
+        return availableBalance.amount().compareTo(minimumOperationAmount) >= 0;
     }
 
+    /**
+     * Verifica se existe posição para o símbolo do portfolio
+     */
+    public boolean hasPosition() {
+        return position != null && !position.isEmpty();
+    }
+
+    /**
+     * Calcula valor atual da posição
+     */
+    public BigDecimal getCurrentPositionValue() {
+        return position != null ? position.getCurrentValue().amount() : BigDecimal.ZERO;
+    }
+
+    /**
+     * Calcula exposição restante permitida
+     */
+    public BigDecimal getRemainingExposure() {
+        BigDecimal maxExposureValue = totalCapital.amount().multiply(maxExposurePerSymbol);
+        BigDecimal currentExposure = getCurrentPositionValue();
+        return maxExposureValue.subtract(currentExposure);
+    }
+
+    /**
+     * Verifica se ainda há exposição disponível
+     */
+    public boolean hasRemainingExposure() {
+        return getRemainingExposure().compareTo(BigDecimal.ZERO) > 0;
+    }
+
+    /**
+     * Calcula percentual de exposição atual
+     */
+    public BigDecimal getCurrentExposurePercentage() {
+        if (totalCapital.amount().compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal currentValue = getCurrentPositionValue();
+        return currentValue.divide(totalCapital.amount(), 4, RoundingMode.HALF_UP);
+    }
 
     /**
      * Verifica se existem lotes de compra abertos
@@ -97,8 +140,16 @@ public record PortfolioContextDto(
     public BigDecimal getTotalPendingSellQuantity() {
         if (pendingSellOrders == null) return BigDecimal.ZERO;
         return pendingSellOrders.stream()
-                .map(PendingSellEntryDto::quantity)
+                .map(s -> s.quantity().amount())
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
+
+    /**
+     * Retorna quantidade disponível para venda (posição - sells pendentes)
+     */
+    public BigDecimal getAvailableToSellQuantity() {
+        if (!hasPosition()) return BigDecimal.ZERO;
+        return position.getQuantity().amount().subtract(getTotalPendingSellQuantity()).max(BigDecimal.ZERO);
     }
 
     /**
@@ -113,7 +164,7 @@ public record PortfolioContextDto(
                 .filter(lot -> lot.lotId().equals(lotId))
                 .findFirst()
                 .map(lot -> {
-                    BigDecimal entryPrice = lot.executedPrice();
+                    BigDecimal entryPrice = lot.executedPrice().amount();
                     if (entryPrice.compareTo(BigDecimal.ZERO) == 0) return BigDecimal.ZERO;
                     return currentPrice.subtract(entryPrice)
                             .divide(entryPrice, 4, RoundingMode.HALF_UP)

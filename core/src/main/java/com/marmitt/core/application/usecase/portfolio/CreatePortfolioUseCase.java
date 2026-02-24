@@ -1,22 +1,18 @@
 package com.marmitt.core.application.usecase.portfolio;
 
-import com.marmitt.core.domain.portfolio.GlobalBalance;
+import com.marmitt.core.domain.Symbol;
+import com.marmitt.core.domain.portfolio.Asset;
 import com.marmitt.core.domain.portfolio.Portfolio;
-import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.portfolio.CreatePortfolioRequest;
+import com.marmitt.core.domain.portfolio.contrats.FifoAccountingPolicy;
 import com.marmitt.core.dto.portfolio.CreatePortfolioResponse;
-import com.marmitt.core.enums.AccountingPolicyType;
-import com.marmitt.core.enums.ExecutionPolicy;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
-import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
-import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import com.marmitt.core.ports.outbound.strategy.TradingStrategy;
 import lombok.extern.slf4j.Slf4j;
 
-import java.math.BigDecimal;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -26,115 +22,112 @@ public class CreatePortfolioUseCase implements CreatePortfolioPort {
     private final PortfolioRepositoryPort portfolioRepository;
     private final StrategyRepositoryPort strategyRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
-    private final GlobalBalanceRepositoryPort globalBalanceRepository;
-    private final StrategyRunnerRepositoryPort strategyRunnerRepository;
 
     public CreatePortfolioUseCase(
             PortfolioRepositoryPort portfolioRepository,
             StrategyRepositoryPort strategyRepository,
-            ExchangeAdapterRepositoryPort exchangeAdapterRepository,
-            GlobalBalanceRepositoryPort globalBalanceRepository,
-            StrategyRunnerRepositoryPort strategyRunnerRepository
+            ExchangeAdapterRepositoryPort exchangeAdapterRepository
     ) {
         this.portfolioRepository = portfolioRepository;
         this.strategyRepository = strategyRepository;
         this.exchangeAdapterRepository = exchangeAdapterRepository;
-        this.globalBalanceRepository = globalBalanceRepository;
-        this.strategyRunnerRepository = strategyRunnerRepository;
     }
 
     @Override
     public CreatePortfolioResponse execute(CreatePortfolioRequest request) {
-        log.info("Creating portfolio - name={} symbol={} strategyId={} exchange={}",
+        log.info("Creating portfolio - Name: {}, Symbol: {}, Strategy: {}, Exchange: {}",
                 request.name(), request.symbol(), request.strategyId(), request.exchangeName());
 
         try {
-            // 1. Validate name uniqueness
-            if (portfolioRepository.findByName(request.name()).isPresent()) {
-                String msg = "Portfolio with name '" + request.name() + "' already exists";
-                log.warn(msg);
-                return CreatePortfolioResponse.failure(msg);
+            // 1. Validar se já existe portfolio com mesmo nome
+            Optional<Portfolio> existingPortfolio = portfolioRepository.findByName(request.name());
+            if (existingPortfolio.isPresent()) {
+                String errorMsg = "Portfolio with name '" + request.name() + "' already exists";
+                log.warn(errorMsg);
+                return CreatePortfolioResponse.failure(errorMsg);
             }
 
-            // 2. Validate strategy exists and is enabled
-            Optional<TradingStrategy> strategyOpt = strategyRepository.findById(request.strategyId());
-            if (strategyOpt.isEmpty()) {
-                String msg = "Strategy not found with ID: " + request.strategyId();
-                log.error(msg);
-                return CreatePortfolioResponse.failure(msg);
+            // 2. Validar se estratégia existe e está ativa
+            Optional<TradingStrategy> strategyOptional = strategyRepository.findById(request.strategyId());
+            if (strategyOptional.isEmpty()) {
+                String errorMsg = "Strategy not found with ID: " + request.strategyId();
+                log.error(errorMsg);
+                return CreatePortfolioResponse.failure(errorMsg);
             }
 
-            TradingStrategy strategy = strategyOpt.get();
+            TradingStrategy strategy = strategyOptional.get();
+
             if (!strategy.isEnabled()) {
-                String msg = "Strategy '" + strategy.getStrategyName() + "' is not enabled";
-                log.warn(msg);
-                return CreatePortfolioResponse.failure(msg);
+                String errorMsg = "Strategy '" + strategy.getStrategyName() + "' is not enabled";
+                log.warn(errorMsg);
+                return CreatePortfolioResponse.failure(errorMsg);
             }
 
-            // 3. Validate exchange adapter exists
+            // 3. Validar se exchange adapter existe
             if (!exchangeAdapterRepository.hasAdapter(request.exchangeName())) {
-                String msg = "Exchange adapter not found: " + request.exchangeName();
-                log.error(msg);
-                return CreatePortfolioResponse.failure(msg);
+                String errorMsg = "Exchange adapter not found: " + request.exchangeName();
+                log.error(errorMsg);
+                return CreatePortfolioResponse.failure(errorMsg);
             }
 
-            // 4. (Uniqueness of runner per strategy+symbol+exchange is enforced by the DB unique index)
-
-            // 5. Create Portfolio (container — name and safe mode only)
-            UUID portfolioId = UUID.randomUUID();
-            Portfolio portfolio = new Portfolio(portfolioId, request.name());
-            portfolioRepository.registerPortfolio(portfolio);
-
-            // 6. Create GlobalBalance with initial capital
-            GlobalBalance balance = new GlobalBalance(
-                    portfolioId,
-                    request.initialCapitalAmount(),
-                    request.currency()
+            // 4. Validar se já existe portfolio com mesmo símbolo e estratégia
+            Optional<Portfolio> duplicatePortfolio = portfolioRepository.findBySymbolAndStrategy(
+                    request.symbol(), request.strategyId()
             );
-            globalBalanceRepository.save(balance);
+            if (duplicatePortfolio.isPresent()) {
+                String errorMsg = String.format(
+                        "Portfolio already exists for symbol '%s' with strategy '%s'",
+                        request.symbol(), strategy.getStrategyName()
+                );
+                log.warn(errorMsg);
+                return CreatePortfolioResponse.failure(errorMsg);
+            }
 
-            // 7. Create StrategyRunner (holds strategy, symbol, exchange and operational config)
-            UUID runnerId = UUID.randomUUID();
-            String shortCode = runnerId.toString().replace("-", "").substring(0, 4);
-            StrategyRunner runner = new StrategyRunner(
-                    runnerId,
+            // 5. Criar objetos de domínio
+            Symbol symbol = Symbol.of(request.symbol());
+            Asset initialCapital = Asset.of(request.initialCapitalAmount(), request.currency());
+
+            // 6. Criar Portfolio
+            UUID portfolioId = UUID.randomUUID();
+            Portfolio portfolio = new Portfolio(
                     portfolioId,
-                    shortCode,
+                    request.name(),
                     request.strategyId(),
                     strategy.getStrategyName(),
-                    request.symbol().toUpperCase(),
-                    request.exchangeName().toUpperCase(),
-                    request.allowedMarketDataSources(),
-                    ExecutionPolicy.SINGLE,
-                    AccountingPolicyType.FIFO,
-                    BigDecimal.ONE,
-                    1,
-                    1,
-                    null
+                    symbol,
+                    new FifoAccountingPolicy(),
+                    initialCapital,
+                    request.exchangeName(),
+                    request.allowedMarketDataSources()
             );
-            strategyRunnerRepository.save(runner);
 
-            // 8. Register portfolio routing in exchange adapter
+            // 7. Registrar portfolio no repository
+            portfolioRepository.registerPortfolio(portfolio);
+
+            // 8. Associar portfolio ao exchange adapter
             exchangeAdapterRepository.registerPortfolioByAdapter(request.exchangeName(), portfolioId);
 
-            log.info("Portfolio created successfully - portfolioId={} runnerId={} name={} symbol={} exchange={}",
-                    portfolioId, runnerId, portfolio.getName(), runner.getSymbol(), runner.getExchangeId());
+            log.info("Portfolio created successfully - ID: {}, Name: {}, Symbol: {}, Strategy: {}, Exchange: {}",
+                    portfolioId, portfolio.getName(), portfolio.getSymbol().value(),
+                    portfolio.getStrategyName(), request.exchangeName());
 
+            // 9. Criar response
             return CreatePortfolioResponse.success(
                     portfolioId,
                     portfolio.getName(),
-                    runner.getStrategyId(),
-                    runner.getStrategyName(),
-                    runner.getSymbol(),
-                    request.initialCapitalAmount().toPlainString(),
-                    request.currency(),
-                    runner.getExchangeId(),
+                    portfolio.getStrategyId(),
+                    portfolio.getStrategyName(),
+                    portfolio.getSymbol().value(),
+                    initialCapital.amount().toPlainString(),
+                    initialCapital.currency(),
+                    request.exchangeName(),
                     portfolio.getCreatedAt()
             );
 
         } catch (IllegalArgumentException e) {
             log.error("Invalid argument creating portfolio: {}", e.getMessage());
             return CreatePortfolioResponse.failure("Invalid argument: " + e.getMessage());
+
         } catch (Exception e) {
             log.error("Unexpected error creating portfolio: {}", e.getMessage(), e);
             return CreatePortfolioResponse.failure("Failed to create portfolio: " + e.getMessage());

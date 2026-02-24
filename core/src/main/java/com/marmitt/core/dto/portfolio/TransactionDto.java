@@ -1,6 +1,6 @@
 package com.marmitt.core.dto.portfolio;
 
-import com.marmitt.core.domain.runner.Transaction;
+import com.marmitt.core.domain.portfolio.Transaction;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
 import lombok.Builder;
@@ -39,19 +39,24 @@ public record TransactionDto(
 
     public static TransactionDto fromDomain(Transaction transaction) {
         return TransactionDto.builder()
-                .id(transaction.getId())
-                .clientOrderId(transaction.getClientOrderId())
-                .status(transaction.getStatus())
-                .type(transaction.getType())
-                .symbol(transaction.getSymbol())
-                .quantity(transaction.getQuantity())
-                .price(transaction.getPrice())
-                .total(transaction.getTotal())
-                .executedQuantity(transaction.getExecutedQuantity())
-                .executedPrice(transaction.getExecutedPrice())
-                .requestedAt(transaction.getRequestedAt())
-                .executedAt(transaction.getExecutedAt())
-                .rejectReason(transaction.getRejectReason())
+                .id(transaction.id())
+                .clientOrderId(transaction.clientOrderId())
+                .status(transaction.status())
+                .type(transaction.type())
+                .symbol(transaction.symbol().value())
+                .quantity(transaction.quantity().amount())
+                .quantityCurrency(transaction.quantity().currency())
+                .price(transaction.price().amount())
+                .priceCurrency(transaction.price().currency())
+                .total(transaction.total().amount())
+                .executedQuantity(transaction.executedQuantity() != null ?
+                        transaction.executedQuantity().amount() : null)
+                .executedPrice(transaction.executedPrice() != null ?
+                        transaction.executedPrice().amount() : null)
+                .fee(transaction.fee() != null ? transaction.fee().amount() : null)
+                .requestedAt(transaction.requestedAt())
+                .executedAt(transaction.executedAt())
+                .rejectReason(transaction.rejectReason())
                 .build();
     }
 }
