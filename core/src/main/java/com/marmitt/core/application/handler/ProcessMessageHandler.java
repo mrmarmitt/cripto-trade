@@ -142,7 +142,9 @@ public class ProcessMessageHandler implements HandlerProcessMessagePort {
 
         for (OrderUpdateListener listener : listeners) {
             try {
-                listener.onOrderUpdate(orderData);
+                if (listener.shouldProcess(orderData)) {
+                    listener.onOrderUpdate(orderData);
+                }
             } catch (Exception e) {
                 // Log error mas não propaga para não interromper outros listeners
                 System.err.println("Error notifying OrderUpdateListener " +

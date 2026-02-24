@@ -56,6 +56,10 @@ public abstract class OrderConciliationUseCase implements OrderConciliationPort 
                 clientOrderId, transaction.getId(), orderData.status());
 
         switch (orderData.status()) {
+            case NEW -> {
+                transaction.submit(orderData.orderId());
+                transactionalSubmit(transaction);
+            }
             case FILLED -> {
                 BigDecimal prevQty = transaction.getEffectiveExecutedQuantity();
                 BigDecimal prevPrice = transaction.getEffectiveExecutedPrice();
@@ -91,9 +95,17 @@ public abstract class OrderConciliationUseCase implements OrderConciliationPort 
         }
     }
 
+    public abstract void transactionalSubmit(Transaction transaction);
+
     public abstract void transactionalProcessFill(Transaction transaction, OrderDataDto orderData,
                                                   BigDecimal fillIncrement, BigDecimal fillPrice,
                                                   boolean isFinal);
+
+    protected void submitTransaction(Transaction transaction) {
+        strategyRunnerRepository.saveTransaction(transaction);
+        log.info("orderConciliation: PENDING→SUBMITTED transactionId={} exchangeOrderId={}",
+                transaction.getId(), transaction.getExchangeOrderId());
+    }
 
     protected void processFill(Transaction transaction, OrderDataDto orderData,
                                 BigDecimal fillIncrement, BigDecimal fillPrice, boolean isFinal) {

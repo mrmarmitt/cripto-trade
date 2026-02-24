@@ -47,7 +47,8 @@ public class PortfolioStrategyRunnerOrderUpdateListener implements OrderUpdateLi
 
     @Override
     public boolean shouldProcess(OrderDataDto orderData) {
-        return orderData.status() == OrderDataDto.OrderStatus.FILLED ||
+        return orderData.status() == OrderDataDto.OrderStatus.NEW ||
+                orderData.status() == OrderDataDto.OrderStatus.FILLED ||
                 orderData.status() == OrderDataDto.OrderStatus.PARTIALLY_FILLED ||
                 orderData.status() == OrderDataDto.OrderStatus.CANCELED ||
                 orderData.status() == OrderDataDto.OrderStatus.EXPIRED ||
