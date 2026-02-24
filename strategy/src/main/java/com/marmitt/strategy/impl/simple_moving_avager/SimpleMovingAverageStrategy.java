@@ -90,7 +90,7 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
                     return StrategyOutputDto.sellLot(
                             STRATEGY_NAME,
                             BigDecimal.ONE,
-                            lot.remainingQuantity(),
+                            lot.remainingQuantity().amount(),
                             lot.lotId(),
                             reason + " para lote " + lot.lotId()
                     );
@@ -129,10 +129,10 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
             return BigDecimal.ZERO;
         }
 
-        BigDecimal totalCapital = portfolioContext.totalCapital();
+        BigDecimal totalCapital = portfolioContext.totalCapital().amount();
         BigDecimal allocationValue = totalCapital.multiply(config.allocationPercentage());
 
-        BigDecimal availableBalance = portfolioContext.availableBalance();
+        BigDecimal availableBalance = portfolioContext.availableBalance().amount();
         BigDecimal operationValue = allocationValue.min(availableBalance);
 
         if (operationValue.compareTo(portfolioContext.minimumOperationAmount()) < 0) {
