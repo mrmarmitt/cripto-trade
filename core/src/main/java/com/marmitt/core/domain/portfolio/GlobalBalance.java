@@ -48,7 +48,7 @@ public class GlobalBalance {
         this.totalFeesPaid = BigDecimal.ZERO;
         this.lastExecutionTime = null;
         this.updatedAt = Instant.now();
-        this.version = 0L;
+        this.version = null;
     }
 
     /**

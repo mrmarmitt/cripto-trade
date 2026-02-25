@@ -1,14 +1,19 @@
 package com.marmitt.application.spring.config.core;
 
+import com.marmitt.core.application.usecase.runner.createrunner.CreateRunnerUseCase;
 import com.marmitt.core.application.usecase.runner.orderconciliation.OrderConciliationUseCase;
+import com.marmitt.core.application.usecase.runner.queryrunner.QueryRunnerUseCase;
 import com.marmitt.core.application.usecase.runner.processsignal.ProcessTradeSignalUseCase;
 import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.capital.BuyExecutionContext;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
+import com.marmitt.core.ports.inbound.runner.QueryRunnerPort;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
+import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
@@ -91,6 +96,28 @@ public class RunnerConfig {
                 txTemplate.executeWithoutResult(status -> persistSellAndLockPosition(transaction, targetPosition));
             }
         };
+    }
+
+    @Bean
+    public CreateRunnerPort createRunner(
+            PortfolioRepositoryPort portfolioRepository,
+            StrategyRepositoryPort strategyRepository,
+            ExchangeAdapterRepositoryPort exchangeAdapterRepository,
+            StrategyRunnerRepositoryPort strategyRunnerRepository
+    ) {
+        return new CreateRunnerUseCase(
+                portfolioRepository,
+                strategyRepository,
+                exchangeAdapterRepository,
+                strategyRunnerRepository
+        );
+    }
+
+    @Bean
+    public QueryRunnerPort queryRunner(
+            StrategyRunnerRepositoryPort strategyRunnerRepository
+    ) {
+        return new QueryRunnerUseCase(strategyRunnerRepository);
     }
 
 }

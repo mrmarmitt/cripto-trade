@@ -120,7 +120,7 @@ public class Transaction {
         this.targetLotId = targetLotId;
         this.status = TransactionStatus.PENDING;
         this.requestedAt = Instant.now();
-        this.version = 0L;
+        this.version = null;
     }
 
     /**
