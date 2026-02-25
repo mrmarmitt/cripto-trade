@@ -18,7 +18,6 @@ import java.util.UUID;
 @Builder
 public record PortfolioContextDto(
         UUID portfolioId,
-        String portfolioName,
         Symbol symbol,                      // Single currency this portfolio manages
         BigDecimal totalCapital,                 // Capital total do portfolio
         BigDecimal availableBalance,             // Saldo disponível para novas operações
@@ -32,7 +31,6 @@ public record PortfolioContextDto(
 
     public PortfolioContextDto {
         Objects.requireNonNull(portfolioId, "Portfolio ID cannot be null");
-        Objects.requireNonNull(portfolioName, "Portfolio name cannot be null");
         Objects.requireNonNull(symbol, "Symbol cannot be null");
         Objects.requireNonNull(totalCapital, "Total capital cannot be null");
         Objects.requireNonNull(availableBalance, "Available balance cannot be null");

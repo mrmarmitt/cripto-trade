@@ -11,8 +11,21 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.Optional;
 
 /**
- * Handler do ramo SELL do fluxo de sinal.
- * Resolve lote alvo, persiste lock transacional e despacha ordem.
+ * Executa o ramo SELL do pipeline de sinais: resolucao do lote alvo, lock transacional
+ * da posicao e dispatch para a exchange.
+ *
+ * <p><b>Resolucao do lote alvo:</b> se o sinal informar um {@code targetLotId} explicito,
+ * aquele lote especifico e usado. Caso contrario, o handler busca a posicao aberta mais
+ * recente do runner para o simbolo (comportamento FIFO implicito). Se nenhuma posicao
+ * aberta existir, o sinal e descartado — nao ha o que vender.
+ *
+ * <p><b>Lock da posicao:</b> a posicao e bloqueada atomicamente junto com a criacao da
+ * transacao SELL dentro da fronteira transacional. O lock impede que dois sinais SELL
+ * simultaneos tentem fechar a mesma posicao.
+ *
+ * <p><b>Fronteira transacional:</b> o lock e a persistencia da transacao ocorrem dentro
+ * de uma transacao de banco injetada via {@link SellPersistenceAction}. O handler nao
+ * conhece Spring diretamente.
  */
 @Slf4j
 class SellSignalHandler {
@@ -30,7 +43,8 @@ class SellSignalHandler {
     }
 
     /**
-     * Processa intencao de venda para o runner.
+     * Resolve o lote alvo, persiste o lock transacionalmente e despacha para a exchange.
+     * Se nenhuma posicao aberta existir, o sinal e descartado sem propagacao de excecao.
      */
     public void handle(StrategyRunner runner,
                        StrategyOutputDto signal,
@@ -57,11 +71,13 @@ class SellSignalHandler {
         return strategyRunnerRepository.findOpenPositionByRunnerIdAndSymbol(runner.getId(), runner.getSymbol());
     }
 
+    /**
+     * Seam de persistencia transacional do ramo SELL.
+     * Implementado pela camada de composicao (Spring) para executar
+     * {@link ProcessTradeSignalUseCase#persistSellAndLockPosition} dentro de uma transacao.
+     */
     @FunctionalInterface
     public interface SellPersistenceAction {
-        /**
-         * Fronteira transacional para persistencia de SELL e lock da posicao alvo.
-         */
         void persist(Transaction transaction, Position targetPosition);
     }
 }

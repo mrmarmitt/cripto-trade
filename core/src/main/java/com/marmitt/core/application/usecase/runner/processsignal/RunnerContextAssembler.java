@@ -16,8 +16,21 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Monta o {@link PortfolioContextDto} consumido pela estrategia.
- * Reune saldo global, posicoes abertas e ordens de venda pendentes.
+ * Monta o {@link PortfolioContextDto} que a estrategia usa para tomar sua decisao de trade.
+ *
+ * <p>O contexto e uma "fotografia" do estado financeiro do runner no momento do tick:
+ * <ul>
+ *   <li><b>Saldo disponivel e total:</b> permite a estrategia calcular quanto capital
+ *       pode ser alocado em um novo BUY sem violar os limites do portfolio.</li>
+ *   <li><b>Posicoes abertas ({@code openTransactions}):</b> lotes BUY executados ainda
+ *       nao vendidos. A quantidade restante (total menos quantidade bloqueada por SELL
+ *       pendente) e informada separadamente para que a estrategia saiba o que pode vender.</li>
+ *   <li><b>Ordens de venda pendentes ({@code pendingSellOrders}):</b> transacoes SELL
+ *       nos status PENDING ou SUBMITTED que ainda nao foram confirmadas pela exchange.
+ *       Permite a estrategia evitar enviar uma segunda SELL para a mesma posicao.</li>
+ *   <li><b>Limite de exposicao ({@code maxExposurePerSymbol}):</b> percentual maximo
+ *       do capital total que pode estar alocado neste runner simultaneamente.</li>
+ * </ul>
  */
 class RunnerContextAssembler {
 
@@ -34,7 +47,10 @@ class RunnerContextAssembler {
     }
 
     /**
-     * Constroi o contexto de portfolio para execucao da estrategia do runner.
+     * Constroi o contexto de portfolio no momento do tick para o runner informado.
+     *
+     * @throws IllegalStateException se o {@link com.marmitt.core.domain.portfolio.GlobalBalance}
+     *         do portfolio nao existir — indica inconsistencia de dados, nao cenario normal
      */
     public PortfolioContextDto assemble(StrategyRunner runner) {
         GlobalBalance balance = globalBalanceRepository
@@ -55,7 +71,6 @@ class RunnerContextAssembler {
 
         return PortfolioContextDto.builder()
                 .portfolioId(runner.getPortfolioId())
-                .portfolioName(runner.getStrategyName())
                 .symbol(symbol)
                 .totalCapital(balance.getTotalBalance())
                 .availableBalance(balance.getAvailableBalance())

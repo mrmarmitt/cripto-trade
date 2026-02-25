@@ -13,12 +13,29 @@ import lombok.extern.slf4j.Slf4j;
 import java.math.BigDecimal;
 
 /**
- * Politica de reserva de capital para ordens BUY.
+ * Valida as pre-condicoes de risco e efetua a reserva atomica de capital para ordens BUY.
  *
- * Centraliza as regras de aprovacao de reserva:
- * - Portfolio existente e fora de Safe Mode.
- * - Limite de exposicao do runner.
- * - Reserva atomica de saldo no GlobalBalance.
+ * <p>As verificacoes sao executadas nesta sequencia intencional:
+ * <ol>
+ *   <li><b>Portfolio existe:</b> sem portfolio nao ha como saber a politica de risco
+ *       nem o saldo disponivel. Falha com {@code UNKNOWN_RUNNER}.</li>
+ *   <li><b>Safe Mode inativo:</b> quando o portfolio esta em Safe Mode, nenhum novo BUY
+ *       e permitido independente do saldo. Falha com {@code RISK_VIOLATION}.</li>
+ *   <li><b>GlobalBalance existe:</b> inconsistencia de dados — portfolio sem saldo nao
+ *       deve ocorrer em operacao normal. Falha com {@code INSUFFICIENT_FUNDS}.</li>
+ *   <li><b>Limite de exposicao do runner:</b> a exposicao atual (ordens em voo) mais o
+ *       valor do novo BUY nao pode ultrapassar {@code maxAllocationPercent × totalBalance}.
+ *       Falha com {@code RUNNER_LIMIT_EXCEEDED}.</li>
+ *   <li><b>Reserva atomica:</b> decrementa o saldo disponivel no banco via CAS. Falha
+ *       com {@code INSUFFICIENT_FUNDS} se o saldo disponivel for insuficiente.</li>
+ * </ol>
+ *
+ * <p>Qualquer falha lanca {@link com.marmitt.core.application.exception.CapitalReservationRejectedException},
+ * capturada pelo {@link BuySignalHandler} que descarta o sinal sem propagar o erro.
+ *
+ * <p>O parametro {@code precomputedExposure} permite reaproveitar o valor ja calculado
+ * pelo {@link RunnerExposureService#loadSnapshot} para runners com politica SINGLE,
+ * evitando uma segunda consulta ao banco para calcular a exposicao em voo.
  */
 @Slf4j
 class CapitalReservationPolicy {
@@ -36,17 +53,14 @@ class CapitalReservationPolicy {
     }
 
     /**
-     * Valida pre-condicoes de risco/capital e aplica a reserva atomica.
+     * Executa todas as validacoes de risco e efetua a reserva atomica de capital.
      *
-     * @throws CapitalReservationRejectedException quando qualquer regra de aprovacao falha
-     */
-    public void validateAndReserve(CapitalRequest capitalRequest, StrategyRunner runner) {
-        validateAndReserve(capitalRequest, runner, null);
-    }
-
-    /**
-     * Mesmo fluxo de validacao/reserva, permitindo receber exposicao pre-calculada
-     * para evitar consulta duplicada no caminho de BUY.
+     * @param capitalRequest     pedido com valor, runner e transacao de referencia
+     * @param runner             runner que originou o sinal BUY
+     * @param precomputedExposure exposicao em voo ja calculada, ou {@code null} para
+     *                           calcular sob demanda via {@link RunnerExposureService}
+     * @throws com.marmitt.core.application.exception.CapitalReservationRejectedException
+     *         se qualquer regra de aprovacao falhar
      */
     public void validateAndReserve(CapitalRequest capitalRequest,
                                    StrategyRunner runner,
@@ -88,5 +102,4 @@ class CapitalReservationPolicy {
         }
     }
 }
-
 

@@ -22,17 +22,36 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Caso de uso principal para processamento de sinais de trade por market data.
+ * Orquestrador principal do fluxo market data → decisao de trade → ordem na exchange.
  *
- * Responsabilidades:
- * - Rotear ticks para runners elegiveis.
- * - Montar contexto e executar estrategia.
- * - Materializar intencao de BUY/SELL.
- * - Delegar validacoes e persistencia para colaboradores especializados.
+ * <p>A cada tick recebido, o use case:
+ * <ol>
+ *   <li>Localiza todos os {@link com.marmitt.core.domain.runner.StrategyRunner runners}
+ *       operacionais para o simbolo/exchange do tick.</li>
+ *   <li>Filtra runners inapta (status, exchange bloqueada) via {@link RunnerSignalPolicy}.</li>
+ *   <li>Monta o {@link com.marmitt.core.dto.strategy.PortfolioContextDto contexto de portfolio}
+ *       com saldo, posicoes abertas e ordens pendentes de venda.</li>
+ *   <li>Executa a estrategia configurada no runner para obter a decisao (BUY/SELL/HOLD).</li>
+ *   <li>Aplica guardas de execucao (politica SINGLE, capital) e materializa a
+ *       {@link com.marmitt.core.domain.runner.Transaction transacao} local com status PENDING.</li>
+ *   <li>Despacha a ordem para a exchange — o status so avanca de PENDING para SUBMITTED
+ *       quando a exchange confirmar via callback assincono.</li>
+ * </ol>
  *
- * Observacao:
- * As fronteiras transacionais continuam na camada de composicao (Spring),
- * via metodos abstratos {@code transactional*}.
+ * <p><b>Fronteiras transacionais:</b> esta classe e abstrata; os metodos
+ * {@code transactionalPersist*} devem ser implementados pela camada de composicao (Spring)
+ * via {@code TransactionTemplate}. Isso mantem o dominio livre de dependencias de
+ * infraestrutura enquanto garante atomicidade entre persistencia e reserva de capital.
+ *
+ * <p><b>Tratamento de erros por runner:</b> falhas em um runner individual sao capturadas
+ * e logadas sem interromper o processamento dos demais runners do mesmo tick. Isso evita
+ * que um runner com dados inconsistentes bloqueie todos os outros.
+ *
+ * @see RunnerSignalPolicy
+ * @see CapitalReservationPolicy
+ * @see BuySignalHandler
+ * @see SellSignalHandler
+ * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Secao 5.1 — ProcessTradeSignal</a>
  */
 @Slf4j
 public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPort {
@@ -69,14 +88,31 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                 portfolioRepository, globalBalanceRepository, this.runnerExposureService);
     }
 
+    /**
+     * Ponto de extensao para a fronteira transacional do ramo BUY.
+     * Implementado pela camada de composicao para envolver {@link #persistBuyAndReserve}
+     * em uma transacao de banco de dados.
+     */
     public abstract void transactionalPersistBuyAndReserve(BuyExecutionContext context);
 
+    /**
+     * Ponto de extensao para a fronteira transacional do ramo SELL.
+     * Implementado pela camada de composicao para envolver {@link #persistSellAndLockPosition}
+     * em uma transacao de banco de dados.
+     */
     public abstract void transactionalPersistSellAndLockPosition(Transaction transaction,
                                                                  Position targetPosition);
 
     /**
-     * Fluxo de persistencia para BUY dentro de uma fronteira transacional externa.
-     * Salva a transacao PENDING e delega validacao/reserva para a politica de capital.
+     * Corpo da persistencia BUY executado dentro da fronteira transacional.
+     *
+     * <p>Salva a transacao com status PENDING <em>antes</em> de tentar reservar capital.
+     * Se a reserva falhar (saldo insuficiente, limite de exposicao, Safe Mode), a transacao
+     * PENDING fica gravada mas o {@link BuySignalHandler} captura a excecao e descarta o sinal
+     * — a transacao e entao tratada como intencao nao materializada e expirada pelo watchdog.
+     *
+     * <p>A persistencia previa garante rastreabilidade: se o processo cair apos o dispatch
+     * mas antes do ACK da exchange, o sistema pode recuperar o estado pelo clientOrderId.
      */
     protected void persistBuyAndReserve(BuyExecutionContext context) {
         strategyRunnerRepository.saveTransaction(context.transaction());
@@ -97,8 +133,9 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     }
 
     /**
-     * Entry point do caso de uso.
-     * Recebe market data e processa runners operacionais para simbolo/exchange.
+     * Entry point do caso de uso. Recebe um tick de market data e aciona o pipeline
+     * completo para todos os runners operacionais do simbolo/exchange informados.
+     * Cada runner e processado de forma independente — excecoes sao isoladas por runner.
      */
     @Override
     public void execute(MarketDataDto marketData) {
