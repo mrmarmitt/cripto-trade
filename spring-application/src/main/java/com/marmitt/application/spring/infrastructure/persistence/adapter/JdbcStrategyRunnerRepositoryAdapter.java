@@ -38,7 +38,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     public void save(StrategyRunner runner) {
         long start = System.nanoTime();
         runnerRepo.save(StrategyRunnerEntityMapper.toEntity(runner));
-        log.trace("[REPO] runner.save({}) - {}ms", runner.getId(), elapsedMs(start));
+        log.trace("[REPO] runner.save({}) - {}ms", runner.getId(), RepoTiming.elapsedMs(start));
     }
 
     @Override
@@ -46,7 +46,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         long start = System.nanoTime();
         Optional<StrategyRunner> result = runnerRepo.findById(runnerId)
                 .map(StrategyRunnerEntityMapper::toDomain);
-        log.trace("[REPO] runner.findById({}) - {}ms", runnerId, elapsedMs(start));
+        log.trace("[REPO] runner.findById({}) - {}ms", runnerId, RepoTiming.elapsedMs(start));
         return result;
     }
 
@@ -56,7 +56,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         List<StrategyRunner> result = runnerRepo.findByPortfolioId(portfolioId).stream()
                 .map(StrategyRunnerEntityMapper::toDomain)
                 .toList();
-        log.trace("[REPO] runner.findByPortfolioId({}) - {}ms - {} results", portfolioId, elapsedMs(start), result.size());
+        log.trace("[REPO] runner.findByPortfolioId({}) - {}ms - {} results", portfolioId, RepoTiming.elapsedMs(start), result.size());
         return result;
     }
 
@@ -66,7 +66,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         List<StrategyRunner> result = runnerRepo.findOperationalByPortfolioId(portfolioId).stream()
                 .map(StrategyRunnerEntityMapper::toDomain)
                 .toList();
-        log.trace("[REPO] runner.findOperationalByPortfolioId({}) - {}ms - {} results", portfolioId, elapsedMs(start), result.size());
+        log.trace("[REPO] runner.findOperationalByPortfolioId({}) - {}ms - {} results", portfolioId, RepoTiming.elapsedMs(start), result.size());
         return result;
     }
 
@@ -76,7 +76,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         List<StrategyRunner> result = runnerRepo.findOperationalBySymbolAndExchange(symbol, exchangeId).stream()
                 .map(StrategyRunnerEntityMapper::toDomain)
                 .toList();
-        log.trace("[REPO] runner.findOperationalBySymbol({}, {}) - {}ms - {} results", symbol, exchangeId, elapsedMs(start), result.size());
+        log.trace("[REPO] runner.findOperationalBySymbol({}, {}) - {}ms - {} results", symbol, exchangeId, RepoTiming.elapsedMs(start), result.size());
         return result;
     }
 
@@ -85,7 +85,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         long start = System.nanoTime();
         Optional<StrategyRunner> result = runnerRepo.findByShortCodeAndPortfolioId(shortCode, portfolioId)
                 .map(StrategyRunnerEntityMapper::toDomain);
-        log.trace("[REPO] runner.findByShortCode({}, {}) - {}ms", shortCode, portfolioId, elapsedMs(start));
+        log.trace("[REPO] runner.findByShortCode({}, {}) - {}ms", shortCode, portfolioId, RepoTiming.elapsedMs(start));
         return result;
     }
 
@@ -96,7 +96,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     public void savePosition(Position position) {
         long start = System.nanoTime();
         positionRepo.save(StrategyRunnerEntityMapper.toEntity(position));
-        log.trace("[REPO] position.save({}) - {}ms", position.getId(), elapsedMs(start));
+        log.trace("[REPO] position.save({}) - {}ms", position.getId(), RepoTiming.elapsedMs(start));
     }
 
     @Override
@@ -104,7 +104,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         long start = System.nanoTime();
         Optional<Position> result = positionRepo.findById(positionId)
                 .map(StrategyRunnerEntityMapper::toDomain);
-        log.trace("[REPO] position.findById({}) - {}ms", positionId, elapsedMs(start));
+        log.trace("[REPO] position.findById({}) - {}ms", positionId, RepoTiming.elapsedMs(start));
         return result;
     }
 
@@ -114,7 +114,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         List<Position> result = positionRepo.findOpenByRunnerId(runnerId).stream()
                 .map(StrategyRunnerEntityMapper::toDomain)
                 .toList();
-        log.trace("[REPO] position.findOpenByRunnerId({}) - {}ms - {} results", runnerId, elapsedMs(start), result.size());
+        log.trace("[REPO] position.findOpenByRunnerId({}) - {}ms - {} results", runnerId, RepoTiming.elapsedMs(start), result.size());
         return result;
     }
 
@@ -123,7 +123,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         long start = System.nanoTime();
         Optional<Position> result = positionRepo.findOpenByRunnerIdAndSymbol(runnerId, symbol)
                 .map(StrategyRunnerEntityMapper::toDomain);
-        log.trace("[REPO] position.findOpenByRunnerIdAndSymbol({}, {}) - {}ms", runnerId, symbol, elapsedMs(start));
+        log.trace("[REPO] position.findOpenByRunnerIdAndSymbol({}, {}) - {}ms", runnerId, symbol, RepoTiming.elapsedMs(start));
         return result;
     }
 
@@ -134,7 +134,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     public void saveTransaction(Transaction transaction) {
         long start = System.nanoTime();
         transactionRepo.save(StrategyRunnerEntityMapper.toEntity(transaction));
-        log.trace("[REPO] transaction.save({}) - {}ms", transaction.getId(), elapsedMs(start));
+        log.trace("[REPO] transaction.save({}) - {}ms", transaction.getId(), RepoTiming.elapsedMs(start));
     }
 
     @Override
@@ -142,7 +142,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         long start = System.nanoTime();
         Optional<Transaction> result = transactionRepo.findById(transactionId)
                 .map(StrategyRunnerEntityMapper::toDomain);
-        log.trace("[REPO] transaction.findById({}) - {}ms", transactionId, elapsedMs(start));
+        log.trace("[REPO] transaction.findById({}) - {}ms", transactionId, RepoTiming.elapsedMs(start));
         return result;
     }
 
@@ -151,7 +151,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         long start = System.nanoTime();
         Optional<Transaction> result = transactionRepo.findByClientOrderId(clientOrderId)
                 .map(StrategyRunnerEntityMapper::toDomain);
-        log.trace("[REPO] transaction.findByClientOrderId({}) - {}ms", clientOrderId, elapsedMs(start));
+        log.trace("[REPO] transaction.findByClientOrderId({}) - {}ms", clientOrderId, RepoTiming.elapsedMs(start));
         return result;
     }
 
@@ -163,7 +163,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
                 .map(StrategyRunnerEntityMapper::toDomain)
                 .toList();
         log.trace("[REPO] transaction.findByRunnerIdAndStatuses({}, {}) - {}ms - {} results",
-                runnerId, statusNames, elapsedMs(start), result.size());
+                runnerId, statusNames, RepoTiming.elapsedMs(start), result.size());
         return result;
     }
 
@@ -174,7 +174,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     public void saveTransactionMatch(TransactionMatch match) {
         long start = System.nanoTime();
         matchRepo.save(StrategyRunnerEntityMapper.toEntity(match));
-        log.trace("[REPO] match.save({}) - {}ms", match.id(), elapsedMs(start));
+        log.trace("[REPO] match.save({}) - {}ms", match.id(), RepoTiming.elapsedMs(start));
     }
 
     @Override
@@ -188,7 +188,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         List<TransactionMatch> result = matchRepo.findByTransactionId(transactionId).stream()
                 .map(StrategyRunnerEntityMapper::toDomain)
                 .toList();
-        log.trace("[REPO] match.findByTransactionId({}) - {}ms - {} results", transactionId, elapsedMs(start), result.size());
+        log.trace("[REPO] match.findByTransactionId({}) - {}ms - {} results", transactionId, RepoTiming.elapsedMs(start), result.size());
         return result;
     }
 
@@ -201,7 +201,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         transactionRepo.save(StrategyRunnerEntityMapper.toEntity(transaction));
         positionRepo.save(StrategyRunnerEntityMapper.toEntity(lockedPosition));
         log.trace("[REPO] saveAtomicTransactionAndPositionLock(tx={}, pos={}) - {}ms",
-                transaction.getId(), lockedPosition.getId(), elapsedMs(start));
+                transaction.getId(), lockedPosition.getId(), RepoTiming.elapsedMs(start));
     }
 
     @Override
@@ -211,12 +211,6 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         transactionRepo.save(StrategyRunnerEntityMapper.toEntity(transaction));
         matchRepo.save(StrategyRunnerEntityMapper.toEntity(match));
         log.trace("[REPO] saveAtomicTransactionAndMatch(tx={}, match={}) - {}ms",
-                transaction.getId(), match.id(), elapsedMs(start));
-    }
-
-    // ── Helper ───────────────────────────────────────────────────────────────
-
-    private static double elapsedMs(long startNanos) {
-        return (System.nanoTime() - startNanos) / 1_000_000.0;
+                transaction.getId(), match.id(), RepoTiming.elapsedMs(start));
     }
 }

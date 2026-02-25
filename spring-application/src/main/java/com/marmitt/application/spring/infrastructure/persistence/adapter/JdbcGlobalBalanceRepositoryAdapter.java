@@ -25,7 +25,7 @@ public class JdbcGlobalBalanceRepositoryAdapter implements GlobalBalanceReposito
         long start = System.nanoTime();
         Optional<GlobalBalance> result = balanceRepo.findById(portfolioId)
                 .map(GlobalBalanceEntityMapper::toDomain);
-        log.trace("[REPO] globalBalance.findByPortfolioId({}) - {}ms", portfolioId, elapsedMs(start));
+        log.trace("[REPO] globalBalance.findByPortfolioId({}) - {}ms", portfolioId, RepoTiming.elapsedMs(start));
         return result;
     }
 
@@ -34,7 +34,7 @@ public class JdbcGlobalBalanceRepositoryAdapter implements GlobalBalanceReposito
     public void save(GlobalBalance balance) {
         long start = System.nanoTime();
         balanceRepo.save(GlobalBalanceEntityMapper.toEntity(balance));
-        log.trace("[REPO] globalBalance.save({}) - {}ms", balance.getPortfolioId(), elapsedMs(start));
+        log.trace("[REPO] globalBalance.save({}) - {}ms", balance.getPortfolioId(), RepoTiming.elapsedMs(start));
     }
 
     @Override
@@ -44,11 +44,7 @@ public class JdbcGlobalBalanceRepositoryAdapter implements GlobalBalanceReposito
         int affected = balanceRepo.reserveAtomic(portfolioId, amount);
         boolean reserved = affected == 1;
         log.trace("[REPO] globalBalance.reserveAtomic({}, {}) - {}ms - reserved={}",
-                portfolioId, amount, elapsedMs(start), reserved);
+                portfolioId, amount, RepoTiming.elapsedMs(start), reserved);
         return reserved;
-    }
-
-    private static double elapsedMs(long startNanos) {
-        return (System.nanoTime() - startNanos) / 1_000_000.0;
     }
 }

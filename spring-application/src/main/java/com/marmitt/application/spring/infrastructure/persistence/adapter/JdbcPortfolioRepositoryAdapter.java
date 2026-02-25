@@ -26,7 +26,7 @@ public class JdbcPortfolioRepositoryAdapter implements PortfolioRepositoryPort {
         long start = System.nanoTime();
         Optional<Portfolio> result = portfolioRepository.findById(portfolioId)
                 .map(PortfolioEntityMapper::toDomain);
-        log.trace("[REPO] findById({}) - {}ms", portfolioId, elapsedMs(start));
+        log.trace("[REPO] findById({}) - {}ms", portfolioId, RepoTiming.elapsedMs(start));
         return result;
     }
 
@@ -35,7 +35,7 @@ public class JdbcPortfolioRepositoryAdapter implements PortfolioRepositoryPort {
         long start = System.nanoTime();
         Optional<Portfolio> result = portfolioRepository.findByNameIgnoreCase(portfolioName)
                 .map(PortfolioEntityMapper::toDomain);
-        log.trace("[REPO] findByName({}) - {}ms", portfolioName, elapsedMs(start));
+        log.trace("[REPO] findByName({}) - {}ms", portfolioName, RepoTiming.elapsedMs(start));
         return result;
     }
 
@@ -45,7 +45,7 @@ public class JdbcPortfolioRepositoryAdapter implements PortfolioRepositoryPort {
         List<Portfolio> result = portfolioRepository.findBySymbol(symbol).stream()
                 .map(PortfolioEntityMapper::toDomain)
                 .toList();
-        log.trace("[REPO] findBySymbol({}) - {}ms - {} results", symbol, elapsedMs(start), result.size());
+        log.trace("[REPO] findBySymbol({}) - {}ms - {} results", symbol, RepoTiming.elapsedMs(start), result.size());
         return result;
     }
 
@@ -55,7 +55,7 @@ public class JdbcPortfolioRepositoryAdapter implements PortfolioRepositoryPort {
         List<Portfolio> result = StreamSupport.stream(portfolioRepository.findAll().spliterator(), false)
                 .map(PortfolioEntityMapper::toDomain)
                 .toList();
-        log.trace("[REPO] findAll() - {}ms - {} results", elapsedMs(start), result.size());
+        log.trace("[REPO] findAll() - {}ms - {} results", RepoTiming.elapsedMs(start), result.size());
         return result;
     }
 
@@ -81,10 +81,6 @@ public class JdbcPortfolioRepositoryAdapter implements PortfolioRepositoryPort {
         portfolioRepository.save(PortfolioEntityMapper.toPortfolioEntity(portfolio));
 
         log.info("Portfolio registered - ID: {}, Name: {}", portfolioId, portfolio.getName());
-        log.trace("[REPO] registerPortfolio({}) - {}ms", portfolioId, elapsedMs(start));
-    }
-
-    private static double elapsedMs(long startNanos) {
-        return (System.nanoTime() - startNanos) / 1_000_000.0;
+        log.trace("[REPO] registerPortfolio({}) - {}ms", portfolioId, RepoTiming.elapsedMs(start));
     }
 }
