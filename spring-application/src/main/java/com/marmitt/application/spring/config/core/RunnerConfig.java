@@ -1,6 +1,6 @@
 package com.marmitt.application.spring.config.core;
 
-import com.marmitt.core.application.usecase.runner.OrderConciliationUseCase;
+import com.marmitt.core.application.usecase.runner.orderconciliation.OrderConciliationUseCase;
 import com.marmitt.core.application.usecase.runner.processsignal.ProcessTradeSignalUseCase;
 import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.Transaction;
@@ -17,7 +17,6 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import java.math.BigDecimal;
 
 /**
  * Configuração Spring dos serviços do domínio Runner e Portfolio (capital).
@@ -59,10 +58,9 @@ public class RunnerConfig {
 
             @Override
             public void transactionalProcessFill(Transaction transaction, OrderDataDto orderData,
-                                                 BigDecimal fillIncrement, BigDecimal fillPrice,
                                                  boolean isFinal) {
                 txTemplate.executeWithoutResult(status ->
-                        processFill(transaction, orderData, fillIncrement, fillPrice, isFinal));
+                        processFill(transaction, orderData, isFinal));
             }
         };
     }
