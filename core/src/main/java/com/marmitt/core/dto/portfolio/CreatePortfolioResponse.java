@@ -9,12 +9,8 @@ import java.util.UUID;
 public record CreatePortfolioResponse(
         UUID portfolioId,
         String name,
-        UUID strategyId,
-        String strategyName,
-        String symbol,
         String initialCapital,
         String currency,
-        String exchangeName,
         boolean isActive,
         Instant createdAt,
         String message
@@ -23,23 +19,15 @@ public record CreatePortfolioResponse(
     public static CreatePortfolioResponse success(
             UUID portfolioId,
             String name,
-            UUID strategyId,
-            String strategyName,
-            String symbol,
             String initialCapital,
             String currency,
-            String exchangeName,
             Instant createdAt
     ) {
         return CreatePortfolioResponse.builder()
                 .portfolioId(portfolioId)
                 .name(name)
-                .strategyId(strategyId)
-                .strategyName(strategyName)
-                .symbol(symbol)
                 .initialCapital(initialCapital)
                 .currency(currency)
-                .exchangeName(exchangeName)
                 .isActive(true)
                 .createdAt(createdAt)
                 .message("Portfolio created successfully")

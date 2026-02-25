@@ -35,7 +35,7 @@ public class MarginAccount {
         this.isActive = true;
         this.createdAt = Instant.now();
         this.updatedAt = Instant.now();
-        this.version = 0L;
+        this.version = null;
     }
 
     /**

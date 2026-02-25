@@ -121,7 +121,7 @@ public class StrategyRunner {
         this.createdAt = Instant.now();
         this.lastReconciliationAt = null;
         this.archivedAt = null;
-        this.version = 0L;
+        this.version = null;
     }
 
     /**

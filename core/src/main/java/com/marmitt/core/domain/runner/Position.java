@@ -96,7 +96,7 @@ public class Position {
         this.realizedPnl = BigDecimal.ZERO;
         this.openedAt = Instant.now();
         this.updatedAt = Instant.now();
-        this.version = 0L;
+        this.version = null;
     }
 
     /**
