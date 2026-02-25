@@ -24,11 +24,9 @@ import java.util.concurrent.atomic.AtomicInteger;
  * O prefixo {@code v1r{shortCode}} serve como chave de roteamento no Portfolio
  * para identificar qual Runner emitiu a ordem.
  *
- * @implNote Utilitário transitório — a forma final descrita no Blueprint e IG 3.4.1 é
- *           {@link com.marmitt.core.domain.shared.ClientOrderId}, um {@code record} rico com
- *           {@code parse()}, todos os campos estruturados e suporte a roteamento de DLQ.
- *           Este utilitário deve ser substituído por {@code shared.ClientOrderId} quando
- *           o roteamento de callbacks e o DLQ forem implementados.
+ * @implNote Utilitário transitório — manter como fonte atual de geração/parse até a
+ *           introdução de um Value Object rico dedicado no domínio compartilhado,
+ *           com parse estruturado e suporte completo a roteamento de DLQ.
  * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 3.4.1</a>
  */
 public final class ClientOrderId {

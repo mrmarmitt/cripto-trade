@@ -4,7 +4,7 @@ import com.marmitt.core.application.listener.MarketDataPriceUpdateListener;
 import com.marmitt.core.application.listener.runner.PortfolioStrategyRunnerOrderUpdateListener;
 import com.marmitt.core.application.listener.runner.PortfolioStrategyRunnerPriceUpdateListener;
 import com.marmitt.core.application.usecase.runner.OrderConciliationUseCase;
-import com.marmitt.core.application.usecase.runner.ProcessTradeSignalUseCase;
+import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
 import com.marmitt.core.ports.outbound.listener.PriceUpdateListener;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
@@ -27,14 +27,14 @@ public class InMemoryListenerRepository implements ListenerRepositoryPort {
     private final Map<String, OrderUpdateListener> orderUpdateListeners;
     private final Map<String, PriceUpdateListener> priceUpdateListeners;
 
-    private final ProcessTradeSignalUseCase newProcessTradeSignal;
+    private final ProcessTradeSignalPort processTradeSignal;
     private final OrderConciliationUseCase orderConciliation;
 
     public InMemoryListenerRepository(
-            ProcessTradeSignalUseCase newProcessTradeSignal,
+            ProcessTradeSignalPort processTradeSignal,
             OrderConciliationUseCase orderConciliation) {
 
-        this.newProcessTradeSignal = newProcessTradeSignal;
+        this.processTradeSignal = processTradeSignal;
         this.orderConciliation = orderConciliation;
 
         this.orderUpdateListeners = new ConcurrentHashMap<>();
@@ -44,7 +44,7 @@ public class InMemoryListenerRepository implements ListenerRepositoryPort {
     @PostConstruct
     public void init() {
         PortfolioStrategyRunnerPriceUpdateListener runnerPriceUpdateListener =
-                new PortfolioStrategyRunnerPriceUpdateListener(newProcessTradeSignal);
+                new PortfolioStrategyRunnerPriceUpdateListener(processTradeSignal);
 
         PortfolioStrategyRunnerOrderUpdateListener runnerOrderUpdateListener =
                 new PortfolioStrategyRunnerOrderUpdateListener(orderConciliation);
