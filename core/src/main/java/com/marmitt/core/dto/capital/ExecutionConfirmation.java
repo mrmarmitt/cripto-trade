@@ -26,6 +26,7 @@ public record ExecutionConfirmation(
         BigDecimal executedPrice,
         Fee fee,
         BigDecimal totalCost,
+        BigDecimal pnlRealized,
         boolean isFinal
 ) {
     public ExecutionConfirmation {
@@ -36,6 +37,7 @@ public record ExecutionConfirmation(
         Objects.requireNonNull(executedPrice, "executedPrice cannot be null");
         Objects.requireNonNull(fee, "fee cannot be null");
         Objects.requireNonNull(totalCost, "totalCost cannot be null");
+        Objects.requireNonNull(pnlRealized, "pnlRealized cannot be null");
 
         if (executedQuantity.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("executedQuantity must be positive");

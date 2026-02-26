@@ -83,6 +83,12 @@ public interface StrategyRunnerRepositoryPort {
      */
     void savePosition(Position position);
 
+    /**
+     * Tenta inserir uma nova Position OPEN.
+     * Retorna false quando outra Position OPEN do mesmo runner/simbolo ja existe.
+     */
+    boolean trySavePosition(Position position);
+
     /** Busca Position por PK. */
     Optional<Position> findPositionById(UUID positionId);
 
@@ -167,6 +173,13 @@ public interface StrategyRunnerRepositoryPort {
      * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 6.2.1 (passos 6a-6b)</a>
      */
     void saveAtomicTransactionAndPositionLock(Transaction transaction, Position lockedPosition);
+
+    /**
+     * Aplica lock atomico em uma Position OPEN para uma SELL.
+     * Retorna true se o lock foi aplicado, false se a position ja foi lockada
+     * ou nao esta mais OPEN.
+     */
+    boolean tryLockPositionForSell(UUID positionId, UUID transactionId, java.math.BigDecimal quantity);
 
     /**
      * Persiste atomicamente uma Transaction atualizada e seu novo TransactionMatch.

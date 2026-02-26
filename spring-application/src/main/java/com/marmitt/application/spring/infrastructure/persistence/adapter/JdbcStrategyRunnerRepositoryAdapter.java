@@ -14,6 +14,7 @@ import com.marmitt.core.exceptions.ConcurrentPositionLockException;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
@@ -22,6 +23,7 @@ import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 @Slf4j
 @Repository
@@ -99,6 +101,20 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         long start = System.nanoTime();
         positionRepo.save(StrategyRunnerEntityMapper.toEntity(position));
         log.trace("[REPO] position.save({}) - {}ms", position.getId(), RepoTiming.elapsedMs(start));
+    }
+
+    @Override
+    @Transactional
+    public boolean trySavePosition(Position position) {
+        long start = System.nanoTime();
+        try {
+            positionRepo.save(StrategyRunnerEntityMapper.toEntity(position));
+            log.trace("[REPO] position.trySave({}) - inserted - {}ms", position.getId(), RepoTiming.elapsedMs(start));
+            return true;
+        } catch (DataIntegrityViolationException e) {
+            log.trace("[REPO] position.trySave({}) - duplicate open - {}ms", position.getId(), RepoTiming.elapsedMs(start));
+            return false;
+        }
     }
 
     @Override
@@ -218,5 +234,16 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         matchRepo.save(StrategyRunnerEntityMapper.toEntity(match));
         log.trace("[REPO] saveAtomicTransactionAndMatch(tx={}, match={}) - {}ms",
                 transaction.getId(), match.id(), RepoTiming.elapsedMs(start));
+    }
+
+    @Override
+    @Transactional
+    public boolean tryLockPositionForSell(UUID positionId, UUID transactionId, BigDecimal quantity) {
+        long start = System.nanoTime();
+        int updated = positionRepo.tryLockPositionForSell(positionId, transactionId, quantity);
+        boolean locked = updated == 1;
+        log.trace("[REPO] position.tryLockForSell(pos={}, tx={}, locked={}) - {}ms",
+                positionId, transactionId, locked, RepoTiming.elapsedMs(start));
+        return locked;
     }
 }

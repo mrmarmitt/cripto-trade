@@ -21,4 +21,23 @@ public interface RunnerPositionJdbcRepository extends CrudRepository<RunnerPosit
             @Param("runnerId") UUID runnerId,
             @Param("symbol") String symbol
     );
+
+    @org.springframework.data.jdbc.repository.query.Modifying
+    @Query("""
+            UPDATE positions
+               SET locked_by_transaction_id = :transactionId,
+                   locked_quantity = :quantity,
+                   locked_at = NOW(),
+                   status = 'CLOSING',
+                   updated_at = NOW(),
+                   version = version + 1
+             WHERE id = :positionId
+               AND status = 'OPEN'
+               AND locked_by_transaction_id IS NULL
+            """)
+    int tryLockPositionForSell(
+            @Param("positionId") UUID positionId,
+            @Param("transactionId") UUID transactionId,
+            @Param("quantity") java.math.BigDecimal quantity
+    );
 }

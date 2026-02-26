@@ -153,12 +153,20 @@ public abstract class OrderConciliationUseCase implements OrderConciliationPort 
      * {@link BuyFillHandler} e {@link SellFillHandler} conforme o tipo da transacao.
      */
     protected void processFill(Transaction transaction, OrderDataDto orderData, boolean isFinal) {
-        if (isFinal && transaction.isFinal()) {
-            log.debug("orderConciliation: duplicate FILLED ignored transactionId={} status={}",
-                    transaction.getId(), transaction.getStatus());
-            return;
-        }
-        if (!isFinal) {
+        if (isFinal) {
+            BigDecimal incoming = orderData.executedQuantity();
+            BigDecimal current = transaction.getEffectiveExecutedQuantity();
+            if (incoming != null && incoming.compareTo(current) <= 0) {
+                log.debug("orderConciliation: duplicate FILLED ignored transactionId={} currentQty={} incomingQty={}",
+                        transaction.getId(), current, incoming);
+                return;
+            }
+            if (transaction.isFinal()) {
+                log.debug("orderConciliation: duplicate FILLED ignored transactionId={} status={}",
+                        transaction.getId(), transaction.getStatus());
+                return;
+            }
+        } else {
             BigDecimal incoming = orderData.executedQuantity();
             BigDecimal current = transaction.getEffectiveExecutedQuantity();
             if (incoming == null || incoming.compareTo(current) <= 0) {

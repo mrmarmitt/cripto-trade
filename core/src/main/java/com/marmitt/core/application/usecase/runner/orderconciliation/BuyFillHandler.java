@@ -56,13 +56,25 @@ class BuyFillHandler {
             position = new Position(transaction.getRunnerId(), transaction.getSymbol(),
                     fillIncrement, fillPrice);
             position.associateBuyTransaction(transaction.getId());
+            boolean inserted = strategyRunnerRepository.trySavePosition(position);
+            if (!inserted) {
+                log.debug("orderConciliation: concurrent open position detected - reloading for transactionId={}",
+                        transaction.getId());
+                position = strategyRunnerRepository
+                        .findOpenPositionByRunnerIdAndSymbol(transaction.getRunnerId(), transaction.getSymbol())
+                        .orElse(null);
+                if (position == null) {
+                    throw new IllegalStateException("Open position not found after unique constraint conflict");
+                }
+                position.addQuantity(fillIncrement, fillPrice);
+                strategyRunnerRepository.savePosition(position);
+            }
         } else {
             log.debug("orderConciliation: open position found positionId={} - adding quantity for transactionId={}",
                     position.getId(), transaction.getId());
             position.addQuantity(fillIncrement, fillPrice);
+            strategyRunnerRepository.savePosition(position);
         }
-
-        strategyRunnerRepository.savePosition(position);
         strategyRunnerRepository.saveTransaction(transaction);
         log.info("orderConciliation: BUY fill positionId={} runnerId={} increment={} fillPrice={}",
                 position.getId(), transaction.getRunnerId(), fillIncrement, fillPrice);

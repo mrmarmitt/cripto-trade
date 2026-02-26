@@ -21,14 +21,13 @@ import java.math.BigDecimal;
  * <ol>
  *   <li>Carrega Runner -> obtem portfolioId</li>
  *   <li>Carrega GlobalBalance</li>
- *   <li>Aplica confirmExecution(totalCost, ZERO, feeConverted)</li>
+ *   <li>Aplica confirmExecution(totalCost, pnlRealized, feeConverted)</li>
  *   <li>Persiste o GlobalBalance atualizado</li>
  * </ol>
  *
  * <p><b>Nota sobre pnlAmount:</b> O PnL realizado por operacao e rastreado no TransactionMatch
  * (Runner). O GlobalBalance.realizedBalance reflete fluxo de caixa liquido via
- * available += totalCost + pnlAmount. Em V1, pnlAmount = 0 - o available
- * e restaurado pelo valor total da operacao, com o PnL real acompanhado via Runner.
+ * available += totalCost + pnlAmount.
  */
 @Slf4j
 public class ExecutionConfirmedReaction {
@@ -60,7 +59,7 @@ public class ExecutionConfirmedReaction {
                         "GlobalBalance not found for portfolio: " + runner.getPortfolioId()));
 
         BigDecimal feeConverted = confirmation.fee().getConvertedAmountOrZero();
-        balance.confirmExecution(confirmation.totalCost(), BigDecimal.ZERO, feeConverted);
+        balance.confirmExecution(confirmation.totalCost(), confirmation.pnlRealized(), feeConverted);
 
         globalBalanceRepository.save(balance);
 

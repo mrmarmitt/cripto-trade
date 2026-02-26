@@ -116,6 +116,7 @@ class SellFillHandler {
                 fillPrice,
                 fee,
                 totalCost,
+                match.pnlRealized(),
                 isFinal
         );
 

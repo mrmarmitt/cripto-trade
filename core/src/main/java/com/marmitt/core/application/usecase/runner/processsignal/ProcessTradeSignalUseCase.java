@@ -128,9 +128,15 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     }
 
     protected void persistSellAndLockPosition(Transaction transaction, Position targetPosition) {
-        targetPosition.lock(transaction.getId(), transaction.getQuantity());
-        targetPosition.startClosing();
-        strategyRunnerRepository.saveAtomicTransactionAndPositionLock(transaction, targetPosition);
+        strategyRunnerRepository.saveTransaction(transaction);
+        boolean locked = strategyRunnerRepository.tryLockPositionForSell(
+                targetPosition.getId(),
+                transaction.getId(),
+                transaction.getQuantity()
+        );
+        if (!locked) {
+            throw new ConcurrentPositionLockException(targetPosition.getId(), transaction.getRunnerId());
+        }
     }
 
     /**
