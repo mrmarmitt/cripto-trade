@@ -15,6 +15,6 @@ public interface RunnerTransactionMatchJdbcRepository extends CrudRepository<Run
     /**
      * Busca todos os matches de uma transação (compra ou venda).
      */
-    @Query("SELECT * FROM runner_transaction_matches WHERE buy_transaction_id = :txId OR sell_transaction_id = :txId ORDER BY created_at")
+    @Query("SELECT * FROM transaction_matches WHERE buy_transaction_id = :txId OR sell_transaction_id = :txId ORDER BY created_at")
     List<RunnerTransactionMatchEntity> findByTransactionId(@Param("txId") UUID txId);
 }

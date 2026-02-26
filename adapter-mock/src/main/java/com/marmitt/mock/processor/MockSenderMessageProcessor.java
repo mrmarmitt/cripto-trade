@@ -83,14 +83,18 @@ public class MockSenderMessageProcessor implements SenderMessageProcessorPort {
             // Simula latência da exchange (200ms fixo)
             Thread.sleep(SIMULATED_LATENCY_MS);
 
-            // Simula execução da ordem
-            OrderDataDto mockResponse = simulator.simulateExecution(orderRequest);
+            String orderId = "MOCK_" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
 
-            // Publica evento como se fosse resposta de WebSocket real
-            publishMockOrderResponse(mockResponse);
+            OrderDataDto accepted = simulator.simulateAccepted(orderRequest, orderId);
+            publishMockOrderResponse(accepted);
+
+            Thread.sleep(SIMULATED_LATENCY_MS);
+
+            OrderDataDto filled = simulator.simulateFilled(orderRequest, orderId);
+            publishMockOrderResponse(filled);
 
             log.info("Mock order simulation completed - ClientOrderId: {}, OrderId: {}, Status: {}",
-                    orderRequest.getClientOrderId(), mockResponse.orderId(), mockResponse.status());
+                    orderRequest.getClientOrderId(), orderId, filled.status());
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();

@@ -7,6 +7,7 @@ import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
 import org.springframework.data.annotation.Id;
+import org.springframework.data.annotation.Version;
 import org.springframework.data.relational.core.mapping.Table;
 
 import java.math.BigDecimal;
@@ -45,4 +46,7 @@ public class RunnerTransactionMatchEntity {
     private BigDecimal feeConvertedAmount;
 
     private Instant createdAt;
+
+    @Version
+    private Long version;
 }

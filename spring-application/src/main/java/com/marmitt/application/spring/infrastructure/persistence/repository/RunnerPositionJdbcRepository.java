@@ -13,10 +13,10 @@ import java.util.UUID;
 @Repository
 public interface RunnerPositionJdbcRepository extends CrudRepository<RunnerPositionEntity, UUID> {
 
-    @Query("SELECT * FROM runner_positions WHERE runner_id = :runnerId AND status = 'OPEN'")
+    @Query("SELECT * FROM positions WHERE runner_id = :runnerId AND status = 'OPEN'")
     List<RunnerPositionEntity> findOpenByRunnerId(@Param("runnerId") UUID runnerId);
 
-    @Query("SELECT * FROM runner_positions WHERE runner_id = :runnerId AND UPPER(symbol) = UPPER(:symbol) AND status = 'OPEN'")
+    @Query("SELECT * FROM positions WHERE runner_id = :runnerId AND UPPER(symbol) = UPPER(:symbol) AND status = 'OPEN' AND locked_by_transaction_id IS NULL")
     Optional<RunnerPositionEntity> findOpenByRunnerIdAndSymbol(
             @Param("runnerId") UUID runnerId,
             @Param("symbol") String symbol

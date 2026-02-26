@@ -56,6 +56,42 @@ public class MockOrderExecutionSimulator {
         return response;
     }
 
+    public OrderDataDto simulateAccepted(SendOrderRequest request, String orderId) {
+        return new OrderDataDto(
+                orderId,
+                request.getClientOrderId(),
+                Symbol.of(request.getSymbol()),
+                convertOrderSide(request.getOrderSide()),
+                convertOrderType(request.getOrderType()),
+                request.getQuantity(),
+                BigDecimal.ZERO,
+                request.getPrice(),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.NEW,
+                null,
+                Instant.now()
+        );
+    }
+
+    public OrderDataDto simulateFilled(SendOrderRequest request, String orderId) {
+        return new OrderDataDto(
+                orderId,
+                request.getClientOrderId(),
+                Symbol.of(request.getSymbol()),
+                convertOrderSide(request.getOrderSide()),
+                convertOrderType(request.getOrderType()),
+                request.getQuantity(),
+                request.getQuantity(),
+                request.getPrice(),
+                request.getPrice(),
+                BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.FILLED,
+                null,
+                Instant.now()
+        );
+    }
+
     /**
      * Gera ID único para ordem mockada
      */

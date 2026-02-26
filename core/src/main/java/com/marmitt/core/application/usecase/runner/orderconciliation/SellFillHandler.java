@@ -84,6 +84,8 @@ class SellFillHandler {
 
         if (isFinal) {
             position.unlockAfterFill();
+            log.debug("orderConciliation: position unlocked after final SELL fill positionId={} transactionId={}",
+                    position.getId(), transaction.getId());
         }
 
         if (buyTransactionId == null) {

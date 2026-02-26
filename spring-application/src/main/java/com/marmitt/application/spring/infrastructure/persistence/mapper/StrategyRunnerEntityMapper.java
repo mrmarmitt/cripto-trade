@@ -85,6 +85,7 @@ public class StrategyRunnerEntityMapper {
                 .openedAt(domain.getOpenedAt())
                 .closedAt(domain.getClosedAt())
                 .updatedAt(domain.getUpdatedAt())
+                .openedByTransactionId(domain.getOpenedByTransactionId())
                 .lockedByTransactionId(domain.getLockedByTransactionId())
                 .lockedQuantity(domain.getLockedQuantity())
                 .lockedAt(domain.getLockedAt())
@@ -108,7 +109,7 @@ public class StrategyRunnerEntityMapper {
                 .lockedByTransactionId(entity.getLockedByTransactionId())
                 .lockedQuantity(entity.getLockedQuantity())
                 .lockedAt(entity.getLockedAt())
-                .openedByTransactionId(null)   // column absent from migration — tracked in domain only
+                .openedByTransactionId(entity.getOpenedByTransactionId())
                 .version(entity.getVersion())
                 .build();
     }

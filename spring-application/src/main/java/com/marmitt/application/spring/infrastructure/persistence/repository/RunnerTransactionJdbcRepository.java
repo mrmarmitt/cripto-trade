@@ -14,14 +14,14 @@ import java.util.UUID;
 @Repository
 public interface RunnerTransactionJdbcRepository extends CrudRepository<RunnerTransactionEntity, UUID> {
 
-    @Query("SELECT * FROM runner_transactions WHERE client_order_id = :clientOrderId")
+    @Query("SELECT * FROM transactions WHERE client_order_id = :clientOrderId")
     Optional<RunnerTransactionEntity> findByClientOrderId(@Param("clientOrderId") String clientOrderId);
 
     /**
      * Busca transações de um Runner nos status informados.
      * {@code statuses} deve conter os nomes dos enums em String (ex: "PENDING", "SUBMITTED").
      */
-    @Query("SELECT * FROM runner_transactions WHERE runner_id = :runnerId AND status IN (:statuses) ORDER BY requested_at")
+    @Query("SELECT * FROM transactions WHERE runner_id = :runnerId AND status IN (:statuses) ORDER BY requested_at")
     List<RunnerTransactionEntity> findByRunnerIdAndStatuses(
             @Param("runnerId") UUID runnerId,
             @Param("statuses") Collection<String> statuses

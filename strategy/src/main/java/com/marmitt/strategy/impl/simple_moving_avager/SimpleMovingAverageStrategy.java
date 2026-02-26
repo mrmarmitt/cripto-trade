@@ -5,6 +5,7 @@ import com.marmitt.core.dto.strategy.StrategyInputDto;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.dto.strategy.PortfolioContextDto;
 import com.marmitt.core.dto.strategy.OpenBuyEntryDto;
+import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
@@ -14,6 +15,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
+@Slf4j
 public class SimpleMovingAverageStrategy implements TradingStrategy {
 
     private static final String STRATEGY_NAME = "SimpleMovingAverageStrategy";
@@ -64,6 +66,8 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
 
         // 1. Aguardar histórico mínimo
         if (priceHistory.size() < config.movingAveragePeriod()) {
+            log.debug("SMA: waiting history {}/{} currentPrice={}",
+                    priceHistory.size(), config.movingAveragePeriod(), currentPrice);
             return StrategyOutputDto.hold(STRATEGY_NAME,
                     "Aguardando histórico: " + priceHistory.size() + "/" + config.movingAveragePeriod());
         }
@@ -100,7 +104,12 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
 
         // 3. Sinal de compra — cruzamento de SMA para cima
         BigDecimal sma = calculateSMA();
-        if (currentPrice.compareTo(sma) > 0 && input.previousPrice().compareTo(sma) <= 0) {
+        BigDecimal previousPrice = resolvePreviousPrice(input);
+        log.debug("SMA: current={} previous={} sma={} size={}",
+                currentPrice, previousPrice, sma, priceHistory.size());
+        if (previousPrice != null
+                && currentPrice.compareTo(sma) > 0
+                && previousPrice.compareTo(sma) <= 0) {
             BigDecimal buyQuantity = calculateBuyQuantity(currentPrice, portfolioContext);
             if (buyQuantity.compareTo(BigDecimal.ZERO) > 0) {
                 return StrategyOutputDto.buy(STRATEGY_NAME, new BigDecimal("0.8"), buyQuantity,
@@ -118,6 +127,16 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
         }
     }
 
+    private BigDecimal resolvePreviousPrice(StrategyInputDto input) {
+        if (input.previousPrice() != null) {
+            return input.previousPrice();
+        }
+        if (priceHistory.size() < 2) {
+            return null;
+        }
+        return priceHistory.get(priceHistory.size() - 2);
+    }
+
     private BigDecimal calculateSMA() {
         BigDecimal sum = priceHistory.stream()
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -126,6 +145,8 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
 
     private BigDecimal calculateBuyQuantity(BigDecimal currentPrice, PortfolioContextDto portfolioContext) {
         if (!portfolioContext.hasMinimumBalance()) {
+            log.debug("SMA: insufficient available balance for min operation - available={} minRequired={}",
+                    portfolioContext.availableBalance(), portfolioContext.minimumOperationAmount());
             return BigDecimal.ZERO;
         }
 
@@ -136,6 +157,8 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
         BigDecimal operationValue = allocationValue.min(availableBalance);
 
         if (operationValue.compareTo(portfolioContext.minimumOperationAmount()) < 0) {
+            log.debug("SMA: operation below minimum - operationValue={} minRequired={}",
+                    operationValue, portfolioContext.minimumOperationAmount());
             return BigDecimal.ZERO;
         }
 

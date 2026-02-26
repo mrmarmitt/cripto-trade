@@ -38,6 +38,9 @@ public class RunnerPositionEntity {
     private Instant closedAt;
     private Instant updatedAt;
 
+    // FK to BUY transaction that opened this position
+    private UUID openedByTransactionId;
+
     // Locking fields (IG 9.3)
     private UUID lockedByTransactionId;
     private BigDecimal lockedQuantity;

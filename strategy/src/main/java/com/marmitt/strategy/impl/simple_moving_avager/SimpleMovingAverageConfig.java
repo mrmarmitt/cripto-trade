@@ -30,7 +30,7 @@ public record SimpleMovingAverageConfig(
      */
     public static SimpleMovingAverageConfig defaultConfig() {
         return new SimpleMovingAverageConfig(
-                3,                                      // 3 períodos (mais responsivo possível)
+                2,                                      // 2 períodos (mais responsivo possível)
                 BigDecimal.valueOf(-0.000001),          // -0.0001% para comprar (~$0.10 para BTC)
                 BigDecimal.valueOf(0.000001),           // +0.0001% para vender (~$0.10 para BTC)
                 BigDecimal.valueOf(0.1),                // 10% do capital por operação

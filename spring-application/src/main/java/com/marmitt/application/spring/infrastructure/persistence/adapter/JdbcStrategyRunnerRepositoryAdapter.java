@@ -10,9 +10,11 @@ import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.domain.runner.TransactionMatch;
 import com.marmitt.core.enums.TransactionStatus;
+import com.marmitt.core.exceptions.ConcurrentPositionLockException;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -198,10 +200,14 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     @Transactional
     public void saveAtomicTransactionAndPositionLock(Transaction transaction, Position lockedPosition) {
         long start = System.nanoTime();
-        transactionRepo.save(StrategyRunnerEntityMapper.toEntity(transaction));
-        positionRepo.save(StrategyRunnerEntityMapper.toEntity(lockedPosition));
-        log.trace("[REPO] saveAtomicTransactionAndPositionLock(tx={}, pos={}) - {}ms",
-                transaction.getId(), lockedPosition.getId(), RepoTiming.elapsedMs(start));
+        try {
+            transactionRepo.save(StrategyRunnerEntityMapper.toEntity(transaction));
+            positionRepo.save(StrategyRunnerEntityMapper.toEntity(lockedPosition));
+            log.trace("[REPO] saveAtomicTransactionAndPositionLock(tx={}, pos={}) - {}ms",
+                    transaction.getId(), lockedPosition.getId(), RepoTiming.elapsedMs(start));
+        } catch (OptimisticLockingFailureException e) {
+            throw new ConcurrentPositionLockException(lockedPosition.getId(), transaction.getRunnerId());
+        }
     }
 
     @Override

@@ -22,16 +22,30 @@ public interface StrategyRunnerJdbcRepository extends CrudRepository<StrategyRun
     /**
      * Hot path — chamado em cada tick de preço.
      * JOIN necessário com portfolios para filtrar portfolios inativos.
-     * Retorna apenas runners operacionais (ACTIVE ou HALTED) de portfolios ativos.
+     * Filtra por fonte de market data:
+     *  - se runner possui sources configuradas, exige match com exchangeId
+     *  - se não possui sources, aceita qualquer exchange
      */
     @Query("""
             SELECT sr.*
               FROM strategy_runners sr
              INNER JOIN portfolios p ON p.id = sr.portfolio_id
              WHERE UPPER(sr.symbol) = UPPER(:symbol)
-               AND UPPER(sr.exchange_id) = UPPER(:exchangeId)
                AND sr.status IN ('ACTIVE', 'HALTED')
                AND p.is_active = true
+               AND (
+                    EXISTS (
+                        SELECT 1
+                          FROM runner_market_data_sources mds
+                         WHERE mds.runner_id = sr.id
+                           AND UPPER(mds.source) = UPPER(:exchangeId)
+                    )
+                    OR NOT EXISTS (
+                        SELECT 1
+                          FROM runner_market_data_sources mds2
+                         WHERE mds2.runner_id = sr.id
+                    )
+               )
             """)
     List<StrategyRunnerEntity> findOperationalBySymbolAndExchange(
             @Param("symbol") String symbol,

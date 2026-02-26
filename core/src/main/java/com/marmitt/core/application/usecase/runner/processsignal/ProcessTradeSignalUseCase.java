@@ -15,6 +15,7 @@ import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
+import com.marmitt.core.exceptions.ConcurrentPositionLockException;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
@@ -156,6 +157,9 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
 
             try {
                 processRunner(runner, strategyInput, marketData.price());
+            } catch (ConcurrentPositionLockException e) {
+                log.warn("priceUpdate: concurrent SELL conflict for runner={} symbol={} - tick discarded (position already locked by another thread)",
+                        runner.getId(), symbol);
             } catch (Exception e) {
                 log.error("priceUpdate: error processing runner={} symbol={} - {}",
                         runner.getId(), symbol, e.getMessage(), e);

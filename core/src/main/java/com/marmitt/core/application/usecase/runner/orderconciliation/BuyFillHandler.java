@@ -43,15 +43,22 @@ class BuyFillHandler {
      * @param fillPrice     preco medio ponderado do incremento calculado por {@link FillCalculator}
      */
     public void handle(Transaction transaction, BigDecimal fillIncrement, BigDecimal fillPrice) {
+        log.debug("orderConciliation: BUY fill start transactionId={} clientOrderId={} increment={} fillPrice={}",
+                transaction.getId(), transaction.getClientOrderId(), fillIncrement, fillPrice);
+
         Position position = strategyRunnerRepository
                 .findOpenPositionByRunnerIdAndSymbol(transaction.getRunnerId(), transaction.getSymbol())
                 .orElse(null);
 
         if (position == null) {
+            log.debug("orderConciliation: no open position found - creating new position for transactionId={}",
+                    transaction.getId());
             position = new Position(transaction.getRunnerId(), transaction.getSymbol(),
                     fillIncrement, fillPrice);
             position.associateBuyTransaction(transaction.getId());
         } else {
+            log.debug("orderConciliation: open position found positionId={} - adding quantity for transactionId={}",
+                    position.getId(), transaction.getId());
             position.addQuantity(fillIncrement, fillPrice);
         }
 

@@ -8,6 +8,8 @@ import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
+import java.math.BigDecimal;
+
 /**
  * Orquestrador de conciliacao de ordens: recebe callbacks assincronos da exchange
  * (via WebSocket) e evolui o estado interno das {@link Transaction transacoes} e
@@ -85,6 +87,11 @@ public abstract class OrderConciliationUseCase implements OrderConciliationPort 
 
         switch (orderData.status()) {
             case NEW -> {
+                if (!transaction.isPending()) {
+                    log.debug("orderConciliation: duplicate NEW ignored transactionId={} status={}",
+                            transaction.getId(), transaction.getStatus());
+                    return;
+                }
                 transaction.submit(orderData.orderId());
                 transactionalSubmit(transaction);
             }
@@ -146,6 +153,20 @@ public abstract class OrderConciliationUseCase implements OrderConciliationPort 
      * {@link BuyFillHandler} e {@link SellFillHandler} conforme o tipo da transacao.
      */
     protected void processFill(Transaction transaction, OrderDataDto orderData, boolean isFinal) {
+        if (isFinal && transaction.isFinal()) {
+            log.debug("orderConciliation: duplicate FILLED ignored transactionId={} status={}",
+                    transaction.getId(), transaction.getStatus());
+            return;
+        }
+        if (!isFinal) {
+            BigDecimal incoming = orderData.executedQuantity();
+            BigDecimal current = transaction.getEffectiveExecutedQuantity();
+            if (incoming == null || incoming.compareTo(current) <= 0) {
+                log.debug("orderConciliation: duplicate PARTIALLY_FILLED ignored transactionId={} currentQty={} incomingQty={}",
+                        transaction.getId(), current, incoming);
+                return;
+            }
+        }
         FillCalculator.FillComputation computed = fillCalculator.compute(transaction, orderData, isFinal);
         if (transaction.isBuy()) {
             buyFillHandler.handle(transaction, computed.fillIncrement(), computed.fillPrice());

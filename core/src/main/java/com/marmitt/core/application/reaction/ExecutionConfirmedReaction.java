@@ -11,27 +11,24 @@ import lombok.extern.slf4j.Slf4j;
 import java.math.BigDecimal;
 
 /**
- * Reação ao evento {@link ExecutionConfirmedEvent} publicado pelo Runner após cada TransactionMatch.
- * <p>
- * Converte margem de Reserved → Realized no {@code GlobalBalance} do Portfolio.
- * Não representa uma intenção de negócio iniciada por ator externo — é uma consequência
- * direta do fluxo de conciliação de ordens ({@code OrderConciliationUseCase}).
- * <p>
- * Sequência de processamento:
- * <ol>
- *   <li>Idempotência: verifica se {@code matchId} já foi processado via {@code TransactionMatch}</li>
- *   <li>Carrega Runner → obtém {@code portfolioId}</li>
- *   <li>Carrega {@code GlobalBalance}</li>
- *   <li>Aplica {@code confirmExecution(totalCost, ZERO, feeConverted)}</li>
- *   <li>Persiste o {@code GlobalBalance} atualizado</li>
- * </ol>
- * <p>
- * <b>Nota sobre pnlAmount:</b> O PnL realizado por operação é rastreado no {@code TransactionMatch}
- * (Runner). O {@code GlobalBalance.realizedBalance} reflete fluxo de caixa líquido via
- * {@code available += totalCost + pnlAmount}. Em V1, {@code pnlAmount = 0} — o available
- * é restaurado pelo valor total da operação, com o PnL real acompanhado via Runner.
+ * Reacao ao evento {@link ExecutionConfirmedEvent} publicado pelo Runner apos cada TransactionMatch.
  *
- * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seções 5.2.2, 5.5.1</a>
+ * <p>Converte margem de Reserved -> Realized no GlobalBalance do Portfolio.
+ * Nao representa uma intencao de negocio iniciada por ator externo - e uma consequencia
+ * direta do fluxo de conciliacao de ordens (OrderConciliationUseCase).
+ *
+ * <p>Sequencia de processamento:
+ * <ol>
+ *   <li>Carrega Runner -> obtem portfolioId</li>
+ *   <li>Carrega GlobalBalance</li>
+ *   <li>Aplica confirmExecution(totalCost, ZERO, feeConverted)</li>
+ *   <li>Persiste o GlobalBalance atualizado</li>
+ * </ol>
+ *
+ * <p><b>Nota sobre pnlAmount:</b> O PnL realizado por operacao e rastreado no TransactionMatch
+ * (Runner). O GlobalBalance.realizedBalance reflete fluxo de caixa liquido via
+ * available += totalCost + pnlAmount. Em V1, pnlAmount = 0 - o available
+ * e restaurado pelo valor total da operacao, com o PnL real acompanhado via Runner.
  */
 @Slf4j
 public class ExecutionConfirmedReaction {
@@ -50,25 +47,18 @@ public class ExecutionConfirmedReaction {
     public void handle(ExecutionConfirmedEvent event) {
         ExecutionConfirmation confirmation = event.confirmation();
 
-        // ── Idempotência: matchId já processado? ─────────────────────────────
-        if (runnerRepository.existsTransactionMatchById(confirmation.matchId())) {
-            log.info("executionConfirmedReaction: duplicate matchId={} — discarding silently",
-                    confirmation.matchId());
-            return;
-        }
+        // Idempotency: do not check TransactionMatch existence here.
+        // The match is persisted before the event is published.
 
-        // ── Carregar Runner → portfolioId ────────────────────────────────────
         StrategyRunner runner = runnerRepository.findById(confirmation.runnerId())
                 .orElseThrow(() -> new IllegalStateException(
                         "Runner not found: " + confirmation.runnerId()));
 
-        // ── Carregar GlobalBalance ────────────────────────────────────────────
         GlobalBalance balance = globalBalanceRepository
                 .findByPortfolioId(runner.getPortfolioId())
                 .orElseThrow(() -> new IllegalStateException(
                         "GlobalBalance not found for portfolio: " + runner.getPortfolioId()));
 
-        // ── Aplicar conversão Reserved → Realized ────────────────────────────
         BigDecimal feeConverted = confirmation.fee().getConvertedAmountOrZero();
         balance.confirmExecution(confirmation.totalCost(), BigDecimal.ZERO, feeConverted);
 
