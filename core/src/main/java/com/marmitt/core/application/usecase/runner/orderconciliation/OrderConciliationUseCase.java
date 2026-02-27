@@ -153,6 +153,11 @@ public abstract class OrderConciliationUseCase implements OrderConciliationPort 
      * {@link BuyFillHandler} e {@link SellFillHandler} conforme o tipo da transacao.
      */
     protected void processFill(Transaction transaction, OrderDataDto orderData, boolean isFinal) {
+        if (transaction.isPending() && orderData.orderId() != null) {
+            transaction.submit(orderData.orderId());
+            log.debug("orderConciliation: PENDING->SUBMITTED via fill transactionId={} exchangeOrderId={}",
+                    transaction.getId(), orderData.orderId());
+        }
         if (isFinal) {
             BigDecimal incoming = orderData.executedQuantity();
             BigDecimal current = transaction.getEffectiveExecutedQuantity();

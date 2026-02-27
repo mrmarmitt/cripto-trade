@@ -9,6 +9,7 @@ import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessor
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 import com.marmitt.mock.adapter.NoOpWebSocketAdapter;
+import com.marmitt.mock.config.MockScenarioConfig;
 import com.marmitt.mock.processor.MockReceivedMessageProcessor;
 import com.marmitt.mock.processor.MockSenderMessageProcessor;
 import com.marmitt.mock.simulator.MockOrderExecutionSimulator;
@@ -38,10 +39,12 @@ public class MockExchangeAdapter implements ExchangeAdapterPort {
 
         // Processor para simular execução de ordens
         MockOrderExecutionSimulator simulator = new MockOrderExecutionSimulator();
+        MockScenarioConfig config = MockScenarioConfig.defaultConfig();
         this.senderMessageProcessor = new MockSenderMessageProcessor(
                 eventPublisher,
                 objectMapper,
-                simulator
+                simulator,
+                config
         );
 
         // Mock não precisa de URL builder (não conecta)

@@ -14,13 +14,15 @@ import com.marmitt.core.ports.outbound.listener.PriceUpdateListener;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Optional;
 
 /**
  * UseCase para processamento de mensagens recebidas de exchanges.
- * Coordena o processamento e notificação de listeners usando o processor apropriado para cada exchange.
+ * Coordena o processamento e notificacao de listeners usando o processor apropriado para cada exchange.
  */
+@Slf4j
 public class ProcessMessageHandler implements HandlerProcessMessagePort {
 
     private final WebSocketConnectionRepositoryPort connectionRepository;
@@ -45,34 +47,32 @@ public class ProcessMessageHandler implements HandlerProcessMessagePort {
             throw new IllegalArgumentException("Message context cannot be null");
         }
 
-        // Manager pode ser null para adapters que não usam WebSocket real (ex: Mock)
+        // Manager pode ser null para adapters que nao usam WebSocket real (ex: Mock)
         WebSocketConnectionManager manager = connectionRepository.getConnection(context.exchangeName());
         if (manager != null) {
             manager.onMessageReceived();
         }
 
         try {
-            // Busca o processor apropriado para a exchange
             Optional<ExchangeAdapterPort> adapterOptional = exchangeAdapterRepository.findByName(context.exchangeName());
 
             if (adapterOptional.isEmpty()) {
-                return ProcessingResult.error(context.correlationId().toString(), "Exchange does not exist. ExchangeName: " + context.exchangeName());
+                return ProcessingResult.error(context.correlationId().toString(),
+                        "Exchange does not exist. ExchangeName: " + context.exchangeName());
             }
 
             ReceivedMessageProcessorPort messageProcessor = adapterOptional.get().getReceivedMessageProcessor();
 
             if (messageProcessor == null) {
-                return ProcessingResult.error(context.correlationId().toString(), "No processor found for exchange: " + context.exchangeName());
+                return ProcessingResult.error(context.correlationId().toString(),
+                        "No processor found for exchange: " + context.exchangeName());
             }
 
             ProcessingResult<? extends ProcessorResponse> result =
                     messageProcessor.processMessage(rawMessage, context);
 
             if (isMessageProcessable(result)) {
-                result.getData()
-                        .ifPresent(
-                                this::notifyListeners
-                        );
+                result.getData().ifPresent(this::notifyListeners);
             } else if (manager != null) {
                 manager.onMessageError(result.getErrorMessage().orElse("No errorMessage error."));
             }
@@ -80,11 +80,11 @@ public class ProcessMessageHandler implements HandlerProcessMessagePort {
             return result;
 
         } catch (Exception e) {
-            // Retorna resultado com erro se algo deu errado
             if (manager != null) {
                 manager.onMessageError(e.getMessage());
             }
-            return ProcessingResult.error(context.correlationId().toString(), "Error processing errorMessage: " + e.getMessage(), e);
+            return ProcessingResult.error(context.correlationId().toString(),
+                    "Error processing errorMessage: " + e.getMessage(), e);
         }
     }
 
@@ -92,11 +92,6 @@ public class ProcessMessageHandler implements HandlerProcessMessagePort {
         return (result.isSuccess() || result.isWarning()) && result.getData().isPresent();
     }
 
-    /**
-     * Notifica os listeners apropriados baseado no tipo de dados processados.
-     *
-     * @param response dados processados
-     */
     private void notifyListeners(final ProcessorResponse response) {
         if (response instanceof MarketDataDto marketData) {
             notifyPriceUpdate(marketData);
@@ -105,11 +100,6 @@ public class ProcessMessageHandler implements HandlerProcessMessagePort {
         }
     }
 
-    /**
-     * Notifica todos os listeners registrados sobre atualização de preço.
-     *
-     * @param marketData dados do mercado para notificar
-     */
     private void notifyPriceUpdate(final MarketDataDto marketData) {
         if (marketData == null) {
             throw new IllegalArgumentException("MarketData cannot be null");
@@ -121,18 +111,12 @@ public class ProcessMessageHandler implements HandlerProcessMessagePort {
             try {
                 listener.onPriceUpdate(marketData);
             } catch (Exception e) {
-                // Log error mas não propaga para não interromper outros listeners
-                System.err.println("Error notifying PriceUpdateListener " +
-                        listener.getClass().getSimpleName() + ": " + e.getMessage());
+                log.error("Error notifying PriceUpdateListener {}: {}",
+                        listener.getClass().getSimpleName(), e.getMessage(), e);
             }
         }
     }
 
-    /**
-     * Notifica todos os listeners registrados sobre atualização de ordem.
-     *
-     * @param orderData dados da ordem para notificar
-     */
     private void notifyOrderUpdate(final OrderDataDto orderData) {
         if (orderData == null) {
             throw new IllegalArgumentException("OrderData cannot be null");
@@ -146,9 +130,13 @@ public class ProcessMessageHandler implements HandlerProcessMessagePort {
                     listener.onOrderUpdate(orderData);
                 }
             } catch (Exception e) {
-                // Log error mas não propaga para não interromper outros listeners
-                System.err.println("Error notifying OrderUpdateListener " +
-                        listener.getClass().getSimpleName() + ": " + e.getMessage());
+                log.error("Error notifying OrderUpdateListener {} clientOrderId={} orderId={} status={}: {}",
+                        listener.getClass().getSimpleName(),
+                        orderData.clientOrderId(),
+                        orderData.orderId(),
+                        orderData.status(),
+                        e.getMessage(),
+                        e);
             }
         }
     }

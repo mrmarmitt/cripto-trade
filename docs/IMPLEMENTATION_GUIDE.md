@@ -5286,8 +5286,34 @@ Exchange WebSocket
 └──────────────┬────────────────────────────────────────────────────────────────────┘
                │ OrderDataDto
                ▼
-         Runner Mailbox
+          Runner Mailbox
 ```
+
+#### 15.2.5 Mock Exchange Simulator (Test Harness)
+
+O Mock Adapter deve simular o **ciclo completo** de uma ordem (e nao apenas o ACK), com modos de falha controlados. O objetivo e validar resiliencia, idempotencia, PnL e reconciliacao **antes** de usar Binance real.
+
+**Escopo ideal (V1):**
+- **Fluxo normal**: NEW -> PARTIALLY_FILLED -> FILLED, com latencia configuravel
+- **Idempotencia**: duplicatas de NEW/PARTIAL/FILLED
+- **Eventos fora de ordem**: FILLED antes de NEW, PARTIAL fora de sequencia
+- **Falhas de ordem**: REJECTED, CANCELED, EXPIRED e "sem ACK" (ordem fantasma)
+- **Fees**: fee no par, fee cross-currency e conversao falha (convertedAmount=null -> DustAccount)
+- **Reconciliação**: eventos que disparam Boot Sequence e DLQ (runner inexistente, clientOrderId invalido)
+- **Market Data (opcional, recomendado)**: ticks controlados (spikes, gaps) para exercitar estrategia e PnL nao realizado
+
+**Configuracao sugerida (exemplo):**
+- `partialFillRatio`, `cancelRatio`, `rejectRatio`, `duplicateRatio`, `outOfOrderRatio`
+- `feeMode`: NONE | SAME_CURRENCY | CROSS_CURRENCY | FAIL_CONVERSION
+- `feeRate`, `latencyMinMs`, `latencyMaxMs`
+
+**Pontos de integracao:**
+- `MockOrderExecutionSimulator`: gera o roteiro de eventos conforme o scenario
+- `MockSenderMessageProcessor`: publica os eventos no mesmo canal do WebSocket real
+
+**Observabilidade:**
+- logar o scenario aplicado por ordem (clientOrderId, status, motivo)
+- garantir que cada caso produza sinais suficientes para acionar Boot Sequence, DLQ e Watchdog
 
 ### 15.3 Key Pooling (Gestão de Múltiplas API Keys)
 

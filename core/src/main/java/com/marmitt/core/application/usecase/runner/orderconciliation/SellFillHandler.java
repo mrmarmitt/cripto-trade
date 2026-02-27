@@ -123,6 +123,8 @@ class SellFillHandler {
         strategyRunnerRepository.saveAtomicTransactionAndMatch(transaction, match);
         strategyRunnerRepository.savePosition(position);
         eventPublisher.publishEvent(new ExecutionConfirmedEvent(confirmation));
+        log.info("orderConciliation: SELL match persisted matchId={} transactionId={} status={} executedQty={}",
+                match.id(), transaction.getId(), isFinal ? "FILLED" : "PARTIAL", fillIncrement);
         log.info("orderConciliation: SELL fill matchId={} runnerId={} increment={} pnl={}",
                 match.id(), transaction.getRunnerId(), fillIncrement, match.pnlRealized());
     }

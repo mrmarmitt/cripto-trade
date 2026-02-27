@@ -3,10 +3,16 @@ package com.marmitt.mock.simulator;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
+import com.marmitt.mock.config.MockScenarioConfig;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
+import java.util.Random;
 import java.util.UUID;
 
 /**
@@ -56,6 +62,41 @@ public class MockOrderExecutionSimulator {
         return response;
     }
 
+    public List<OrderDataDto> buildScenarioEvents(SendOrderRequest request,
+                                                  String orderId,
+                                                  MockScenarioConfig config,
+                                                  Random random) {
+        List<OrderDataDto> events = new ArrayList<>();
+
+        OrderDataDto accepted = simulateAccepted(request, orderId);
+        events.add(accepted);
+
+        OrderDataDto.OrderStatus failureStatus = pickFailureStatus(config, random);
+        if (failureStatus != null) {
+            if (failureStatus == OrderDataDto.OrderStatus.CANCELED) {
+                events.add(simulateCanceled(request, orderId));
+            } else {
+                events.add(simulateExpired(request, orderId));
+            }
+            return applyOrderingAndDuplicates(events, config, random);
+        }
+
+        int partialCount = Math.max(0, config.flow().partialFillCount());
+        if (partialCount == 0) {
+            events.add(simulateFilled(request, orderId));
+            return applyOrderingAndDuplicates(events, config, random);
+        }
+
+        List<BigDecimal> fractions = resolveFractions(partialCount, config.flow().partialFillFractions());
+        for (BigDecimal fraction : fractions) {
+            BigDecimal executedQty = request.getQuantity().multiply(fraction).setScale(8, RoundingMode.HALF_UP);
+            events.add(simulatePartial(request, orderId, executedQty));
+        }
+
+        events.add(simulateFilled(request, orderId));
+        return applyOrderingAndDuplicates(events, config, random);
+    }
+
     public OrderDataDto simulateAccepted(SendOrderRequest request, String orderId) {
         return new OrderDataDto(
                 orderId,
@@ -69,6 +110,24 @@ public class MockOrderExecutionSimulator {
                 BigDecimal.ZERO,
                 BigDecimal.ZERO,
                 OrderDataDto.OrderStatus.NEW,
+                null,
+                Instant.now()
+        );
+    }
+
+    public OrderDataDto simulatePartial(SendOrderRequest request, String orderId, BigDecimal executedQty) {
+        return new OrderDataDto(
+                orderId,
+                request.getClientOrderId(),
+                Symbol.of(request.getSymbol()),
+                convertOrderSide(request.getOrderSide()),
+                convertOrderType(request.getOrderType()),
+                request.getQuantity(),
+                executedQty,
+                request.getPrice(),
+                request.getPrice(),
+                BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.PARTIALLY_FILLED,
                 null,
                 Instant.now()
         );
@@ -92,11 +151,113 @@ public class MockOrderExecutionSimulator {
         );
     }
 
+    public OrderDataDto simulateCanceled(SendOrderRequest request, String orderId) {
+        return new OrderDataDto(
+                orderId,
+                request.getClientOrderId(),
+                Symbol.of(request.getSymbol()),
+                convertOrderSide(request.getOrderSide()),
+                convertOrderType(request.getOrderType()),
+                request.getQuantity(),
+                BigDecimal.ZERO,
+                request.getPrice(),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.CANCELED,
+                null,
+                Instant.now()
+        );
+    }
+
+    public OrderDataDto simulateExpired(SendOrderRequest request, String orderId) {
+        return new OrderDataDto(
+                orderId,
+                request.getClientOrderId(),
+                Symbol.of(request.getSymbol()),
+                convertOrderSide(request.getOrderSide()),
+                convertOrderType(request.getOrderType()),
+                request.getQuantity(),
+                BigDecimal.ZERO,
+                request.getPrice(),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.EXPIRED,
+                null,
+                Instant.now()
+        );
+    }
+
     /**
      * Gera ID único para ordem mockada
      */
     private String generateMockOrderId() {
         return "MOCK_" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+    }
+
+    private OrderDataDto.OrderStatus pickFailureStatus(MockScenarioConfig config, Random random) {
+        double cancelRatio = config.failures().cancelRatio();
+        double expireRatio = config.failures().expireRatio();
+        double roll = random.nextDouble();
+        if (roll < cancelRatio) {
+            return OrderDataDto.OrderStatus.CANCELED;
+        }
+        if (roll < cancelRatio + expireRatio) {
+            return OrderDataDto.OrderStatus.EXPIRED;
+        }
+        return null;
+    }
+
+    private List<OrderDataDto> applyOrderingAndDuplicates(List<OrderDataDto> baseEvents,
+                                                          MockScenarioConfig config,
+                                                          Random random) {
+        List<OrderDataDto> events = new ArrayList<>();
+        int maxDup = config.duplicates().maxDuplicatesPerEvent();
+        for (OrderDataDto event : baseEvents) {
+            events.add(event);
+            if (maxDup > 0 && random.nextDouble() < config.duplicates().ratio()) {
+                int dupCount = 1 + random.nextInt(maxDup);
+                for (int i = 0; i < dupCount; i++) {
+                    events.add(event);
+                }
+            }
+        }
+
+        if (events.size() > 1 && random.nextDouble() < config.outOfOrder().ratio()) {
+            Collections.shuffle(events, random);
+        }
+        return events;
+    }
+
+    private List<BigDecimal> resolveFractions(int partialCount,
+                                              List<BigDecimal> configuredFractions) {
+        if (configuredFractions == null || configuredFractions.isEmpty()) {
+            BigDecimal step = BigDecimal.ONE.divide(BigDecimal.valueOf(partialCount + 1L), 8, RoundingMode.HALF_UP);
+            List<BigDecimal> fractions = new ArrayList<>();
+            BigDecimal cumulative = BigDecimal.ZERO;
+            for (int i = 0; i < partialCount; i++) {
+                cumulative = cumulative.add(step);
+                fractions.add(cumulative);
+            }
+            return fractions;
+        }
+
+        List<BigDecimal> fractions = new ArrayList<>();
+        BigDecimal cumulative = BigDecimal.ZERO;
+        for (BigDecimal fraction : configuredFractions) {
+            cumulative = cumulative.add(fraction);
+            fractions.add(cumulative);
+        }
+
+        if (fractions.size() != partialCount || cumulative.compareTo(BigDecimal.ONE) >= 0) {
+            BigDecimal step = BigDecimal.ONE.divide(BigDecimal.valueOf(partialCount + 1L), 8, RoundingMode.HALF_UP);
+            fractions.clear();
+            cumulative = BigDecimal.ZERO;
+            for (int i = 0; i < partialCount; i++) {
+                cumulative = cumulative.add(step);
+                fractions.add(cumulative);
+            }
+        }
+        return fractions;
     }
 
     /**
