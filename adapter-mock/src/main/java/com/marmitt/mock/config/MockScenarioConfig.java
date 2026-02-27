@@ -119,7 +119,7 @@ public record MockScenarioConfig(
                 new Failures(0.02, 0.01),
                 new FeeSettings(FeeMode.SAME_CURRENCY, new BigDecimal("0.0010")),
                 new SlippageSettings(SlippageMode.MARKET_ONLY, 15, 0.10, 2),
-                new ValidationSettings(new BigDecimal("0.000001"), new BigDecimal("0.000001"), new BigDecimal("1.0")),
+                new ValidationSettings(new BigDecimal("0.000001"), new BigDecimal("0.00000001"), new BigDecimal("1.0")),
                 new BalanceSettings(java.util.Map.copyOf(initialBalances))
         );
     }
