@@ -93,6 +93,20 @@ public interface StrategyRunnerRepositoryPort {
     Optional<Position> findPositionById(UUID positionId);
 
     /**
+     * Busca Position pelo transactionId de compra que a originou.
+     * Retorna OPEN ou CLOSING (lock ativo) - usado para reconciliar fills BUY
+     * que chegam enquanto a position esta temporariamente em closing.
+     */
+    Optional<Position> findPositionByOpenedByTransactionId(UUID transactionId);
+
+
+    /**
+     * Busca Position ativa (OPEN ou CLOSING) de um Runner para um simbolo.
+     * Usado para montar contexto da Strategy com quantidade disponivel.
+     */
+    Optional<Position> findActivePositionByRunnerIdAndSymbol(UUID runnerId, String symbol);
+
+    /**
      * Busca todas as Positions OPEN de um Runner.
      * Usado pelo Runner para verificar posições abertas antes de novos sinais.
      */

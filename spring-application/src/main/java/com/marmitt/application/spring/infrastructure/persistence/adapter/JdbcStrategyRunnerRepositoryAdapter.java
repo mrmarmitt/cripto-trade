@@ -127,6 +127,15 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     }
 
     @Override
+    public Optional<Position> findPositionByOpenedByTransactionId(UUID transactionId) {
+        long start = System.nanoTime();
+        Optional<Position> result = positionRepo.findByOpenedByTransactionId(transactionId)
+                .map(StrategyRunnerEntityMapper::toDomain);
+        log.trace("[REPO] position.findByOpenedByTransactionId({}) - {}ms", transactionId, RepoTiming.elapsedMs(start));
+        return result;
+    }
+
+    @Override
     public List<Position> findOpenPositionsByRunnerId(UUID runnerId) {
         long start = System.nanoTime();
         List<Position> result = positionRepo.findOpenByRunnerId(runnerId).stream()
@@ -142,6 +151,15 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         Optional<Position> result = positionRepo.findOpenByRunnerIdAndSymbol(runnerId, symbol)
                 .map(StrategyRunnerEntityMapper::toDomain);
         log.trace("[REPO] position.findOpenByRunnerIdAndSymbol({}, {}) - {}ms", runnerId, symbol, RepoTiming.elapsedMs(start));
+        return result;
+    }
+
+    @Override
+    public Optional<Position> findActivePositionByRunnerIdAndSymbol(UUID runnerId, String symbol) {
+        long start = System.nanoTime();
+        Optional<Position> result = positionRepo.findActiveByRunnerIdAndSymbol(runnerId, symbol)
+                .map(StrategyRunnerEntityMapper::toDomain);
+        log.trace("[REPO] position.findActiveByRunnerIdAndSymbol({}, {}) - {}ms", runnerId, symbol, RepoTiming.elapsedMs(start));
         return result;
     }
 

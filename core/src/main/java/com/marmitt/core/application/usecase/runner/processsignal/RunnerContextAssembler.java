@@ -60,7 +60,7 @@ class RunnerContextAssembler {
 
         Symbol symbol = Symbol.of(runner.getSymbol());
         Optional<Position> runnerPositionOpt =
-                strategyRunnerRepository.findOpenPositionByRunnerIdAndSymbol(runner.getId(), runner.getSymbol());
+                strategyRunnerRepository.findActivePositionByRunnerIdAndSymbol(runner.getId(), runner.getSymbol());
 
         List<OpenBuyEntryDto> openBuyEntries = runnerPositionOpt
                 .map(this::buildOpenBuyEntry)
@@ -101,7 +101,7 @@ class RunnerContextAssembler {
     private List<PendingSellEntryDto> buildPendingSellOrders(StrategyRunner runner) {
         return strategyRunnerRepository
                 .findByRunnerIdAndStatuses(runner.getId(),
-                        List.of(TransactionStatus.PENDING, TransactionStatus.SUBMITTED))
+                        List.of(TransactionStatus.PENDING, TransactionStatus.SUBMITTED, TransactionStatus.PARTIAL))
                 .stream()
                 .filter(com.marmitt.core.domain.runner.Transaction::isSell)
                 .map(t -> PendingSellEntryDto.builder()

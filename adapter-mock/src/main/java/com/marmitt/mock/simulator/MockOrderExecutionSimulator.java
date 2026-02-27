@@ -66,6 +66,7 @@ public class MockOrderExecutionSimulator {
 
         OrderDataDto.OrderStatus failureStatus = pickFailureStatus(config, random);
         if (failureStatus != null) {
+            releaseReservation(request, balanceStore, config);
             if (failureStatus == OrderDataDto.OrderStatus.CANCELED) {
                 events.add(simulateCanceled(request, orderId, baseExecutedPrice));
             } else {
@@ -312,6 +313,26 @@ public class MockOrderExecutionSimulator {
         balanceStore.debitReserved(base, increment);
         BigDecimal proceeds = increment.multiply(executedPrice).subtract(fee).setScale(8, RoundingMode.HALF_UP);
         balanceStore.credit(quote, proceeds);
+    }
+
+    private void releaseReservation(SendOrderRequest request,
+                                    MockBalanceStore balanceStore,
+                                    MockScenarioConfig config) {
+        Symbol symbol = Symbol.of(request.getSymbol());
+        String base = symbol.getBaseAsset();
+        String quote = symbol.getQuoteAsset();
+        if (request.getOrderSide() == com.marmitt.core.enums.OrderSide.BUY) {
+            BigDecimal price = request.getPrice();
+            if (price == null) {
+                return;
+            }
+            BigDecimal estimatedFee = feeModel.calculateFee(request.getQuantity(), price, config);
+            BigDecimal reservedAmount = request.getQuantity().multiply(price).add(estimatedFee)
+                    .setScale(8, RoundingMode.HALF_UP);
+            balanceStore.release(quote, reservedAmount);
+            return;
+        }
+        balanceStore.release(base, request.getQuantity());
     }
 
     /**

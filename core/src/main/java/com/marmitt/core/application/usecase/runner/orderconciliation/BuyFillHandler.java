@@ -47,6 +47,21 @@ class BuyFillHandler {
                 transaction.getId(), transaction.getClientOrderId(), fillIncrement, fillPrice);
 
         Position position = strategyRunnerRepository
+                .findPositionByOpenedByTransactionId(transaction.getId())
+                .orElse(null);
+
+        if (position != null) {
+            log.debug("orderConciliation: position found by openedByTransactionId positionId={} - adding quantity for transactionId={}",
+                    position.getId(), transaction.getId());
+            position.addQuantity(fillIncrement, fillPrice);
+            strategyRunnerRepository.savePosition(position);
+            strategyRunnerRepository.saveTransaction(transaction);
+            log.info("orderConciliation: BUY fill positionId={} runnerId={} increment={} fillPrice={}",
+                    position.getId(), transaction.getRunnerId(), fillIncrement, fillPrice);
+            return;
+        }
+
+        position = strategyRunnerRepository
                 .findOpenPositionByRunnerIdAndSymbol(transaction.getRunnerId(), transaction.getSymbol())
                 .orElse(null);
 
@@ -61,8 +76,10 @@ class BuyFillHandler {
                 log.debug("orderConciliation: concurrent open position detected - reloading for transactionId={}",
                         transaction.getId());
                 position = strategyRunnerRepository
-                        .findOpenPositionByRunnerIdAndSymbol(transaction.getRunnerId(), transaction.getSymbol())
-                        .orElse(null);
+                        .findPositionByOpenedByTransactionId(transaction.getId())
+                        .orElseGet(() -> strategyRunnerRepository
+                                .findOpenPositionByRunnerIdAndSymbol(transaction.getRunnerId(), transaction.getSymbol())
+                                .orElse(null));
                 if (position == null) {
                     throw new IllegalStateException("Open position not found after unique constraint conflict");
                 }

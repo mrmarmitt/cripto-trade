@@ -22,6 +22,17 @@ public interface RunnerPositionJdbcRepository extends CrudRepository<RunnerPosit
             @Param("symbol") String symbol
     );
 
+    @Query("SELECT * FROM positions WHERE opened_by_transaction_id = :transactionId AND status IN ('OPEN','CLOSING') ORDER BY updated_at DESC LIMIT 1")
+    Optional<RunnerPositionEntity> findByOpenedByTransactionId(
+            @Param("transactionId") UUID transactionId
+    );
+
+    @Query("SELECT * FROM positions WHERE runner_id = :runnerId AND UPPER(symbol) = UPPER(:symbol) AND status IN ('OPEN','CLOSING') ORDER BY updated_at DESC LIMIT 1")
+    Optional<RunnerPositionEntity> findActiveByRunnerIdAndSymbol(
+            @Param("runnerId") UUID runnerId,
+            @Param("symbol") String symbol
+    );
+
     @org.springframework.data.jdbc.repository.query.Modifying
     @Query("""
             UPDATE positions
