@@ -3,6 +3,7 @@ package com.marmitt.mock.simulator;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
+import com.marmitt.mock.balance.MockBalanceStore;
 import com.marmitt.mock.config.MockScenarioConfig;
 import lombok.extern.slf4j.Slf4j;
 
@@ -65,8 +66,9 @@ public class MockOrderExecutionSimulator {
     public List<OrderDataDto> buildScenarioEvents(SendOrderRequest request,
                                                   String orderId,
                                                   MockScenarioConfig config,
-                                                  Random random) {
-        List<OrderDataDto> rejected = validateOrder(request, orderId, config);
+                                                  Random random,
+                                                  MockBalanceStore balanceStore) {
+        List<OrderDataDto> rejected = validateOrder(request, orderId, config, balanceStore);
         if (!rejected.isEmpty()) {
             return applyOrderingAndDuplicates(rejected, config, random);
         }
@@ -92,6 +94,7 @@ public class MockOrderExecutionSimulator {
         if (partialCount == 0) {
             BigDecimal fee = calculateFee(request.getQuantity(), baseExecutedPrice, config);
             events.add(simulateFilled(request, orderId, baseExecutedPrice, fee));
+            applyBalanceForFill(request, balanceStore, baseExecutedPrice, request.getQuantity(), fee);
             return applyOrderingAndDuplicates(events, config, random);
         }
 
@@ -107,6 +110,7 @@ public class MockOrderExecutionSimulator {
             BigDecimal eventPrice = calculateEventExecutedPrice(request, baseExecutedPrice, config, random);
             BigDecimal fee = calculateFee(increment, eventPrice, config);
             events.add(simulatePartial(request, orderId, executedQty, eventPrice, fee));
+            applyBalanceForFill(request, balanceStore, eventPrice, increment, fee);
         }
 
         BigDecimal finalIncrement = request.getQuantity().subtract(previousExecuted);
@@ -116,6 +120,7 @@ public class MockOrderExecutionSimulator {
         BigDecimal finalPrice = calculateEventExecutedPrice(request, baseExecutedPrice, config, random);
         BigDecimal finalFee = calculateFee(finalIncrement, finalPrice, config);
         events.add(simulateFilled(request, orderId, finalPrice, finalFee));
+        applyBalanceForFill(request, balanceStore, finalPrice, finalIncrement, finalFee);
         return applyOrderingAndDuplicates(events, config, random);
     }
 
@@ -408,7 +413,10 @@ public class MockOrderExecutionSimulator {
         return executedPrice;
     }
 
-    private List<OrderDataDto> validateOrder(SendOrderRequest request, String orderId, MockScenarioConfig config) {
+    private List<OrderDataDto> validateOrder(SendOrderRequest request,
+                                             String orderId,
+                                             MockScenarioConfig config,
+                                             MockBalanceStore balanceStore) {
         MockScenarioConfig.ValidationSettings validation = config.validation();
         BigDecimal qty = request.getQuantity();
         if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
@@ -433,6 +441,10 @@ public class MockOrderExecutionSimulator {
                 return List.of(simulateRejected(request, orderId, "MIN_NOTIONAL"));
             }
         }
+
+        if (!reserveForRequest(request, config, balanceStore)) {
+            return List.of(simulateRejected(request, orderId, "INSUFFICIENT_BALANCE"));
+        }
         return List.of();
     }
 
@@ -442,6 +454,48 @@ public class MockOrderExecutionSimulator {
         }
         BigDecimal remainder = value.remainder(step);
         return remainder.compareTo(BigDecimal.ZERO) == 0;
+    }
+
+    private boolean reserveForRequest(SendOrderRequest request,
+                                      MockScenarioConfig config,
+                                      MockBalanceStore balanceStore) {
+        Symbol symbol = Symbol.of(request.getSymbol());
+        String base = symbol.getBaseAsset();
+        String quote = symbol.getQuoteAsset();
+        BigDecimal qty = request.getQuantity();
+        BigDecimal price = request.getPrice();
+        if (request.getOrderSide() == com.marmitt.core.enums.OrderSide.BUY) {
+            if (price == null) {
+                return false;
+            }
+            BigDecimal estimatedFee = calculateFee(qty, price, config);
+            BigDecimal required = qty.multiply(price).add(estimatedFee).setScale(8, RoundingMode.HALF_UP);
+            return balanceStore.reserve(quote, required);
+        }
+        return balanceStore.reserve(base, qty);
+    }
+
+    private void applyBalanceForFill(SendOrderRequest request,
+                                     MockBalanceStore balanceStore,
+                                     BigDecimal executedPrice,
+                                     BigDecimal increment,
+                                     BigDecimal fee) {
+        if (increment == null || increment.compareTo(BigDecimal.ZERO) <= 0) {
+            return;
+        }
+        Symbol symbol = Symbol.of(request.getSymbol());
+        String base = symbol.getBaseAsset();
+        String quote = symbol.getQuoteAsset();
+        if (request.getOrderSide() == com.marmitt.core.enums.OrderSide.BUY) {
+            BigDecimal cost = increment.multiply(executedPrice).add(fee).setScale(8, RoundingMode.HALF_UP);
+            balanceStore.debitReserved(quote, cost);
+            balanceStore.credit(base, increment);
+            return;
+        }
+
+        balanceStore.debitReserved(base, increment);
+        BigDecimal proceeds = increment.multiply(executedPrice).subtract(fee).setScale(8, RoundingMode.HALF_UP);
+        balanceStore.credit(quote, proceeds);
     }
 
     /**

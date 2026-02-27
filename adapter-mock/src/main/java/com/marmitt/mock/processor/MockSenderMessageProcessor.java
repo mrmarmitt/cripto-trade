@@ -7,6 +7,7 @@ import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
+import com.marmitt.mock.balance.MockBalanceStore;
 import com.marmitt.mock.config.MockScenarioConfig;
 import com.marmitt.mock.simulator.MockOrderExecutionSimulator;
 import lombok.extern.slf4j.Slf4j;
@@ -28,6 +29,7 @@ public class MockSenderMessageProcessor implements SenderMessageProcessorPort {
     private final UUID mockConnectionId;
     private final MockScenarioConfig config;
     private final Random random;
+    private final MockBalanceStore balanceStore;
 
     public MockSenderMessageProcessor(
             EventPublisherPort eventPublisher,
@@ -41,6 +43,7 @@ public class MockSenderMessageProcessor implements SenderMessageProcessorPort {
         this.mockConnectionId = UUID.randomUUID();
         this.config = config;
         this.random = new Random(config.randomSeed());
+        this.balanceStore = new MockBalanceStore(config.balances().initialBalances());
     }
 
     @Override
@@ -76,7 +79,7 @@ public class MockSenderMessageProcessor implements SenderMessageProcessorPort {
     private void simulateOrderExecutionAsync(SendOrderRequest orderRequest) {
         try {
             String orderId = "MOCK_" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
-            List<OrderDataDto> events = simulator.buildScenarioEvents(orderRequest, orderId, config, random);
+            List<OrderDataDto> events = simulator.buildScenarioEvents(orderRequest, orderId, config, random, balanceStore);
 
             for (OrderDataDto event : events) {
                 sleepLatency();

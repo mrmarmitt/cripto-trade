@@ -12,7 +12,8 @@ public record MockScenarioConfig(
         Failures failures,
         FeeSettings fees,
         SlippageSettings slippage,
-        ValidationSettings validation
+        ValidationSettings validation,
+        BalanceSettings balances
 ) {
 
     public MockScenarioConfig {
@@ -24,6 +25,7 @@ public record MockScenarioConfig(
         Objects.requireNonNull(fees, "fees cannot be null");
         Objects.requireNonNull(slippage, "slippage cannot be null");
         Objects.requireNonNull(validation, "validation cannot be null");
+        Objects.requireNonNull(balances, "balances cannot be null");
 
         if (timing.latencyMinMs() < 0 || timing.latencyMaxMs() < 0 || timing.latencyMaxMs() < timing.latencyMinMs()) {
             throw new IllegalArgumentException("Invalid latency range");
@@ -41,6 +43,7 @@ public record MockScenarioConfig(
         validateFeeSettings(fees);
         validateSlippageSettings(slippage);
         validateValidationSettings(validation);
+        validateBalanceSettings(balances);
     }
 
     private static void validateRatio(double value, String label) {
@@ -91,7 +94,22 @@ public record MockScenarioConfig(
         }
     }
 
+    private static void validateBalanceSettings(BalanceSettings settings) {
+        Objects.requireNonNull(settings.initialBalances(), "balances.initialBalances cannot be null");
+        for (var entry : settings.initialBalances().entrySet()) {
+            if (entry.getKey() == null || entry.getKey().isBlank()) {
+                throw new IllegalArgumentException("balance asset cannot be null or blank");
+            }
+            if (entry.getValue() == null || entry.getValue().compareTo(BigDecimal.ZERO) < 0) {
+                throw new IllegalArgumentException("balance amount must be >= 0");
+            }
+        }
+    }
+
     public static MockScenarioConfig defaultConfig() {
+        java.util.Map<String, BigDecimal> initialBalances = new java.util.HashMap<>();
+        initialBalances.put("USDT", new BigDecimal("10000.00"));
+        initialBalances.put("BTC", BigDecimal.ZERO);
         return new MockScenarioConfig(
                 42L,
                 new Timing(100L, 400L),
@@ -101,7 +119,8 @@ public record MockScenarioConfig(
                 new Failures(0.02, 0.01),
                 new FeeSettings(FeeMode.SAME_CURRENCY, new BigDecimal("0.0010")),
                 new SlippageSettings(SlippageMode.MARKET_ONLY, 15, 0.10, 2),
-                new ValidationSettings(new BigDecimal("0.000001"), new BigDecimal("0.000001"), new BigDecimal("1.0"))
+                new ValidationSettings(new BigDecimal("0.000001"), new BigDecimal("0.000001"), new BigDecimal("1.0")),
+                new BalanceSettings(java.util.Map.copyOf(initialBalances))
         );
     }
 
@@ -146,4 +165,9 @@ public record MockScenarioConfig(
     public record ValidationSettings(BigDecimal minQty,
                                      BigDecimal stepSize,
                                      BigDecimal minNotional) {}
+
+    /**
+     * initialBalances: saldo inicial disponível por asset (ex.: USDT, BTC).
+     */
+    public record BalanceSettings(java.util.Map<String, BigDecimal> initialBalances) {}
 }
