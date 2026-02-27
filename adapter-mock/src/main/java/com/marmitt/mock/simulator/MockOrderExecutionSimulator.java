@@ -83,17 +83,30 @@ public class MockOrderExecutionSimulator {
 
         int partialCount = Math.max(0, config.flow().partialFillCount());
         if (partialCount == 0) {
-            events.add(simulateFilled(request, orderId));
+            BigDecimal fee = calculateFee(request.getQuantity(), request.getPrice(), config);
+            events.add(simulateFilled(request, orderId, fee));
             return applyOrderingAndDuplicates(events, config, random);
         }
 
         List<BigDecimal> fractions = resolveFractions(partialCount, config.flow().partialFillFractions());
+        BigDecimal previousExecuted = BigDecimal.ZERO;
         for (BigDecimal fraction : fractions) {
             BigDecimal executedQty = request.getQuantity().multiply(fraction).setScale(8, RoundingMode.HALF_UP);
-            events.add(simulatePartial(request, orderId, executedQty));
+            BigDecimal increment = executedQty.subtract(previousExecuted);
+            if (increment.compareTo(BigDecimal.ZERO) < 0) {
+                increment = BigDecimal.ZERO;
+            }
+            previousExecuted = executedQty;
+            BigDecimal fee = calculateFee(increment, request.getPrice(), config);
+            events.add(simulatePartial(request, orderId, executedQty, fee));
         }
 
-        events.add(simulateFilled(request, orderId));
+        BigDecimal finalIncrement = request.getQuantity().subtract(previousExecuted);
+        if (finalIncrement.compareTo(BigDecimal.ZERO) < 0) {
+            finalIncrement = BigDecimal.ZERO;
+        }
+        BigDecimal finalFee = calculateFee(finalIncrement, request.getPrice(), config);
+        events.add(simulateFilled(request, orderId, finalFee));
         return applyOrderingAndDuplicates(events, config, random);
     }
 
@@ -115,7 +128,8 @@ public class MockOrderExecutionSimulator {
         );
     }
 
-    public OrderDataDto simulatePartial(SendOrderRequest request, String orderId, BigDecimal executedQty) {
+    public OrderDataDto simulatePartial(SendOrderRequest request, String orderId,
+                                        BigDecimal executedQty, BigDecimal fee) {
         return new OrderDataDto(
                 orderId,
                 request.getClientOrderId(),
@@ -126,14 +140,14 @@ public class MockOrderExecutionSimulator {
                 executedQty,
                 request.getPrice(),
                 request.getPrice(),
-                BigDecimal.ZERO,
+                fee,
                 OrderDataDto.OrderStatus.PARTIALLY_FILLED,
                 null,
                 Instant.now()
         );
     }
 
-    public OrderDataDto simulateFilled(SendOrderRequest request, String orderId) {
+    public OrderDataDto simulateFilled(SendOrderRequest request, String orderId, BigDecimal fee) {
         return new OrderDataDto(
                 orderId,
                 request.getClientOrderId(),
@@ -144,7 +158,7 @@ public class MockOrderExecutionSimulator {
                 request.getQuantity(),
                 request.getPrice(),
                 request.getPrice(),
-                BigDecimal.ZERO,
+                fee,
                 OrderDataDto.OrderStatus.FILLED,
                 null,
                 Instant.now()
@@ -258,6 +272,24 @@ public class MockOrderExecutionSimulator {
             }
         }
         return fractions;
+    }
+
+    private BigDecimal calculateFee(BigDecimal increment, BigDecimal price, MockScenarioConfig config) {
+        if (increment == null || price == null) {
+            return BigDecimal.ZERO;
+        }
+        if (increment.compareTo(BigDecimal.ZERO) <= 0) {
+            return BigDecimal.ZERO;
+        }
+        MockScenarioConfig.FeeSettings feeSettings = config.fees();
+        if (feeSettings.mode() == MockScenarioConfig.FeeMode.NONE) {
+            return BigDecimal.ZERO;
+        }
+        if (feeSettings.feeRate().compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ZERO;
+        }
+        BigDecimal gross = increment.multiply(price);
+        return gross.multiply(feeSettings.feeRate()).setScale(8, RoundingMode.HALF_UP);
     }
 
     /**
