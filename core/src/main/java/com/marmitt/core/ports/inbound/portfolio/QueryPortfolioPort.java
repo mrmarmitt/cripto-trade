@@ -1,6 +1,8 @@
 package com.marmitt.core.ports.inbound.portfolio;
 
 import com.marmitt.core.dto.portfolio.PortfolioDto;
+import com.marmitt.core.dto.portfolio.GlobalBalanceDto;
+import com.marmitt.core.dto.portfolio.PortfolioPnlDto;
 import com.marmitt.core.dto.portfolio.TransactionDto;
 
 import java.util.List;
@@ -16,4 +18,8 @@ public interface QueryPortfolioPort {
     List<PortfolioDto> findBySymbol(String symbol);
 
     List<TransactionDto> findTransactionsByPortfolioId(UUID portfolioId);
+
+    Optional<GlobalBalanceDto> findBalanceByPortfolioId(UUID portfolioId);
+
+    Optional<PortfolioPnlDto> findPnlByPortfolioId(UUID portfolioId);
 }

@@ -27,8 +27,13 @@ public class PortfolioConfig {
     @Bean
     public QueryPortfolioPort queryPortfolio(
             PortfolioRepositoryPort portfolioRepository,
-            StrategyRunnerRepositoryPort strategyRunnerRepository
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            GlobalBalanceRepositoryPort globalBalanceRepository
     ) {
-        return new QueryPortfolioUseCase(portfolioRepository, strategyRunnerRepository);
+        return new QueryPortfolioUseCase(
+                portfolioRepository,
+                strategyRunnerRepository,
+                globalBalanceRepository
+        );
     }
 }
