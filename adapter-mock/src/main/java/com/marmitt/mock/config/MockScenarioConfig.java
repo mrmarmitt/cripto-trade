@@ -11,7 +11,8 @@ public record MockScenarioConfig(
         OutOfOrder outOfOrder,
         Failures failures,
         FeeSettings fees,
-        SlippageSettings slippage
+        SlippageSettings slippage,
+        ValidationSettings validation
 ) {
 
     public MockScenarioConfig {
@@ -22,6 +23,7 @@ public record MockScenarioConfig(
         Objects.requireNonNull(failures, "failures cannot be null");
         Objects.requireNonNull(fees, "fees cannot be null");
         Objects.requireNonNull(slippage, "slippage cannot be null");
+        Objects.requireNonNull(validation, "validation cannot be null");
 
         if (timing.latencyMinMs() < 0 || timing.latencyMaxMs() < 0 || timing.latencyMaxMs() < timing.latencyMinMs()) {
             throw new IllegalArgumentException("Invalid latency range");
@@ -38,6 +40,7 @@ public record MockScenarioConfig(
         validateRatio(failures.expireRatio(), "expireRatio");
         validateFeeSettings(fees);
         validateSlippageSettings(slippage);
+        validateValidationSettings(validation);
     }
 
     private static void validateRatio(double value, String label) {
@@ -73,6 +76,21 @@ public record MockScenarioConfig(
         }
     }
 
+    private static void validateValidationSettings(ValidationSettings settings) {
+        Objects.requireNonNull(settings.minQty(), "validation.minQty cannot be null");
+        Objects.requireNonNull(settings.stepSize(), "validation.stepSize cannot be null");
+        Objects.requireNonNull(settings.minNotional(), "validation.minNotional cannot be null");
+        if (settings.minQty().compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("minQty cannot be negative");
+        }
+        if (settings.stepSize().compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("stepSize cannot be negative");
+        }
+        if (settings.minNotional().compareTo(BigDecimal.ZERO) < 0) {
+            throw new IllegalArgumentException("minNotional cannot be negative");
+        }
+    }
+
     public static MockScenarioConfig defaultConfig() {
         return new MockScenarioConfig(
                 42L,
@@ -82,7 +100,8 @@ public record MockScenarioConfig(
                 new OutOfOrder(0.05),
                 new Failures(0.02, 0.01),
                 new FeeSettings(FeeMode.SAME_CURRENCY, new BigDecimal("0.0010")),
-                new SlippageSettings(SlippageMode.MARKET_ONLY, 15, 0.10, 2)
+                new SlippageSettings(SlippageMode.MARKET_ONLY, 15, 0.10, 2),
+                new ValidationSettings(new BigDecimal("0.000001"), new BigDecimal("0.000001"), new BigDecimal("1.0"))
         );
     }
 
@@ -118,4 +137,13 @@ public record MockScenarioConfig(
                                    int maxSlippageBps,
                                    double priceImprovementChance,
                                    int priceStepBps) {}
+
+    /**
+     * minQty: quantidade mínima (base asset).
+     * stepSize: incremento mínimo para quantidade.
+     * minNotional: valor mínimo da ordem (quote asset).
+     */
+    public record ValidationSettings(BigDecimal minQty,
+                                     BigDecimal stepSize,
+                                     BigDecimal minNotional) {}
 }

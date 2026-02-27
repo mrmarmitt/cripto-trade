@@ -66,6 +66,11 @@ public class MockOrderExecutionSimulator {
                                                   String orderId,
                                                   MockScenarioConfig config,
                                                   Random random) {
+        List<OrderDataDto> rejected = validateOrder(request, orderId, config);
+        if (!rejected.isEmpty()) {
+            return applyOrderingAndDuplicates(rejected, config, random);
+        }
+
         List<OrderDataDto> events = new ArrayList<>();
 
         OrderDataDto accepted = simulateAccepted(request, orderId);
@@ -202,6 +207,24 @@ public class MockOrderExecutionSimulator {
                 BigDecimal.ZERO,
                 OrderDataDto.OrderStatus.EXPIRED,
                 null,
+                Instant.now()
+        );
+    }
+
+    public OrderDataDto simulateRejected(SendOrderRequest request, String orderId, String reason) {
+        return new OrderDataDto(
+                orderId,
+                request.getClientOrderId(),
+                Symbol.of(request.getSymbol()),
+                convertOrderSide(request.getOrderSide()),
+                convertOrderType(request.getOrderType()),
+                request.getQuantity(),
+                BigDecimal.ZERO,
+                request.getPrice(),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.REJECTED,
+                reason,
                 Instant.now()
         );
     }
@@ -383,6 +406,42 @@ public class MockOrderExecutionSimulator {
             return limitPrice;
         }
         return executedPrice;
+    }
+
+    private List<OrderDataDto> validateOrder(SendOrderRequest request, String orderId, MockScenarioConfig config) {
+        MockScenarioConfig.ValidationSettings validation = config.validation();
+        BigDecimal qty = request.getQuantity();
+        if (qty == null || qty.compareTo(BigDecimal.ZERO) <= 0) {
+            return List.of(simulateRejected(request, orderId, "INVALID_QTY"));
+        }
+        if (validation.minQty().compareTo(BigDecimal.ZERO) > 0
+                && qty.compareTo(validation.minQty()) < 0) {
+            return List.of(simulateRejected(request, orderId, "MIN_QTY"));
+        }
+        if (validation.stepSize().compareTo(BigDecimal.ZERO) > 0
+                && !isMultipleOfStep(qty, validation.stepSize())) {
+            return List.of(simulateRejected(request, orderId, "STEP_SIZE"));
+        }
+
+        BigDecimal price = request.getPrice();
+        if (validation.minNotional().compareTo(BigDecimal.ZERO) > 0) {
+            if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
+                return List.of(simulateRejected(request, orderId, "MISSING_PRICE"));
+            }
+            BigDecimal notional = qty.multiply(price).setScale(8, RoundingMode.HALF_UP);
+            if (notional.compareTo(validation.minNotional()) < 0) {
+                return List.of(simulateRejected(request, orderId, "MIN_NOTIONAL"));
+            }
+        }
+        return List.of();
+    }
+
+    private boolean isMultipleOfStep(BigDecimal value, BigDecimal step) {
+        if (step.compareTo(BigDecimal.ZERO) <= 0) {
+            return true;
+        }
+        BigDecimal remainder = value.remainder(step);
+        return remainder.compareTo(BigDecimal.ZERO) == 0;
     }
 
     /**
