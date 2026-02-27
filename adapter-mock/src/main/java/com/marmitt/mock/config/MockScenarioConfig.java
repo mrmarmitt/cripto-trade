@@ -10,7 +10,8 @@ public record MockScenarioConfig(
         Duplicates duplicates,
         OutOfOrder outOfOrder,
         Failures failures,
-        FeeSettings fees
+        FeeSettings fees,
+        SlippageSettings slippage
 ) {
 
     public MockScenarioConfig {
@@ -20,6 +21,7 @@ public record MockScenarioConfig(
         Objects.requireNonNull(outOfOrder, "outOfOrder cannot be null");
         Objects.requireNonNull(failures, "failures cannot be null");
         Objects.requireNonNull(fees, "fees cannot be null");
+        Objects.requireNonNull(slippage, "slippage cannot be null");
 
         if (timing.latencyMinMs() < 0 || timing.latencyMaxMs() < 0 || timing.latencyMaxMs() < timing.latencyMinMs()) {
             throw new IllegalArgumentException("Invalid latency range");
@@ -35,6 +37,7 @@ public record MockScenarioConfig(
         validateRatio(failures.cancelRatio(), "cancelRatio");
         validateRatio(failures.expireRatio(), "expireRatio");
         validateFeeSettings(fees);
+        validateSlippageSettings(slippage);
     }
 
     private static void validateRatio(double value, String label) {
@@ -54,6 +57,22 @@ public record MockScenarioConfig(
         }
     }
 
+    private static void validateSlippageSettings(SlippageSettings settings) {
+        Objects.requireNonNull(settings.mode(), "slippage.mode cannot be null");
+        if (settings.maxSlippageBps() < 0) {
+            throw new IllegalArgumentException("maxSlippageBps cannot be negative");
+        }
+        if (settings.priceImprovementChance() < 0.0 || settings.priceImprovementChance() > 1.0) {
+            throw new IllegalArgumentException("priceImprovementChance must be between 0 and 1");
+        }
+        if (settings.priceStepBps() < 0) {
+            throw new IllegalArgumentException("priceStepBps cannot be negative");
+        }
+        if (settings.priceStepBps() > settings.maxSlippageBps()) {
+            throw new IllegalArgumentException("priceStepBps cannot exceed maxSlippageBps");
+        }
+    }
+
     public static MockScenarioConfig defaultConfig() {
         return new MockScenarioConfig(
                 42L,
@@ -62,7 +81,8 @@ public record MockScenarioConfig(
                 new Duplicates(0.10, 1),
                 new OutOfOrder(0.05),
                 new Failures(0.02, 0.01),
-                new FeeSettings(FeeMode.SAME_CURRENCY, new BigDecimal("0.0010"))
+                new FeeSettings(FeeMode.SAME_CURRENCY, new BigDecimal("0.0010")),
+                new SlippageSettings(SlippageMode.MARKET_ONLY, 15, 0.10, 2)
         );
     }
 
@@ -82,4 +102,20 @@ public record MockScenarioConfig(
     }
 
     public record FeeSettings(FeeMode mode, BigDecimal feeRate) {}
+
+    public enum SlippageMode {
+        NONE,
+        MARKET_ONLY,
+        ALL_ORDERS
+    }
+
+    /**
+     * maxSlippageBps: limite absoluto de slippage em basis points (1 bps = 0.01%).
+     * priceImprovementChance: chance de executar com melhoria de preco.
+     * priceStepBps: granularidade de slippage para simular book discreto.
+     */
+    public record SlippageSettings(SlippageMode mode,
+                                   int maxSlippageBps,
+                                   double priceImprovementChance,
+                                   int priceStepBps) {}
 }
