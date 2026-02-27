@@ -71,22 +71,22 @@ public class MockOrderExecutionSimulator {
         OrderDataDto accepted = simulateAccepted(request, orderId);
         events.add(accepted);
 
-        BigDecimal executedPrice = calculateExecutedPrice(request, config, random);
+        BigDecimal baseExecutedPrice = calculateExecutedPrice(request, config, random);
 
         OrderDataDto.OrderStatus failureStatus = pickFailureStatus(config, random);
         if (failureStatus != null) {
             if (failureStatus == OrderDataDto.OrderStatus.CANCELED) {
-                events.add(simulateCanceled(request, orderId, executedPrice));
+                events.add(simulateCanceled(request, orderId, baseExecutedPrice));
             } else {
-                events.add(simulateExpired(request, orderId, executedPrice));
+                events.add(simulateExpired(request, orderId, baseExecutedPrice));
             }
             return applyOrderingAndDuplicates(events, config, random);
         }
 
         int partialCount = Math.max(0, config.flow().partialFillCount());
         if (partialCount == 0) {
-            BigDecimal fee = calculateFee(request.getQuantity(), executedPrice, config);
-            events.add(simulateFilled(request, orderId, executedPrice, fee));
+            BigDecimal fee = calculateFee(request.getQuantity(), baseExecutedPrice, config);
+            events.add(simulateFilled(request, orderId, baseExecutedPrice, fee));
             return applyOrderingAndDuplicates(events, config, random);
         }
 
@@ -99,16 +99,18 @@ public class MockOrderExecutionSimulator {
                 increment = BigDecimal.ZERO;
             }
             previousExecuted = executedQty;
-            BigDecimal fee = calculateFee(increment, executedPrice, config);
-            events.add(simulatePartial(request, orderId, executedQty, executedPrice, fee));
+            BigDecimal eventPrice = calculateEventExecutedPrice(request, baseExecutedPrice, config, random);
+            BigDecimal fee = calculateFee(increment, eventPrice, config);
+            events.add(simulatePartial(request, orderId, executedQty, eventPrice, fee));
         }
 
         BigDecimal finalIncrement = request.getQuantity().subtract(previousExecuted);
         if (finalIncrement.compareTo(BigDecimal.ZERO) < 0) {
             finalIncrement = BigDecimal.ZERO;
         }
-        BigDecimal finalFee = calculateFee(finalIncrement, executedPrice, config);
-        events.add(simulateFilled(request, orderId, executedPrice, finalFee));
+        BigDecimal finalPrice = calculateEventExecutedPrice(request, baseExecutedPrice, config, random);
+        BigDecimal finalFee = calculateFee(finalIncrement, finalPrice, config);
+        events.add(simulateFilled(request, orderId, finalPrice, finalFee));
         return applyOrderingAndDuplicates(events, config, random);
     }
 
@@ -330,7 +332,57 @@ public class MockOrderExecutionSimulator {
         if (executed.compareTo(BigDecimal.ZERO) <= 0) {
             return request.getPrice();
         }
-        return executed;
+        return applyLimitConstraint(request, executed);
+    }
+
+    private BigDecimal calculateEventExecutedPrice(SendOrderRequest request,
+                                                   BigDecimal basePrice,
+                                                   MockScenarioConfig config,
+                                                   Random random) {
+        if (basePrice == null || basePrice.compareTo(BigDecimal.ZERO) <= 0) {
+            return calculateExecutedPrice(request, config, random);
+        }
+        MockScenarioConfig.SlippageSettings slippage = config.slippage();
+        if (slippage.mode() == MockScenarioConfig.SlippageMode.NONE) {
+            return basePrice;
+        }
+        int maxBps = slippage.maxSlippageBps();
+        if (maxBps <= 0) {
+            return basePrice;
+        }
+        int stepBps = Math.max(1, slippage.priceStepBps());
+        int steps = Math.max(1, maxBps / stepBps);
+        int stepCount = random.nextInt(steps + 1);
+        int bps = stepCount * stepBps;
+        boolean improve = random.nextDouble() < slippage.priceImprovementChance();
+        int signedBps = improve ? -bps : bps;
+
+        BigDecimal multiplier = BigDecimal.valueOf(10000L + signedBps)
+                .divide(BigDecimal.valueOf(10000L), 8, RoundingMode.HALF_UP);
+        BigDecimal executed = basePrice.multiply(multiplier).setScale(8, RoundingMode.HALF_UP);
+        if (executed.compareTo(BigDecimal.ZERO) <= 0) {
+            return basePrice;
+        }
+        return applyLimitConstraint(request, executed);
+    }
+
+    private BigDecimal applyLimitConstraint(SendOrderRequest request, BigDecimal executedPrice) {
+        if (request.getOrderType() != com.marmitt.core.enums.OrderType.LIMIT) {
+            return executedPrice;
+        }
+        BigDecimal limitPrice = request.getPrice();
+        if (limitPrice == null) {
+            return executedPrice;
+        }
+        if (request.getOrderSide() == com.marmitt.core.enums.OrderSide.BUY
+                && executedPrice.compareTo(limitPrice) > 0) {
+            return limitPrice;
+        }
+        if (request.getOrderSide() == com.marmitt.core.enums.OrderSide.SELL
+                && executedPrice.compareTo(limitPrice) < 0) {
+            return limitPrice;
+        }
+        return executedPrice;
     }
 
     /**
