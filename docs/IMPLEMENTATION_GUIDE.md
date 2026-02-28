@@ -4764,18 +4764,17 @@ public interface TradingStrategy {
     boolean isEnabled();
 
     /**
-     * Executa a estratégia com dados de mercado e contexto do Runner.
+     * Executa a estrategia com dados de mercado e contexto operacional do Runner.
      *
-     * @param inputData       Dados de mercado (preços, volume, timestamp)
-     * @param portfolioContext Contexto do Runner (posição, capital, limites)
-     * @return Decisão da estratégia com quantity absoluta
+     * @param inputData dados de mercado (precos, volume, timestamp)
+     * @param strategyContext contexto operacional consolidado do Runner
+     * @return decisao da estrategia com quantity absoluta
      */
     StrategyOutputDto executeStrategy(StrategyInputDto inputData,
-                                      PortfolioContextDto portfolioContext);
+                                      StrategyContextDto strategyContext);
 }
 ```
-
-**Evolução:** O parâmetro `PortfolioContextDto` será renomeado para `StrategyContextDto` (Seção 14.4). A assinatura evolui para:
+**Assinatura ativa:** o contrato atual usa `StrategyContextDto` como contexto operacional da Strategy:
 
 ```java
 StrategyOutputDto executeStrategy(StrategyInputDto inputData,
@@ -4819,60 +4818,45 @@ public record StrategyInputDto(
 
 **Regra:** O `StrategyInputDto` **não deve conter** informações de posição, saldo ou estado do Runner. Essa separação garante que a Strategy possa ser testada isoladamente com dados de mercado puros.
 
-### 14.4 Contrato de Contexto: PortfolioContextDto → StrategyContextDto
+### 14.4 Contrato de Contexto: StrategyContextDto (Ativo)
 
-O contexto do Runner é injetado como segundo parâmetro da Strategy. O DTO atual (`PortfolioContextDto`) mistura responsabilidades do Portfolio e do Runner. A evolução proposta renomeia e reestrutura para refletir a separação de agregados.
+O contexto do Runner e injetado como segundo parametro da Strategy por meio de `StrategyContextDto`. Esse contrato ja esta ativo no core e nas estrategias implementadas.
 
-#### 14.4.1 Estado Atual (Código Existente)
+#### 14.4.1 Contrato Ativo (Implementado)
 
-```java
-public record PortfolioContextDto(
-    UUID portfolioId,
-    String portfolioName,
-    Symbol symbol,
-    Asset totalCapital,
-    Asset availableBalance,
-    Asset allocatedBalance,
-    Position position,
-    List<OpenBuyEntryDto> openTransactions,
-    List<PendingSellEntryDto> pendingSellOrders,
-    BigDecimal realizedPnL,
-    BigDecimal minimumOperationAmount,
-    BigDecimal maxExposurePerSymbol
-)
-```
+O contrato legado `PortfolioContextDto` foi removido do fluxo principal. O contrato ativo da Strategy e `StrategyContextDto`.
 
-#### 14.4.2 Estado Alvo: StrategyContextDto
+#### 14.4.2 Estrutura do StrategyContextDto
 
-A evolução renomeia `PortfolioContextDto` → `StrategyContextDto` e ajusta os campos para refletir o modelo de dois agregados:
+Estrutura do contrato ativo, refletindo a separacao de agregados Portfolio e Runner:
 
 ```java
 public record StrategyContextDto(
-    // --- Identificação ---
-    UUID runnerId,                          // Substitui portfolioId
-    Symbol symbol,                          // Par de trading
+    // --- Identificacao ---
+    UUID runnerId,
+    Symbol symbol,
 
-    // --- Posição Atual (PositionContext — read-only) ---
-    PositionContext positionContext,         // Agregação da posição para a Strategy
+    // --- Posicao Atual (PositionContext - read-only) ---
+    PositionContext positionContext,
 
-    // --- Lotes Abertos (para estratégias com targetLotId) ---
-    List<OpenLotDto> openLots,              // Lotes de compra disponíveis para venda
+    // --- Lotes Abertos ---
+    List<OpenLotDto> openLots,
 
-    // --- Ordens em Trânsito (visibilidade) ---
-    List<PendingOrderDto> pendingOrders,    // Ordens PENDING/SUBMITTED em voo
+    // --- Ordens em Transito ---
+    List<PendingOrderDto> pendingOrders,
 
-    // --- Capital Disponível (visão limitada) ---
-    BigDecimal availableCapital,            // Capital disponível para novas operações
-    BigDecimal maxOperationAmount,          // Máximo que pode operar em uma ordem
+    // --- Capital Disponivel ---
+    BigDecimal availableCapital,
+    BigDecimal maxOperationAmount,
 
     // --- Limites Operacionais ---
-    BigDecimal minOperationAmount,          // Notional mínimo (minNotional da Exchange)
-    int maxOpenPositions,                   // Limite de posições abertas
-    int currentOpenPositions,               // Posições abertas atuais
+    BigDecimal minOperationAmount,
+    int maxOpenPositions,
+    int currentOpenPositions,
 
     // --- Performance ---
-    BigDecimal realizedPnl,                 // PnL realizado acumulado do Runner
-    BigDecimal unrealizedPnl                // PnL não realizado (posições abertas)
+    BigDecimal realizedPnl,
+    BigDecimal unrealizedPnl
 )
 ```
 
@@ -5060,7 +5044,7 @@ A TradeStrategy é **stateless** — não mantém estado entre invocações:
 | **Sem acesso a outros Runners** | Contexto é limitado ao Runner atual                               | Previne estratégias correlacionadas (escopo V2+)                    |
 | **BigDecimal obrigatório**      | Todos os valores numéricos são BigDecimal, nunca double/float     | Precisão financeira (Seção 8.2)                                     |
 
-### 14.8 Mapa de Migração: PortfolioContextDto → StrategyContextDto
+### 14.8 Mapa de Migracao (Concluido): PortfolioContextDto -> StrategyContextDto
 
 | Campo Atual (PortfolioContextDto)  | Campo Alvo (StrategyContextDto)  | Ação                                                      |
 |------------------------------------|----------------------------------|-----------------------------------------------------------|
@@ -5121,7 +5105,7 @@ if (lastTerminalStateAt != null) {
 |-------------------------------------------------|-----------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------|
 | Strategy stateless                              | Testabilidade — strategy pode ser testada com dados de mercado puros, sem infraestrutura            | Strategy não pode manter estado entre invocações (acumuladores, médias móveis devem vir via `additionalData`) |
 | Separação StrategyInputDto / StrategyContextDto | Input = mercado (puro), Context = estado (Runner). Permite trocar a Strategy sem alterar o contexto | Dois objetos em vez de um — levemente mais verboso                                                            |
-| PortfolioContextDto → StrategyContextDto        | Reflete a separação de agregados (Portfolio vs Runner). Strategy vê o Runner, não o Portfolio       | Breaking change — strategies existentes precisam migrar                                                       |
+| PortfolioContextDto -> StrategyContextDto        | Reflete a separação de agregados (Portfolio vs Runner). Strategy vê o Runner, não o Portfolio       | Implementado no core e strategy                                                                                |
 | `availableCapital` como BigDecimal (não Asset)  | Moeda inferida do símbolo. Simplifica o contrato                                                    | Se multi-currency for suportado, precisará voltar a Asset                                                     |
 | Strategy não vê GlobalBalance                   | Isolamento — uma Strategy não deve otimizar baseada no capital de outros Runners                    | Limita estratégias que precisam de visão global (escopo V2+)                                                  |
 | Cooldown implícito (Single mode + Mailbox)      | Zero configuração adicional — o modelo de concorrência já fornece o comportamento                   | Não oferece cooldown time-based configurável (mitigado: config `cooldown.explicit-ms` para V2+)               |
@@ -6022,3 +6006,5 @@ Mapa reverso para localizar rapidamente onde cada fonte de questões foi absorvi
 | Questões adiadas (V2+)                     | 6                                      |
 | **Total de questões rastreadas**           | **51**                                 |
 | **Taxa de resolução**                      | **80%** (41/51 resolvidas ou parciais) |
+
+
