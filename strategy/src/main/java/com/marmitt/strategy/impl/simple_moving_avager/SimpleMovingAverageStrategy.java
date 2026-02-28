@@ -4,7 +4,7 @@ import com.marmitt.core.ports.outbound.strategy.TradingStrategy;
 import com.marmitt.core.dto.strategy.StrategyInputDto;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.dto.strategy.PortfolioContextDto;
-import com.marmitt.core.dto.strategy.OpenBuyEntryDto;
+import com.marmitt.core.dto.strategy.OpenLotDto;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
@@ -64,25 +64,25 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
         BigDecimal currentPrice = input.currentPrice();
         updateHistory(currentPrice);
 
-        // 1. Aguardar histórico mínimo
+        // 1. Aguardar historico minimo
         if (priceHistory.size() < config.movingAveragePeriod()) {
             log.debug("SMA: waiting history {}/{} currentPrice={}",
                     priceHistory.size(), config.movingAveragePeriod(), currentPrice);
             return StrategyOutputDto.hold(STRATEGY_NAME,
-                    "Aguardando histórico: " + priceHistory.size() + "/" + config.movingAveragePeriod());
+                    "Aguardando historico: " + priceHistory.size() + "/" + config.movingAveragePeriod());
         }
 
-        // 2. Verificar lotes abertos — saída por lucro ou timeout
+        // 2. Verificar lotes abertos - saida por lucro ou timeout
         if (portfolioContext.hasOpenLots()) {
-            for (OpenBuyEntryDto lot : portfolioContext.openTransactions()) {
+            for (OpenLotDto lot : portfolioContext.openLots()) {
                 BigDecimal lotProfit = portfolioContext.calculateLotProfit(lot.lotId(), currentPrice)
                         .orElse(BigDecimal.ZERO);
 
-                long minutesActive = Duration.between(lot.executedAt(), Instant.now()).toMinutes();
+                long minutesActive = Duration.between(lot.openedAt(), Instant.now()).toMinutes();
                 boolean isExpired = config.positionTimeoutMinutes() > 0
                         && minutesActive >= config.positionTimeoutMinutes();
 
-                // sellThreshold está em escala decimal (ex: 0.02 = 2%), lotProfit em % (ex: 2.00)
+                // sellThreshold esta em escala decimal (ex: 0.02 = 2%), lotProfit em % (ex: 2.00)
                 boolean isProfitable = lotProfit.compareTo(
                         config.sellThreshold().multiply(BigDecimal.valueOf(100))) >= 0;
 
@@ -94,7 +94,7 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
                     return StrategyOutputDto.sellLot(
                             STRATEGY_NAME,
                             BigDecimal.ONE,
-                            lot.remainingQuantity(),
+                            lot.availableQuantity(),
                             lot.lotId(),
                             reason + " para lote " + lot.lotId()
                     );
@@ -102,7 +102,7 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
             }
         }
 
-        // 3. Sinal de compra — cruzamento de SMA para cima
+        // 3. Sinal de compra - cruzamento de SMA para cima
         BigDecimal sma = calculateSMA();
         BigDecimal previousPrice = resolvePreviousPrice(input);
         log.debug("SMA: current={} previous={} sma={} size={}",
@@ -117,7 +117,7 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
             }
         }
 
-        return StrategyOutputDto.hold(STRATEGY_NAME, "Nenhum sinal de lucro ou cruzamento de média.");
+        return StrategyOutputDto.hold(STRATEGY_NAME, "Nenhum sinal de lucro ou cruzamento de media.");
     }
 
     private void updateHistory(BigDecimal price) {

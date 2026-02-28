@@ -13,20 +13,20 @@ import java.util.UUID;
 
 /**
  * Contexto do Portfolio fornecido para a Strategy
- * Contém todos os dados necessários para que a Strategy possa tomar decisões informadas
+ * Contem todos os dados necessarios para que a Strategy possa tomar decisoes informadas
  */
 @Builder
 public record PortfolioContextDto(
         UUID portfolioId,
         Symbol symbol,                      // Single currency this portfolio manages
         BigDecimal totalCapital,                 // Capital total do portfolio
-        BigDecimal availableBalance,             // Saldo disponível para novas operações
-        BigDecimal allocatedBalance,             // Saldo já alocado em posições
-        List<OpenBuyEntryDto> openTransactions, // Compras executadas (posições abertas)
-        List<PendingSellEntryDto> pendingSellOrders, // Sells PENDING/SUBMITTED em trânsito
+        BigDecimal availableBalance,             // Saldo disponivel para novas operacoes
+        BigDecimal allocatedBalance,             // Saldo ja alocado em posicoes
+        List<OpenLotDto> openLots, // Lotes de compra abertos
+        List<PendingOrderDto> pendingOrders, // Ordens BUY/SELL em transito
         BigDecimal realizedPnL,             // P&L acumulado das vendas realizadas
-        BigDecimal minimumOperationAmount,  // Valor mínimo para operações
-        BigDecimal maxExposurePerSymbol     // % máxima de exposição (agora sempre 100% para single currency)
+        BigDecimal minimumOperationAmount,  // Valor minimo para operacoes
+        BigDecimal maxExposurePerSymbol     // % maxima de exposicao (agora sempre 100% para single currency)
 ) {
 
     public PortfolioContextDto {
@@ -36,21 +36,21 @@ public record PortfolioContextDto(
         Objects.requireNonNull(availableBalance, "Available balance cannot be null");
         Objects.requireNonNull(allocatedBalance, "Allocated balance cannot be null");
         // position can be null - no validation needed
-        // openTransactions can be null or empty
+        // openLots can be null or empty
         Objects.requireNonNull(realizedPnL, "Realized PnL cannot be null");
         Objects.requireNonNull(minimumOperationAmount, "Minimum operation amount cannot be null");
         Objects.requireNonNull(maxExposurePerSymbol, "Max exposure per currency cannot be null");
     }
 
     /**
-     * Verifica se há saldo suficiente para uma operação
+     * Verifica se ha saldo suficiente para uma operacao
      */
     public boolean hasAvailableBalance(BigDecimal amount) {
         return availableBalance.compareTo(amount) >= 0;
     }
 
     /**
-     * Verifica se há saldo mínimo para operação
+     * Verifica se ha saldo minimo para operacao
      */
     public boolean hasMinimumBalance() {
         return availableBalance.compareTo(minimumOperationAmount) >= 0;
@@ -61,57 +61,50 @@ public record PortfolioContextDto(
      * Verifica se existem lotes de compra abertos
      */
     public boolean hasOpenLots() {
-        return openTransactions != null && !openTransactions.isEmpty();
+        return openLots != null && !openLots.isEmpty();
     }
 
     /**
-     * Alias para hasOpenLots() — compatibilidade
+     * Retorna o lote de compra mais antigo (util para stop loss por tempo)
      */
-    public boolean hasOpenTransactions() {
-        return hasOpenLots();
-    }
-
-    /**
-     * Retorna a transação de compra mais antiga (útil para stop loss por tempo)
-     */
-    public Optional<OpenBuyEntryDto> getOldestOpenTransaction() {
-        if (!hasOpenTransactions()) {
+    public Optional<OpenLotDto> getOldestOpenLot() {
+        if (!hasOpenLots()) {
             return Optional.empty();
         }
-        return openTransactions.stream()
-                .min(Comparator.comparing(OpenBuyEntryDto::executedAt));
+        return openLots.stream()
+                .min(Comparator.comparing(OpenLotDto::openedAt));
     }
 
     /**
-     * Verifica se existem ordens de venda pendentes em trânsito
+     * Verifica se existem ordens pendentes em transito
      */
-    public boolean hasPendingSellOrders() {
-        return pendingSellOrders != null && !pendingSellOrders.isEmpty();
+    public boolean hasPendingOrders() {
+        return pendingOrders != null && !pendingOrders.isEmpty();
     }
 
     /**
-     * Retorna quantidade total de sells pendentes em trânsito
+     * Retorna quantidade total de ordens pendentes em transito
      */
-    public BigDecimal getTotalPendingSellQuantity() {
-        if (pendingSellOrders == null) return BigDecimal.ZERO;
-        return pendingSellOrders.stream()
-                .map(PendingSellEntryDto::quantity)
+    public BigDecimal getTotalPendingOrderQuantity() {
+        if (pendingOrders == null) return BigDecimal.ZERO;
+        return pendingOrders.stream()
+                .map(PendingOrderDto::quantity)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
     }
 
     /**
-     * Calcula o percentual de lucro de um lote específico comparando o executedPrice com o preço atual.
-     * @param lotId ID do lote (buy transaction)
-     * @param currentPrice preço de mercado atual
-     * @return percentual de lucro (ex: 5.25 para +5.25%, -2.10 para -2.10%), ou empty se lote não encontrado
+     * Calcula o percentual de lucro de um lote especifico comparando o entryPrice com o preco atual.
+     * @param lotId ID do lote (Position)
+     * @param currentPrice preco de mercado atual
+     * @return percentual de lucro (ex: 5.25 para +5.25%, -2.10 para -2.10%), ou empty se lote nao encontrado
      */
     public Optional<BigDecimal> calculateLotProfit(UUID lotId, BigDecimal currentPrice) {
-        if (openTransactions == null || currentPrice == null) return Optional.empty();
-        return openTransactions.stream()
+        if (openLots == null || currentPrice == null) return Optional.empty();
+        return openLots.stream()
                 .filter(lot -> lot.lotId().equals(lotId))
                 .findFirst()
                 .map(lot -> {
-                    BigDecimal entryPrice = lot.executedPrice();
+                    BigDecimal entryPrice = lot.entryPrice();
                     if (entryPrice.compareTo(BigDecimal.ZERO) == 0) return BigDecimal.ZERO;
                     return currentPrice.subtract(entryPrice)
                             .divide(entryPrice, 4, RoundingMode.HALF_UP)

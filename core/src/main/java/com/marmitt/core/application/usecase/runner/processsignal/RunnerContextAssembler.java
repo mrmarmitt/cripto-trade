@@ -4,14 +4,16 @@ import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.StrategyRunner;
-import com.marmitt.core.dto.strategy.OpenBuyEntryDto;
-import com.marmitt.core.dto.strategy.PendingSellEntryDto;
+import com.marmitt.core.dto.strategy.OpenLotDto;
+import com.marmitt.core.dto.strategy.PendingOrderDto;
 import com.marmitt.core.dto.strategy.PortfolioContextDto;
+import com.marmitt.core.enums.TradingAction;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.Optional;
 
@@ -22,12 +24,11 @@ import java.util.Optional;
  * <ul>
  *   <li><b>Saldo disponivel e total:</b> permite a estrategia calcular quanto capital
  *       pode ser alocado em um novo BUY sem violar os limites do portfolio.</li>
- *   <li><b>Posicoes abertas ({@code openTransactions}):</b> lotes BUY executados ainda
+ *   <li><b>Posicoes abertas ({@code openLots}):</b> lotes BUY executados ainda
  *       nao vendidos. A quantidade restante (total menos quantidade bloqueada por SELL
  *       pendente) e informada separadamente para que a estrategia saiba o que pode vender.</li>
- *   <li><b>Ordens de venda pendentes ({@code pendingSellOrders}):</b> transacoes SELL
- *       nos status PENDING ou SUBMITTED que ainda nao foram confirmadas pela exchange.
- *       Permite a estrategia evitar enviar uma segunda SELL para a mesma posicao.</li>
+ *   <li><b>Ordens pendentes ({@code pendingOrders}):</b> transacoes BUY/SELL
+ *       nos status PENDING, SUBMITTED ou PARTIAL que ainda nao foram confirmadas pela exchange.</li>
  *   <li><b>Limite de exposicao ({@code maxExposurePerSymbol}):</b> percentual maximo
  *       do capital total que pode estar alocado neste runner simultaneamente.</li>
  * </ul>
@@ -50,7 +51,7 @@ class RunnerContextAssembler {
      * Constroi o contexto de portfolio no momento do tick para o runner informado.
      *
      * @throws IllegalStateException se o {@link com.marmitt.core.domain.portfolio.GlobalBalance}
-     *         do portfolio nao existir — indica inconsistencia de dados, nao cenario normal
+     *         do portfolio nao existir - indica inconsistencia de dados, nao cenario normal
      */
     public PortfolioContextDto assemble(StrategyRunner runner) {
         GlobalBalance balance = globalBalanceRepository
@@ -62,12 +63,12 @@ class RunnerContextAssembler {
         Optional<Position> runnerPositionOpt =
                 strategyRunnerRepository.findActivePositionByRunnerIdAndSymbol(runner.getId(), runner.getSymbol());
 
-        List<OpenBuyEntryDto> openBuyEntries = runnerPositionOpt
-                .map(this::buildOpenBuyEntry)
+        List<OpenLotDto> openLots = runnerPositionOpt
+                .map(this::buildOpenLot)
                 .map(List::of)
                 .orElse(List.of());
 
-        List<PendingSellEntryDto> pendingSellOrders = buildPendingSellOrders(runner);
+        List<PendingOrderDto> pendingOrders = buildPendingOrders(runner);
 
         return PortfolioContextDto.builder()
                 .portfolioId(runner.getPortfolioId())
@@ -75,37 +76,48 @@ class RunnerContextAssembler {
                 .totalCapital(balance.getTotalBalance())
                 .availableBalance(balance.getAvailableBalance())
                 .allocatedBalance(balance.getReservedBalance())
-                .openTransactions(openBuyEntries)
-                .pendingSellOrders(pendingSellOrders)
+                .openLots(openLots)
+                .pendingOrders(pendingOrders)
                 .realizedPnL(balance.getRealizedBalance())
                 .minimumOperationAmount(minimumOperationAmount)
                 .maxExposurePerSymbol(runner.getMaxAllocationPercent())
                 .build();
     }
 
-    private OpenBuyEntryDto buildOpenBuyEntry(Position pos) {
+    private OpenLotDto buildOpenLot(Position pos) {
         BigDecimal lockedQty = pos.getLockedQuantity() != null
                 ? pos.getLockedQuantity() : BigDecimal.ZERO;
-        BigDecimal remaining = pos.getQuantity().subtract(lockedQty).max(BigDecimal.ZERO);
+        BigDecimal available = pos.getQuantity().subtract(lockedQty).max(BigDecimal.ZERO);
 
-        return OpenBuyEntryDto.builder()
+        return OpenLotDto.builder()
                 .lotId(pos.getId())
-                .executedQuantity(pos.getQuantity())
-                .executedPrice(pos.getAveragePrice())
-                .remainingQuantity(remaining)
-                .reservedQuantity(lockedQty)
-                .executedAt(pos.getOpenedAt())
+                .quantity(pos.getQuantity())
+                .availableQuantity(available)
+                .entryPrice(pos.getAveragePrice())
+                .currentPnlPercent(calculatePnlPercent(pos))
+                .openedAt(pos.getOpenedAt())
                 .build();
     }
 
-    private List<PendingSellEntryDto> buildPendingSellOrders(StrategyRunner runner) {
+    private BigDecimal calculatePnlPercent(Position pos) {
+        BigDecimal currentPrice = pos.getCurrentPrice();
+        BigDecimal entryPrice = pos.getAveragePrice();
+        if (currentPrice == null || entryPrice.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ZERO;
+        }
+        return currentPrice.subtract(entryPrice)
+                .divide(entryPrice, 6, RoundingMode.HALF_UP)
+                .multiply(BigDecimal.valueOf(100));
+    }
+
+    private List<PendingOrderDto> buildPendingOrders(StrategyRunner runner) {
         return strategyRunnerRepository
                 .findByRunnerIdAndStatuses(runner.getId(),
                         List.of(TransactionStatus.PENDING, TransactionStatus.SUBMITTED, TransactionStatus.PARTIAL))
                 .stream()
-                .filter(com.marmitt.core.domain.runner.Transaction::isSell)
-                .map(t -> PendingSellEntryDto.builder()
+                .map(t -> PendingOrderDto.builder()
                         .transactionId(t.getId())
+                        .type(t.isBuy() ? TradingAction.SHOULD_BUY : TradingAction.SHOULD_SELL)
                         .quantity(t.getQuantity())
                         .price(t.getPrice())
                         .status(t.getStatus())
