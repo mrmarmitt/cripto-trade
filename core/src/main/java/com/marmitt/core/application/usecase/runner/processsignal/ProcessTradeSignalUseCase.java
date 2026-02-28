@@ -4,7 +4,7 @@ import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.capital.BuyExecutionContext;
-import com.marmitt.core.dto.strategy.PortfolioContextDto;
+import com.marmitt.core.dto.strategy.StrategyContextDto;
 import com.marmitt.core.dto.strategy.StrategyInputDto;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.dto.websocket.data.MarketDataDto;
@@ -30,7 +30,7 @@ import java.util.Optional;
  *   <li>Localiza todos os {@link com.marmitt.core.domain.runner.StrategyRunner runners}
  *       operacionais para o simbolo/exchange do tick.</li>
  *   <li>Filtra runners inapta (status, exchange bloqueada) via {@link RunnerSignalPolicy}.</li>
- *   <li>Monta o {@link com.marmitt.core.dto.strategy.PortfolioContextDto contexto de portfolio}
+ *   <li>Monta o {@link com.marmitt.core.dto.strategy.StrategyContextDto contexto operacional}
  *       com saldo, posicoes abertas e ordens pendentes de venda.</li>
  *   <li>Executa a estrategia configurada no runner para obter a decisao (BUY/SELL/HOLD).</li>
  *   <li>Aplica guardas de execucao (politica SINGLE, capital) e materializa a
@@ -179,7 +179,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
             return;
         }
 
-        PortfolioContextDto context = contextAssembler.assemble(runner);
+        StrategyContextDto context = contextAssembler.assemble(runner);
         StrategyOutputDto strategyOutput = signalEvaluator.evaluate(runner, activeStrategy.get(), input, context);
         if (signalEvaluator.isHold(strategyOutput)) {
             log.debug("priceUpdate: HOLD signal for runner={} - no action", runner.getId());

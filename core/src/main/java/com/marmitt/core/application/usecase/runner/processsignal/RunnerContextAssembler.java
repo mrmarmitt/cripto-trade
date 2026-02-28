@@ -6,7 +6,8 @@ import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.strategy.OpenLotDto;
 import com.marmitt.core.dto.strategy.PendingOrderDto;
-import com.marmitt.core.dto.strategy.PortfolioContextDto;
+import com.marmitt.core.dto.strategy.PositionContext;
+import com.marmitt.core.dto.strategy.StrategyContextDto;
 import com.marmitt.core.enums.TradingAction;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
@@ -18,7 +19,7 @@ import java.util.List;
 import java.util.Optional;
 
 /**
- * Monta o {@link PortfolioContextDto} que a estrategia usa para tomar sua decisao de trade.
+ * Monta o {@link StrategyContextDto} que a estrategia usa para tomar sua decisao de trade.
  *
  * <p>O contexto e uma "fotografia" do estado financeiro do runner no momento do tick:
  * <ul>
@@ -53,7 +54,7 @@ class RunnerContextAssembler {
      * @throws IllegalStateException se o {@link com.marmitt.core.domain.portfolio.GlobalBalance}
      *         do portfolio nao existir - indica inconsistencia de dados, nao cenario normal
      */
-    public PortfolioContextDto assemble(StrategyRunner runner) {
+    public StrategyContextDto assemble(StrategyRunner runner) {
         GlobalBalance balance = globalBalanceRepository
                 .findByPortfolioId(runner.getPortfolioId())
                 .orElseThrow(() -> new IllegalStateException(
@@ -70,17 +71,36 @@ class RunnerContextAssembler {
 
         List<PendingOrderDto> pendingOrders = buildPendingOrders(runner);
 
-        return PortfolioContextDto.builder()
+        PositionContext positionContext = runnerPositionOpt
+                .map(position -> PositionContext.from(
+                        position.getId(),
+                        position.getSymbol(),
+                        position.getQuantity(),
+                        position.getAveragePrice(),
+                        position.getCurrentPrice(),
+                        position.getRealizedPnl(),
+                        position.getOpenedAt(),
+                        openLots
+                ))
+                .orElse(PositionContext.empty(runner.getSymbol()));
+
+        BigDecimal maxOperationAmount = balance.getAvailableBalance();
+
+        return StrategyContextDto.builder()
+                .runnerId(runner.getId())
                 .portfolioId(runner.getPortfolioId())
                 .symbol(symbol)
-                .totalCapital(balance.getTotalBalance())
-                .availableBalance(balance.getAvailableBalance())
-                .allocatedBalance(balance.getReservedBalance())
+                .positionContext(positionContext)
                 .openLots(openLots)
                 .pendingOrders(pendingOrders)
-                .realizedPnL(balance.getRealizedBalance())
-                .minimumOperationAmount(minimumOperationAmount)
-                .maxExposurePerSymbol(runner.getMaxAllocationPercent())
+                .totalCapital(balance.getTotalBalance())
+                .availableCapital(balance.getAvailableBalance())
+                .maxOperationAmount(maxOperationAmount)
+                .minOperationAmount(minimumOperationAmount)
+                .maxOpenPositions(runner.getMaxOpenPositions())
+                .currentOpenPositions(openLots.size())
+                .realizedPnl(balance.getRealizedBalance())
+                .unrealizedPnl(positionContext.unrealizedPnl())
                 .build();
     }
 
