@@ -4,7 +4,9 @@ import lombok.Builder;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
+import java.time.Instant;
 
 /**
  * Objeto imutavel injetado na Strategy pelo Runner, contendo o estado operacional
@@ -42,6 +44,36 @@ public record PositionContext(
                 .unrealizedPnl(BigDecimal.ZERO)
                 .realizedPnl(BigDecimal.ZERO)
                 .openLots(List.of())
+                .build();
+    }
+
+    public static PositionContext from(UUID positionId,
+                                       String symbol,
+                                       BigDecimal quantity,
+                                       BigDecimal averagePrice,
+                                       BigDecimal currentPrice,
+                                       BigDecimal realizedPnl,
+                                       Instant openedAt,
+                                       List<OpenLotDto> openLots) {
+        Objects.requireNonNull(positionId, "positionId cannot be null");
+        Objects.requireNonNull(symbol, "symbol cannot be null");
+        Objects.requireNonNull(quantity, "quantity cannot be null");
+        Objects.requireNonNull(averagePrice, "averagePrice cannot be null");
+        Objects.requireNonNull(realizedPnl, "realizedPnl cannot be null");
+        Objects.requireNonNull(openLots, "openLots cannot be null");
+
+        BigDecimal marketPrice = currentPrice != null ? currentPrice : averagePrice;
+        BigDecimal unrealized = marketPrice.subtract(averagePrice).multiply(quantity);
+
+        return PositionContext.builder()
+                .positionId(positionId)
+                .symbol(symbol)
+                .quantity(quantity)
+                .averagePrice(averagePrice)
+                .currentPrice(marketPrice)
+                .unrealizedPnl(unrealized)
+                .realizedPnl(realizedPnl)
+                .openLots(openLots)
                 .build();
     }
 }

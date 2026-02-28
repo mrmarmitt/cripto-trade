@@ -1,7 +1,7 @@
 package com.marmitt.core.application.usecase.runner.processsignal;
 
 import com.marmitt.core.domain.runner.StrategyRunner;
-import com.marmitt.core.dto.strategy.PortfolioContextDto;
+import com.marmitt.core.dto.strategy.StrategyContextDto;
 import com.marmitt.core.dto.strategy.StrategyInputDto;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.enums.TradingAction;
@@ -63,7 +63,7 @@ class StrategySignalEvaluator {
     public StrategyOutputDto evaluate(StrategyRunner runner,
                                       TradingStrategy strategy,
                                       StrategyInputDto input,
-                                      PortfolioContextDto context) {
+                                      StrategyContextDto context) {
         StrategyOutputDto output = strategy.executeStrategy(input, context);
         if (output == null) {
             return StrategyOutputDto.hold(runner.getStrategyName(),

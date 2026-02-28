@@ -3,8 +3,8 @@ package com.marmitt.strategy.impl.simple_moving_avager;
 import com.marmitt.core.ports.outbound.strategy.TradingStrategy;
 import com.marmitt.core.dto.strategy.StrategyInputDto;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
-import com.marmitt.core.dto.strategy.PortfolioContextDto;
 import com.marmitt.core.dto.strategy.OpenLotDto;
+import com.marmitt.core.dto.strategy.StrategyContextDto;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
@@ -60,7 +60,7 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
     }
 
     @Override
-    public StrategyOutputDto executeStrategy(StrategyInputDto input, PortfolioContextDto portfolioContext) {
+    public StrategyOutputDto executeStrategy(StrategyInputDto input, StrategyContextDto portfolioContext) {
         BigDecimal currentPrice = input.currentPrice();
         updateHistory(currentPrice);
 
@@ -143,22 +143,22 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
         return sum.divide(BigDecimal.valueOf(priceHistory.size()), 8, RoundingMode.HALF_UP);
     }
 
-    private BigDecimal calculateBuyQuantity(BigDecimal currentPrice, PortfolioContextDto portfolioContext) {
+    private BigDecimal calculateBuyQuantity(BigDecimal currentPrice, StrategyContextDto portfolioContext) {
         if (!portfolioContext.hasMinimumBalance()) {
             log.debug("SMA: insufficient available balance for min operation - available={} minRequired={}",
-                    portfolioContext.availableBalance(), portfolioContext.minimumOperationAmount());
+                    portfolioContext.availableCapital(), portfolioContext.minOperationAmount());
             return BigDecimal.ZERO;
         }
 
         BigDecimal totalCapital = portfolioContext.totalCapital();
         BigDecimal allocationValue = totalCapital.multiply(config.allocationPercentage());
 
-        BigDecimal availableBalance = portfolioContext.availableBalance();
+        BigDecimal availableBalance = portfolioContext.availableCapital();
         BigDecimal operationValue = allocationValue.min(availableBalance);
 
-        if (operationValue.compareTo(portfolioContext.minimumOperationAmount()) < 0) {
+        if (operationValue.compareTo(portfolioContext.minOperationAmount()) < 0) {
             log.debug("SMA: operation below minimum - operationValue={} minRequired={}",
-                    operationValue, portfolioContext.minimumOperationAmount());
+                    operationValue, portfolioContext.minOperationAmount());
             return BigDecimal.ZERO;
         }
 
