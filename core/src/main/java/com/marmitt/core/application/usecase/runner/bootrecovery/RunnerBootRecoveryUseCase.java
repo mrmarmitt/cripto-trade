@@ -54,23 +54,24 @@ public class RunnerBootRecoveryUseCase {
         log.info("bootRecovery: start DRY-RUN runnerId={} status={} reconciling={}",
                 runnerId, runner.getStatus(), runner.isReconciling());
 
-        // Step 1 (IG 6.6.2): carregar transacoes relevantes para boot.
+        // Preparacao (pre-step): carregar transacoes relevantes para o recovery do runner.
         List<Transaction> inFlight = strategyRunnerRepository.findByRunnerIdAndStatuses(
                 runnerId, BOOT_RELEVANT_STATUSES);
 
-        // Step 2 (IG 9.6): identificar zumbis = PENDING sem exchangeOrderId.
+        // Step 1 (IG 6.6.2 / 9.6): saneamento de zumbis = PENDING sem exchangeOrderId.
         List<Transaction> zombies = inFlight.stream()
                 .filter(tx -> tx.getStatus() == TransactionStatus.PENDING)
                 .filter(tx -> tx.getExchangeOrderId() == null || tx.getExchangeOrderId().isBlank())
                 .toList();
 
-        // Step 3 (IG 6.6.2): identificar limbo = PENDING com exchangeOrderId + SUBMITTED + PARTIAL.
+        // Step 2 (IG 6.6.2): identificar limbo = PENDING com exchangeOrderId + SUBMITTED + PARTIAL.
         List<Transaction> limbo = inFlight.stream()
                 .filter(tx -> !zombies.contains(tx))
                 .toList();
 
         notes.add("TODO[Step 0]: runner.startInitializing() + persistir status INITIALIZING/isReconciling=true.");
-        notes.add("TODO[Step 2]: para cada zombie -> EXPIRED + release margem + unlock de lotes.");
+        notes.add("TODO[Step 1]: para cada zombie -> EXPIRED + release margem + unlock de lotes.");
+        notes.add("TODO[Step 2]: identificar limbo para consulta autoritativa na exchange.");
         notes.add("TODO[Step 3]: consultar exchange por clientOrderId (FILLED/PARTIAL/CANCELED/NOT_FOUND).");
         notes.add("TODO[Step 4]: aplicar transicoes locais + TransactionMatch + release/confirmExecution.");
         notes.add("TODO[Step 5]: validar integridade final (inflight remanescente, locks ativos, saldo).");
@@ -114,4 +115,3 @@ public class RunnerBootRecoveryUseCase {
             List<String> notes
     ) {}
 }
-

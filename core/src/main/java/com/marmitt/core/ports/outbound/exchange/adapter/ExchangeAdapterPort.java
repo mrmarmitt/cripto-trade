@@ -1,19 +1,20 @@
 package com.marmitt.core.ports.outbound.exchange.adapter;
 
-import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 
-public interface ExchangeAdapterPort {
-    
-    String getExchangeName();
-
-    boolean requiresPostConnection();
-
-    WebSocketPort getWebSocketPort();
-
-    ReceivedMessageProcessorPort getReceivedMessageProcessor();
-
-    SenderMessageProcessorPort getSenderMessageProcessor();
-
-    ExchangeUrlBuilderPort getUrlBuilder();
-
+/**
+ * Porta legada de adapter "tudo em um".
+ *
+ * <p>Etapa 1 da refatoracao:
+ * permanece ativa para compatibilidade e agora representa somente
+ * a capacidade de streaming (WebSocket).
+ *
+ * <p>As novas capacidades REST foram separadas em:
+ * <ul>
+ *   <li>{@code ExchangeOrderExecutionPort}</li>
+ *   <li>{@code ExchangeOrderQueryPort}</li>
+ *   <li>{@code ExchangeAccountQueryPort}</li>
+ * </ul>
+ */
+public interface ExchangeAdapterPort extends ExchangeStreamingPort {
 }
