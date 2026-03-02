@@ -19,12 +19,11 @@ import java.util.stream.Stream;
 /**
  * Orquestrador de boot em nivel de aplicacao.
  *
- * <p>Estado atual: skeleton DRY-RUN.
- * Responsabilidade nesta fase:
+ * <p>Responsabilidade nesta fase:
  * <ul>
  *   <li>Demonstrar a ordem de fases do boot recovery.</li>
  *   <li>Disparar o RunnerBootRecoveryUseCase para cada runner elegivel.</li>
- *   <li>Gerar logs de planejamento sem mutar estado de dominio.</li>
+ *   <li>Executar saneamento/reconciliacao por runner e registrar resumo em log.</li>
  * </ul>
  *
  * <p>Ativacao:
@@ -49,17 +48,17 @@ public class BootOrchestrator {
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
         // Phase 1 (Infra) e Phase 2 (Portfolio) ainda serao implementadas.
-        // Nesta versao focamos no desenho da Phase 3 (Runner recovery).
-        log.info("bootOrchestrator: start DRY-RUN");
+        // Nesta versao focamos na execucao da Phase 3 (Runner recovery).
+        log.info("bootOrchestrator: start");
 
         List<Portfolio> portfolios = portfolioRepository.findAll();
         List<RunnerBootRecoveryUseCase.RecoverySummary> summaries = portfolios.stream()
                 .flatMap(this::loadRunnersByPortfolio)
                 .filter(this::isEligibleForRecovery)
-                .map(this::recoverRunnerDryRun)
+                .map(this::recoverRunner)
                 .toList();
 
-        log.info("bootOrchestrator: DRY-RUN completed portfolios={} runners={}",
+        log.info("bootOrchestrator: completed portfolios={} runners={}",
                 portfolios.size(), summaries.size());
     }
 
@@ -71,7 +70,7 @@ public class BootOrchestrator {
         return runner.getStatus() != RunnerStatus.ARCHIVED;
     }
 
-    private RunnerBootRecoveryUseCase.RecoverySummary recoverRunnerDryRun(StrategyRunner runner) {
+    private RunnerBootRecoveryUseCase.RecoverySummary recoverRunner(StrategyRunner runner) {
         RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
 
         log.info("bootOrchestrator: runner={} inFlight={} zombies={} limbo={}",

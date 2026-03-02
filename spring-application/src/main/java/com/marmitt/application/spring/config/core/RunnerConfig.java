@@ -10,6 +10,7 @@ import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.capital.BuyExecutionContext;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
+import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
 import com.marmitt.core.ports.inbound.runner.QueryRunnerPort;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
@@ -123,9 +124,15 @@ public class RunnerConfig {
 
     @Bean
     public RunnerBootRecoveryUseCase runnerBootRecoveryUseCase(
-            StrategyRunnerRepositoryPort strategyRunnerRepository
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            ExchangeAdapterRepositoryPort exchangeAdapterRepository,
+            OrderConciliationPort orderConciliationPort
     ) {
-        return new RunnerBootRecoveryUseCase(strategyRunnerRepository);
+        return new RunnerBootRecoveryUseCase(
+                strategyRunnerRepository,
+                exchangeAdapterRepository,
+                orderConciliationPort
+        );
     }
 
 }
