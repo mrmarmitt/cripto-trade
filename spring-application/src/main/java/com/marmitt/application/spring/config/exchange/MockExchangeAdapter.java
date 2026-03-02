@@ -8,10 +8,13 @@ import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
-import com.marmitt.mock.adapter.NoOpWebSocketAdapter;
+import com.marmitt.mock.adapter.LocalEventWebSocketAdapter;
+import com.marmitt.mock.config.MockMarketDataFeedConfig;
 import com.marmitt.mock.config.MockScenarioConfig;
 import com.marmitt.mock.processor.MockReceivedMessageProcessor;
 import com.marmitt.mock.processor.MockSenderMessageProcessor;
+import com.marmitt.mock.runtime.MockExchangeRuntime;
+import com.marmitt.mock.simulator.MockMarketDataFeedEngine;
 import com.marmitt.mock.simulator.MockOrderExecutionSimulator;
 
 /**
@@ -31,8 +34,8 @@ public class MockExchangeAdapter implements ExchangeAdapterPort {
     private final ExchangeUrlBuilderPort urlBuilder;
 
     public MockExchangeAdapter(ObjectMapper objectMapper, EventPublisherPort eventPublisher) {
-        // Mock não precisa de WebSocket real
-        this.webSocketPort = new NoOpWebSocketAdapter();
+        // Mock does not open real sockets, but emits connection events to drive post-connection flow
+        this.webSocketPort = new LocalEventWebSocketAdapter(eventPublisher);
 
         // Processor para deserializar respostas mockadas
         this.receivedMessageProcessor = new MockReceivedMessageProcessor(objectMapper);
@@ -40,12 +43,21 @@ public class MockExchangeAdapter implements ExchangeAdapterPort {
         // Processor para simular execução de ordens
         MockOrderExecutionSimulator simulator = new MockOrderExecutionSimulator();
         MockScenarioConfig config = MockScenarioConfig.defaultConfig();
-        this.senderMessageProcessor = new MockSenderMessageProcessor(
+        MockMarketDataFeedConfig feedConfig = MockMarketDataFeedConfig.defaultConfig();
+        MockMarketDataFeedEngine feedEngine = new MockMarketDataFeedEngine(
+                eventPublisher,
+                objectMapper,
+                feedConfig,
+                config.randomSeed()
+        );
+        MockExchangeRuntime runtime = new MockExchangeRuntime(
                 eventPublisher,
                 objectMapper,
                 simulator,
-                config
+                config,
+                feedEngine
         );
+        this.senderMessageProcessor = new MockSenderMessageProcessor(runtime);
 
         // Mock não precisa de URL builder (não conecta)
         this.urlBuilder = new NoOpUrlBuilder();
@@ -58,8 +70,8 @@ public class MockExchangeAdapter implements ExchangeAdapterPort {
 
     @Override
     public boolean requiresPostConnection() {
-        // Mock não precisa de post-connection (não envia subscrições)
-        return false;
+        // Enable auto-subscription on /websocket/connect using the same post-connection pipeline
+        return true;
     }
 
     @Override

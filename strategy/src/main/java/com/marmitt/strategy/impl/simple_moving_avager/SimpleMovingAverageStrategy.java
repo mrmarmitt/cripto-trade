@@ -75,6 +75,13 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
         // 2. Verificar lotes abertos - saida por lucro ou timeout
         if (portfolioContext.hasOpenLots()) {
             for (OpenLotDto lot : portfolioContext.openLots()) {
+                BigDecimal availableQuantity = lot.availableQuantity();
+                if (availableQuantity == null || availableQuantity.compareTo(BigDecimal.ZERO) <= 0) {
+                    log.debug("SMA: skipping lot {} for sell signal because availableQuantity={}",
+                            lot.lotId(), availableQuantity);
+                    continue;
+                }
+
                 BigDecimal lotProfit = portfolioContext.calculateLotProfit(lot.lotId(), currentPrice)
                         .orElse(BigDecimal.ZERO);
 
@@ -94,7 +101,7 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
                     return StrategyOutputDto.sellLot(
                             STRATEGY_NAME,
                             BigDecimal.ONE,
-                            lot.availableQuantity(),
+                            availableQuantity,
                             lot.lotId(),
                             reason + " para lote " + lot.lotId()
                     );

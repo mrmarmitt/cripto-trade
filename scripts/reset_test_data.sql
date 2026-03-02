@@ -1,17 +1,27 @@
 -- Reset runner trading data for fresh tests
 BEGIN;
 
--- Clear position links before deletion (explicit, for safety)
+-- Break FK cycle:
+-- transactions.target_lot_id -> positions.id
+-- positions.(opened_by/locked_by)_transaction_id -> transactions.id
+-- We cannot null opened_by_transaction_id due active-position invariant (V6).
+UPDATE transactions
+   SET target_lot_id = NULL
+ WHERE target_lot_id IS NOT NULL;
+
+-- Clear transient lock fields (safe and explicit)
 UPDATE positions
    SET locked_by_transaction_id = NULL,
        locked_quantity = NULL,
-       locked_at = NULL,
-       opened_by_transaction_id = NULL;
+       locked_at = NULL
+ WHERE locked_by_transaction_id IS NOT NULL
+    OR locked_quantity IS NOT NULL
+    OR locked_at IS NOT NULL;
 
 -- Remove execution records first (FK-safe order)
 DELETE FROM transaction_matches;
-DELETE FROM transactions;
 DELETE FROM positions;
+DELETE FROM transactions;
 
 -- Restore GlobalBalance to initial state
 UPDATE global_balances

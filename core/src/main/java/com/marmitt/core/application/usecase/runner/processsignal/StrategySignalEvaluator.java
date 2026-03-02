@@ -64,12 +64,19 @@ class StrategySignalEvaluator {
                                       TradingStrategy strategy,
                                       StrategyInputDto input,
                                       StrategyContextDto context) {
-        StrategyOutputDto output = strategy.executeStrategy(input, context);
-        if (output == null) {
-            return StrategyOutputDto.hold(runner.getStrategyName(),
-                    "Execution of strategy returned null, SHOULD_HOLD by default.");
+        try {
+            StrategyOutputDto output = strategy.executeStrategy(input, context);
+            if (output == null) {
+                return StrategyOutputDto.hold(runner.getStrategyName(),
+                        "Execution of strategy returned null, SHOULD_HOLD by default.");
+            }
+            return output;
+        } catch (IllegalArgumentException e) {
+            log.warn("priceUpdate: invalid strategy signal runner={} strategy={} reason={} - forcing HOLD",
+                    runner.getId(), strategy.getStrategyName(), e.getMessage());
+            return StrategyOutputDto.hold(strategy.getStrategyName(),
+                    "Invalid strategy signal: " + e.getMessage());
         }
-        return output;
     }
 
     /**
