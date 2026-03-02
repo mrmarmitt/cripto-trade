@@ -9,6 +9,7 @@ import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.domain.runner.TransactionMatch;
+import com.marmitt.core.enums.PositionStatus;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.exceptions.ConcurrentPositionLockException;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
@@ -99,6 +100,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     @Transactional
     public void savePosition(Position position) {
         long start = System.nanoTime();
+        validateOpenedByInvariant(position);
         positionRepo.save(StrategyRunnerEntityMapper.toEntity(position));
         log.trace("[REPO] position.save({}) - {}ms", position.getId(), RepoTiming.elapsedMs(start));
     }
@@ -107,6 +109,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     @Transactional
     public boolean trySavePosition(Position position) {
         long start = System.nanoTime();
+        validateOpenedByInvariant(position);
         try {
             positionRepo.save(StrategyRunnerEntityMapper.toEntity(position));
             log.trace("[REPO] position.trySave({}) - inserted - {}ms", position.getId(), RepoTiming.elapsedMs(start));
@@ -234,6 +237,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     @Transactional
     public void saveAtomicTransactionAndPositionLock(Transaction transaction, Position lockedPosition) {
         long start = System.nanoTime();
+        validateOpenedByInvariant(lockedPosition);
         try {
             transactionRepo.save(StrategyRunnerEntityMapper.toEntity(transaction));
             positionRepo.save(StrategyRunnerEntityMapper.toEntity(lockedPosition));
@@ -263,5 +267,14 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         log.trace("[REPO] position.tryLockForSell(pos={}, tx={}, locked={}) - {}ms",
                 positionId, transactionId, locked, RepoTiming.elapsedMs(start));
         return locked;
+    }
+
+    private static void validateOpenedByInvariant(Position position) {
+        PositionStatus status = position.getStatus();
+        boolean active = status == PositionStatus.OPEN || status == PositionStatus.CLOSING;
+        if (active && position.getOpenedByTransactionId() == null) {
+            throw new IllegalStateException("Position invariant violation: openedByTransactionId is required for status="
+                    + status + " positionId=" + position.getId());
+        }
     }
 }

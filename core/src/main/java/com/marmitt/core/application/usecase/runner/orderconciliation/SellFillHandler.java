@@ -8,6 +8,7 @@ import com.marmitt.core.dto.capital.ExecutionConfirmation;
 import com.marmitt.core.dto.events.ExecutionConfirmedEvent;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.FeeType;
+import com.marmitt.core.exceptions.MissingPositionOriginException;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
@@ -40,10 +41,9 @@ import java.util.UUID;
  *       {@link com.marmitt.core.domain.portfolio.GlobalBalance}.</li>
  * </ol>
  *
- * <p><b>Caminho degradado:</b> se a posicao nao tiver {@code openedByTransactionId}
- * (posicao criada antes do rastreamento de origem ser implementado), o
- * {@code TransactionMatch} nao e criado e o evento nao e publicado. A posicao
- * e transacao sao persistidas normalmente, mas o P&L nao e contabilizado.
+ * <p><b>Invariante estrito:</b> posicoes OPEN/CLOSING devem possuir
+ * {@code openedByTransactionId}. Se esse vinculo nao existir, o fluxo falha
+ * explicitamente com excecao para evitar perda silenciosa de contabilidade.
  */
 @Slf4j
 class SellFillHandler {
@@ -89,11 +89,7 @@ class SellFillHandler {
         }
 
         if (buyTransactionId == null) {
-            log.warn("orderConciliation: position has no openedByTransactionId positionId={} " +
-                    "- TransactionMatch not created for transactionId={}", position.getId(), transaction.getId());
-            strategyRunnerRepository.savePosition(position);
-            strategyRunnerRepository.saveTransaction(transaction);
-            return;
+            throw new MissingPositionOriginException(position.getId(), transaction.getId(), transaction.getRunnerId());
         }
 
         TransactionMatch match = TransactionMatch.create(

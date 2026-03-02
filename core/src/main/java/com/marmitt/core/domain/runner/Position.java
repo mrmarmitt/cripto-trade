@@ -76,7 +76,8 @@ public class Position {
     /**
      * FK para a Transaction de compra que originou esta posição.
      * Usado para criar o {@code TransactionMatch} quando a posição for vendida.
-     * Nullable para posições abertas antes da introdução deste campo.
+     *
+     * <p>Invariante: para posições com status OPEN/CLOSING, este campo deve estar preenchido.
      */
     private UUID openedByTransactionId;
 
