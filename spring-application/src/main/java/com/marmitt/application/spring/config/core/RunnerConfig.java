@@ -1,6 +1,7 @@
 package com.marmitt.application.spring.config.core;
 
 import com.marmitt.core.application.usecase.runner.createrunner.CreateRunnerUseCase;
+import com.marmitt.core.application.usecase.runner.bootrecovery.RunnerBootRecoveryUseCase;
 import com.marmitt.core.application.usecase.runner.orderconciliation.OrderConciliationUseCase;
 import com.marmitt.core.application.usecase.runner.queryrunner.QueryRunnerUseCase;
 import com.marmitt.core.application.usecase.runner.processsignal.ProcessTradeSignalUseCase;
@@ -118,6 +119,13 @@ public class RunnerConfig {
             StrategyRunnerRepositoryPort strategyRunnerRepository
     ) {
         return new QueryRunnerUseCase(strategyRunnerRepository);
+    }
+
+    @Bean
+    public RunnerBootRecoveryUseCase runnerBootRecoveryUseCase(
+            StrategyRunnerRepositoryPort strategyRunnerRepository
+    ) {
+        return new RunnerBootRecoveryUseCase(strategyRunnerRepository);
     }
 
 }
