@@ -6,14 +6,36 @@ import com.marmitt.application.spring.adapter.OkHttp3WebSocketAdapter;
 import com.marmitt.binance.BinanceUrlBuilder;
 import com.marmitt.binance.processor.receive.BinanceReceivedMessageProcessor;
 import com.marmitt.binance.processor.send.BinanceSenderMessageProcessor;
+import com.marmitt.core.dto.websocket.data.AccountDataDto;
+import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
+import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
+import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
+import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
+import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 
-public class BinanceExchangeAdapter implements ExchangeAdapterPort {
+import java.util.List;
+import java.util.Optional;
+
+/**
+ * Binance adapter.
+ *
+ * <p>Stage 2 capability status:
+ * <ul>
+ *   <li>Streaming: implemented.</li>
+ *   <li>REST capabilities: declared and explicit as not implemented yet.</li>
+ * </ul>
+ */
+public class BinanceExchangeAdapter implements ExchangeAdapterPort,
+        ExchangeOrderExecutionPort,
+        ExchangeOrderQueryPort,
+        ExchangeAccountQueryPort {
 
     private final WebSocketPort webSocketPort;
     private final ReceivedMessageProcessorPort receivedMessageProcessor;
@@ -56,4 +78,46 @@ public class BinanceExchangeAdapter implements ExchangeAdapterPort {
     public ExchangeUrlBuilderPort getUrlBuilder() {
         return urlBuilder;
     }
+
+    @Override
+    public OrderDataDto submitOrder(SendOrderRequest request) {
+        throw restNotImplemented();
+    }
+
+    @Override
+    public OrderDataDto cancelOrder(SendCancelOrderRequest request) {
+        throw restNotImplemented();
+    }
+
+    @Override
+    public Optional<OrderDataDto> queryOrderByClientOrderId(String symbol, String clientOrderId) {
+        throw restNotImplemented();
+    }
+
+    @Override
+    public Optional<OrderDataDto> queryOrderByExchangeOrderId(String symbol, String exchangeOrderId) {
+        throw restNotImplemented();
+    }
+
+    @Override
+    public List<OrderDataDto> listOpenOrdersBySymbol(String symbol) {
+        throw restNotImplemented();
+    }
+
+    @Override
+    public List<OrderDataDto> listAllOpenOrders() {
+        throw restNotImplemented();
+    }
+
+    @Override
+    public AccountDataDto queryAccountSnapshot() {
+        throw restNotImplemented();
+    }
+
+    private UnsupportedOperationException restNotImplemented() {
+        return new UnsupportedOperationException(
+                "BINANCE REST capability is not implemented yet. Use streaming path for now."
+        );
+    }
 }
+
