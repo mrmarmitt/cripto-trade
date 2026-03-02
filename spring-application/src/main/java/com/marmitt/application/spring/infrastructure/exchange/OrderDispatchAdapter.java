@@ -6,23 +6,12 @@ import com.marmitt.core.enums.OrderSide;
 import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
-import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
+import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
-/**
- * Adapter de saída responsável por despachar ordens à exchange via WebSocket.
- * <p>
- * Fire-and-forget: serializa o comando, envia pelo canal WebSocket e retorna imediatamente.
- * A confirmação (SUBMITTED) e a rejeição (REJECTED) chegam de forma assíncrona via
- * {@code onMessage()} → {@code BinanceReceivedMessageProcessor} → {@code OrderConciliationUseCase}.
- * <p>
- * Em caso de falha técnica (WebSocket desconectado, serialização), lança exceção.
- * O chamador deixa a transação em {@code PENDING} para reconciliação pelo Boot Sequence.
- *
- * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 6.2.1, 15.8.1</a>
- */
 @Slf4j
 @Component
 public class OrderDispatchAdapter implements OrderDispatchPort {
@@ -35,17 +24,42 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
 
     @Override
     public void dispatch(OrderDispatchCommand command) {
-        ExchangeAdapterPort adapter = exchangeAdapterRepository
-                .findByName(command.exchangeId())
-                .orElseThrow(() -> new IllegalStateException(
-                        "No exchange adapter found for exchangeId: " + command.exchangeId()));
+        SendOrderRequest request = toSendOrderRequest(command, command.exchangeId());
 
-        SendOrderRequest request = toSendOrderRequest(command, adapter.getExchangeName());
-        String json = adapter.getSenderMessageProcessor().execute(request);
-        adapter.getWebSocketPort().sendMessage(json);
+        if (!tryDispatchViaRest(request, command.exchangeId(), command.clientOrderId())) {
+            dispatchViaStreaming(request, command.exchangeId());
+        }
 
-        log.debug("dispatch: order sent — clientOrderId={} exchange={} symbol={} type={}",
+        log.debug("dispatch: order sent - clientOrderId={} exchange={} symbol={} type={}",
                 command.clientOrderId(), command.exchangeId(), command.symbol(), command.type());
+    }
+
+    private boolean tryDispatchViaRest(SendOrderRequest request, String exchangeId, String clientOrderId) {
+        ExchangeOrderExecutionPort executionPort = exchangeAdapterRepository
+                .findOrderExecutionByName(exchangeId)
+                .orElse(null);
+        if (executionPort == null) {
+            return false;
+        }
+
+        try {
+            executionPort.submitOrder(request);
+            log.debug("dispatch: REST submit accepted - clientOrderId={} exchange={}", clientOrderId, exchangeId);
+            return true;
+        } catch (UnsupportedOperationException ex) {
+            log.trace("dispatch: REST submit unsupported for exchange={} - fallback to streaming", exchangeId);
+            return false;
+        }
+    }
+
+    private void dispatchViaStreaming(SendOrderRequest request, String exchangeId) {
+        ExchangeStreamingPort streamingPort = exchangeAdapterRepository
+                .findStreamingByName(exchangeId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "No streaming capability found for exchangeId: " + exchangeId));
+
+        String json = streamingPort.getSenderMessageProcessor().execute(request);
+        streamingPort.getWebSocketPort().sendMessage(json);
     }
 
     private SendOrderRequest toSendOrderRequest(OrderDispatchCommand command, String exchangeName) {
@@ -61,3 +75,4 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
         );
     }
 }
+
