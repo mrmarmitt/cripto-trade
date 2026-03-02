@@ -10,10 +10,6 @@ import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
  *
  * <p>Esta porta concentra apenas contratos de conectividade e serializacao
  * ligados ao canal streaming.
- *
- * <p>Etapa 1 da refatoracao:
- * {@code ExchangeAdapterPort} permanece ativo e extende esta interface
- * para manter compatibilidade com os consumidores legados.
  */
 public interface ExchangeStreamingPort {
 
@@ -29,4 +25,3 @@ public interface ExchangeStreamingPort {
 
     ExchangeUrlBuilderPort getUrlBuilder();
 }
-

@@ -11,13 +11,13 @@ import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
-import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 
 import java.util.List;
@@ -32,7 +32,8 @@ import java.util.Optional;
  *   <li>REST capabilities: declared and explicit as not implemented yet.</li>
  * </ul>
  */
-public class BinanceExchangeAdapter implements ExchangeAdapterPort,
+public class BinanceExchangeAdapter implements
+        ExchangeStreamingPort,
         ExchangeOrderExecutionPort,
         ExchangeOrderQueryPort,
         ExchangeAccountQueryPort {
@@ -120,4 +121,3 @@ public class BinanceExchangeAdapter implements ExchangeAdapterPort,
         );
     }
 }
-

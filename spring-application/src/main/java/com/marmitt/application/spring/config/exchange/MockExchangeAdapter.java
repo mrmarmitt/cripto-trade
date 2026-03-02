@@ -7,13 +7,13 @@ import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
-import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 import com.marmitt.mock.adapter.LocalEventWebSocketAdapter;
 import com.marmitt.mock.config.MockMarketDataFeedConfig;
@@ -36,7 +36,7 @@ import java.util.Optional;
  *   <li>Order execution/query/account query: implemented via {@link MockExchangeRuntime}.</li>
  * </ul>
  */
-public class MockExchangeAdapter implements ExchangeAdapterPort,
+public class MockExchangeAdapter implements ExchangeStreamingPort,
         ExchangeOrderExecutionPort,
         ExchangeOrderQueryPort,
         ExchangeAccountQueryPort {
@@ -143,4 +143,3 @@ public class MockExchangeAdapter implements ExchangeAdapterPort,
         }
     }
 }
-
