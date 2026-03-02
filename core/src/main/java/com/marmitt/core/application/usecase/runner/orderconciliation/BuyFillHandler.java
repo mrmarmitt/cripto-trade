@@ -47,7 +47,7 @@ class BuyFillHandler {
                 transaction.getId(), transaction.getClientOrderId(), fillIncrement, fillPrice);
 
         Position position = strategyRunnerRepository
-                .findPositionByOpenedByTransactionId(transaction.getId())
+                .findPositionByOpenedByTransactionIdForUpdate(transaction.getId())
                 .orElse(null);
 
         if (position != null) {
@@ -62,7 +62,7 @@ class BuyFillHandler {
         }
 
         position = strategyRunnerRepository
-                .findOpenPositionByRunnerIdAndSymbol(transaction.getRunnerId(), transaction.getSymbol())
+                .findOpenPositionByRunnerIdAndSymbolForUpdate(transaction.getRunnerId(), transaction.getSymbol())
                 .orElse(null);
 
         if (position == null) {
@@ -76,9 +76,9 @@ class BuyFillHandler {
                 log.debug("orderConciliation: concurrent open position detected - reloading for transactionId={}",
                         transaction.getId());
                 position = strategyRunnerRepository
-                        .findPositionByOpenedByTransactionId(transaction.getId())
+                        .findPositionByOpenedByTransactionIdForUpdate(transaction.getId())
                         .orElseGet(() -> strategyRunnerRepository
-                                .findOpenPositionByRunnerIdAndSymbol(transaction.getRunnerId(), transaction.getSymbol())
+                                .findOpenPositionByRunnerIdAndSymbolForUpdate(transaction.getRunnerId(), transaction.getSymbol())
                                 .orElse(null));
                 if (position == null) {
                     throw new IllegalStateException("Open position not found after unique constraint conflict");
