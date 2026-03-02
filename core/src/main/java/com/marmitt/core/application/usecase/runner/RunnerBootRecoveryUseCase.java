@@ -1,5 +1,6 @@
-package com.marmitt.core.application.usecase.runner.bootrecovery;
+package com.marmitt.core.application.usecase.runner;
 
+import com.marmitt.core.application.usecase.runner.orderconciliation.ReconcileOrderUpdate;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
@@ -7,7 +8,6 @@ import com.marmitt.core.dto.runner.RecoveryContext;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.enums.TransactionStatus;
-import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
@@ -50,14 +50,14 @@ public class RunnerBootRecoveryUseCase {
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
-    private final OrderConciliationPort orderConciliationPort;
+    private final ReconcileOrderUpdate reconcileOrderUpdate;
 
     public RunnerBootRecoveryUseCase(StrategyRunnerRepositoryPort strategyRunnerRepository,
                                      ExchangeAdapterRepositoryPort exchangeAdapterRepository,
-                                     OrderConciliationPort orderConciliationPort) {
+                                     ReconcileOrderUpdate reconcileOrderUpdate) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.exchangeAdapterRepository = exchangeAdapterRepository;
-        this.orderConciliationPort = orderConciliationPort;
+        this.reconcileOrderUpdate = reconcileOrderUpdate;
     }
 
     public RecoverySummary recoverRunner(StrategyRunner runner) {
@@ -157,7 +157,7 @@ public class RunnerBootRecoveryUseCase {
             try {
                 OrderDataDto syntheticExpired = buildSyntheticTerminalOrder(
                         tx, OrderDataDto.OrderStatus.EXPIRED, "BOOT_ZOMBIE_PENDING_WITHOUT_EXCHANGE_ORDER_ID");
-                orderConciliationPort.execute(syntheticExpired);
+                reconcileOrderUpdate.execute(syntheticExpired);
                 ctx.note("Step 3: zombie expired transactionId=" + tx.getId());
             } catch (Exception e) {
                 ctx.error("Step 3 ERROR: zombie transactionId=" + tx.getId() + " reason=" + e.getMessage());
@@ -184,7 +184,7 @@ public class RunnerBootRecoveryUseCase {
 
                 if (queried.isPresent()) {
                     OrderDataDto normalized = normalizeQueriedOrder(tx, queried.get());
-                    orderConciliationPort.execute(normalized);
+                    reconcileOrderUpdate.execute(normalized);
                     ctx.note("Step 4: reconciled from exchange transactionId=" + tx.getId()
                             + " status=" + normalized.status());
                     continue;
@@ -195,7 +195,7 @@ public class RunnerBootRecoveryUseCase {
                         : OrderDataDto.OrderStatus.EXPIRED;
                 OrderDataDto synthetic = buildSyntheticTerminalOrder(
                         tx, fallbackStatus, "BOOT_NOT_FOUND_ON_EXCHANGE");
-                orderConciliationPort.execute(synthetic);
+                reconcileOrderUpdate.execute(synthetic);
                 ctx.note("Step 4: exchange not found -> local " + fallbackStatus
                         + " transactionId=" + tx.getId());
 

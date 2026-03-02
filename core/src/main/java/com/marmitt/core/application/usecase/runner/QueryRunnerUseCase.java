@@ -1,4 +1,4 @@
-package com.marmitt.core.application.usecase.runner.queryrunner;
+package com.marmitt.core.application.usecase.runner;
 
 import com.marmitt.core.dto.portfolio.TransactionDto;
 import com.marmitt.core.dto.runner.RunnerDto;

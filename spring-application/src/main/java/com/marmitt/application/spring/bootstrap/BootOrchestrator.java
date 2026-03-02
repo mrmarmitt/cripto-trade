@@ -1,6 +1,6 @@
 package com.marmitt.application.spring.bootstrap;
 
-import com.marmitt.core.application.usecase.runner.bootrecovery.RunnerBootRecoveryUseCase;
+import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.enums.RunnerStatus;

@@ -1,16 +1,16 @@
 package com.marmitt.application.spring.config.core;
 
-import com.marmitt.core.application.usecase.runner.createrunner.CreateRunnerUseCase;
-import com.marmitt.core.application.usecase.runner.bootrecovery.RunnerBootRecoveryUseCase;
-import com.marmitt.core.application.usecase.runner.orderconciliation.OrderConciliationUseCase;
-import com.marmitt.core.application.usecase.runner.queryrunner.QueryRunnerUseCase;
+import com.marmitt.core.application.usecase.runner.CreateRunnerUseCase;
+import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
+import com.marmitt.core.application.usecase.runner.OrderConciliationUseCase;
+import com.marmitt.core.application.usecase.runner.orderconciliation.ReconcileOrderUpdate;
+import com.marmitt.core.application.usecase.runner.QueryRunnerUseCase;
 import com.marmitt.core.application.usecase.runner.processsignal.ProcessTradeSignalUseCase;
 import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.capital.BuyExecutionContext;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
-import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
 import com.marmitt.core.ports.inbound.runner.QueryRunnerPort;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
@@ -47,11 +47,20 @@ public class RunnerConfig {
      * tanto como {@code OrderConciliationPort} quanto como {@code HandleOrderTerminationPort}.
      */
     @Bean
-    public OrderConciliationUseCase createOrderConciliation(TransactionTemplate txTemplate,
-                                                         StrategyRunnerRepositoryPort strategyRunnerRepository,
-                                                         EventPublisherPort eventPublisher) {
+    public ReconcileOrderUpdate reconcileOrderUpdate(
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            EventPublisherPort eventPublisher
+    ) {
+        return new ReconcileOrderUpdate(strategyRunnerRepository, eventPublisher);
+    }
 
-        return new OrderConciliationUseCase(strategyRunnerRepository, eventPublisher) {
+    @Bean
+    public OrderConciliationUseCase createOrderConciliation(
+            TransactionTemplate txTemplate,
+            ReconcileOrderUpdate reconcileOrderUpdate
+    ) {
+
+        return new OrderConciliationUseCase(reconcileOrderUpdate) {
 
             @Override
             public void transactionalSubmit(Transaction transaction) {
@@ -126,12 +135,12 @@ public class RunnerConfig {
     public RunnerBootRecoveryUseCase runnerBootRecoveryUseCase(
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             ExchangeAdapterRepositoryPort exchangeAdapterRepository,
-            OrderConciliationPort orderConciliationPort
+            ReconcileOrderUpdate reconcileOrderUpdate
     ) {
         return new RunnerBootRecoveryUseCase(
                 strategyRunnerRepository,
                 exchangeAdapterRepository,
-                orderConciliationPort
+                reconcileOrderUpdate
         );
     }
 
