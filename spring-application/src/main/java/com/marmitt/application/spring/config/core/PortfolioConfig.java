@@ -2,8 +2,10 @@ package com.marmitt.application.spring.config.core;
 
 import com.marmitt.core.application.usecase.portfolio.CreatePortfolioUseCase;
 import com.marmitt.core.application.usecase.portfolio.PortfolioBootSanityUseCase;
+import com.marmitt.core.application.usecase.portfolio.PortfolioReservationTtlUseCase;
 import com.marmitt.core.application.usecase.portfolio.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.application.usecase.portfolio.QueryPortfolioUseCase;
+import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdate;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.portfolio.QueryPortfolioPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
@@ -54,5 +56,13 @@ public class PortfolioConfig {
             ExchangeAdapterRepositoryPort exchangeAdapterRepository
     ) {
         return new PortfolioZombieDetectionUseCase(strategyRunnerRepository, exchangeAdapterRepository);
+    }
+
+    @Bean
+    public PortfolioReservationTtlUseCase portfolioReservationTtlUseCase(
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            ConciliationOrderUpdate conciliationOrderUpdate
+    ) {
+        return new PortfolioReservationTtlUseCase(strategyRunnerRepository, conciliationOrderUpdate);
     }
 }

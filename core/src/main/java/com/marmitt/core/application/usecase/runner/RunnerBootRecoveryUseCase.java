@@ -51,13 +51,16 @@ public class RunnerBootRecoveryUseCase {
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
     private final ConciliationOrderUpdate conciliationOrderUpdate;
+    private final long pendingWithoutExchangeOrderIdTtlMs;
 
     public RunnerBootRecoveryUseCase(StrategyRunnerRepositoryPort strategyRunnerRepository,
                                      ExchangeAdapterRepositoryPort exchangeAdapterRepository,
-                                     ConciliationOrderUpdate conciliationOrderUpdate) {
+                                     ConciliationOrderUpdate conciliationOrderUpdate,
+                                     long pendingWithoutExchangeOrderIdTtlMs) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.exchangeAdapterRepository = exchangeAdapterRepository;
         this.conciliationOrderUpdate = conciliationOrderUpdate;
+        this.pendingWithoutExchangeOrderIdTtlMs = pendingWithoutExchangeOrderIdTtlMs;
     }
 
     public RecoverySummary recoverRunner(StrategyRunner runner) {
@@ -153,7 +156,18 @@ public class RunnerBootRecoveryUseCase {
     }
 
     private void step3ExpireZombies(RecoveryContext ctx) {
+        Instant cutoff = pendingWithoutExchangeOrderIdTtlMs > 0
+                ? Instant.now().minusMillis(pendingWithoutExchangeOrderIdTtlMs)
+                : Instant.EPOCH;
+
         for (Transaction tx : ctx.zombies()) {
+            if (pendingWithoutExchangeOrderIdTtlMs > 0
+                    && tx.getRequestedAt() != null
+                    && tx.getRequestedAt().isAfter(cutoff)) {
+                ctx.note("Step 3: zombie within TTL - keeping pending transactionId=" + tx.getId());
+                continue;
+            }
+
             try {
                 OrderDataDto syntheticExpired = buildSyntheticTerminalOrder(
                         tx, OrderDataDto.OrderStatus.EXPIRED, "BOOT_ZOMBIE_PENDING_WITHOUT_EXCHANGE_ORDER_ID");

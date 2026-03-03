@@ -39,5 +39,8 @@ runner:
 portfolio:
   sanity-check:
     threshold: 0.00000001
+  reservation-ttl:
+    enabled: true
+    ttl-ms: 300000
   zombie-detection:
     enabled: true

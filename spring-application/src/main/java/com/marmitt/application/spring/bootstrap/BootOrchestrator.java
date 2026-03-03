@@ -2,12 +2,15 @@ package com.marmitt.application.spring.bootstrap;
 
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.application.usecase.portfolio.PortfolioBootSanityUseCase;
+import com.marmitt.core.application.usecase.portfolio.PortfolioReservationTtlUseCase;
 import com.marmitt.core.application.usecase.portfolio.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.portfolio.PortfolioBootSanityResult;
+import com.marmitt.core.dto.portfolio.PortfolioReservationTtlResult;
 import com.marmitt.core.dto.portfolio.PortfolioZombieDetectionResult;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
+import com.marmitt.core.enums.PortfolioReservationTtlStatus;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.enums.PortfolioSanityStatus;
 import com.marmitt.core.enums.PortfolioZombieDetectionStatus;
@@ -54,9 +57,11 @@ public class BootOrchestrator {
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
     private final PortfolioBootSanityUseCase portfolioBootSanityUseCase;
+    private final PortfolioReservationTtlUseCase portfolioReservationTtlUseCase;
     private final PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase;
     private final RunnerBootPhase2Properties phase2Properties;
     private final PortfolioSanityCheckProperties portfolioSanityCheckProperties;
+    private final PortfolioReservationTtlProperties portfolioReservationTtlProperties;
     private final PortfolioZombieDetectionProperties portfolioZombieDetectionProperties;
     private final RunnerBootRecoveryUseCase runnerBootRecoveryUseCase;
 
@@ -73,6 +78,7 @@ public class BootOrchestrator {
         runPhase1InfrastructureReadiness(eligibleRunners);
         runPhase2PortfolioSanity(portfolios, eligibleRunners);
         runPhase2ZombieDetection(portfolios, eligibleRunners);
+        runPhase2ReservationTtl(portfolios, eligibleRunners);
 
         List<RunnerBootRecoveryUseCase.RecoverySummary> summaries = eligibleRunners.stream()
                 .map(this::recoverRunner)
@@ -279,6 +285,108 @@ public class BootOrchestrator {
         }
 
         log.info("bootOrchestrator.phase2.zombie: completed");
+    }
+
+    private void runPhase2ReservationTtl(List<Portfolio> portfolios, List<StrategyRunner> eligibleRunners) {
+        if (!portfolioReservationTtlProperties.isEnabled()) {
+            log.info("bootOrchestrator.phase2.ttl: disabled by configuration");
+            return;
+        }
+
+        long ttlMs = portfolioReservationTtlProperties.getTtlMs();
+        Phase2Mode mode = phase2Properties.getMode();
+        log.info("bootOrchestrator.phase2.ttl: start portfolios={} mode={} ttlMs={}",
+                portfolios.size(), mode, ttlMs);
+
+        for (Portfolio portfolio : portfolios) {
+            Set<String> exchanges = resolvePortfolioExchanges(portfolio, eligibleRunners);
+            if (exchanges.isEmpty()) {
+                continue;
+            }
+
+            for (String exchange : exchanges) {
+                List<StrategyRunner> scopedRunners = eligibleRunners.stream()
+                        .filter(runner -> runner.getPortfolioId().equals(portfolio.getId()))
+                        .filter(runner -> exchange.equalsIgnoreCase(runner.getExchangeId()))
+                        .toList();
+
+                PortfolioReservationTtlResult result = portfolioReservationTtlUseCase.execute(
+                        portfolio.getId(),
+                        exchange,
+                        ttlMs,
+                        scopedRunners
+                );
+
+                switch (result.status()) {
+                    case CLEAN -> log.info(
+                            "bootOrchestrator.phase2.ttl: portfolio={} exchange={} status={} ttlMs={} scannedPending={} eligibleNoExchangeOrderId={} expired={} fresh={} errors={}",
+                            result.portfolioId(),
+                            result.exchangeId(),
+                            result.status(),
+                            result.ttlMs(),
+                            result.scannedPendingCount(),
+                            result.eligibleNoExchangeOrderIdCount(),
+                            result.expiredCount(),
+                            result.freshCount(),
+                            result.errorCount()
+                    );
+                    case EXPIRED -> {
+                        log.warn(
+                                "bootOrchestrator.phase2.ttl: portfolio={} exchange={} status={} code={} ttlMs={} scannedPending={} eligibleNoExchangeOrderId={} expired={} fresh={} errors={}",
+                                result.portfolioId(),
+                                result.exchangeId(),
+                                result.status(),
+                                result.code(),
+                                result.ttlMs(),
+                                result.scannedPendingCount(),
+                                result.eligibleNoExchangeOrderIdCount(),
+                                result.expiredCount(),
+                                result.freshCount(),
+                                result.errorCount()
+                        );
+                        result.samples().forEach(transactionId -> log.warn(
+                                "bootOrchestrator.phase2.ttl: expiredSample portfolio={} exchange={} transactionId={}",
+                                result.portfolioId(),
+                                result.exchangeId(),
+                                transactionId
+                        ));
+                    }
+                    case SKIPPED -> log.warn(
+                            "bootOrchestrator.phase2.ttl: portfolio={} exchange={} status={} code={} message={} ttlMs={}",
+                            result.portfolioId(),
+                            result.exchangeId(),
+                            result.status(),
+                            result.code(),
+                            result.message(),
+                            result.ttlMs()
+                    );
+                    case FAILED -> log.error(
+                            "bootOrchestrator.phase2.ttl: portfolio={} exchange={} status={} code={} message={} ttlMs={} scannedPending={} eligibleNoExchangeOrderId={} expired={} fresh={} errors={}",
+                            result.portfolioId(),
+                            result.exchangeId(),
+                            result.status(),
+                            result.code(),
+                            result.message(),
+                            result.ttlMs(),
+                            result.scannedPendingCount(),
+                            result.eligibleNoExchangeOrderIdCount(),
+                            result.expiredCount(),
+                            result.freshCount(),
+                            result.errorCount()
+                    );
+                }
+
+                boolean criticalFailure = result.status() == PortfolioReservationTtlStatus.FAILED;
+                if (criticalFailure && mode == Phase2Mode.FAIL_FAST) {
+                    throw new IllegalStateException("Phase2 reservation TTL failed portfolio=" + result.portfolioId()
+                            + " exchange=" + result.exchangeId()
+                            + " code=" + result.code()
+                            + " message=" + result.message());
+                }
+            }
+        }
+
+        log.info("bootOrchestrator.phase2.ttl: completed");
     }
 
     private Set<String> resolvePortfolioExchanges(Portfolio portfolio, List<StrategyRunner> eligibleRunners) {
