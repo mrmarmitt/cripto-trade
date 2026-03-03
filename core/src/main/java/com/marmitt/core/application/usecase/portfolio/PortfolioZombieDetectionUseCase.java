@@ -15,6 +15,8 @@ import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
+import java.util.Comparator;
+import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -38,6 +40,26 @@ public class PortfolioZombieDetectionUseCase {
     }
 
     public PortfolioZombieDetectionResult execute(UUID portfolioId, String exchangeId) {
+        return execute(portfolioId, exchangeId, true);
+    }
+
+    public PortfolioZombieDetectionResult execute(UUID portfolioId, String exchangeId, boolean cutoffEnabled) {
+        List<StrategyRunner> scopedRunners = strategyRunnerRepository.findByPortfolioId(portfolioId).stream()
+                .filter(runner -> runner.getStatus() != RunnerStatus.ARCHIVED)
+                .filter(runner -> runner.getExchangeId() != null
+                        && exchangeId != null
+                        && exchangeId.equalsIgnoreCase(runner.getExchangeId()))
+                .toList();
+
+        if (scopedRunners.isEmpty()) {
+            return PortfolioZombieDetectionResult.skipped(
+                    portfolioId,
+                    exchangeId,
+                    "NO_RUNNERS",
+                    "No eligible runners found for portfolio/exchange."
+            );
+        }
+
         Optional<ExchangeOrderQueryPort> orderQueryOptional =
                 exchangeAdapterRepository.findOrderQueryByName(exchangeId);
         if (orderQueryOptional.isEmpty()) {
@@ -48,7 +70,13 @@ public class PortfolioZombieDetectionUseCase {
 
         try {
             List<OrderDataDto> openOrders = orderQueryOptional.get().listAllOpenOrders();
-            return classifyOpenOrders(portfolioId, exchangeId, openOrders != null ? openOrders : List.of());
+            return classifyOpenOrders(
+                    portfolioId,
+                    exchangeId,
+                    openOrders != null ? openOrders : List.of(),
+                    scopedRunners,
+                    cutoffEnabled
+            );
         } catch (UnsupportedOperationException e) {
             return PortfolioZombieDetectionResult.skipped(
                     portfolioId, exchangeId, "ORDER_QUERY_UNSUPPORTED", e.getMessage());
@@ -62,14 +90,24 @@ public class PortfolioZombieDetectionUseCase {
 
     private PortfolioZombieDetectionResult classifyOpenOrders(UUID portfolioId,
                                                               String exchangeId,
-                                                              List<OrderDataDto> openOrders) {
+                                                              List<OrderDataDto> openOrders,
+                                                              List<StrategyRunner> scopedRunners,
+                                                              boolean cutoffEnabled) {
         int invalidFormatCount = 0;
         int unknownRunnerCount = 0;
         int noLocalMatchCount = 0;
+        int beforeCutoffCount = 0;
         int unknownSymbolCount = 0;
         List<PortfolioZombieCandidate> samples = new ArrayList<>();
+        Instant portfolioCutoff = cutoffEnabled ? resolvePortfolioCutoff(scopedRunners) : null;
 
         for (OrderDataDto order : openOrders) {
+            if (cutoffEnabled && isBeforeCutoff(order.timestamp(), portfolioCutoff)) {
+                beforeCutoffCount++;
+                addSample(samples, order, DlqReason.RECONCILIATION_CONFLICT, "BEFORE_CUTOFF");
+                continue;
+            }
+
             String clientOrderId = order.clientOrderId();
             String shortCode = ClientOrderId.getRunnerShortCode(clientOrderId);
             if (shortCode != null) {
@@ -99,6 +137,12 @@ public class PortfolioZombieDetectionUseCase {
             }
 
             StrategyRunner runner = runnerOptional.get();
+            if (cutoffEnabled && isBeforeCutoff(order.timestamp(), resolveRunnerCutoff(runner))) {
+                beforeCutoffCount++;
+                addSample(samples, order, DlqReason.RECONCILIATION_CONFLICT, "BEFORE_CUTOFF");
+                continue;
+            }
+
             if (!transactionOptional.get().getRunnerId().equals(runner.getId())) {
                 unknownRunnerCount++;
                 addSample(samples, order, DlqReason.UNKNOWN_RUNNER, "OWNER_MISMATCH");
@@ -111,7 +155,11 @@ public class PortfolioZombieDetectionUseCase {
             }
         }
 
-        if (invalidFormatCount == 0 && unknownRunnerCount == 0 && noLocalMatchCount == 0 && unknownSymbolCount == 0) {
+        if (invalidFormatCount == 0
+                && unknownRunnerCount == 0
+                && noLocalMatchCount == 0
+                && beforeCutoffCount == 0
+                && unknownSymbolCount == 0) {
             return PortfolioZombieDetectionResult.clean(portfolioId, exchangeId, openOrders.size());
         }
 
@@ -122,6 +170,7 @@ public class PortfolioZombieDetectionUseCase {
                 invalidFormatCount,
                 unknownRunnerCount,
                 noLocalMatchCount,
+                beforeCutoffCount,
                 unknownSymbolCount,
                 samples
         );
@@ -148,5 +197,23 @@ public class PortfolioZombieDetectionUseCase {
             return true;
         }
         return runnerSymbol.equalsIgnoreCase(orderSymbol.toString());
+    }
+
+    private static Instant resolvePortfolioCutoff(List<StrategyRunner> scopedRunners) {
+        return scopedRunners.stream()
+                .map(PortfolioZombieDetectionUseCase::resolveRunnerCutoff)
+                .min(Comparator.naturalOrder())
+                .orElse(null);
+    }
+
+    private static Instant resolveRunnerCutoff(StrategyRunner runner) {
+        if (runner.getLastReconciliationAt() != null) {
+            return runner.getLastReconciliationAt();
+        }
+        return runner.getCreatedAt();
+    }
+
+    private static boolean isBeforeCutoff(Instant orderTimestamp, Instant cutoff) {
+        return cutoff != null && orderTimestamp != null && orderTimestamp.isBefore(cutoff);
     }
 }

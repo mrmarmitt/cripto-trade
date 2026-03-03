@@ -7,8 +7,17 @@ import org.springframework.stereotype.Component;
 @ConfigurationProperties(prefix = "runner.boot.phase2")
 public class RunnerBootPhase2Properties {
 
+    private boolean enabled = true;
     private Phase2Mode mode = Phase2Mode.WARN_ONLY;
     private Phase2AccountQueryPolicy accountQueryPolicy = Phase2AccountQueryPolicy.SKIP;
+
+    public boolean isEnabled() {
+        return enabled;
+    }
+
+    public void setEnabled(boolean enabled) {
+        this.enabled = enabled;
+    }
 
     public Phase2Mode getMode() {
         return mode;

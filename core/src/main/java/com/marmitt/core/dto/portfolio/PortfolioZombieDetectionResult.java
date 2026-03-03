@@ -16,6 +16,7 @@ public record PortfolioZombieDetectionResult(
         int invalidFormatCount,
         int unknownRunnerCount,
         int noLocalMatchCount,
+        int beforeCutoffCount,
         int unknownSymbolCount,
         List<PortfolioZombieCandidate> samples
 ) {
@@ -34,6 +35,7 @@ public record PortfolioZombieDetectionResult(
                 0,
                 0,
                 0,
+                0,
                 List.of()
         );
     }
@@ -44,9 +46,14 @@ public record PortfolioZombieDetectionResult(
                                                           int invalidFormatCount,
                                                           int unknownRunnerCount,
                                                           int noLocalMatchCount,
+                                                          int beforeCutoffCount,
                                                           int unknownSymbolCount,
                                                           List<PortfolioZombieCandidate> samples) {
-        int zombieCount = invalidFormatCount + unknownRunnerCount + noLocalMatchCount + unknownSymbolCount;
+        int zombieCount = invalidFormatCount
+                + unknownRunnerCount
+                + noLocalMatchCount
+                + beforeCutoffCount
+                + unknownSymbolCount;
 
         return new PortfolioZombieDetectionResult(
                 portfolioId,
@@ -59,6 +66,7 @@ public record PortfolioZombieDetectionResult(
                 invalidFormatCount,
                 unknownRunnerCount,
                 noLocalMatchCount,
+                beforeCutoffCount,
                 unknownSymbolCount,
                 samples != null ? List.copyOf(samples) : List.of()
         );
@@ -80,6 +88,7 @@ public record PortfolioZombieDetectionResult(
                 0,
                 0,
                 0,
+                0,
                 List.of()
         );
     }
@@ -94,6 +103,7 @@ public record PortfolioZombieDetectionResult(
                 PortfolioZombieDetectionStatus.FAILED,
                 code,
                 message,
+                0,
                 0,
                 0,
                 0,

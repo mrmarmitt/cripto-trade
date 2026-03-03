@@ -4,7 +4,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 @Component
-@ConfigurationProperties(prefix = "portfolio.zombie-detection")
+@ConfigurationProperties(prefix = "runner.boot.phase2.portfolio.zombie-detection")
 public class PortfolioZombieDetectionProperties {
 
     private boolean enabled = true;

@@ -32,15 +32,22 @@ logging:
 runner:
   boot:
     orchestrator-enabled: true
+    phase1:
+      enabled: true
     phase2:
+      enabled: true
       mode: WARN_ONLY
       account-query-policy: SKIP
-
-portfolio:
-  sanity-check:
-    threshold: 0.00000001
-  reservation-ttl:
-    enabled: true
-    ttl-ms: 300000
-  zombie-detection:
-    enabled: true
+      portfolio:
+        sanity-check:
+          enabled: true
+          threshold: 0.00000001
+        cutoff:
+          enabled: true
+        reservation-ttl:
+          enabled: true
+          ttl-ms: 300000
+        zombie-detection:
+          enabled: true
+    phase3:
+      enabled: true

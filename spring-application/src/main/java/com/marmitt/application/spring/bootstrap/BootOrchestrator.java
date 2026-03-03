@@ -59,10 +59,13 @@ public class BootOrchestrator {
     private final PortfolioBootSanityUseCase portfolioBootSanityUseCase;
     private final PortfolioReservationTtlUseCase portfolioReservationTtlUseCase;
     private final PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase;
+    private final RunnerBootPhase1Properties phase1Properties;
     private final RunnerBootPhase2Properties phase2Properties;
+    private final RunnerBootPhase3Properties phase3Properties;
     private final PortfolioSanityCheckProperties portfolioSanityCheckProperties;
     private final PortfolioReservationTtlProperties portfolioReservationTtlProperties;
     private final PortfolioZombieDetectionProperties portfolioZombieDetectionProperties;
+    private final PortfolioCutoffProperties portfolioCutoffProperties;
     private final RunnerBootRecoveryUseCase runnerBootRecoveryUseCase;
 
     @EventListener(ApplicationReadyEvent.class)
@@ -75,14 +78,27 @@ public class BootOrchestrator {
                 .filter(this::isEligibleForRecovery)
                 .toList();
 
-        runPhase1InfrastructureReadiness(eligibleRunners);
-        runPhase2PortfolioSanity(portfolios, eligibleRunners);
-        runPhase2ZombieDetection(portfolios, eligibleRunners);
-        runPhase2ReservationTtl(portfolios, eligibleRunners);
+        if (phase1Properties.isEnabled()) {
+            runPhase1InfrastructureReadiness(eligibleRunners);
+        } else {
+            log.info("bootOrchestrator.phase1: disabled by configuration");
+        }
 
-        List<RunnerBootRecoveryUseCase.RecoverySummary> summaries = eligibleRunners.stream()
-                .map(this::recoverRunner)
-                .toList();
+        if (phase2Properties.isEnabled()) {
+            runPhase2PortfolioSanity(portfolios, eligibleRunners);
+            runPhase2ZombieDetection(portfolios, eligibleRunners);
+            runPhase2ReservationTtl(portfolios, eligibleRunners);
+        } else {
+            log.info("bootOrchestrator.phase2: disabled by configuration");
+        }
+
+        List<RunnerBootRecoveryUseCase.RecoverySummary> summaries = phase3Properties.isEnabled()
+                ? eligibleRunners.stream().map(this::recoverRunner).toList()
+                : List.of();
+
+        if (!phase3Properties.isEnabled()) {
+            log.info("bootOrchestrator.phase3: disabled by configuration");
+        }
 
         log.info("bootOrchestrator: completed portfolios={} runners={}",
                 portfolios.size(), summaries.size());
@@ -122,15 +138,20 @@ public class BootOrchestrator {
     }
 
     private void runPhase2PortfolioSanity(List<Portfolio> portfolios, List<StrategyRunner> eligibleRunners) {
+        if (!portfolioSanityCheckProperties.isEnabled()) {
+            log.info("bootOrchestrator.phase2.sanity: disabled by configuration");
+            return;
+        }
+
         Phase2Mode mode = phase2Properties.getMode();
-        log.info("bootOrchestrator.phase2: start portfolios={} mode={} accountQueryPolicy={} threshold={}",
+        log.info("bootOrchestrator.phase2.sanity: start portfolios={} mode={} accountQueryPolicy={} threshold={}",
                 portfolios.size(), mode, phase2Properties.getAccountQueryPolicy(), portfolioSanityCheckProperties.getThreshold());
 
         for (Portfolio portfolio : portfolios) {
             Set<String> exchanges = resolvePortfolioExchanges(portfolio, eligibleRunners);
 
             if (exchanges.isEmpty()) {
-                log.debug("bootOrchestrator.phase2: portfolio={} skipped - no eligible runner exchange",
+                log.debug("bootOrchestrator.phase2.sanity: portfolio={} skipped - no eligible runner exchange",
                         portfolio.getId());
                 continue;
             }
@@ -145,7 +166,7 @@ public class BootOrchestrator {
 
                 switch (result.status()) {
                     case PASS, WARN_SURPLUS -> log.info(
-                            "bootOrchestrator.phase2: portfolio={} exchange={} status={} code={} localTotal={} exchangeTotal={} signedDelta={} deviation={}",
+                            "bootOrchestrator.phase2.sanity: portfolio={} exchange={} status={} code={} localTotal={} exchangeTotal={} signedDelta={} deviation={}",
                             result.portfolioId(),
                             result.exchangeId(),
                             result.status(),
@@ -156,7 +177,7 @@ public class BootOrchestrator {
                             result.absoluteDeviation()
                     );
                     case SKIPPED -> log.warn(
-                            "bootOrchestrator.phase2: portfolio={} exchange={} status={} code={} message={}",
+                            "bootOrchestrator.phase2.sanity: portfolio={} exchange={} status={} code={} message={}",
                             result.portfolioId(),
                             result.exchangeId(),
                             result.status(),
@@ -164,7 +185,7 @@ public class BootOrchestrator {
                             result.message()
                     );
                     case FAIL_DEFICIT -> log.error(
-                            "bootOrchestrator.phase2: portfolio={} exchange={} status={} code={} message={} localTotal={} exchangeTotal={} signedDelta={} deviation={}",
+                            "bootOrchestrator.phase2.sanity: portfolio={} exchange={} status={} code={} message={} localTotal={} exchangeTotal={} signedDelta={} deviation={}",
                             result.portfolioId(),
                             result.exchangeId(),
                             result.status(),
@@ -176,7 +197,7 @@ public class BootOrchestrator {
                             result.absoluteDeviation()
                     );
                     case FAILED -> log.warn(
-                            "bootOrchestrator.phase2: portfolio={} exchange={} status={} code={} message={}",
+                            "bootOrchestrator.phase2.sanity: portfolio={} exchange={} status={} code={} message={}",
                             result.portfolioId(),
                             result.exchangeId(),
                             result.status(),
@@ -198,7 +219,7 @@ public class BootOrchestrator {
             }
         }
 
-        log.info("bootOrchestrator.phase2: completed");
+        log.info("bootOrchestrator.phase2.sanity: completed");
     }
 
     private void runPhase2ZombieDetection(List<Portfolio> portfolios, List<StrategyRunner> eligibleRunners) {
@@ -208,8 +229,8 @@ public class BootOrchestrator {
         }
 
         Phase2Mode mode = phase2Properties.getMode();
-        log.info("bootOrchestrator.phase2.zombie: start portfolios={} mode={}",
-                portfolios.size(), mode);
+        log.info("bootOrchestrator.phase2.zombie: start portfolios={} mode={} cutoffEnabled={}",
+                portfolios.size(), mode, portfolioCutoffProperties.isEnabled());
 
         for (Portfolio portfolio : portfolios) {
             Set<String> exchanges = resolvePortfolioExchanges(portfolio, eligibleRunners);
@@ -219,7 +240,11 @@ public class BootOrchestrator {
 
             for (String exchange : exchanges) {
                 PortfolioZombieDetectionResult result =
-                        portfolioZombieDetectionUseCase.execute(portfolio.getId(), exchange);
+                        portfolioZombieDetectionUseCase.execute(
+                                portfolio.getId(),
+                                exchange,
+                                portfolioCutoffProperties.isEnabled()
+                        );
 
                 switch (result.status()) {
                     case CLEAN -> log.info(
@@ -232,7 +257,7 @@ public class BootOrchestrator {
                     );
                     case DETECTED -> {
                         log.warn(
-                                "bootOrchestrator.phase2.zombie: portfolio={} exchange={} status={} code={} openOrders={} zombies={} invalidFormat={} unknownRunner={} noLocalMatch={} unknownSymbol={}",
+                                "bootOrchestrator.phase2.zombie: portfolio={} exchange={} status={} code={} openOrders={} zombies={} invalidFormat={} unknownRunner={} noLocalMatch={} beforeCutoff={} unknownSymbol={}",
                                 result.portfolioId(),
                                 result.exchangeId(),
                                 result.status(),
@@ -242,6 +267,7 @@ public class BootOrchestrator {
                                 result.invalidFormatCount(),
                                 result.unknownRunnerCount(),
                                 result.noLocalMatchCount(),
+                                result.beforeCutoffCount(),
                                 result.unknownSymbolCount()
                         );
                         result.samples().forEach(sample -> log.warn(
