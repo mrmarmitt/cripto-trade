@@ -21,9 +21,12 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 import java.util.stream.Stream;
@@ -67,41 +70,56 @@ public class BootOrchestrator {
     private final PortfolioZombieDetectionProperties portfolioZombieDetectionProperties;
     private final PortfolioCutoffProperties portfolioCutoffProperties;
     private final RunnerBootRecoveryUseCase runnerBootRecoveryUseCase;
+    private final BootStatusTracker bootStatusTracker;
+    private final BootMetricsRecorder bootMetricsRecorder;
+    private final ApplicationEventPublisher applicationEventPublisher;
 
     @EventListener(ApplicationReadyEvent.class)
     public void onApplicationReady() {
-        log.info("bootOrchestrator: start");
+        bootStatusTracker.startRun(phase2Properties.getMode().name());
+        log.info("bootOrchestrator: start runId={} mode={} phase1Enabled={} phase2Enabled={} phase3Enabled={}",
+                bootStatusTracker.currentRunId(),
+                phase2Properties.getMode(),
+                phase1Properties.isEnabled(),
+                phase2Properties.isEnabled(),
+                phase3Properties.isEnabled());
 
-        List<Portfolio> portfolios = portfolioRepository.findAll();
-        List<StrategyRunner> eligibleRunners = portfolios.stream()
-                .flatMap(this::loadRunnersByPortfolio)
-                .filter(this::isEligibleForRecovery)
-                .toList();
+        try {
+            List<Portfolio> portfolios = portfolioRepository.findAll();
+            List<StrategyRunner> eligibleRunners = portfolios.stream()
+                    .flatMap(this::loadRunnersByPortfolio)
+                    .filter(this::isEligibleForRecovery)
+                    .toList();
 
-        if (phase1Properties.isEnabled()) {
-            runPhase1InfrastructureReadiness(eligibleRunners);
-        } else {
-            log.info("bootOrchestrator.phase1: disabled by configuration");
+            executePhase("phase1.infrastructure", phase1Properties.isEnabled(),
+                    () -> runPhase1InfrastructureReadiness(eligibleRunners));
+
+            boolean phase2Enabled = phase2Properties.isEnabled();
+            executePhase("phase2.sanity",
+                    phase2Enabled && portfolioSanityCheckProperties.isEnabled(),
+                    () -> runPhase2PortfolioSanity(portfolios, eligibleRunners));
+            executePhase("phase2.zombie",
+                    phase2Enabled && portfolioZombieDetectionProperties.isEnabled(),
+                    () -> runPhase2ZombieDetection(portfolios, eligibleRunners));
+            executePhase("phase2.reservation_ttl",
+                    phase2Enabled && portfolioReservationTtlProperties.isEnabled(),
+                    () -> runPhase2ReservationTtl(portfolios, eligibleRunners));
+
+            List<RunnerBootRecoveryUseCase.RecoverySummary> summaries = new ArrayList<>();
+            executePhase("phase3.runner_recovery", phase3Properties.isEnabled(),
+                    () -> summaries.addAll(eligibleRunners.stream().map(this::recoverRunner).toList()));
+
+            bootStatusTracker.completeRun();
+            bootMetricsRecorder.recordRun(BootRunStatus.SUCCESS);
+            log.info("bootOrchestrator: completed runId={} portfolios={} runners={}",
+                    bootStatusTracker.currentRunId(), portfolios.size(), summaries.size());
+        } catch (RuntimeException e) {
+            bootStatusTracker.failRun("boot", e.getMessage());
+            bootMetricsRecorder.recordRun(BootRunStatus.FAILED);
+            log.error("bootOrchestrator: failed runId={} reason={}",
+                    bootStatusTracker.currentRunId(), e.getMessage(), e);
+            throw e;
         }
-
-        if (phase2Properties.isEnabled()) {
-            runPhase2PortfolioSanity(portfolios, eligibleRunners);
-            runPhase2ZombieDetection(portfolios, eligibleRunners);
-            runPhase2ReservationTtl(portfolios, eligibleRunners);
-        } else {
-            log.info("bootOrchestrator.phase2: disabled by configuration");
-        }
-
-        List<RunnerBootRecoveryUseCase.RecoverySummary> summaries = phase3Properties.isEnabled()
-                ? eligibleRunners.stream().map(this::recoverRunner).toList()
-                : List.of();
-
-        if (!phase3Properties.isEnabled()) {
-            log.info("bootOrchestrator.phase3: disabled by configuration");
-        }
-
-        log.info("bootOrchestrator: completed portfolios={} runners={}",
-                portfolios.size(), summaries.size());
     }
 
     private void runPhase1InfrastructureReadiness(List<StrategyRunner> runners) {
@@ -125,9 +143,11 @@ public class BootOrchestrator {
                     .checkBootReadiness();
 
             if (!readiness.ready()) {
-                throw new IllegalStateException("Phase1 readiness failed exchange=" + exchange
-                        + " code=" + readiness.code()
-                        + " message=" + readiness.message());
+                throw failFast(
+                        "phase1.infrastructure",
+                        readiness.code(),
+                        "Phase1 readiness failed exchange=" + exchange + " message=" + readiness.message()
+                );
             }
 
             log.info("bootOrchestrator.phase1: exchange={} ready code={} message={}",
@@ -138,11 +158,6 @@ public class BootOrchestrator {
     }
 
     private void runPhase2PortfolioSanity(List<Portfolio> portfolios, List<StrategyRunner> eligibleRunners) {
-        if (!portfolioSanityCheckProperties.isEnabled()) {
-            log.info("bootOrchestrator.phase2.sanity: disabled by configuration");
-            return;
-        }
-
         Phase2Mode mode = phase2Properties.getMode();
         log.info("bootOrchestrator.phase2.sanity: start portfolios={} mode={} accountQueryPolicy={} threshold={}",
                 portfolios.size(), mode, phase2Properties.getAccountQueryPolicy(), portfolioSanityCheckProperties.getThreshold());
@@ -211,10 +226,13 @@ public class BootOrchestrator {
                 boolean criticalFailure = result.status() == PortfolioSanityStatus.FAIL_DEFICIT
                         || result.status() == PortfolioSanityStatus.FAILED;
                 if ((skippedWithFailPolicy || criticalFailure) && mode == Phase2Mode.FAIL_FAST) {
-                    throw new IllegalStateException("Phase2 sanity failed portfolio=" + result.portfolioId()
-                            + " exchange=" + result.exchangeId()
-                            + " code=" + result.code()
-                            + " message=" + result.message());
+                    throw failFast(
+                            "phase2.sanity",
+                            result.code(),
+                            "Phase2 sanity failed portfolio=" + result.portfolioId()
+                                    + " exchange=" + result.exchangeId()
+                                    + " message=" + result.message()
+                    );
                 }
             }
         }
@@ -223,11 +241,6 @@ public class BootOrchestrator {
     }
 
     private void runPhase2ZombieDetection(List<Portfolio> portfolios, List<StrategyRunner> eligibleRunners) {
-        if (!portfolioZombieDetectionProperties.isEnabled()) {
-            log.info("bootOrchestrator.phase2.zombie: disabled by configuration");
-            return;
-        }
-
         Phase2Mode mode = phase2Properties.getMode();
         log.info("bootOrchestrator.phase2.zombie: start portfolios={} mode={} cutoffEnabled={}",
                 portfolios.size(), mode, portfolioCutoffProperties.isEnabled());
@@ -302,10 +315,13 @@ public class BootOrchestrator {
                 boolean criticalFailure = result.status() == PortfolioZombieDetectionStatus.FAILED
                         || result.status() == PortfolioZombieDetectionStatus.DETECTED;
                 if (criticalFailure && mode == Phase2Mode.FAIL_FAST) {
-                    throw new IllegalStateException("Phase2 zombie detection failed portfolio=" + result.portfolioId()
-                            + " exchange=" + result.exchangeId()
-                            + " code=" + result.code()
-                            + " message=" + result.message());
+                    throw failFast(
+                            "phase2.zombie",
+                            result.code(),
+                            "Phase2 zombie detection failed portfolio=" + result.portfolioId()
+                                    + " exchange=" + result.exchangeId()
+                                    + " message=" + result.message()
+                    );
                 }
             }
         }
@@ -314,11 +330,6 @@ public class BootOrchestrator {
     }
 
     private void runPhase2ReservationTtl(List<Portfolio> portfolios, List<StrategyRunner> eligibleRunners) {
-        if (!portfolioReservationTtlProperties.isEnabled()) {
-            log.info("bootOrchestrator.phase2.ttl: disabled by configuration");
-            return;
-        }
-
         long ttlMs = portfolioReservationTtlProperties.getTtlMs();
         Phase2Mode mode = phase2Properties.getMode();
         log.info("bootOrchestrator.phase2.ttl: start portfolios={} mode={} ttlMs={}",
@@ -404,10 +415,13 @@ public class BootOrchestrator {
 
                 boolean criticalFailure = result.status() == PortfolioReservationTtlStatus.FAILED;
                 if (criticalFailure && mode == Phase2Mode.FAIL_FAST) {
-                    throw new IllegalStateException("Phase2 reservation TTL failed portfolio=" + result.portfolioId()
-                            + " exchange=" + result.exchangeId()
-                            + " code=" + result.code()
-                            + " message=" + result.message());
+                    throw failFast(
+                            "phase2.reservation_ttl",
+                            result.code(),
+                            "Phase2 reservation TTL failed portfolio=" + result.portfolioId()
+                                    + " exchange=" + result.exchangeId()
+                                    + " message=" + result.message()
+                    );
                 }
             }
         }
@@ -445,5 +459,44 @@ public class BootOrchestrator {
         }
 
         return summary;
+    }
+
+    private void executePhase(String phase, boolean enabled, Runnable action) {
+        if (!enabled) {
+            bootStatusTracker.completePhase(phase, BootPhaseStatus.SKIPPED, "disabled_by_configuration");
+            bootMetricsRecorder.recordPhase(phase, BootPhaseStatus.SKIPPED, 0L);
+            log.info("bootOrchestrator: phase={} status=SKIPPED reason=disabled_by_configuration runId={}",
+                    phase, bootStatusTracker.currentRunId());
+            return;
+        }
+
+        long startedNs = System.nanoTime();
+        bootStatusTracker.startPhase(phase);
+        try {
+            action.run();
+            long durationMs = (System.nanoTime() - startedNs) / 1_000_000L;
+            bootStatusTracker.completePhase(phase, BootPhaseStatus.SUCCESS, "ok");
+            bootMetricsRecorder.recordPhase(phase, BootPhaseStatus.SUCCESS, durationMs);
+            log.info("bootOrchestrator: phase={} status=SUCCESS durationMs={} runId={}",
+                    phase, durationMs, bootStatusTracker.currentRunId());
+        } catch (RuntimeException e) {
+            long durationMs = (System.nanoTime() - startedNs) / 1_000_000L;
+            bootStatusTracker.completePhase(phase, BootPhaseStatus.FAILED, e.getMessage());
+            bootMetricsRecorder.recordPhase(phase, BootPhaseStatus.FAILED, durationMs);
+            bootStatusTracker.failRun(phase, e.getMessage());
+            throw e;
+        }
+    }
+
+    private IllegalStateException failFast(String phase, String code, String message) {
+        bootMetricsRecorder.recordFailFast(phase, code);
+        applicationEventPublisher.publishEvent(new BootFailFastEvent(
+                bootStatusTracker.currentRunId(),
+                phase,
+                code,
+                message,
+                Instant.now()
+        ));
+        return new IllegalStateException(message + " code=" + code);
     }
 }
