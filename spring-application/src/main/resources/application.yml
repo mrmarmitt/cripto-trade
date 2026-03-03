@@ -34,5 +34,10 @@ runner:
     orchestrator-enabled: true
     phase2:
       mode: WARN_ONLY
-      absolute-tolerance: 0.00010000
-      percent-tolerance: 0.10
+      account-query-policy: SKIP
+
+portfolio:
+  sanity-check:
+    threshold: 0.00000001
+  zombie-detection:
+    enabled: true

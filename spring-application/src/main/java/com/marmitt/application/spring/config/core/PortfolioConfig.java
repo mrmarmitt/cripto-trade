@@ -2,6 +2,7 @@ package com.marmitt.application.spring.config.core;
 
 import com.marmitt.core.application.usecase.portfolio.CreatePortfolioUseCase;
 import com.marmitt.core.application.usecase.portfolio.PortfolioBootSanityUseCase;
+import com.marmitt.core.application.usecase.portfolio.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.application.usecase.portfolio.QueryPortfolioUseCase;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.portfolio.QueryPortfolioPort;
@@ -45,5 +46,13 @@ public class PortfolioConfig {
             ExchangeAdapterRepositoryPort exchangeAdapterRepository
     ) {
         return new PortfolioBootSanityUseCase(globalBalanceRepository, exchangeAdapterRepository);
+    }
+
+    @Bean
+    public PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase(
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            ExchangeAdapterRepositoryPort exchangeAdapterRepository
+    ) {
+        return new PortfolioZombieDetectionUseCase(strategyRunnerRepository, exchangeAdapterRepository);
     }
 }

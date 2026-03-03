@@ -2,10 +2,15 @@ package com.marmitt.application.spring.bootstrap;
 
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.application.usecase.portfolio.PortfolioBootSanityUseCase;
+import com.marmitt.core.application.usecase.portfolio.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.StrategyRunner;
+import com.marmitt.core.dto.portfolio.PortfolioBootSanityResult;
+import com.marmitt.core.dto.portfolio.PortfolioZombieDetectionResult;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
 import com.marmitt.core.enums.RunnerStatus;
+import com.marmitt.core.enums.PortfolioSanityStatus;
+import com.marmitt.core.enums.PortfolioZombieDetectionStatus;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
@@ -49,7 +54,10 @@ public class BootOrchestrator {
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
     private final PortfolioBootSanityUseCase portfolioBootSanityUseCase;
+    private final PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase;
     private final RunnerBootPhase2Properties phase2Properties;
+    private final PortfolioSanityCheckProperties portfolioSanityCheckProperties;
+    private final PortfolioZombieDetectionProperties portfolioZombieDetectionProperties;
     private final RunnerBootRecoveryUseCase runnerBootRecoveryUseCase;
 
     @EventListener(ApplicationReadyEvent.class)
@@ -64,6 +72,7 @@ public class BootOrchestrator {
 
         runPhase1InfrastructureReadiness(eligibleRunners);
         runPhase2PortfolioSanity(portfolios, eligibleRunners);
+        runPhase2ZombieDetection(portfolios, eligibleRunners);
 
         List<RunnerBootRecoveryUseCase.RecoverySummary> summaries = eligibleRunners.stream()
                 .map(this::recoverRunner)
@@ -108,16 +117,11 @@ public class BootOrchestrator {
 
     private void runPhase2PortfolioSanity(List<Portfolio> portfolios, List<StrategyRunner> eligibleRunners) {
         Phase2Mode mode = phase2Properties.getMode();
-        log.info("bootOrchestrator.phase2: start portfolios={} mode={} absoluteTolerance={} percentTolerance={}",
-                portfolios.size(), mode, phase2Properties.getAbsoluteTolerance(), phase2Properties.getPercentTolerance());
+        log.info("bootOrchestrator.phase2: start portfolios={} mode={} accountQueryPolicy={} threshold={}",
+                portfolios.size(), mode, phase2Properties.getAccountQueryPolicy(), portfolioSanityCheckProperties.getThreshold());
 
         for (Portfolio portfolio : portfolios) {
-            Set<String> exchanges = eligibleRunners.stream()
-                    .filter(runner -> runner.getPortfolioId().equals(portfolio.getId()))
-                    .map(StrategyRunner::getExchangeId)
-                    .filter(exchange -> exchange != null && !exchange.isBlank())
-                    .map(String::toUpperCase)
-                    .collect(java.util.stream.Collectors.toCollection(java.util.TreeSet::new));
+            Set<String> exchanges = resolvePortfolioExchanges(portfolio, eligibleRunners);
 
             if (exchanges.isEmpty()) {
                 log.debug("bootOrchestrator.phase2: portfolio={} skipped - no eligible runner exchange",
@@ -126,24 +130,24 @@ public class BootOrchestrator {
             }
 
             for (String exchange : exchanges) {
-                PortfolioBootSanityUseCase.PortfolioBootSanityResult result =
+                PortfolioBootSanityResult result =
                         portfolioBootSanityUseCase.execute(
                                 portfolio.getId(),
                                 exchange,
-                                phase2Properties.getAbsoluteTolerance(),
-                                phase2Properties.getPercentTolerance()
+                                portfolioSanityCheckProperties.getThreshold()
                         );
 
                 switch (result.status()) {
-                    case OK -> log.info(
-                            "bootOrchestrator.phase2: portfolio={} exchange={} status={} localTotal={} exchangeTotal={} drift={} driftPercent={}",
+                    case PASS, WARN_SURPLUS -> log.info(
+                            "bootOrchestrator.phase2: portfolio={} exchange={} status={} code={} localTotal={} exchangeTotal={} signedDelta={} deviation={}",
                             result.portfolioId(),
                             result.exchangeId(),
                             result.status(),
+                            result.code(),
                             result.localTotal(),
                             result.exchangeTotal(),
-                            result.absoluteDrift(),
-                            result.driftPercent()
+                            result.signedDelta(),
+                            result.absoluteDeviation()
                     );
                     case SKIPPED -> log.warn(
                             "bootOrchestrator.phase2: portfolio={} exchange={} status={} code={} message={}",
@@ -153,8 +157,8 @@ public class BootOrchestrator {
                             result.code(),
                             result.message()
                     );
-                    case FAILED -> log.warn(
-                            "bootOrchestrator.phase2: portfolio={} exchange={} status={} code={} message={} localTotal={} exchangeTotal={} drift={} driftPercent={}",
+                    case FAIL_DEFICIT -> log.error(
+                            "bootOrchestrator.phase2: portfolio={} exchange={} status={} code={} message={} localTotal={} exchangeTotal={} signedDelta={} deviation={}",
                             result.portfolioId(),
                             result.exchangeId(),
                             result.status(),
@@ -162,13 +166,24 @@ public class BootOrchestrator {
                             result.message(),
                             result.localTotal(),
                             result.exchangeTotal(),
-                            result.absoluteDrift(),
-                            result.driftPercent()
+                            result.signedDelta(),
+                            result.absoluteDeviation()
+                    );
+                    case FAILED -> log.warn(
+                            "bootOrchestrator.phase2: portfolio={} exchange={} status={} code={} message={}",
+                            result.portfolioId(),
+                            result.exchangeId(),
+                            result.status(),
+                            result.code(),
+                            result.message()
                     );
                 }
 
-                if (result.status() == PortfolioBootSanityUseCase.SanityStatus.FAILED
-                        && mode == Phase2Mode.FAIL_FAST) {
+                boolean skippedWithFailPolicy = result.status() == PortfolioSanityStatus.SKIPPED
+                        && phase2Properties.getAccountQueryPolicy() == Phase2AccountQueryPolicy.FAIL;
+                boolean criticalFailure = result.status() == PortfolioSanityStatus.FAIL_DEFICIT
+                        || result.status() == PortfolioSanityStatus.FAILED;
+                if ((skippedWithFailPolicy || criticalFailure) && mode == Phase2Mode.FAIL_FAST) {
                     throw new IllegalStateException("Phase2 sanity failed portfolio=" + result.portfolioId()
                             + " exchange=" + result.exchangeId()
                             + " code=" + result.code()
@@ -178,6 +193,101 @@ public class BootOrchestrator {
         }
 
         log.info("bootOrchestrator.phase2: completed");
+    }
+
+    private void runPhase2ZombieDetection(List<Portfolio> portfolios, List<StrategyRunner> eligibleRunners) {
+        if (!portfolioZombieDetectionProperties.isEnabled()) {
+            log.info("bootOrchestrator.phase2.zombie: disabled by configuration");
+            return;
+        }
+
+        Phase2Mode mode = phase2Properties.getMode();
+        log.info("bootOrchestrator.phase2.zombie: start portfolios={} mode={}",
+                portfolios.size(), mode);
+
+        for (Portfolio portfolio : portfolios) {
+            Set<String> exchanges = resolvePortfolioExchanges(portfolio, eligibleRunners);
+            if (exchanges.isEmpty()) {
+                continue;
+            }
+
+            for (String exchange : exchanges) {
+                PortfolioZombieDetectionResult result =
+                        portfolioZombieDetectionUseCase.execute(portfolio.getId(), exchange);
+
+                switch (result.status()) {
+                    case CLEAN -> log.info(
+                            "bootOrchestrator.phase2.zombie: portfolio={} exchange={} status={} openOrders={} zombies={}",
+                            result.portfolioId(),
+                            result.exchangeId(),
+                            result.status(),
+                            result.openOrders(),
+                            result.zombieCount()
+                    );
+                    case DETECTED -> {
+                        log.warn(
+                                "bootOrchestrator.phase2.zombie: portfolio={} exchange={} status={} code={} openOrders={} zombies={} invalidFormat={} unknownRunner={} noLocalMatch={} unknownSymbol={}",
+                                result.portfolioId(),
+                                result.exchangeId(),
+                                result.status(),
+                                result.code(),
+                                result.openOrders(),
+                                result.zombieCount(),
+                                result.invalidFormatCount(),
+                                result.unknownRunnerCount(),
+                                result.noLocalMatchCount(),
+                                result.unknownSymbolCount()
+                        );
+                        result.samples().forEach(sample -> log.warn(
+                                "bootOrchestrator.phase2.zombie: sample portfolio={} exchange={} reason={} code={} clientOrderId={} exchangeOrderId={} symbol={}",
+                                result.portfolioId(),
+                                result.exchangeId(),
+                                sample.reason(),
+                                sample.code(),
+                                sample.clientOrderId(),
+                                sample.exchangeOrderId(),
+                                sample.symbol()
+                        ));
+                    }
+                    case SKIPPED -> log.warn(
+                            "bootOrchestrator.phase2.zombie: portfolio={} exchange={} status={} code={} message={}",
+                            result.portfolioId(),
+                            result.exchangeId(),
+                            result.status(),
+                            result.code(),
+                            result.message()
+                    );
+                    case FAILED -> log.error(
+                            "bootOrchestrator.phase2.zombie: portfolio={} exchange={} status={} code={} message={}",
+                            result.portfolioId(),
+                            result.exchangeId(),
+                            result.status(),
+                            result.code(),
+                            result.message()
+                    );
+                }
+
+                boolean criticalFailure = result.status() == PortfolioZombieDetectionStatus.FAILED
+                        || result.status() == PortfolioZombieDetectionStatus.DETECTED;
+                if (criticalFailure && mode == Phase2Mode.FAIL_FAST) {
+                    throw new IllegalStateException("Phase2 zombie detection failed portfolio=" + result.portfolioId()
+                            + " exchange=" + result.exchangeId()
+                            + " code=" + result.code()
+                            + " message=" + result.message());
+                }
+            }
+        }
+
+        log.info("bootOrchestrator.phase2.zombie: completed");
+    }
+
+    private Set<String> resolvePortfolioExchanges(Portfolio portfolio, List<StrategyRunner> eligibleRunners) {
+        return eligibleRunners.stream()
+                .filter(runner -> runner.getPortfolioId().equals(portfolio.getId()))
+                .map(StrategyRunner::getExchangeId)
+                .filter(exchange -> exchange != null && !exchange.isBlank())
+                .map(String::toUpperCase)
+                .collect(java.util.stream.Collectors.toCollection(java.util.TreeSet::new));
     }
 
     private Stream<StrategyRunner> loadRunnersByPortfolio(Portfolio portfolio) {
