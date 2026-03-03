@@ -1,6 +1,7 @@
 package com.marmitt.core.ports.outbound.repository;
 
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
+import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
@@ -19,6 +20,8 @@ public interface ExchangeAdapterRepositoryPort {
 
     void registerAccountQueryAdapter(String exchangeName, ExchangeAccountQueryPort adapter);
 
+    void registerBootReadinessAdapter(String exchangeName, ExchangeBootReadinessPort adapter);
+
     void registerPortfolioByAdapter(String exchangeName, UUID portfolioId);
 
     boolean hasAdapter(String exchangeName);
@@ -34,4 +37,6 @@ public interface ExchangeAdapterRepositoryPort {
     Optional<ExchangeOrderQueryPort> findOrderQueryByName(String exchangeName);
 
     Optional<ExchangeAccountQueryPort> findAccountQueryByName(String exchangeName);
+
+    Optional<ExchangeBootReadinessPort> findBootReadinessByName(String exchangeName);
 }

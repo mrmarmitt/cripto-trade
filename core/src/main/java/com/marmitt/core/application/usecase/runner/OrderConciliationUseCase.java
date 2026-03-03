@@ -1,6 +1,6 @@
 package com.marmitt.core.application.usecase.runner;
 
-import com.marmitt.core.application.usecase.runner.orderconciliation.ReconcileOrderUpdate;
+import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdate;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
@@ -38,10 +38,10 @@ import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
  */
 public abstract class OrderConciliationUseCase implements OrderConciliationPort {
 
-    private final ReconcileOrderUpdate reconcileOrderUpdate;
+    private final ConciliationOrderUpdate conciliationOrderUpdate;
 
-    public OrderConciliationUseCase(ReconcileOrderUpdate reconcileOrderUpdate) {
-        this.reconcileOrderUpdate = reconcileOrderUpdate;
+    public OrderConciliationUseCase(ConciliationOrderUpdate conciliationOrderUpdate) {
+        this.conciliationOrderUpdate = conciliationOrderUpdate;
     }
 
     /**
@@ -50,7 +50,7 @@ public abstract class OrderConciliationUseCase implements OrderConciliationPort 
      * Eventos cujo {@code clientOrderId} nao pertencam a este sistema sao ignorados.
      */
     public void execute(OrderDataDto orderData) {
-        reconcileOrderUpdate.execute(
+        conciliationOrderUpdate.execute(
                 orderData,
                 this::transactionalSubmit,
                 this::transactionalProcessFill,
@@ -86,7 +86,7 @@ public abstract class OrderConciliationUseCase implements OrderConciliationPort 
      * retornado pela exchange — vinculo definitivo entre registro interno e externo.
      */
     protected void submitTransaction(Transaction transaction) {
-        reconcileOrderUpdate.submitTransaction(transaction);
+        conciliationOrderUpdate.submitTransaction(transaction);
     }
 
     /**
@@ -95,7 +95,7 @@ public abstract class OrderConciliationUseCase implements OrderConciliationPort 
      * {@link BuyFillHandler} e {@link SellFillHandler} conforme o tipo da transacao.
      */
     protected void processFill(Transaction transaction, OrderDataDto orderData, boolean isFinal) {
-        reconcileOrderUpdate.processFill(transaction, orderData, isFinal);
+        conciliationOrderUpdate.processFill(transaction, orderData, isFinal);
     }
 
     /**
@@ -104,6 +104,6 @@ public abstract class OrderConciliationUseCase implements OrderConciliationPort 
      * persistencia e publicacao de evento de liberacao de margem.
      */
     public void releaseMargin(Transaction transaction) {
-        reconcileOrderUpdate.releaseMargin(transaction);
+        conciliationOrderUpdate.releaseMargin(transaction);
     }
 }

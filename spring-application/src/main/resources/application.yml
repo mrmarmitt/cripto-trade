@@ -32,3 +32,7 @@ logging:
 runner:
   boot:
     orchestrator-enabled: true
+    phase2:
+      mode: WARN_ONLY
+      absolute-tolerance: 0.00010000
+      percent-tolerance: 0.10

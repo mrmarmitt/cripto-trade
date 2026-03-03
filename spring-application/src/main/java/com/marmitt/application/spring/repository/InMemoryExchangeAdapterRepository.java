@@ -6,6 +6,7 @@ import com.marmitt.application.spring.config.exchange.CoinbaseExchangeAdapter;
 import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
+import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
@@ -28,6 +29,7 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
     private final Map<String, ExchangeOrderExecutionPort> orderExecutionAdapters = new ConcurrentHashMap<>();
     private final Map<String, ExchangeOrderQueryPort> orderQueryAdapters = new ConcurrentHashMap<>();
     private final Map<String, ExchangeAccountQueryPort> accountQueryAdapters = new ConcurrentHashMap<>();
+    private final Map<String, ExchangeBootReadinessPort> bootReadinessAdapters = new ConcurrentHashMap<>();
     private final Map<UUID, String> adapterByPortfolio = new ConcurrentHashMap<>();
 
     private final EventPublisherPort eventPublisher;
@@ -64,6 +66,11 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
     @Override
     public void registerAccountQueryAdapter(String exchangeName, ExchangeAccountQueryPort adapter) {
         accountQueryAdapters.put(normalize(exchangeName), adapter);
+    }
+
+    @Override
+    public void registerBootReadinessAdapter(String exchangeName, ExchangeBootReadinessPort adapter) {
+        bootReadinessAdapters.put(normalize(exchangeName), adapter);
     }
 
     @Override
@@ -106,6 +113,11 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
         return Optional.ofNullable(accountQueryAdapters.get(normalize(exchangeName)));
     }
 
+    @Override
+    public Optional<ExchangeBootReadinessPort> findBootReadinessByName(String exchangeName) {
+        return Optional.ofNullable(bootReadinessAdapters.get(normalize(exchangeName)));
+    }
+
     private void registerAllCapabilities(ExchangeStreamingPort streamingAdapter) {
         String exchangeName = normalize(streamingAdapter.getExchangeName());
         registerStreamingAdapter(streamingAdapter);
@@ -119,17 +131,20 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
         if (streamingAdapter instanceof ExchangeAccountQueryPort accountQueryPort) {
             registerAccountQueryAdapter(exchangeName, accountQueryPort);
         }
+        if (streamingAdapter instanceof ExchangeBootReadinessPort bootReadinessPort) {
+            registerBootReadinessAdapter(exchangeName, bootReadinessPort);
+        }
 
-        log.info("Exchange capabilities registered - exchange={} streaming={} orderExec={} orderQuery={} accountQuery={}",
+        log.info("Exchange capabilities registered - exchange={} streaming={} orderExec={} orderQuery={} accountQuery={} bootReadiness={}",
                 exchangeName,
                 true,
                 orderExecutionAdapters.containsKey(exchangeName),
                 orderQueryAdapters.containsKey(exchangeName),
-                accountQueryAdapters.containsKey(exchangeName));
+                accountQueryAdapters.containsKey(exchangeName),
+                bootReadinessAdapters.containsKey(exchangeName));
     }
 
     private static String normalize(String exchangeName) {
         return exchangeName.toUpperCase();
     }
 }
-

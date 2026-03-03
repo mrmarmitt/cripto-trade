@@ -10,11 +10,13 @@ import com.marmitt.core.dto.websocket.data.AccountDataDto;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
+import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
+import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
@@ -36,7 +38,8 @@ public class CoinbaseExchangeAdapter implements
         ExchangeStreamingPort,
         ExchangeOrderExecutionPort,
         ExchangeOrderQueryPort,
-        ExchangeAccountQueryPort {
+        ExchangeAccountQueryPort,
+        ExchangeBootReadinessPort {
 
     private final WebSocketPort webSocketPort;
     private final ReceivedMessageProcessorPort receivedMessageProcessor;
@@ -113,6 +116,14 @@ public class CoinbaseExchangeAdapter implements
     @Override
     public AccountDataDto queryAccountSnapshot() {
         throw restNotImplemented();
+    }
+
+    @Override
+    public ExchangeBootReadiness checkBootReadiness() {
+        if (webSocketPort == null || receivedMessageProcessor == null || senderMessageProcessor == null || urlBuilder == null) {
+            return ExchangeBootReadiness.notReady("COINBASE", "MISSING_COMPONENT", "Coinbase adapter components are not initialized.");
+        }
+        return ExchangeBootReadiness.ready("COINBASE", "Coinbase adapter initialized for streaming.");
     }
 
     private UnsupportedOperationException restNotImplemented() {

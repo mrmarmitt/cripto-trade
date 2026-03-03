@@ -17,7 +17,7 @@ import java.math.BigDecimal;
  * (callbacks) ou com persistencia direta (boot recovery).
  */
 @Slf4j
-public class ReconcileOrderUpdate {
+public class ConciliationOrderUpdate {
 
     @FunctionalInterface
     public interface SubmitAction {
@@ -40,8 +40,8 @@ public class ReconcileOrderUpdate {
     private final SellFillHandler sellFillHandler;
     private final TerminationHandler terminationHandler;
 
-    public ReconcileOrderUpdate(StrategyRunnerRepositoryPort strategyRunnerRepository,
-                                EventPublisherPort eventPublisher) {
+    public ConciliationOrderUpdate(StrategyRunnerRepositoryPort strategyRunnerRepository,
+                                   EventPublisherPort eventPublisher) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.fillCalculator = new FillCalculator();
         this.buyFillHandler = new BuyFillHandler(strategyRunnerRepository);

@@ -1,6 +1,6 @@
 package com.marmitt.core.application.usecase.runner;
 
-import com.marmitt.core.application.usecase.runner.orderconciliation.ReconcileOrderUpdate;
+import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdate;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
@@ -50,14 +50,14 @@ public class RunnerBootRecoveryUseCase {
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
-    private final ReconcileOrderUpdate reconcileOrderUpdate;
+    private final ConciliationOrderUpdate conciliationOrderUpdate;
 
     public RunnerBootRecoveryUseCase(StrategyRunnerRepositoryPort strategyRunnerRepository,
                                      ExchangeAdapterRepositoryPort exchangeAdapterRepository,
-                                     ReconcileOrderUpdate reconcileOrderUpdate) {
+                                     ConciliationOrderUpdate conciliationOrderUpdate) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.exchangeAdapterRepository = exchangeAdapterRepository;
-        this.reconcileOrderUpdate = reconcileOrderUpdate;
+        this.conciliationOrderUpdate = conciliationOrderUpdate;
     }
 
     public RecoverySummary recoverRunner(StrategyRunner runner) {
@@ -157,7 +157,7 @@ public class RunnerBootRecoveryUseCase {
             try {
                 OrderDataDto syntheticExpired = buildSyntheticTerminalOrder(
                         tx, OrderDataDto.OrderStatus.EXPIRED, "BOOT_ZOMBIE_PENDING_WITHOUT_EXCHANGE_ORDER_ID");
-                reconcileOrderUpdate.execute(syntheticExpired);
+                conciliationOrderUpdate.execute(syntheticExpired);
                 ctx.note("Step 3: zombie expired transactionId=" + tx.getId());
             } catch (Exception e) {
                 ctx.error("Step 3 ERROR: zombie transactionId=" + tx.getId() + " reason=" + e.getMessage());
@@ -184,7 +184,7 @@ public class RunnerBootRecoveryUseCase {
 
                 if (queried.isPresent()) {
                     OrderDataDto normalized = normalizeQueriedOrder(tx, queried.get());
-                    reconcileOrderUpdate.execute(normalized);
+                    conciliationOrderUpdate.execute(normalized);
                     ctx.note("Step 4: reconciled from exchange transactionId=" + tx.getId()
                             + " status=" + normalized.status());
                     continue;
@@ -195,7 +195,7 @@ public class RunnerBootRecoveryUseCase {
                         : OrderDataDto.OrderStatus.EXPIRED;
                 OrderDataDto synthetic = buildSyntheticTerminalOrder(
                         tx, fallbackStatus, "BOOT_NOT_FOUND_ON_EXCHANGE");
-                reconcileOrderUpdate.execute(synthetic);
+                conciliationOrderUpdate.execute(synthetic);
                 ctx.note("Step 4: exchange not found -> local " + fallbackStatus
                         + " transactionId=" + tx.getId());
 

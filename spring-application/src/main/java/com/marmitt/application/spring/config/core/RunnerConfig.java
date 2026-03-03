@@ -3,7 +3,7 @@ package com.marmitt.application.spring.config.core;
 import com.marmitt.core.application.usecase.runner.CreateRunnerUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.application.usecase.runner.OrderConciliationUseCase;
-import com.marmitt.core.application.usecase.runner.orderconciliation.ReconcileOrderUpdate;
+import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdate;
 import com.marmitt.core.application.usecase.runner.QueryRunnerUseCase;
 import com.marmitt.core.application.usecase.runner.processsignal.ProcessTradeSignalUseCase;
 import com.marmitt.core.domain.runner.Position;
@@ -47,17 +47,17 @@ public class RunnerConfig {
      * tanto como {@code OrderConciliationPort} quanto como {@code HandleOrderTerminationPort}.
      */
     @Bean
-    public ReconcileOrderUpdate reconcileOrderUpdate(
+    public ConciliationOrderUpdate reconcileOrderUpdate(
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             EventPublisherPort eventPublisher
     ) {
-        return new ReconcileOrderUpdate(strategyRunnerRepository, eventPublisher);
+        return new ConciliationOrderUpdate(strategyRunnerRepository, eventPublisher);
     }
 
     @Bean
     public OrderConciliationUseCase createOrderConciliation(
             TransactionTemplate txTemplate,
-            ReconcileOrderUpdate reconcileOrderUpdate
+            ConciliationOrderUpdate reconcileOrderUpdate
     ) {
 
         return new OrderConciliationUseCase(reconcileOrderUpdate) {
@@ -135,7 +135,7 @@ public class RunnerConfig {
     public RunnerBootRecoveryUseCase runnerBootRecoveryUseCase(
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             ExchangeAdapterRepositoryPort exchangeAdapterRepository,
-            ReconcileOrderUpdate reconcileOrderUpdate
+            ConciliationOrderUpdate reconcileOrderUpdate
     ) {
         return new RunnerBootRecoveryUseCase(
                 strategyRunnerRepository,

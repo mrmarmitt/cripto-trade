@@ -6,16 +6,19 @@ import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
+import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
+import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 import com.marmitt.mock.adapter.LocalEventWebSocketAdapter;
+import com.marmitt.mock.config.MockBootReadinessConfig;
 import com.marmitt.mock.config.MockMarketDataFeedConfig;
 import com.marmitt.mock.config.MockScenarioConfig;
 import com.marmitt.mock.processor.MockReceivedMessageProcessor;
@@ -39,13 +42,15 @@ import java.util.Optional;
 public class MockExchangeAdapter implements ExchangeStreamingPort,
         ExchangeOrderExecutionPort,
         ExchangeOrderQueryPort,
-        ExchangeAccountQueryPort {
+        ExchangeAccountQueryPort,
+        ExchangeBootReadinessPort {
 
     private final WebSocketPort webSocketPort;
     private final ReceivedMessageProcessorPort receivedMessageProcessor;
     private final SenderMessageProcessorPort senderMessageProcessor;
     private final ExchangeUrlBuilderPort urlBuilder;
     private final MockExchangeRuntime runtime;
+    private final MockBootReadinessConfig bootReadinessConfig;
 
     public MockExchangeAdapter(ObjectMapper objectMapper, EventPublisherPort eventPublisher) {
         this.webSocketPort = new LocalEventWebSocketAdapter(eventPublisher);
@@ -53,6 +58,7 @@ public class MockExchangeAdapter implements ExchangeStreamingPort,
 
         MockOrderExecutionSimulator simulator = new MockOrderExecutionSimulator();
         MockScenarioConfig config = MockScenarioConfig.defaultConfig();
+        this.bootReadinessConfig = MockBootReadinessConfig.defaultConfig();
         MockMarketDataFeedConfig feedConfig = MockMarketDataFeedConfig.defaultConfig();
         MockMarketDataFeedEngine feedEngine = new MockMarketDataFeedEngine(
                 eventPublisher,
@@ -134,6 +140,36 @@ public class MockExchangeAdapter implements ExchangeStreamingPort,
     @Override
     public AccountDataDto queryAccountSnapshot() {
         return runtime.queryAccountSnapshot();
+    }
+
+    @Override
+    public ExchangeBootReadiness checkBootReadiness() {
+        if (!bootReadinessConfig.enabled()) {
+            return ExchangeBootReadiness.ready("MOCK", "Mock readiness check disabled.");
+        }
+
+        simulateDelayIfNeeded(bootReadinessConfig.simulatedDelayMs());
+
+        return switch (bootReadinessConfig.mode()) {
+            case READY -> ExchangeBootReadiness.ready("MOCK", bootReadinessConfig.message());
+            case CONNECTIVITY_FAIL -> ExchangeBootReadiness.notReady(
+                    "MOCK", "CONNECTIVITY_FAIL", bootReadinessConfig.message());
+            case AUTH_FAIL -> ExchangeBootReadiness.notReady(
+                    "MOCK", "AUTH_FAIL", bootReadinessConfig.message());
+            case TIMEOUT -> ExchangeBootReadiness.notReady(
+                    "MOCK", "TIMEOUT", bootReadinessConfig.message());
+        };
+    }
+
+    private static void simulateDelayIfNeeded(long delayMs) {
+        if (delayMs <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(delayMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
     }
 
     private static class NoOpUrlBuilder implements ExchangeUrlBuilderPort {
