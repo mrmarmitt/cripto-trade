@@ -7,10 +7,24 @@ import org.springframework.data.repository.CrudRepository;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.UUID;
 
 @Repository
 public interface DeadLetterEntryJdbcRepository extends CrudRepository<DeadLetterEntryEntity, UUID> {
+
+    @Query("""
+            SELECT *
+              FROM dead_letter_entries
+             WHERE is_resolved = FALSE
+               AND (:portfolioId IS NULL OR portfolio_id = :portfolioId)
+               AND (:runnerId IS NULL OR runner_id = :runnerId)
+             ORDER BY created_at DESC
+             LIMIT :limit
+            """)
+    List<DeadLetterEntryEntity> findUnresolved(@Param("portfolioId") UUID portfolioId,
+                                               @Param("runnerId") UUID runnerId,
+                                               @Param("limit") int limit);
 
     @Query("""
             SELECT EXISTS(

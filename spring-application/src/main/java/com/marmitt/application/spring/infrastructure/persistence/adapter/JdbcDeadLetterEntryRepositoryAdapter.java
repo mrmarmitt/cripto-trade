@@ -10,6 +10,8 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 
 @Slf4j
@@ -25,6 +27,30 @@ public class JdbcDeadLetterEntryRepositoryAdapter implements DeadLetterEntryRepo
         long start = System.nanoTime();
         deadLetterEntryJdbcRepository.save(DeadLetterEntryEntityMapper.toEntity(entry));
         log.trace("[REPO] deadLetterEntry.save({}) - {}ms", entry.getId(), RepoTiming.elapsedMs(start));
+    }
+
+    @Override
+    public Optional<DeadLetterEntry> findById(UUID id) {
+        long start = System.nanoTime();
+        Optional<DeadLetterEntry> result = deadLetterEntryJdbcRepository.findById(id)
+                .map(DeadLetterEntryEntityMapper::toDomain);
+        log.trace("[REPO] deadLetterEntry.findById({}) - {}ms - found={}",
+                id, RepoTiming.elapsedMs(start), result.isPresent());
+        return result;
+    }
+
+    @Override
+    public List<DeadLetterEntry> findUnresolved(UUID portfolioId, UUID runnerId, int limit) {
+        long start = System.nanoTime();
+        int boundedLimit = Math.max(1, limit);
+        List<DeadLetterEntry> result = deadLetterEntryJdbcRepository
+                .findUnresolved(portfolioId, runnerId, boundedLimit)
+                .stream()
+                .map(DeadLetterEntryEntityMapper::toDomain)
+                .toList();
+        log.trace("[REPO] deadLetterEntry.findUnresolved(portfolioId={}, runnerId={}, limit={}) - {}ms - {} results",
+                portfolioId, runnerId, boundedLimit, RepoTiming.elapsedMs(start), result.size());
+        return result;
     }
 
     @Override
