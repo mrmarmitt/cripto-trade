@@ -8,6 +8,7 @@ import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 import com.marmitt.core.enums.StreamAction;
+import com.marmitt.core.exceptions.ExchangeQueryException;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.mock.balance.MockBalanceStore;
 import com.marmitt.mock.config.MockScenarioConfig;
@@ -136,6 +137,7 @@ public class MockExchangeRuntime {
     }
 
     public Optional<OrderDataDto> queryOrderByClientOrderId(String symbol, String clientOrderId) {
+        ensureLifecycleForQuery();
         String orderId = orderIdByClientOrderId.get(clientOrderId);
         if (orderId == null) {
             return Optional.empty();
@@ -144,6 +146,7 @@ public class MockExchangeRuntime {
     }
 
     public Optional<OrderDataDto> queryOrderByExchangeOrderId(String symbol, String exchangeOrderId) {
+        ensureLifecycleForQuery();
         OrderDataDto order = latestEventByOrderId.get(exchangeOrderId);
         if (order == null) {
             return Optional.empty();
@@ -262,6 +265,17 @@ public class MockExchangeRuntime {
         this.balanceStore = new MockBalanceStore(config.balances().initialBalances());
         this.orderIdByClientOrderId.clear();
         this.latestEventByOrderId.clear();
+    }
+
+    private void ensureLifecycleForQuery() {
+        if (lifecycle.isRunning()) {
+            return;
+        }
+        throw new ExchangeQueryException(
+                "MOCK",
+                ExchangeQueryException.ErrorType.TEMPORARY,
+                "Mock lifecycle is stopped for order query"
+        );
     }
 
     private static boolean isTerminal(OrderDataDto.OrderStatus status) {

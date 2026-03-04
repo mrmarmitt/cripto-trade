@@ -8,6 +8,7 @@ import com.marmitt.core.dto.runner.RecoveryContext;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.enums.TransactionStatus;
+import com.marmitt.core.exceptions.ExchangeQueryException;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
@@ -338,6 +339,9 @@ public class RunnerBootRecoveryUseCase {
         }
         if (throwable instanceof IllegalArgumentException) {
             return false;
+        }
+        if (throwable instanceof ExchangeQueryException exchangeQueryException) {
+            return exchangeQueryException.isRetryable();
         }
         if (throwable instanceof BootQueryTimeoutException) {
             return true;

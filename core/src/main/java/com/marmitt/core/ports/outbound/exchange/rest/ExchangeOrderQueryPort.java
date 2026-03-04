@@ -10,6 +10,10 @@ import java.util.Optional;
  *
  * <p>Principal consumidor: Boot/Recovery e reconciliacao.
  * A exchange e tratada como fonte autoritativa do estado financeiro.
+ *
+ * <p>Falhas de consulta devem preferir excecoes tipadas
+ * ({@link com.marmitt.core.exceptions.ExchangeQueryException})
+ * para classificacao robusta de retry no boot recovery.
  */
 public interface ExchangeOrderQueryPort {
 
@@ -21,4 +25,3 @@ public interface ExchangeOrderQueryPort {
 
     List<OrderDataDto> listAllOpenOrders();
 }
-
