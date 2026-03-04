@@ -1,6 +1,6 @@
 package com.marmitt.core.application.usecase.runner;
 
-import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdate;
+import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
@@ -57,7 +57,7 @@ public class RunnerBootRecoveryUseCase {
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
     private final DeadLetterEntryRepositoryPort deadLetterEntryRepository;
-    private final ConciliationOrderUpdate conciliationOrderUpdate;
+    private final ConciliationOrderUpdateExecutor conciliationOrderUpdate;
     private final long pendingWithoutExchangeOrderIdTtlMs;
     private final long exchangeQueryTimeoutMs;
     private final int exchangeQueryMaxAttempts;
@@ -68,7 +68,7 @@ public class RunnerBootRecoveryUseCase {
     public RunnerBootRecoveryUseCase(StrategyRunnerRepositoryPort strategyRunnerRepository,
                                      ExchangeAdapterRepositoryPort exchangeAdapterRepository,
                                      DeadLetterEntryRepositoryPort deadLetterEntryRepository,
-                                     ConciliationOrderUpdate conciliationOrderUpdate,
+                                     ConciliationOrderUpdateExecutor conciliationOrderUpdate,
                                      long pendingWithoutExchangeOrderIdTtlMs,
                                      long exchangeQueryTimeoutMs,
                                      int exchangeQueryMaxAttempts,

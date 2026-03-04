@@ -5,7 +5,7 @@ import com.marmitt.core.application.usecase.portfolio.PortfolioBootSanityUseCase
 import com.marmitt.core.application.usecase.portfolio.PortfolioReservationTtlUseCase;
 import com.marmitt.core.application.usecase.portfolio.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.application.usecase.portfolio.QueryPortfolioUseCase;
-import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdate;
+import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.portfolio.QueryPortfolioPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
@@ -61,7 +61,7 @@ public class PortfolioConfig {
     @Bean
     public PortfolioReservationTtlUseCase portfolioReservationTtlUseCase(
             StrategyRunnerRepositoryPort strategyRunnerRepository,
-            ConciliationOrderUpdate conciliationOrderUpdate
+            ConciliationOrderUpdateExecutor conciliationOrderUpdate
     ) {
         return new PortfolioReservationTtlUseCase(strategyRunnerRepository, conciliationOrderUpdate);
     }

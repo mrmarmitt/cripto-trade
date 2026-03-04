@@ -5,6 +5,7 @@ import com.marmitt.application.spring.bootstrap.RunnerBootPhase3Properties;
 import com.marmitt.core.application.usecase.runner.CreateRunnerUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.application.usecase.runner.OrderConciliationUseCase;
+import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
 import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdate;
 import com.marmitt.core.application.usecase.runner.QueryRunnerUseCase;
 import com.marmitt.core.application.usecase.runner.processsignal.ProcessTradeSignalUseCase;
@@ -37,8 +38,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   <li>Listeners de mercado e ordem do Runner ({@code PortfolioStrategyRunner*})</li>
  * </ul>
  * <p>
- * Os use cases são classes abstratas cujas fronteiras {@code @Transactional} são definidas
- * aqui via subclasses anônimas — mesmo padrão de {@link OrderConciliationUseCase}.
+ * A fronteira transacional da conciliação é centralizada em
+ * {@link ConciliationOrderUpdateExecutor}, reutilizada no fluxo normal e no boot recovery.
  *
  * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 6.2.1, 6.3</a>
  */
@@ -58,30 +59,46 @@ public class RunnerConfig {
     }
 
     @Bean
-    public OrderConciliationUseCase createOrderConciliation(
+    public ConciliationOrderUpdateExecutor conciliationOrderUpdateExecutor(
             TransactionTemplate txTemplate,
-            ConciliationOrderUpdate reconcileOrderUpdate
+            ConciliationOrderUpdate conciliationOrderUpdate
     ) {
-
-        return new OrderConciliationUseCase(reconcileOrderUpdate) {
-
+        return new ConciliationOrderUpdateExecutor() {
             @Override
-            public void transactionalSubmit(Transaction transaction) {
-                txTemplate.executeWithoutResult(status -> submitTransaction(transaction));
+            public void execute(OrderDataDto orderData) {
+                conciliationOrderUpdate.execute(
+                        orderData,
+                        this::submitTransaction,
+                        this::processFill,
+                        this::releaseMargin
+                );
             }
 
             @Override
-            public void transactionalReleaseMargin(Transaction transaction) {
-                txTemplate.executeWithoutResult(status -> releaseMargin(transaction));
+            public void submitTransaction(Transaction transaction) {
+                txTemplate.executeWithoutResult(status -> conciliationOrderUpdate.submitTransaction(transaction));
             }
 
             @Override
-            public void transactionalProcessFill(Transaction transaction, OrderDataDto orderData,
-                                                 boolean isFinal) {
+            public void processFill(Transaction transaction,
+                                    OrderDataDto orderData,
+                                    boolean isFinal) {
                 txTemplate.executeWithoutResult(status ->
-                        processFill(transaction, orderData, isFinal));
+                        conciliationOrderUpdate.processFill(transaction, orderData, isFinal));
+            }
+
+            @Override
+            public void releaseMargin(Transaction transaction) {
+                txTemplate.executeWithoutResult(status -> conciliationOrderUpdate.releaseMargin(transaction));
             }
         };
+    }
+
+    @Bean
+    public OrderConciliationUseCase createOrderConciliation(
+            ConciliationOrderUpdateExecutor conciliationOrderUpdateExecutor
+    ) {
+        return new OrderConciliationUseCase(conciliationOrderUpdateExecutor);
     }
 
     @Bean
@@ -139,7 +156,7 @@ public class RunnerConfig {
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             ExchangeAdapterRepositoryPort exchangeAdapterRepository,
             DeadLetterEntryRepositoryPort deadLetterEntryRepository,
-            ConciliationOrderUpdate reconcileOrderUpdate,
+            ConciliationOrderUpdateExecutor conciliationOrderUpdateExecutor,
             PortfolioReservationTtlProperties reservationTtlProperties,
             RunnerBootPhase3Properties phase3Properties
     ) {
@@ -147,7 +164,7 @@ public class RunnerConfig {
                 strategyRunnerRepository,
                 exchangeAdapterRepository,
                 deadLetterEntryRepository,
-                reconcileOrderUpdate,
+                conciliationOrderUpdateExecutor,
                 reservationTtlProperties.getTtlMs(),
                 phase3Properties.getExchangeQueryTimeoutMs(),
                 phase3Properties.getExchangeQueryMaxAttempts(),

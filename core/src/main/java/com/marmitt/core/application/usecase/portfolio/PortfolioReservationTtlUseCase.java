@@ -1,6 +1,6 @@
 package com.marmitt.core.application.usecase.portfolio;
 
-import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdate;
+import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
@@ -33,10 +33,10 @@ public class PortfolioReservationTtlUseCase {
     private static final List<TransactionStatus> PENDING_STATUS = List.of(TransactionStatus.PENDING);
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
-    private final ConciliationOrderUpdate conciliationOrderUpdate;
+    private final ConciliationOrderUpdateExecutor conciliationOrderUpdate;
 
     public PortfolioReservationTtlUseCase(StrategyRunnerRepositoryPort strategyRunnerRepository,
-                                          ConciliationOrderUpdate conciliationOrderUpdate) {
+                                          ConciliationOrderUpdateExecutor conciliationOrderUpdate) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.conciliationOrderUpdate = conciliationOrderUpdate;
     }
