@@ -1,10 +1,12 @@
 package com.marmitt.application.spring.infrastructure.exchange;
 
 import com.marmitt.core.dto.runner.OrderDispatchCommand;
+import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.enums.OrderSide;
 import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.TransactionType;
+import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
@@ -17,16 +19,19 @@ import org.springframework.stereotype.Component;
 public class OrderDispatchAdapter implements OrderDispatchPort {
 
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
+    private final OrderConciliationPort orderConciliation;
 
-    public OrderDispatchAdapter(ExchangeAdapterRepositoryPort exchangeAdapterRepository) {
+    public OrderDispatchAdapter(ExchangeAdapterRepositoryPort exchangeAdapterRepository,
+                                OrderConciliationPort orderConciliation) {
         this.exchangeAdapterRepository = exchangeAdapterRepository;
+        this.orderConciliation = orderConciliation;
     }
 
     @Override
     public void dispatch(OrderDispatchCommand command) {
         SendOrderRequest request = toSendOrderRequest(command, command.exchangeId());
 
-        if (!tryDispatchViaRest(request, command.exchangeId(), command.clientOrderId())) {
+        if (!tryDispatchViaRest(request, command.exchangeId())) {
             dispatchViaStreaming(request, command.exchangeId());
         }
 
@@ -34,7 +39,7 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
                 command.clientOrderId(), command.exchangeId(), command.symbol(), command.type());
     }
 
-    private boolean tryDispatchViaRest(SendOrderRequest request, String exchangeId, String clientOrderId) {
+    private boolean tryDispatchViaRest(SendOrderRequest request, String exchangeId) {
         ExchangeOrderExecutionPort executionPort = exchangeAdapterRepository
                 .findOrderExecutionByName(exchangeId)
                 .orElse(null);
@@ -43,8 +48,17 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
         }
 
         try {
-            executionPort.submitOrder(request);
-            log.debug("dispatch: REST submit accepted - clientOrderId={} exchange={}", clientOrderId, exchangeId);
+            OrderDataDto response = executionPort.submitOrder(request);
+            if (response == null || response.status() == null) {
+                log.warn("dispatch: REST submit returned empty status - fallback to streaming clientOrderId={} exchange={}",
+                        request.getClientOrderId(), exchangeId);
+                return false;
+            }
+
+            OrderDataDto normalized = normalizeClientOrderId(response, request.getClientOrderId());
+            orderConciliation.execute(normalized);
+            log.debug("dispatch: REST submit reconciled - clientOrderId={} exchange={} status={}",
+                    normalized.clientOrderId(), exchangeId, normalized.status());
             return true;
         } catch (UnsupportedOperationException ex) {
             log.trace("dispatch: REST submit unsupported for exchange={} - fallback to streaming", exchangeId);
@@ -74,5 +88,25 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
                 command.clientOrderId()
         );
     }
-}
 
+    private static OrderDataDto normalizeClientOrderId(OrderDataDto response, String fallbackClientOrderId) {
+        if (response.clientOrderId() != null && !response.clientOrderId().isBlank()) {
+            return response;
+        }
+        return new OrderDataDto(
+                response.orderId(),
+                fallbackClientOrderId,
+                response.symbol(),
+                response.side(),
+                response.type(),
+                response.quantity(),
+                response.executedQuantity(),
+                response.price(),
+                response.executedPrice(),
+                response.fee(),
+                response.status(),
+                response.rejectReason(),
+                response.timestamp()
+        );
+    }
+}

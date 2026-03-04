@@ -479,7 +479,8 @@ public class BootOrchestrator {
     }
 
     private boolean isEligibleForRecovery(StrategyRunner runner) {
-        return runner.getStatus() != RunnerStatus.ARCHIVED;
+        return runner.getStatus() != RunnerStatus.ARCHIVED
+                && runner.getStatus() != RunnerStatus.TERMINATING;
     }
 
     private RunnerBootRecoveryUseCase.RecoverySummary recoverRunner(StrategyRunner runner) {
