@@ -24,9 +24,12 @@ import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.concurrent.Executor;
 
 
 /**
@@ -158,7 +161,8 @@ public class RunnerConfig {
             DeadLetterEntryRepositoryPort deadLetterEntryRepository,
             ConciliationOrderUpdateExecutor conciliationOrderUpdateExecutor,
             PortfolioReservationTtlProperties reservationTtlProperties,
-            RunnerBootPhase3Properties phase3Properties
+            RunnerBootPhase3Properties phase3Properties,
+            @Qualifier("bootRecoveryQueryExecutor") Executor bootRecoveryQueryExecutor
     ) {
         return new RunnerBootRecoveryUseCase(
                 strategyRunnerRepository,
@@ -170,7 +174,8 @@ public class RunnerConfig {
                 phase3Properties.getExchangeQueryMaxAttempts(),
                 phase3Properties.getExchangeQueryInitialBackoffMs(),
                 phase3Properties.getExchangeQueryBackoffMultiplier(),
-                phase3Properties.getExchangeQueryMaxBackoffMs()
+                phase3Properties.getExchangeQueryMaxBackoffMs(),
+                bootRecoveryQueryExecutor
         );
     }
 

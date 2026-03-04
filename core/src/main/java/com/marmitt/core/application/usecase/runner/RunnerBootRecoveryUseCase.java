@@ -23,6 +23,7 @@ import java.util.Optional;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
@@ -64,6 +65,7 @@ public class RunnerBootRecoveryUseCase {
     private final long exchangeQueryInitialBackoffMs;
     private final double exchangeQueryBackoffMultiplier;
     private final long exchangeQueryMaxBackoffMs;
+    private final Executor exchangeQueryExecutor;
 
     public RunnerBootRecoveryUseCase(StrategyRunnerRepositoryPort strategyRunnerRepository,
                                      ExchangeAdapterRepositoryPort exchangeAdapterRepository,
@@ -74,7 +76,8 @@ public class RunnerBootRecoveryUseCase {
                                      int exchangeQueryMaxAttempts,
                                      long exchangeQueryInitialBackoffMs,
                                      double exchangeQueryBackoffMultiplier,
-                                     long exchangeQueryMaxBackoffMs) {
+                                     long exchangeQueryMaxBackoffMs,
+                                     Executor exchangeQueryExecutor) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.exchangeAdapterRepository = exchangeAdapterRepository;
         this.deadLetterEntryRepository = deadLetterEntryRepository;
@@ -87,6 +90,7 @@ public class RunnerBootRecoveryUseCase {
                 ? exchangeQueryBackoffMultiplier
                 : 1.0d;
         this.exchangeQueryMaxBackoffMs = Math.max(0L, exchangeQueryMaxBackoffMs);
+        this.exchangeQueryExecutor = exchangeQueryExecutor;
     }
 
     public RecoverySummary recoverRunner(StrategyRunner runner) {
@@ -305,7 +309,8 @@ public class RunnerBootRecoveryUseCase {
         }
 
         CompletableFuture<Optional<OrderDataDto>> future = CompletableFuture.supplyAsync(
-                () -> orderQuery.queryOrderByClientOrderId(tx.getSymbol(), tx.getClientOrderId())
+                () -> orderQuery.queryOrderByClientOrderId(tx.getSymbol(), tx.getClientOrderId()),
+                exchangeQueryExecutor
         );
 
         try {
