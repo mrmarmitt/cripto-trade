@@ -1,6 +1,7 @@
 package com.marmitt.application.spring.config.core;
 
 import com.marmitt.application.spring.bootstrap.PortfolioReservationTtlProperties;
+import com.marmitt.application.spring.bootstrap.RunnerBootPhase3Properties;
 import com.marmitt.core.application.usecase.runner.CreateRunnerUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.application.usecase.runner.OrderConciliationUseCase;
@@ -139,14 +140,20 @@ public class RunnerConfig {
             ExchangeAdapterRepositoryPort exchangeAdapterRepository,
             DeadLetterEntryRepositoryPort deadLetterEntryRepository,
             ConciliationOrderUpdate reconcileOrderUpdate,
-            PortfolioReservationTtlProperties reservationTtlProperties
+            PortfolioReservationTtlProperties reservationTtlProperties,
+            RunnerBootPhase3Properties phase3Properties
     ) {
         return new RunnerBootRecoveryUseCase(
                 strategyRunnerRepository,
                 exchangeAdapterRepository,
                 deadLetterEntryRepository,
                 reconcileOrderUpdate,
-                reservationTtlProperties.getTtlMs()
+                reservationTtlProperties.getTtlMs(),
+                phase3Properties.getExchangeQueryTimeoutMs(),
+                phase3Properties.getExchangeQueryMaxAttempts(),
+                phase3Properties.getExchangeQueryInitialBackoffMs(),
+                phase3Properties.getExchangeQueryBackoffMultiplier(),
+                phase3Properties.getExchangeQueryMaxBackoffMs()
         );
     }
 

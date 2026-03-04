@@ -19,19 +19,16 @@ Este documento substitui o plano antigo e reflete o estado real do codigo.
 
 ### 1.2 Parcialmente concluido
 
-- Zombie detection identifica e classifica corretamente, mas ainda nao persiste DLQ da propria Phase 2.
+- Gate de DLQ no boot recovery esta ativo em nivel de portfolio (conservador).
+- Pendente evoluir para gate mais granular por runner quando a DLQ tiver `runner_id`.
 
 ### 1.3 Pendente para fechar a Phase 2
 
-1. Persistir candidatos de zombie em `dead_letter_entries` (na fase portfolio), com `reason` e payload minimo de auditoria.
-2. Definir acao por modo:
-   - `WARN_ONLY`: persiste + alerta.
-   - `FAIL_FAST`: persiste + interrompe boot.
-3. Adicionar regra de bloqueio por DLQ pendente antes de liberar conclusao de boot do runner afetado.
-4. Fechar testes de integracao mock-first cobrindo:
+1. Fechar testes de integracao mock-first cobrindo:
    - sanity pass/warn/fail,
    - zombie com roteamento para DLQ,
    - reservation TTL expirando apenas o elegivel.
+2. Evoluir gate de DLQ de portfolio para runner (quando a modelagem da DLQ incluir `runner_id`).
 
 ## 2. Status atual do Boot Recovery (Runner)
 
@@ -49,18 +46,13 @@ Este documento substitui o plano antigo e reflete o estado real do codigo.
 
 ### 2.2 Parcialmente concluido
 
-- O runner conclui reconciliacao com base em erros do contexto, mas ainda falta gate explicito por DLQ pendente.
+- O gate por DLQ pendente ja existe, mas hoje usa escopo de portfolio (seguro e mais restritivo).
 
 ### 2.3 Pendente para concluir Boot Recovery
 
-1. Gate de DLQ pendente por runner/portfolio:
-   - se houver DLQ aberta relacionada ao runner, nao concluir `reconciliation`.
-   - manter runner bloqueado (`HALTED` ou `INITIALIZING`, conforme politica final).
-2. Entrada explicita em modo de reconciliacao no inicio do recovery:
-   - garantir `isReconciling=true` durante toda a execucao do boot do runner.
-3. Endurecer retry/timeout de consultas REST de reconciliacao (step 4):
-   - politica dedicada de timeout e retry para boot query.
-4. Cobertura de testes de reinicio com base suja:
+1. Evoluir gate de DLQ para granularidade por runner:
+   - evitar bloquear runners saudaveis do mesmo portfolio.
+2. Cobertura de testes de reinicio com base suja:
    - crash entre persist e dispatch,
    - limbo sem retorno da exchange,
    - zumbi expirado por TTL,

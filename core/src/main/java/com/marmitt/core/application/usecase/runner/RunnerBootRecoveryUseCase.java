@@ -17,9 +17,14 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Locale;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 /**
  * Boot recovery executavel por runner.
@@ -54,17 +59,34 @@ public class RunnerBootRecoveryUseCase {
     private final DeadLetterEntryRepositoryPort deadLetterEntryRepository;
     private final ConciliationOrderUpdate conciliationOrderUpdate;
     private final long pendingWithoutExchangeOrderIdTtlMs;
+    private final long exchangeQueryTimeoutMs;
+    private final int exchangeQueryMaxAttempts;
+    private final long exchangeQueryInitialBackoffMs;
+    private final double exchangeQueryBackoffMultiplier;
+    private final long exchangeQueryMaxBackoffMs;
 
     public RunnerBootRecoveryUseCase(StrategyRunnerRepositoryPort strategyRunnerRepository,
                                      ExchangeAdapterRepositoryPort exchangeAdapterRepository,
                                      DeadLetterEntryRepositoryPort deadLetterEntryRepository,
                                      ConciliationOrderUpdate conciliationOrderUpdate,
-                                     long pendingWithoutExchangeOrderIdTtlMs) {
+                                     long pendingWithoutExchangeOrderIdTtlMs,
+                                     long exchangeQueryTimeoutMs,
+                                     int exchangeQueryMaxAttempts,
+                                     long exchangeQueryInitialBackoffMs,
+                                     double exchangeQueryBackoffMultiplier,
+                                     long exchangeQueryMaxBackoffMs) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.exchangeAdapterRepository = exchangeAdapterRepository;
         this.deadLetterEntryRepository = deadLetterEntryRepository;
         this.conciliationOrderUpdate = conciliationOrderUpdate;
         this.pendingWithoutExchangeOrderIdTtlMs = pendingWithoutExchangeOrderIdTtlMs;
+        this.exchangeQueryTimeoutMs = Math.max(0L, exchangeQueryTimeoutMs);
+        this.exchangeQueryMaxAttempts = Math.max(1, exchangeQueryMaxAttempts);
+        this.exchangeQueryInitialBackoffMs = Math.max(0L, exchangeQueryInitialBackoffMs);
+        this.exchangeQueryBackoffMultiplier = exchangeQueryBackoffMultiplier > 0
+                ? exchangeQueryBackoffMultiplier
+                : 1.0d;
+        this.exchangeQueryMaxBackoffMs = Math.max(0L, exchangeQueryMaxBackoffMs);
     }
 
     public RecoverySummary recoverRunner(StrategyRunner runner) {
@@ -209,8 +231,7 @@ public class RunnerBootRecoveryUseCase {
 
         for (Transaction tx : ctx.limbo()) {
             try {
-                Optional<OrderDataDto> queried = ctx.orderQuery()
-                        .queryOrderByClientOrderId(tx.getSymbol(), tx.getClientOrderId());
+                Optional<OrderDataDto> queried = queryOrderByClientOrderIdWithRetry(ctx, tx);
 
                 if (queried.isPresent()) {
                     OrderDataDto normalized = normalizeQueriedOrder(tx, queried.get());
@@ -241,6 +262,125 @@ public class RunnerBootRecoveryUseCase {
                         tx.getId(), ctx.runnerId(), e);
             }
         }
+    }
+
+    private Optional<OrderDataDto> queryOrderByClientOrderIdWithRetry(RecoveryContext ctx, Transaction tx) {
+        long backoffMs = exchangeQueryInitialBackoffMs;
+
+        for (int attempt = 1; attempt <= exchangeQueryMaxAttempts; attempt++) {
+            try {
+                Optional<OrderDataDto> queried = queryOrderByClientOrderIdWithTimeout(ctx.orderQuery(), tx);
+                if (attempt > 1) {
+                    ctx.note("Step 4: exchange query recovered transactionId=" + tx.getId()
+                            + " attempt=" + attempt);
+                }
+                return queried;
+            } catch (UnsupportedOperationException e) {
+                throw e;
+            } catch (Exception e) {
+                boolean retryable = isRetryableQueryFailure(e);
+                boolean hasNextAttempt = attempt < exchangeQueryMaxAttempts;
+
+                if (!retryable || !hasNextAttempt) {
+                    throw e;
+                }
+
+                log.warn("bootRecovery: transient query failure exchange={} runnerId={} transactionId={} attempt={}/{} reason={}",
+                        ctx.exchangeId(), ctx.runnerId(), tx.getId(), attempt, exchangeQueryMaxAttempts, e.getMessage());
+                ctx.note("Step 4 WARN: transient query failure transactionId=" + tx.getId()
+                        + " attempt=" + attempt + " reason=" + e.getMessage());
+
+                sleepBackoff(backoffMs);
+                backoffMs = nextBackoff(backoffMs);
+            }
+        }
+
+        return Optional.empty();
+    }
+
+    private Optional<OrderDataDto> queryOrderByClientOrderIdWithTimeout(ExchangeOrderQueryPort orderQuery,
+                                                                         Transaction tx) {
+        if (exchangeQueryTimeoutMs <= 0) {
+            return orderQuery.queryOrderByClientOrderId(tx.getSymbol(), tx.getClientOrderId());
+        }
+
+        CompletableFuture<Optional<OrderDataDto>> future = CompletableFuture.supplyAsync(
+                () -> orderQuery.queryOrderByClientOrderId(tx.getSymbol(), tx.getClientOrderId())
+        );
+
+        try {
+            return future.get(exchangeQueryTimeoutMs, TimeUnit.MILLISECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            throw new BootQueryTimeoutException(
+                    "Timeout querying order by clientOrderId after " + exchangeQueryTimeoutMs
+                            + "ms transactionId=" + tx.getId(), e);
+        } catch (ExecutionException e) {
+            Throwable cause = e.getCause();
+            if (cause instanceof RuntimeException runtimeException) {
+                throw runtimeException;
+            }
+            throw new RuntimeException(cause);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted while querying order by clientOrderId", e);
+        }
+    }
+
+    private boolean isRetryableQueryFailure(Throwable throwable) {
+        if (throwable instanceof UnsupportedOperationException) {
+            return false;
+        }
+        if (throwable instanceof IllegalArgumentException) {
+            return false;
+        }
+        if (throwable instanceof BootQueryTimeoutException) {
+            return true;
+        }
+
+        String message = throwable.getMessage() != null
+                ? throwable.getMessage().toLowerCase(Locale.ROOT)
+                : "";
+
+        if (message.contains("timeout")
+                || message.contains("timed out")
+                || message.contains("connection reset")
+                || message.contains("temporarily")
+                || message.contains("rate limit")
+                || message.contains("429")
+                || message.contains("503")) {
+            return true;
+        }
+
+        Throwable cause = throwable.getCause();
+        if (cause == null || cause == throwable) {
+            return false;
+        }
+        return isRetryableQueryFailure(cause);
+    }
+
+    private void sleepBackoff(long backoffMs) {
+        if (backoffMs <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(backoffMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException("Interrupted during boot recovery backoff", e);
+        }
+    }
+
+    private long nextBackoff(long currentBackoffMs) {
+        if (currentBackoffMs <= 0) {
+            return 0L;
+        }
+
+        long multiplied = Math.round(currentBackoffMs * exchangeQueryBackoffMultiplier);
+        long bounded = Math.max(currentBackoffMs, multiplied);
+        return exchangeQueryMaxBackoffMs > 0
+                ? Math.min(bounded, exchangeQueryMaxBackoffMs)
+                : bounded;
     }
 
     private void step5ValidateRemainingInFlight(RecoveryContext ctx) {
@@ -337,4 +477,10 @@ public class RunnerBootRecoveryUseCase {
             int limboCount,
             List<String> notes
     ) {}
+
+    private static final class BootQueryTimeoutException extends RuntimeException {
+        private BootQueryTimeoutException(String message, Throwable cause) {
+            super(message, cause);
+        }
+    }
 }

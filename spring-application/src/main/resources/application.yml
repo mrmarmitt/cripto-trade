@@ -65,3 +65,8 @@ runner:
           enabled: true
     phase3:
       enabled: true
+      exchange-query-timeout-ms: 10000
+      exchange-query-max-attempts: 3
+      exchange-query-initial-backoff-ms: 300
+      exchange-query-backoff-multiplier: 2.0
+      exchange-query-max-backoff-ms: 5000
