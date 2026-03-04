@@ -392,25 +392,31 @@ public class RunnerBootRecoveryUseCase {
     }
 
     private void step6FinalizeRunnerState(RecoveryContext ctx) {
+        StrategyRunner latestRunner = strategyRunnerRepository.findById(ctx.runnerId()).orElse(null);
+        if (latestRunner == null) {
+            ctx.error("Step 6 ERROR: runner not found during finalization runnerId=" + ctx.runnerId());
+            return;
+        }
+
         boolean hasRunnerScopedDlq = deadLetterEntryRepository.existsUnresolvedByRunnerId(ctx.runnerId());
         boolean hasPortfolioUnscopedDlq = deadLetterEntryRepository
-                .existsUnresolvedByPortfolioIdAndRunnerIsNull(ctx.runner().getPortfolioId());
+                .existsUnresolvedByPortfolioIdAndRunnerIsNull(latestRunner.getPortfolioId());
         if (hasRunnerScopedDlq || hasPortfolioUnscopedDlq) {
             ctx.error("Step 6 ERROR: unresolved DLQ entries found for runner/portfolio"
                     + " runnerId=" + ctx.runnerId()
-                    + " portfolioId=" + ctx.runner().getPortfolioId());
+                    + " portfolioId=" + latestRunner.getPortfolioId());
         }
 
         if (!ctx.hasErrors()) {
-            ctx.runner().completeReconciliation();
-            strategyRunnerRepository.save(ctx.runner());
+            latestRunner.completeReconciliation();
+            strategyRunnerRepository.save(latestRunner);
             ctx.note("Step 6: reconciliation completed and runner persisted.");
             return;
         }
 
-        if (ctx.runner().getStatus() == RunnerStatus.ACTIVE) {
-            ctx.runner().halt();
-            strategyRunnerRepository.save(ctx.runner());
+        if (latestRunner.getStatus() == RunnerStatus.ACTIVE) {
+            latestRunner.halt();
+            strategyRunnerRepository.save(latestRunner);
             ctx.note("Step 6: runner moved ACTIVE->HALTED due to reconciliation errors.");
             return;
         }
