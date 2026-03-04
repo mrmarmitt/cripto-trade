@@ -12,6 +12,7 @@ public final class DeadLetterEntryEntityMapper {
         return DeadLetterEntryEntity.builder()
                 .id(domain.getId())
                 .portfolioId(domain.getPortfolioId())
+                .runnerId(domain.getRunnerId())
                 .clientOrderId(domain.getClientOrderId())
                 .exchangeOrderId(domain.getExchangeOrderId())
                 .rawPayload(domain.getRawPayload())
@@ -27,6 +28,7 @@ public final class DeadLetterEntryEntityMapper {
         return new DeadLetterEntry(
                 entity.getId(),
                 entity.getPortfolioId(),
+                entity.getRunnerId(),
                 entity.getClientOrderId(),
                 entity.getExchangeOrderId(),
                 entity.getRawPayload(),

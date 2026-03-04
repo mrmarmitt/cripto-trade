@@ -24,6 +24,7 @@ public class DeadLetterEntryEntity {
     private UUID id;
 
     private UUID portfolioId;
+    private UUID runnerId;
     private String clientOrderId;
     private String exchangeOrderId;
     private String rawPayload;

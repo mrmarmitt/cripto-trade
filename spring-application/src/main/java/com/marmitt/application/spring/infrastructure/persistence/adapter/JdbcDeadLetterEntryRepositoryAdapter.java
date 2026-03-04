@@ -37,19 +37,39 @@ public class JdbcDeadLetterEntryRepositoryAdapter implements DeadLetterEntryRepo
     }
 
     @Override
+    public boolean existsUnresolvedByPortfolioIdAndRunnerIsNull(UUID portfolioId) {
+        long start = System.nanoTime();
+        boolean exists = deadLetterEntryJdbcRepository.existsUnresolvedByPortfolioIdAndRunnerIsNull(portfolioId);
+        log.trace("[REPO] deadLetterEntry.existsUnresolvedByPortfolioIdAndRunnerIsNull({}) - {}ms - exists={}",
+                portfolioId, RepoTiming.elapsedMs(start), exists);
+        return exists;
+    }
+
+    @Override
+    public boolean existsUnresolvedByRunnerId(UUID runnerId) {
+        long start = System.nanoTime();
+        boolean exists = deadLetterEntryJdbcRepository.existsUnresolvedByRunnerId(runnerId);
+        log.trace("[REPO] deadLetterEntry.existsUnresolvedByRunnerId({}) - {}ms - exists={}",
+                runnerId, RepoTiming.elapsedMs(start), exists);
+        return exists;
+    }
+
+    @Override
     public boolean existsUnresolvedByIdentity(UUID portfolioId,
+                                              UUID runnerId,
                                               String clientOrderId,
                                               String exchangeOrderId,
                                               DlqReason reason) {
         long start = System.nanoTime();
         boolean exists = deadLetterEntryJdbcRepository.existsUnresolvedByIdentity(
                 portfolioId,
+                runnerId,
                 clientOrderId,
                 exchangeOrderId,
                 reason
         );
-        log.trace("[REPO] deadLetterEntry.existsUnresolvedByIdentity({}, {}, {}, {}) - {}ms - exists={}",
-                portfolioId, clientOrderId, exchangeOrderId, reason, RepoTiming.elapsedMs(start), exists);
+        log.trace("[REPO] deadLetterEntry.existsUnresolvedByIdentity({}, {}, {}, {}, {}) - {}ms - exists={}",
+                portfolioId, runnerId, clientOrderId, exchangeOrderId, reason, RepoTiming.elapsedMs(start), exists);
         return exists;
     }
 }

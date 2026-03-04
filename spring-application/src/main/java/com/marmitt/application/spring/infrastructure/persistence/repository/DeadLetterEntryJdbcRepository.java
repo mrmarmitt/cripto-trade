@@ -27,6 +27,31 @@ public interface DeadLetterEntryJdbcRepository extends CrudRepository<DeadLetter
                 SELECT 1
                   FROM dead_letter_entries
                  WHERE portfolio_id = :portfolioId
+                   AND runner_id IS NULL
+                   AND is_resolved = FALSE
+            )
+            """)
+    boolean existsUnresolvedByPortfolioIdAndRunnerIsNull(@Param("portfolioId") UUID portfolioId);
+
+    @Query("""
+            SELECT EXISTS(
+                SELECT 1
+                  FROM dead_letter_entries
+                 WHERE runner_id = :runnerId
+                   AND is_resolved = FALSE
+            )
+            """)
+    boolean existsUnresolvedByRunnerId(@Param("runnerId") UUID runnerId);
+
+    @Query("""
+            SELECT EXISTS(
+                SELECT 1
+                  FROM dead_letter_entries
+                 WHERE portfolio_id = :portfolioId
+                   AND (
+                       (:runnerId IS NULL AND runner_id IS NULL)
+                       OR runner_id = :runnerId
+                   )
                    AND is_resolved = FALSE
                    AND reason = :reason
                    AND (
@@ -40,6 +65,7 @@ public interface DeadLetterEntryJdbcRepository extends CrudRepository<DeadLetter
             )
             """)
     boolean existsUnresolvedByIdentity(@Param("portfolioId") UUID portfolioId,
+                                       @Param("runnerId") UUID runnerId,
                                        @Param("clientOrderId") String clientOrderId,
                                        @Param("exchangeOrderId") String exchangeOrderId,
                                        @Param("reason") DlqReason reason);

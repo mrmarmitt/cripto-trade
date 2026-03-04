@@ -144,6 +144,7 @@ public class CapitalEventListener {
         try {
             DeadLetterEntry entry = new DeadLetterEntry(
                     portfolioId,
+                    runnerId,
                     null,
                     null,
                     rawPayload,

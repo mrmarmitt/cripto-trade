@@ -392,9 +392,13 @@ public class RunnerBootRecoveryUseCase {
     }
 
     private void step6FinalizeRunnerState(RecoveryContext ctx) {
-        if (deadLetterEntryRepository.existsUnresolvedByPortfolioId(ctx.runner().getPortfolioId())) {
-            ctx.error("Step 6 ERROR: unresolved DLQ entries found for portfolio="
-                    + ctx.runner().getPortfolioId());
+        boolean hasRunnerScopedDlq = deadLetterEntryRepository.existsUnresolvedByRunnerId(ctx.runnerId());
+        boolean hasPortfolioUnscopedDlq = deadLetterEntryRepository
+                .existsUnresolvedByPortfolioIdAndRunnerIsNull(ctx.runner().getPortfolioId());
+        if (hasRunnerScopedDlq || hasPortfolioUnscopedDlq) {
+            ctx.error("Step 6 ERROR: unresolved DLQ entries found for runner/portfolio"
+                    + " runnerId=" + ctx.runnerId()
+                    + " portfolioId=" + ctx.runner().getPortfolioId());
         }
 
         if (!ctx.hasErrors()) {

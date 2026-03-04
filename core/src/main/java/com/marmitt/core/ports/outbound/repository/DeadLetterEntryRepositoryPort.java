@@ -14,7 +14,12 @@ public interface DeadLetterEntryRepositoryPort {
 
     boolean existsUnresolvedByPortfolioId(UUID portfolioId);
 
+    boolean existsUnresolvedByPortfolioIdAndRunnerIsNull(UUID portfolioId);
+
+    boolean existsUnresolvedByRunnerId(UUID runnerId);
+
     boolean existsUnresolvedByIdentity(UUID portfolioId,
+                                       UUID runnerId,
                                        String clientOrderId,
                                        String exchangeOrderId,
                                        DlqReason reason);

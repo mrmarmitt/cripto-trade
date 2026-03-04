@@ -19,6 +19,7 @@ public class DeadLetterEntry {
 
     private final UUID id;
     private final UUID portfolioId;
+    private final UUID runnerId;
 
     /**
      * clientOrderId extraído do payload. Nullable se malformado.
@@ -56,8 +57,30 @@ public class DeadLetterEntry {
             String rawPayload,
             DlqReason reason
     ) {
+        this(
+                portfolioId,
+                null,
+                clientOrderId,
+                exchangeOrderId,
+                rawPayload,
+                reason
+        );
+    }
+
+    /**
+     * Construtor para criaÃ§Ã£o de novo registro DLQ com vinculo opcional ao runner.
+     */
+    public DeadLetterEntry(
+            UUID portfolioId,
+            UUID runnerId,
+            String clientOrderId,
+            String exchangeOrderId,
+            String rawPayload,
+            DlqReason reason
+    ) {
         this.id = UUID.randomUUID();
         this.portfolioId = Objects.requireNonNull(portfolioId, "portfolioId cannot be null");
+        this.runnerId = runnerId;
         this.clientOrderId = clientOrderId;
         this.exchangeOrderId = exchangeOrderId;
         this.rawPayload = Objects.requireNonNull(rawPayload, "rawPayload cannot be null");
@@ -83,8 +106,40 @@ public class DeadLetterEntry {
             Instant resolvedAt,
             Instant createdAt
     ) {
+        this(
+                id,
+                portfolioId,
+                null,
+                clientOrderId,
+                exchangeOrderId,
+                rawPayload,
+                reason,
+                isResolved,
+                resolvedBy,
+                resolvedAt,
+                createdAt
+        );
+    }
+
+    /**
+     * Construtor completo para reconstituiÃ§Ã£o a partir do banco de dados com runner.
+     */
+    public DeadLetterEntry(
+            UUID id,
+            UUID portfolioId,
+            UUID runnerId,
+            String clientOrderId,
+            String exchangeOrderId,
+            String rawPayload,
+            DlqReason reason,
+            boolean isResolved,
+            String resolvedBy,
+            Instant resolvedAt,
+            Instant createdAt
+    ) {
         this.id = Objects.requireNonNull(id, "id cannot be null");
         this.portfolioId = Objects.requireNonNull(portfolioId, "portfolioId cannot be null");
+        this.runnerId = runnerId;
         this.clientOrderId = clientOrderId;
         this.exchangeOrderId = exchangeOrderId;
         this.rawPayload = Objects.requireNonNull(rawPayload, "rawPayload cannot be null");
@@ -112,6 +167,7 @@ public class DeadLetterEntry {
 
     public UUID getId() { return id; }
     public UUID getPortfolioId() { return portfolioId; }
+    public UUID getRunnerId() { return runnerId; }
     public String getClientOrderId() { return clientOrderId; }
     public String getExchangeOrderId() { return exchangeOrderId; }
     public String getRawPayload() { return rawPayload; }

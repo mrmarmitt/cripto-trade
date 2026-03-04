@@ -6,6 +6,7 @@ import com.marmitt.core.application.usecase.portfolio.PortfolioReservationTtlUse
 import com.marmitt.core.application.usecase.portfolio.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
 import com.marmitt.core.domain.portfolio.Portfolio;
+import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.portfolio.PortfolioBootSanityResult;
 import com.marmitt.core.dto.portfolio.PortfolioZombieCandidate;
@@ -31,7 +32,9 @@ import org.springframework.stereotype.Component;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Locale;
 import java.util.Set;
+import java.util.UUID;
 import java.util.stream.Stream;
 
 /**
@@ -536,8 +539,11 @@ public class BootOrchestrator {
     private int persistZombieSamplesToDlq(PortfolioZombieDetectionResult result) {
         int persisted = 0;
         for (PortfolioZombieCandidate sample : result.samples()) {
+            UUID runnerId = resolveRunnerIdForZombieSample(result.portfolioId(), sample);
+
             boolean alreadyOpen = deadLetterEntryRepository.existsUnresolvedByIdentity(
                     result.portfolioId(),
+                    runnerId,
                     sample.clientOrderId(),
                     sample.exchangeOrderId(),
                     sample.reason()
@@ -549,10 +555,12 @@ public class BootOrchestrator {
 
             DeadLetterEntry entry = new DeadLetterEntry(
                     result.portfolioId(),
+                    runnerId,
                     sample.clientOrderId(),
                     sample.exchangeOrderId(),
                     "source=boot.phase2.zombie"
                             + ", exchange=" + result.exchangeId()
+                            + ", runnerId=" + runnerId
                             + ", code=" + sample.code()
                             + ", symbol=" + sample.symbol()
                             + ", reason=" + sample.reason(),
@@ -562,5 +570,27 @@ public class BootOrchestrator {
             persisted++;
         }
         return persisted;
+    }
+
+    private UUID resolveRunnerIdForZombieSample(UUID portfolioId, PortfolioZombieCandidate sample) {
+        String clientOrderId = sample.clientOrderId();
+        if (clientOrderId == null || clientOrderId.isBlank()) {
+            return null;
+        }
+
+        var byTransaction = strategyRunnerRepository.findTransactionByClientOrderId(clientOrderId)
+                .map(tx -> tx.getRunnerId());
+        if (byTransaction.isPresent()) {
+            return byTransaction.get();
+        }
+
+        String shortCode = ClientOrderId.getRunnerShortCode(clientOrderId);
+        if (shortCode == null || shortCode.isBlank()) {
+            return null;
+        }
+
+        return strategyRunnerRepository.findByShortCodeAndPortfolioId(shortCode.toLowerCase(Locale.ROOT), portfolioId)
+                .map(StrategyRunner::getId)
+                .orElse(null);
     }
 }
