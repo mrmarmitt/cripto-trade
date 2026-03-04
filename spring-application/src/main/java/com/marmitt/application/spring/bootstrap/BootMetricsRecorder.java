@@ -28,6 +28,31 @@ public class BootMetricsRecorder {
                 .record(Duration.ofMillis(Math.max(0L, durationMs)));
     }
 
+    public void recordPortfolioPhaseEvaluation(String phase,
+                                               String status,
+                                               String exchange,
+                                               String mode,
+                                               long durationMs) {
+        String safeExchange = exchange != null ? exchange : "UNKNOWN";
+        String safeMode = mode != null ? mode : "UNKNOWN";
+
+        meterRegistry.counter(
+                "boot.phase.portfolio.total",
+                "phase", phase,
+                "status", status,
+                "exchange", safeExchange,
+                "mode", safeMode
+        ).increment();
+
+        Timer.builder("boot.phase.portfolio.duration")
+                .tag("phase", phase)
+                .tag("status", status)
+                .tag("exchange", safeExchange)
+                .tag("mode", safeMode)
+                .register(meterRegistry)
+                .record(Duration.ofMillis(Math.max(0L, durationMs)));
+    }
+
     public void recordFailFast(String phase, String code) {
         meterRegistry.counter("boot.failfast.total", "phase", phase, "code", code).increment();
     }

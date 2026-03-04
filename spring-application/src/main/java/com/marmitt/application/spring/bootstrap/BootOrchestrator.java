@@ -172,12 +172,21 @@ public class BootOrchestrator {
             }
 
             for (String exchange : exchanges) {
+                long startedNs = System.nanoTime();
                 PortfolioBootSanityResult result =
                         portfolioBootSanityUseCase.execute(
                                 portfolio.getId(),
                                 exchange,
                                 portfolioSanityCheckProperties.getThreshold()
                         );
+                long durationMs = (System.nanoTime() - startedNs) / 1_000_000L;
+                bootMetricsRecorder.recordPortfolioPhaseEvaluation(
+                        "phase2.sanity",
+                        result.status().name(),
+                        exchange,
+                        mode.name(),
+                        durationMs
+                );
 
                 switch (result.status()) {
                     case PASS, WARN_SURPLUS -> log.info(
@@ -252,12 +261,21 @@ public class BootOrchestrator {
             }
 
             for (String exchange : exchanges) {
+                long startedNs = System.nanoTime();
                 PortfolioZombieDetectionResult result =
                         portfolioZombieDetectionUseCase.execute(
                                 portfolio.getId(),
                                 exchange,
                                 portfolioCutoffProperties.isEnabled()
                         );
+                long durationMs = (System.nanoTime() - startedNs) / 1_000_000L;
+                bootMetricsRecorder.recordPortfolioPhaseEvaluation(
+                        "phase2.zombie",
+                        result.status().name(),
+                        exchange,
+                        mode.name(),
+                        durationMs
+                );
 
                 switch (result.status()) {
                     case CLEAN -> log.info(
@@ -347,11 +365,20 @@ public class BootOrchestrator {
                         .filter(runner -> exchange.equalsIgnoreCase(runner.getExchangeId()))
                         .toList();
 
+                long startedNs = System.nanoTime();
                 PortfolioReservationTtlResult result = portfolioReservationTtlUseCase.execute(
                         portfolio.getId(),
                         exchange,
                         ttlMs,
                         scopedRunners
+                );
+                long durationMs = (System.nanoTime() - startedNs) / 1_000_000L;
+                bootMetricsRecorder.recordPortfolioPhaseEvaluation(
+                        "phase2.reservation_ttl",
+                        result.status().name(),
+                        exchange,
+                        mode.name(),
+                        durationMs
                 );
 
                 switch (result.status()) {
