@@ -25,5 +25,10 @@ public enum DlqReason {
     /**
      * Símbolo do callback não corresponde a nenhum Runner ativo
      */
-    UNKNOWN_SYMBOL
+    UNKNOWN_SYMBOL,
+
+    /**
+     * Evento interno com retries esgotados e necessidade de intervencao manual.
+     */
+    RETRY_EXHAUSTED
 }

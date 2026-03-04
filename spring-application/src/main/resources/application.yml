@@ -28,6 +28,20 @@ logging:
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
 
+event:
+  retry:
+    max-attempts: 5
+    initial-interval-ms: 1000
+    max-interval-ms: 30000
+    multiplier: 2.0
+
+margin:
+  release:
+    max-attempts: 2147483647
+    initial-interval-ms: 1000
+    max-interval-ms: 60000
+    multiplier: 2.0
+
 
 runner:
   boot:

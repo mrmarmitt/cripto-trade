@@ -2,6 +2,7 @@ package com.marmitt.application.spring.config.core;
 
 import com.marmitt.core.application.reaction.ExecutionConfirmedReaction;
 import com.marmitt.core.application.reaction.MarginReleasedReaction;
+import com.marmitt.core.ports.outbound.repository.CapitalEventIdempotencyPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.springframework.context.annotation.Bean;
@@ -19,14 +20,24 @@ public class CapitalConfig {
     @Bean
     public ExecutionConfirmedReaction executionConfirmedReaction(
             StrategyRunnerRepositoryPort runnerRepository,
-            GlobalBalanceRepositoryPort globalBalanceRepository) {
-        return new ExecutionConfirmedReaction(runnerRepository, globalBalanceRepository);
+            GlobalBalanceRepositoryPort globalBalanceRepository,
+            CapitalEventIdempotencyPort capitalEventIdempotencyPort) {
+        return new ExecutionConfirmedReaction(
+                runnerRepository,
+                globalBalanceRepository,
+                capitalEventIdempotencyPort
+        );
     }
 
     @Bean
     public MarginReleasedReaction marginReleasedReaction(
             StrategyRunnerRepositoryPort runnerRepository,
-            GlobalBalanceRepositoryPort globalBalanceRepository) {
-        return new MarginReleasedReaction(runnerRepository, globalBalanceRepository);
+            GlobalBalanceRepositoryPort globalBalanceRepository,
+            CapitalEventIdempotencyPort capitalEventIdempotencyPort) {
+        return new MarginReleasedReaction(
+                runnerRepository,
+                globalBalanceRepository,
+                capitalEventIdempotencyPort
+        );
     }
 }

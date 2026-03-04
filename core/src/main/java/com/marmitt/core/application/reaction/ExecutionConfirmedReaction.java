@@ -4,6 +4,7 @@ import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.capital.ExecutionConfirmation;
 import com.marmitt.core.dto.events.ExecutionConfirmedEvent;
+import com.marmitt.core.ports.outbound.repository.CapitalEventIdempotencyPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
@@ -34,20 +35,26 @@ public class ExecutionConfirmedReaction {
 
     private final StrategyRunnerRepositoryPort runnerRepository;
     private final GlobalBalanceRepositoryPort globalBalanceRepository;
+    private final CapitalEventIdempotencyPort idempotencyPort;
 
     public ExecutionConfirmedReaction(
             StrategyRunnerRepositoryPort runnerRepository,
-            GlobalBalanceRepositoryPort globalBalanceRepository
+            GlobalBalanceRepositoryPort globalBalanceRepository,
+            CapitalEventIdempotencyPort idempotencyPort
     ) {
         this.runnerRepository = runnerRepository;
         this.globalBalanceRepository = globalBalanceRepository;
+        this.idempotencyPort = idempotencyPort;
     }
 
     public void handle(ExecutionConfirmedEvent event) {
         ExecutionConfirmation confirmation = event.confirmation();
 
-        // Idempotency: do not check TransactionMatch existence here.
-        // The match is persisted before the event is published.
+        if (!idempotencyPort.tryRegisterExecutionConfirmed(confirmation.matchId())) {
+            log.debug("executionConfirmedReaction: duplicate event ignored matchId={} transactionId={}",
+                    confirmation.matchId(), confirmation.transactionId());
+            return;
+        }
 
         StrategyRunner runner = runnerRepository.findById(confirmation.runnerId())
                 .orElseThrow(() -> new IllegalStateException(
