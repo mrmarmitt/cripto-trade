@@ -4,9 +4,11 @@ import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.application.usecase.portfolio.PortfolioBootSanityUseCase;
 import com.marmitt.core.application.usecase.portfolio.PortfolioReservationTtlUseCase;
 import com.marmitt.core.application.usecase.portfolio.PortfolioZombieDetectionUseCase;
+import com.marmitt.core.domain.portfolio.DeadLetterEntry;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.portfolio.PortfolioBootSanityResult;
+import com.marmitt.core.dto.portfolio.PortfolioZombieCandidate;
 import com.marmitt.core.dto.portfolio.PortfolioReservationTtlResult;
 import com.marmitt.core.dto.portfolio.PortfolioZombieDetectionResult;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
@@ -14,6 +16,7 @@ import com.marmitt.core.enums.PortfolioReservationTtlStatus;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.enums.PortfolioSanityStatus;
 import com.marmitt.core.enums.PortfolioZombieDetectionStatus;
+import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
@@ -62,6 +65,7 @@ public class BootOrchestrator {
     private final PortfolioBootSanityUseCase portfolioBootSanityUseCase;
     private final PortfolioReservationTtlUseCase portfolioReservationTtlUseCase;
     private final PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase;
+    private final DeadLetterEntryRepositoryPort deadLetterEntryRepository;
     private final RunnerBootPhase1Properties phase1Properties;
     private final RunnerBootPhase2Properties phase2Properties;
     private final RunnerBootPhase3Properties phase3Properties;
@@ -287,8 +291,9 @@ public class BootOrchestrator {
                             result.zombieCount()
                     );
                     case DETECTED -> {
+                        int persistedSamples = persistZombieSamplesToDlq(result);
                         log.warn(
-                                "bootOrchestrator.phase2.zombie: portfolio={} exchange={} status={} code={} openOrders={} zombies={} invalidFormat={} unknownRunner={} noLocalMatch={} beforeCutoff={} unknownSymbol={}",
+                                "bootOrchestrator.phase2.zombie: portfolio={} exchange={} status={} code={} openOrders={} zombies={} invalidFormat={} unknownRunner={} noLocalMatch={} beforeCutoff={} unknownSymbol={} persistedSamples={}",
                                 result.portfolioId(),
                                 result.exchangeId(),
                                 result.status(),
@@ -299,7 +304,8 @@ public class BootOrchestrator {
                                 result.unknownRunnerCount(),
                                 result.noLocalMatchCount(),
                                 result.beforeCutoffCount(),
-                                result.unknownSymbolCount()
+                                result.unknownSymbolCount(),
+                                persistedSamples
                         );
                         result.samples().forEach(sample -> log.warn(
                                 "bootOrchestrator.phase2.zombie: sample portfolio={} exchange={} reason={} code={} clientOrderId={} exchangeOrderId={} symbol={}",
@@ -525,5 +531,36 @@ public class BootOrchestrator {
                 Instant.now()
         ));
         return new IllegalStateException(message + " code=" + code);
+    }
+
+    private int persistZombieSamplesToDlq(PortfolioZombieDetectionResult result) {
+        int persisted = 0;
+        for (PortfolioZombieCandidate sample : result.samples()) {
+            boolean alreadyOpen = deadLetterEntryRepository.existsUnresolvedByIdentity(
+                    result.portfolioId(),
+                    sample.clientOrderId(),
+                    sample.exchangeOrderId(),
+                    sample.reason()
+            );
+
+            if (alreadyOpen) {
+                continue;
+            }
+
+            DeadLetterEntry entry = new DeadLetterEntry(
+                    result.portfolioId(),
+                    sample.clientOrderId(),
+                    sample.exchangeOrderId(),
+                    "source=boot.phase2.zombie"
+                            + ", exchange=" + result.exchangeId()
+                            + ", code=" + sample.code()
+                            + ", symbol=" + sample.symbol()
+                            + ", reason=" + sample.reason(),
+                    sample.reason()
+            );
+            deadLetterEntryRepository.save(entry);
+            persisted++;
+        }
+        return persisted;
     }
 }

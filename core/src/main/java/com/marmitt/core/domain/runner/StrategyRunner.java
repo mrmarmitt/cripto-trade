@@ -250,6 +250,16 @@ public class StrategyRunner {
         this.lastReconciliationAt = Instant.now();
     }
 
+    /**
+     * Marks reconciliation start to block signal processing during boot/recovery.
+     */
+    public void beginReconciliation() {
+        if (this.status == RunnerStatus.ARCHIVED || this.status == RunnerStatus.TERMINATING) {
+            throw new IllegalStateException("Cannot start reconciliation for status: " + this.status);
+        }
+        this.isReconciling = true;
+    }
+
     // ============================================================
     // Query methods
     // ============================================================

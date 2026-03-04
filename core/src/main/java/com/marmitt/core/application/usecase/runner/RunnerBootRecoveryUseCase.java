@@ -10,6 +10,7 @@ import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
+import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
@@ -50,15 +51,18 @@ public class RunnerBootRecoveryUseCase {
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
+    private final DeadLetterEntryRepositoryPort deadLetterEntryRepository;
     private final ConciliationOrderUpdate conciliationOrderUpdate;
     private final long pendingWithoutExchangeOrderIdTtlMs;
 
     public RunnerBootRecoveryUseCase(StrategyRunnerRepositoryPort strategyRunnerRepository,
                                      ExchangeAdapterRepositoryPort exchangeAdapterRepository,
+                                     DeadLetterEntryRepositoryPort deadLetterEntryRepository,
                                      ConciliationOrderUpdate conciliationOrderUpdate,
                                      long pendingWithoutExchangeOrderIdTtlMs) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.exchangeAdapterRepository = exchangeAdapterRepository;
+        this.deadLetterEntryRepository = deadLetterEntryRepository;
         this.conciliationOrderUpdate = conciliationOrderUpdate;
         this.pendingWithoutExchangeOrderIdTtlMs = pendingWithoutExchangeOrderIdTtlMs;
     }
@@ -69,6 +73,7 @@ public class RunnerBootRecoveryUseCase {
         log.info("bootRecovery: start runnerId={} exchange={} status={} reconciling={}",
                 ctx.runnerId(), ctx.exchangeId(), ctx.runner().getStatus(), ctx.runner().isReconciling());
 
+        stepAEnterReconciliation(ctx);
         step0CaptureAccountSnapshot(ctx);
         step1LoadAndClassifyInFlight(ctx);
         step2ResolveOrderQueryCapability(ctx);
@@ -92,6 +97,17 @@ public class RunnerBootRecoveryUseCase {
                 ctx.limbo().size(),
                 ctx.notes()
         );
+    }
+
+    private void stepAEnterReconciliation(RecoveryContext ctx) {
+        if (ctx.runner().isReconciling()) {
+            ctx.note("Step A: runner already in reconciliation.");
+            return;
+        }
+
+        ctx.runner().beginReconciliation();
+        strategyRunnerRepository.save(ctx.runner());
+        ctx.note("Step A: runner set to reconciling=true.");
     }
 
     private void step0CaptureAccountSnapshot(RecoveryContext ctx) {
@@ -236,6 +252,11 @@ public class RunnerBootRecoveryUseCase {
     }
 
     private void step6FinalizeRunnerState(RecoveryContext ctx) {
+        if (deadLetterEntryRepository.existsUnresolvedByPortfolioId(ctx.runner().getPortfolioId())) {
+            ctx.error("Step 6 ERROR: unresolved DLQ entries found for portfolio="
+                    + ctx.runner().getPortfolioId());
+        }
+
         if (!ctx.hasErrors()) {
             ctx.runner().completeReconciliation();
             strategyRunnerRepository.save(ctx.runner());

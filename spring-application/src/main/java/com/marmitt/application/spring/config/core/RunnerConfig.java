@@ -18,6 +18,7 @@ import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
@@ -136,12 +137,14 @@ public class RunnerConfig {
     public RunnerBootRecoveryUseCase runnerBootRecoveryUseCase(
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             ExchangeAdapterRepositoryPort exchangeAdapterRepository,
+            DeadLetterEntryRepositoryPort deadLetterEntryRepository,
             ConciliationOrderUpdate reconcileOrderUpdate,
             PortfolioReservationTtlProperties reservationTtlProperties
     ) {
         return new RunnerBootRecoveryUseCase(
                 strategyRunnerRepository,
                 exchangeAdapterRepository,
+                deadLetterEntryRepository,
                 reconcileOrderUpdate,
                 reservationTtlProperties.getTtlMs()
         );
