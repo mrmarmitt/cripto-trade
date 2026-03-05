@@ -21,6 +21,7 @@ import java.time.Instant;
 import java.util.Locale;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -170,8 +171,12 @@ public class RunnerBootRecoveryUseCase {
                 .toList();
         ctx.zombies(zombies);
 
+        Set<UUID> zombieIds = zombies.stream()
+                .map(Transaction::getId)
+                .collect(java.util.stream.Collectors.toSet());
+
         List<Transaction> limbo = inFlight.stream()
-                .filter(tx -> !zombies.contains(tx))
+                .filter(tx -> !zombieIds.contains(tx.getId()))
                 .toList();
         ctx.limbo(limbo);
 
