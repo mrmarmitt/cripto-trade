@@ -2,6 +2,7 @@ name: CI PR
 
 on:
   pull_request:
+    branches: [develop]
     types: [opened, synchronize, reopened, ready_for_review]
   push:
     branches: [develop]
@@ -31,4 +32,7 @@ jobs:
 
       - name: Run build checks
         run: ./gradlew --no-daemon :core:test :core:compileJava :strategy:compileJava :adapter-mock:compileJava :spring-application:compileJava
+
+      - name: Run spring-application tests
+        run: ./gradlew --no-daemon :spring-application:test
 
