@@ -6,8 +6,10 @@ import com.marmitt.core.application.usecase.portfolio.PortfolioZombieDetectionUs
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.StrategyRunner;
+import com.marmitt.core.dto.portfolio.PortfolioZombieCandidate;
 import com.marmitt.core.dto.portfolio.PortfolioZombieDetectionResult;
 import com.marmitt.core.enums.AccountingPolicyType;
+import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.enums.ExecutionPolicy;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
@@ -29,6 +31,7 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -66,11 +69,19 @@ class BootOrchestratorBootMinimumTest {
     }
 
     @Test
-    void failFastZombieDetectionPreservesPhaseSpecificFailureMetadata() {
+    void failFastDetectedPersistsDlqSamplesAndPreservesPhaseSpecificFailureMetadata() {
         Portfolio portfolio = new Portfolio(UUID.randomUUID(), "p1");
         StrategyRunner runner = activeRunner(portfolio.getId(), "MOCK");
         PortfolioZombieDetectionResult detected = PortfolioZombieDetectionResult.detected(
-                portfolio.getId(), "MOCK", 1, 1, 0, 0, 0, 0, List.of()
+                portfolio.getId(), "MOCK", 1, 1, 0, 0, 0, 0, List.of(
+                        new PortfolioZombieCandidate(
+                                "",
+                                "EX_ORDER_123",
+                                "BTCUSDT",
+                                DlqReason.INVALID_FORMAT,
+                                "INVALID_FORMAT"
+                        )
+                )
         );
 
         BootStatusTracker tracker = new BootStatusTracker();
@@ -91,6 +102,40 @@ class BootOrchestratorBootMinimumTest {
         BootRunSnapshot snapshot = tracker.snapshot();
         assertEquals(BootRunStatus.FAILED, snapshot.status());
         assertEquals("phase2.zombie", snapshot.failurePhase());
+        verify(deadLetterRepository, times(1)).save(any());
+        verify(eventPublisher).publishEvent(any(BootFailFastEvent.class));
+    }
+
+    @Test
+    void failFastFailedStatusPreservesPhaseSpecificFailureMetadata() {
+        Portfolio portfolio = new Portfolio(UUID.randomUUID(), "p1");
+        StrategyRunner runner = activeRunner(portfolio.getId(), "MOCK");
+        PortfolioZombieDetectionResult failed = PortfolioZombieDetectionResult.failed(
+                portfolio.getId(),
+                "MOCK",
+                "QUERY_FAILED",
+                "Simulated exchange query failure"
+        );
+
+        BootStatusTracker tracker = new BootStatusTracker();
+        DeadLetterEntryRepositoryPort deadLetterRepository = mock(DeadLetterEntryRepositoryPort.class);
+        ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+        BootOrchestrator orchestrator = newOrchestrator(
+                Phase2Mode.FAIL_FAST,
+                portfolio,
+                runner,
+                failed,
+                tracker,
+                deadLetterRepository,
+                eventPublisher
+        );
+
+        assertThrows(IllegalStateException.class, orchestrator::onApplicationReady);
+
+        BootRunSnapshot snapshot = tracker.snapshot();
+        assertEquals(BootRunStatus.FAILED, snapshot.status());
+        assertEquals("phase2.zombie", snapshot.failurePhase());
+        verifyNoInteractions(deadLetterRepository);
         verify(eventPublisher).publishEvent(any(BootFailFastEvent.class));
     }
 
@@ -183,4 +228,3 @@ class BootOrchestratorBootMinimumTest {
         );
     }
 }
-
