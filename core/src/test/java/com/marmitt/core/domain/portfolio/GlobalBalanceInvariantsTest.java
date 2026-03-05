@@ -35,6 +35,17 @@ class GlobalBalanceInvariantsTest {
     }
 
     @Test
+    void releaseMovesAmountFromReservedToAvailable() {
+        GlobalBalance balance = newBalance("100");
+        balance.reserve(new BigDecimal("40"));
+
+        balance.release(new BigDecimal("15"));
+
+        assertAmount("75", balance.getAvailableBalance());
+        assertAmount("25", balance.getReservedBalance());
+    }
+
+    @Test
     void confirmExecutionRejectsAmountGreaterThanReserved() {
         GlobalBalance balance = newBalance("100");
         balance.reserve(new BigDecimal("15"));
@@ -60,6 +71,23 @@ class GlobalBalanceInvariantsTest {
         assertAmount("0.5", balance.getTotalFeesPaid());
     }
 
+    @Test
+    void confirmExecutionSupportsNegativePnl() {
+        GlobalBalance balance = newBalance("100");
+        balance.reserve(new BigDecimal("25"));
+
+        balance.confirmExecution(
+                new BigDecimal("20"),
+                new BigDecimal("-5"),
+                BigDecimal.ZERO
+        );
+
+        assertAmount("90", balance.getAvailableBalance());
+        assertAmount("5", balance.getReservedBalance());
+        assertAmount("-5", balance.getRealizedBalance());
+        assertAmount("0", balance.getTotalFeesPaid());
+    }
+
     private static GlobalBalance newBalance(String initialCapital) {
         return new GlobalBalance(UUID.randomUUID(), new BigDecimal(initialCapital), "USDT");
     }
@@ -68,4 +96,3 @@ class GlobalBalanceInvariantsTest {
         assertEquals(0, new BigDecimal(expected).compareTo(actual));
     }
 }
-

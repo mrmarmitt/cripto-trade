@@ -63,6 +63,18 @@ class TransactionInvariantsTest {
         assertAmount("23.00000000", transaction.getExecutedValue());
     }
 
+    @Test
+    void executedValueUsesLatestCumulativePartialFillAcrossMultipleUpdates() {
+        Transaction transaction = newTransaction();
+        transaction.submit("EX_ORDER_1");
+
+        transaction.partialFill(new BigDecimal("1.0"), new BigDecimal("10.0"));
+        assertAmount("10.00000000", transaction.getExecutedValue());
+
+        transaction.partialFill(new BigDecimal("2.5"), new BigDecimal("10.8"));
+        assertAmount("27.00000000", transaction.getExecutedValue());
+    }
+
     private static Transaction newTransaction() {
         BigDecimal quantity = new BigDecimal("2.5");
         BigDecimal price = new BigDecimal("10");
@@ -85,4 +97,3 @@ class TransactionInvariantsTest {
         assertEquals(0, new BigDecimal(expected).compareTo(actual));
     }
 }
-

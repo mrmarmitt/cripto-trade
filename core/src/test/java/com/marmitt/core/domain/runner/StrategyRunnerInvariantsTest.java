@@ -47,6 +47,14 @@ class StrategyRunnerInvariantsTest {
         terminatingRunner.startTerminating();
 
         assertThrows(IllegalStateException.class, terminatingRunner::beginReconciliation);
+
+        StrategyRunner archivedRunner = newRunner();
+        archivedRunner.startInitializing();
+        archivedRunner.activate();
+        archivedRunner.startTerminating();
+        archivedRunner.archive();
+
+        assertThrows(IllegalStateException.class, archivedRunner::beginReconciliation);
     }
 
     @Test
@@ -108,4 +116,3 @@ class StrategyRunnerInvariantsTest {
         );
     }
 }
-
