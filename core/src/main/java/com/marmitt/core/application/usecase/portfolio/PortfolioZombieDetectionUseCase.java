@@ -19,8 +19,12 @@ import java.util.Comparator;
 import java.time.Instant;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 /**
  * Phase 2 (Portfolio): identifica ordens abertas na exchange sem correspondencia local valida.
@@ -93,6 +97,16 @@ public class PortfolioZombieDetectionUseCase {
                                                               List<OrderDataDto> openOrders,
                                                               List<StrategyRunner> scopedRunners,
                                                               boolean cutoffEnabled) {
+        Map<UUID, StrategyRunner> scopedRunnerById = scopedRunners.stream()
+                .collect(Collectors.toMap(StrategyRunner::getId, Function.identity()));
+        Map<String, StrategyRunner> scopedRunnerByShortCode = scopedRunners.stream()
+                .collect(Collectors.toMap(
+                        runner -> runner.getShortCode().toLowerCase(Locale.ROOT),
+                        Function.identity(),
+                        (left, right) -> left
+                ));
+        Set<UUID> scopedRunnerIds = scopedRunnerById.keySet();
+
         int invalidFormatCount = 0;
         int unknownRunnerCount = 0;
         int noLocalMatchCount = 0;
@@ -102,16 +116,29 @@ public class PortfolioZombieDetectionUseCase {
         Instant portfolioCutoff = cutoffEnabled ? resolvePortfolioCutoff(scopedRunners) : null;
 
         for (OrderDataDto order : openOrders) {
+            String clientOrderId = order.clientOrderId();
+            Optional<Transaction> transactionOptional = (clientOrderId == null || clientOrderId.isBlank())
+                    ? Optional.empty()
+                    : strategyRunnerRepository.findTransactionByClientOrderId(clientOrderId);
+            String shortCode = ClientOrderId.getRunnerShortCode(clientOrderId);
+            if (shortCode != null) {
+                shortCode = shortCode.toLowerCase(Locale.ROOT);
+            }
+            final String normalizedShortCode = shortCode;
+
+            boolean belongsToCurrentPortfolio = transactionOptional
+                    .map(tx -> scopedRunnerIds.contains(tx.getRunnerId()))
+                    .orElseGet(() -> normalizedShortCode != null
+                            && scopedRunnerByShortCode.containsKey(normalizedShortCode));
+
+            if (!belongsToCurrentPortfolio) {
+                continue;
+            }
+
             if (cutoffEnabled && isBeforeCutoff(order.timestamp(), portfolioCutoff)) {
                 beforeCutoffCount++;
                 addSample(samples, order, DlqReason.RECONCILIATION_CONFLICT, "BEFORE_CUTOFF");
                 continue;
-            }
-
-            String clientOrderId = order.clientOrderId();
-            String shortCode = ClientOrderId.getRunnerShortCode(clientOrderId);
-            if (shortCode != null) {
-                shortCode = shortCode.toLowerCase(Locale.ROOT);
             }
 
             if (shortCode == null) {
@@ -120,30 +147,33 @@ public class PortfolioZombieDetectionUseCase {
                 continue;
             }
 
-            Optional<Transaction> transactionOptional =
-                    strategyRunnerRepository.findTransactionByClientOrderId(clientOrderId);
             if (transactionOptional.isEmpty()) {
                 noLocalMatchCount++;
                 addSample(samples, order, DlqReason.RECONCILIATION_CONFLICT, "NO_LOCAL_MATCH");
                 continue;
             }
 
-            Optional<StrategyRunner> runnerOptional =
-                    strategyRunnerRepository.findByShortCodeAndPortfolioId(shortCode, portfolioId);
-            if (runnerOptional.isEmpty() || runnerOptional.get().getStatus() == RunnerStatus.ARCHIVED) {
+            StrategyRunner runnerByShortCode = scopedRunnerByShortCode.get(shortCode);
+            if (runnerByShortCode == null || runnerByShortCode.getStatus() == RunnerStatus.ARCHIVED) {
                 unknownRunnerCount++;
                 addSample(samples, order, DlqReason.UNKNOWN_RUNNER, "RUNNER_NOT_FOUND");
                 continue;
             }
 
-            StrategyRunner runner = runnerOptional.get();
+            StrategyRunner runner = scopedRunnerById.get(transactionOptional.get().getRunnerId());
+            if (runner == null || runner.getStatus() == RunnerStatus.ARCHIVED) {
+                unknownRunnerCount++;
+                addSample(samples, order, DlqReason.UNKNOWN_RUNNER, "RUNNER_NOT_FOUND");
+                continue;
+            }
+
             if (cutoffEnabled && isBeforeCutoff(order.timestamp(), resolveRunnerCutoff(runner))) {
                 beforeCutoffCount++;
                 addSample(samples, order, DlqReason.RECONCILIATION_CONFLICT, "BEFORE_CUTOFF");
                 continue;
             }
 
-            if (!transactionOptional.get().getRunnerId().equals(runner.getId())) {
+            if (!transactionOptional.get().getRunnerId().equals(runnerByShortCode.getId())) {
                 unknownRunnerCount++;
                 addSample(samples, order, DlqReason.UNKNOWN_RUNNER, "OWNER_MISMATCH");
                 continue;

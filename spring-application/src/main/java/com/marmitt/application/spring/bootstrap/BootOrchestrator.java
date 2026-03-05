@@ -580,7 +580,9 @@ public class BootOrchestrator {
         }
 
         var byTransaction = strategyRunnerRepository.findTransactionByClientOrderId(clientOrderId)
-                .map(tx -> tx.getRunnerId());
+                .flatMap(tx -> strategyRunnerRepository.findById(tx.getRunnerId())
+                        .filter(runner -> portfolioId.equals(runner.getPortfolioId()))
+                        .map(StrategyRunner::getId));
         if (byTransaction.isPresent()) {
             return byTransaction.get();
         }
