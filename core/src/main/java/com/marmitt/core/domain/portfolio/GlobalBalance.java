@@ -110,6 +110,12 @@ public class GlobalBalance {
         Objects.requireNonNull(cost, "cost cannot be null");
         Objects.requireNonNull(pnlAmount, "pnlAmount cannot be null");
         Objects.requireNonNull(feeConverted, "feeConverted cannot be null");
+        if (cost.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("Execution cost must be positive");
+        }
+        if (reservedBalance.compareTo(cost) < 0) {
+            throw new IllegalStateException("Insufficient reserved balance for execution confirmation");
+        }
 
         this.reservedBalance = this.reservedBalance.subtract(cost);
         this.realizedBalance = this.realizedBalance.add(pnlAmount);
@@ -129,6 +135,9 @@ public class GlobalBalance {
         Objects.requireNonNull(amount, "amount cannot be null");
         if (amount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Release amount must be positive");
+        }
+        if (reservedBalance.compareTo(amount) < 0) {
+            throw new IllegalStateException("Insufficient reserved balance for release");
         }
         this.reservedBalance = this.reservedBalance.subtract(amount);
         this.availableBalance = this.availableBalance.add(amount);
