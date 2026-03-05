@@ -121,7 +121,10 @@ public class BootOrchestrator {
             log.info("bootOrchestrator: completed runId={} portfolios={} runners={}",
                     bootStatusTracker.currentRunId(), portfolios.size(), summaries.size());
         } catch (RuntimeException e) {
-            bootStatusTracker.failRun("boot", e.getMessage());
+            BootRunSnapshot snapshot = bootStatusTracker.snapshot();
+            if (snapshot.status() == BootRunStatus.RUNNING) {
+                bootStatusTracker.failRun("boot", e.getMessage());
+            }
             bootMetricsRecorder.recordRun(BootRunStatus.FAILED);
             log.error("bootOrchestrator: failed runId={} reason={}",
                     bootStatusTracker.currentRunId(), e.getMessage(), e);
@@ -294,11 +297,13 @@ public class BootOrchestrator {
                             result.zombieCount()
                     );
                     case DETECTED -> {
-                        int persistedSamples = persistZombieSamplesToDlq(result);
+                        boolean persistToDlq = mode == Phase2Mode.FAIL_FAST;
+                        int persistedSamples = persistToDlq ? persistZombieSamplesToDlq(result) : 0;
                         log.warn(
-                                "bootOrchestrator.phase2.zombie: portfolio={} exchange={} status={} code={} openOrders={} zombies={} invalidFormat={} unknownRunner={} noLocalMatch={} beforeCutoff={} unknownSymbol={} persistedSamples={}",
+                                "bootOrchestrator.phase2.zombie: portfolio={} exchange={} mode={} status={} code={} openOrders={} zombies={} invalidFormat={} unknownRunner={} noLocalMatch={} beforeCutoff={} unknownSymbol={} persistedSamples={} dlqPersisted={}",
                                 result.portfolioId(),
                                 result.exchangeId(),
+                                mode,
                                 result.status(),
                                 result.code(),
                                 result.openOrders(),
@@ -308,7 +313,8 @@ public class BootOrchestrator {
                                 result.noLocalMatchCount(),
                                 result.beforeCutoffCount(),
                                 result.unknownSymbolCount(),
-                                persistedSamples
+                                persistedSamples,
+                                persistToDlq
                         );
                         result.samples().forEach(sample -> log.warn(
                                 "bootOrchestrator.phase2.zombie: sample portfolio={} exchange={} reason={} code={} clientOrderId={} exchangeOrderId={} symbol={}",
