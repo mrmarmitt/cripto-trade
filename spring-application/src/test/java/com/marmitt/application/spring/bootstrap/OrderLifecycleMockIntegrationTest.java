@@ -51,6 +51,9 @@ class OrderLifecycleMockIntegrationTest {
     private static final String SYMBOL = "BTCUSDT";
     private static final String MARKET_DATA_EXCHANGE = "BINANCE";
     private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(25);
+    // Sentinel de regressao: no estado atual, SELL FILLED pode deixar pequeno residual
+    // de reserva por diferenca entre custo reservado e custo efetivo consolidado.
+    private static final BigDecimal MAX_ACCEPTABLE_RESERVED_RESIDUAL = new BigDecimal("2.00000000");
 
     @Container
     @SuppressWarnings("resource")
@@ -118,13 +121,13 @@ class OrderLifecycleMockIntegrationTest {
         PositionSnapshot openAfterSell = latestOpenPosition(runnerId, SYMBOL);
         assertNull(openAfterSell, "Expected no OPEN position after SELL filled");
 
-        PositionSnapshot lastClosed = latestClosedPosition(runnerId, SYMBOL);
+        PositionSnapshot lastClosed = awaitClosedPosition(runnerId, SYMBOL, WAIT_TIMEOUT);
         assertNotNull(lastClosed, "Expected CLOSED position after SELL filled");
 
         GlobalBalanceSnapshot balance = awaitPostSellBalance(portfolioId, WAIT_TIMEOUT);
         assertTrue(balance.reservedBalance().compareTo(BigDecimal.ZERO) >= 0,
                 "Reserved balance must never be negative");
-        assertTrue(balance.reservedBalance().compareTo(new BigDecimal("2.00000000")) < 0,
+        assertTrue(balance.reservedBalance().compareTo(MAX_ACCEPTABLE_RESERVED_RESIDUAL) < 0,
                 "Reserved balance residual should stay small in this scenario");
         assertTrue(balance.realizedBalance().compareTo(BigDecimal.ZERO) > 0,
                 "Expected positive realized balance in this scenario");
@@ -220,7 +223,7 @@ class OrderLifecycleMockIntegrationTest {
         MatchAggregateSnapshot lastSeen = null;
         while (Instant.now().isBefore(deadline)) {
             MatchAggregateSnapshot snapshot = matchAggregateBySellTransaction(sellTransactionId);
-            if (snapshot != null && snapshot.matchCount() > 0) {
+            if (snapshot.matchCount() > 0) {
                 return snapshot;
             }
             lastSeen = snapshot;
@@ -243,6 +246,21 @@ class OrderLifecycleMockIntegrationTest {
         }
         throw new AssertionError("Timeout waiting post-sell global_balance for portfolio="
                 + portfolioId + ". Last snapshot=" + lastSeen);
+    }
+
+    private PositionSnapshot awaitClosedPosition(UUID runnerId, String symbol, Duration timeout) {
+        Instant deadline = Instant.now().plus(timeout);
+        PositionSnapshot lastSeen = null;
+        while (Instant.now().isBefore(deadline)) {
+            PositionSnapshot closed = latestClosedPosition(runnerId, symbol);
+            if (closed != null) {
+                return closed;
+            }
+            lastSeen = closed;
+            sleep(80);
+        }
+        throw new AssertionError("Timeout waiting CLOSED position for runner=" + runnerId
+                + " symbol=" + symbol + ". Last snapshot=" + lastSeen);
     }
 
     private TransactionSnapshot latestTransactionByType(UUID runnerId, String type) {
