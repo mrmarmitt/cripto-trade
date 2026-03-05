@@ -4,10 +4,13 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.application.spring.config.exchange.BinanceExchangeAdapter;
 import com.marmitt.application.spring.config.exchange.CoinbaseExchangeAdapter;
 import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
-import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
+import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
+import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
+import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
+import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
-import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Repository;
@@ -20,63 +23,128 @@ import java.util.concurrent.ConcurrentHashMap;
 
 @Slf4j
 @Repository
-public class InMemoryExchangeAdapterRepository  implements ExchangeAdapterRepositoryPort {
+public class InMemoryExchangeAdapterRepository implements ExchangeAdapterRepositoryPort {
 
-    private final Map<String, ExchangeAdapterPort> adapters = new ConcurrentHashMap<>();
+    private final Map<String, ExchangeStreamingPort> streamingAdapters = new ConcurrentHashMap<>();
+    private final Map<String, ExchangeOrderExecutionPort> orderExecutionAdapters = new ConcurrentHashMap<>();
+    private final Map<String, ExchangeOrderQueryPort> orderQueryAdapters = new ConcurrentHashMap<>();
+    private final Map<String, ExchangeAccountQueryPort> accountQueryAdapters = new ConcurrentHashMap<>();
+    private final Map<String, ExchangeBootReadinessPort> bootReadinessAdapters = new ConcurrentHashMap<>();
     private final Map<UUID, String> adapterByPortfolio = new ConcurrentHashMap<>();
 
     private final EventPublisherPort eventPublisher;
     private final ObjectMapper objectMapper;
 
-    public InMemoryExchangeAdapterRepository(
-            EventPublisherPort eventPublisher,
-            ObjectMapper objectMapper
-    ) {
+    public InMemoryExchangeAdapterRepository(EventPublisherPort eventPublisher, ObjectMapper objectMapper) {
         this.eventPublisher = eventPublisher;
         this.objectMapper = objectMapper;
     }
 
     @PostConstruct
     public void initExchangeAdapters() {
-        registerAdapter(new BinanceExchangeAdapter(objectMapper, eventPublisher));
-        registerAdapter(new CoinbaseExchangeAdapter(objectMapper, eventPublisher));
-        registerAdapter(new MockExchangeAdapter(objectMapper, eventPublisher));
+        registerAllCapabilities(new BinanceExchangeAdapter(objectMapper, eventPublisher));
+        registerAllCapabilities(new CoinbaseExchangeAdapter(objectMapper, eventPublisher));
+        registerAllCapabilities(new MockExchangeAdapter(objectMapper, eventPublisher));
     }
 
     @Override
-    public void registerAdapter(ExchangeAdapterPort adapter) {
-        String exchangeName = adapter.getExchangeName().toUpperCase();
-        adapters.put(exchangeName, adapter);
+    public void registerStreamingAdapter(ExchangeStreamingPort adapter) {
+        String exchangeName = normalize(adapter.getExchangeName());
+        streamingAdapters.put(exchangeName, adapter);
+    }
+
+    @Override
+    public void registerOrderExecutionAdapter(String exchangeName, ExchangeOrderExecutionPort adapter) {
+        orderExecutionAdapters.put(normalize(exchangeName), adapter);
+    }
+
+    @Override
+    public void registerOrderQueryAdapter(String exchangeName, ExchangeOrderQueryPort adapter) {
+        orderQueryAdapters.put(normalize(exchangeName), adapter);
+    }
+
+    @Override
+    public void registerAccountQueryAdapter(String exchangeName, ExchangeAccountQueryPort adapter) {
+        accountQueryAdapters.put(normalize(exchangeName), adapter);
+    }
+
+    @Override
+    public void registerBootReadinessAdapter(String exchangeName, ExchangeBootReadinessPort adapter) {
+        bootReadinessAdapters.put(normalize(exchangeName), adapter);
     }
 
     @Override
     public void registerPortfolioByAdapter(String exchangeName, UUID portfolioId) {
-        exchangeName = exchangeName.toUpperCase();
-        adapterByPortfolio.put(portfolioId, exchangeName);
-    }
-
-    @Override
-    public Optional<ExchangeAdapterPort> findByName(String exchangeName) {
-        return Optional.ofNullable(adapters.get(exchangeName.toUpperCase()));
+        adapterByPortfolio.put(portfolioId, normalize(exchangeName));
     }
 
     @Override
     public boolean hasAdapter(String exchangeName) {
-        return adapters.containsKey(exchangeName.toUpperCase());
+        return streamingAdapters.containsKey(normalize(exchangeName));
     }
 
     @Override
     public Set<String> getAllExchangeNames() {
-        return adapters.keySet();
-    }
-
-    @Override
-    public Map<String, ExchangeAdapterPort> getAllAdapters() {
-        return Map.copyOf(adapters);
+        return streamingAdapters.keySet();
     }
 
     @Override
     public int getAdapterCount() {
-        return adapters.size();
+        return streamingAdapters.size();
+    }
+
+    @Override
+    public Optional<ExchangeStreamingPort> findStreamingByName(String exchangeName) {
+        return Optional.ofNullable(streamingAdapters.get(normalize(exchangeName)));
+    }
+
+    @Override
+    public Optional<ExchangeOrderExecutionPort> findOrderExecutionByName(String exchangeName) {
+        return Optional.ofNullable(orderExecutionAdapters.get(normalize(exchangeName)));
+    }
+
+    @Override
+    public Optional<ExchangeOrderQueryPort> findOrderQueryByName(String exchangeName) {
+        return Optional.ofNullable(orderQueryAdapters.get(normalize(exchangeName)));
+    }
+
+    @Override
+    public Optional<ExchangeAccountQueryPort> findAccountQueryByName(String exchangeName) {
+        return Optional.ofNullable(accountQueryAdapters.get(normalize(exchangeName)));
+    }
+
+    @Override
+    public Optional<ExchangeBootReadinessPort> findBootReadinessByName(String exchangeName) {
+        return Optional.ofNullable(bootReadinessAdapters.get(normalize(exchangeName)));
+    }
+
+    private void registerAllCapabilities(ExchangeStreamingPort streamingAdapter) {
+        String exchangeName = normalize(streamingAdapter.getExchangeName());
+        registerStreamingAdapter(streamingAdapter);
+
+        if (streamingAdapter instanceof ExchangeOrderExecutionPort orderExecutionPort) {
+            registerOrderExecutionAdapter(exchangeName, orderExecutionPort);
+        }
+        if (streamingAdapter instanceof ExchangeOrderQueryPort orderQueryPort) {
+            registerOrderQueryAdapter(exchangeName, orderQueryPort);
+        }
+        if (streamingAdapter instanceof ExchangeAccountQueryPort accountQueryPort) {
+            registerAccountQueryAdapter(exchangeName, accountQueryPort);
+        }
+        if (streamingAdapter instanceof ExchangeBootReadinessPort bootReadinessPort) {
+            registerBootReadinessAdapter(exchangeName, bootReadinessPort);
+        }
+
+        log.info("Exchange capabilities registered - exchange={} streaming={} orderExec={} orderQuery={} accountQuery={} bootReadiness={}",
+                exchangeName,
+                true,
+                orderExecutionAdapters.containsKey(exchangeName),
+                orderQueryAdapters.containsKey(exchangeName),
+                accountQueryAdapters.containsKey(exchangeName),
+                bootReadinessAdapters.containsKey(exchangeName));
+    }
+
+    private static String normalize(String exchangeName) {
+        return exchangeName.toUpperCase();
     }
 }

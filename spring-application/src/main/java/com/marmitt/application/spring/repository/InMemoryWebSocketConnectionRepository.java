@@ -1,8 +1,5 @@
 package com.marmitt.application.spring.repository;
 
-import com.marmitt.application.spring.config.exchange.BinanceExchangeAdapter;
-import com.marmitt.application.spring.config.exchange.CoinbaseExchangeAdapter;
-import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import jakarta.annotation.PostConstruct;

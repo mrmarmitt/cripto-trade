@@ -1,14 +1,24 @@
 package com.marmitt.application.spring.config.exchange;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.marmitt.core.dto.websocket.data.AccountDataDto;
+import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
+import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
+import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
-import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
+import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
+import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
+import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
+import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 import com.marmitt.mock.adapter.LocalEventWebSocketAdapter;
+import com.marmitt.mock.config.MockBootReadinessConfig;
 import com.marmitt.mock.config.MockMarketDataFeedConfig;
 import com.marmitt.mock.config.MockScenarioConfig;
 import com.marmitt.mock.processor.MockReceivedMessageProcessor;
@@ -17,32 +27,38 @@ import com.marmitt.mock.runtime.MockExchangeRuntime;
 import com.marmitt.mock.simulator.MockMarketDataFeedEngine;
 import com.marmitt.mock.simulator.MockOrderExecutionSimulator;
 
+import java.util.List;
+import java.util.Optional;
+
 /**
- * Mock Exchange Adapter para simulação de ordens sem conexão real.
+ * Mock exchange adapter used for local simulation.
  *
- * Características:
- * - Não conecta a WebSocket real (usa NoOpWebSocketAdapter)
- * - Simula execução de ordens localmente (100% sucesso, latência fixa, sem taxas)
- * - Publica eventos de ordem como se fossem respostas reais
- * - Permite testar estratégias com market data real mas sem risco
+ * <p>Stage 2 capability status:
+ * <ul>
+ *   <li>Streaming: implemented (local event websocket).</li>
+ *   <li>Order execution/query/account query: implemented via {@link MockExchangeRuntime}.</li>
+ * </ul>
  */
-public class MockExchangeAdapter implements ExchangeAdapterPort {
+public class MockExchangeAdapter implements ExchangeStreamingPort,
+        ExchangeOrderExecutionPort,
+        ExchangeOrderQueryPort,
+        ExchangeAccountQueryPort,
+        ExchangeBootReadinessPort {
 
     private final WebSocketPort webSocketPort;
     private final ReceivedMessageProcessorPort receivedMessageProcessor;
     private final SenderMessageProcessorPort senderMessageProcessor;
     private final ExchangeUrlBuilderPort urlBuilder;
+    private final MockExchangeRuntime runtime;
+    private final MockBootReadinessConfig bootReadinessConfig;
 
     public MockExchangeAdapter(ObjectMapper objectMapper, EventPublisherPort eventPublisher) {
-        // Mock does not open real sockets, but emits connection events to drive post-connection flow
         this.webSocketPort = new LocalEventWebSocketAdapter(eventPublisher);
-
-        // Processor para deserializar respostas mockadas
         this.receivedMessageProcessor = new MockReceivedMessageProcessor(objectMapper);
 
-        // Processor para simular execução de ordens
         MockOrderExecutionSimulator simulator = new MockOrderExecutionSimulator();
         MockScenarioConfig config = MockScenarioConfig.defaultConfig();
+        this.bootReadinessConfig = MockBootReadinessConfig.defaultConfig();
         MockMarketDataFeedConfig feedConfig = MockMarketDataFeedConfig.defaultConfig();
         MockMarketDataFeedEngine feedEngine = new MockMarketDataFeedEngine(
                 eventPublisher,
@@ -50,7 +66,7 @@ public class MockExchangeAdapter implements ExchangeAdapterPort {
                 feedConfig,
                 config.randomSeed()
         );
-        MockExchangeRuntime runtime = new MockExchangeRuntime(
+        this.runtime = new MockExchangeRuntime(
                 eventPublisher,
                 objectMapper,
                 simulator,
@@ -58,8 +74,6 @@ public class MockExchangeAdapter implements ExchangeAdapterPort {
                 feedEngine
         );
         this.senderMessageProcessor = new MockSenderMessageProcessor(runtime);
-
-        // Mock não precisa de URL builder (não conecta)
         this.urlBuilder = new NoOpUrlBuilder();
     }
 
@@ -70,7 +84,6 @@ public class MockExchangeAdapter implements ExchangeAdapterPort {
 
     @Override
     public boolean requiresPostConnection() {
-        // Enable auto-subscription on /websocket/connect using the same post-connection pipeline
         return true;
     }
 
@@ -94,13 +107,75 @@ public class MockExchangeAdapter implements ExchangeAdapterPort {
         return urlBuilder;
     }
 
-    /**
-     * URL Builder que não faz nada (Mock não precisa construir URLs)
-     */
+    @Override
+    public OrderDataDto submitOrder(SendOrderRequest request) {
+        return runtime.submitOrderRest(request);
+    }
+
+    @Override
+    public OrderDataDto cancelOrder(SendCancelOrderRequest request) {
+        return runtime.cancelOrderRest(request);
+    }
+
+    @Override
+    public Optional<OrderDataDto> queryOrderByClientOrderId(String symbol, String clientOrderId) {
+        return runtime.queryOrderByClientOrderId(symbol, clientOrderId);
+    }
+
+    @Override
+    public Optional<OrderDataDto> queryOrderByExchangeOrderId(String symbol, String exchangeOrderId) {
+        return runtime.queryOrderByExchangeOrderId(symbol, exchangeOrderId);
+    }
+
+    @Override
+    public List<OrderDataDto> listOpenOrdersBySymbol(String symbol) {
+        return runtime.listOpenOrdersBySymbol(symbol);
+    }
+
+    @Override
+    public List<OrderDataDto> listAllOpenOrders() {
+        return runtime.listAllOpenOrders();
+    }
+
+    @Override
+    public AccountDataDto queryAccountSnapshot() {
+        return runtime.queryAccountSnapshot();
+    }
+
+    @Override
+    public ExchangeBootReadiness checkBootReadiness() {
+        if (!bootReadinessConfig.enabled()) {
+            return ExchangeBootReadiness.ready("MOCK", "Mock readiness check disabled.");
+        }
+
+        simulateDelayIfNeeded(bootReadinessConfig.simulatedDelayMs());
+
+        return switch (bootReadinessConfig.mode()) {
+            case READY -> ExchangeBootReadiness.ready("MOCK", bootReadinessConfig.message());
+            case CONNECTIVITY_FAIL -> ExchangeBootReadiness.notReady(
+                    "MOCK", "CONNECTIVITY_FAIL", bootReadinessConfig.message());
+            case AUTH_FAIL -> ExchangeBootReadiness.notReady(
+                    "MOCK", "AUTH_FAIL", bootReadinessConfig.message());
+            case TIMEOUT -> ExchangeBootReadiness.notReady(
+                    "MOCK", "TIMEOUT", bootReadinessConfig.message());
+        };
+    }
+
+    private static void simulateDelayIfNeeded(long delayMs) {
+        if (delayMs <= 0) {
+            return;
+        }
+        try {
+            Thread.sleep(delayMs);
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
     private static class NoOpUrlBuilder implements ExchangeUrlBuilderPort {
         @Override
         public String buildConnectionUrl(StreamSubscriptionRequest parameters) {
-            return "mock://localhost";  // URL fictícia
+            return "mock://localhost";
         }
     }
 }

@@ -1,10 +1,14 @@
 package com.marmitt.mock.runtime;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.marmitt.core.domain.Symbol;
+import com.marmitt.core.dto.websocket.data.AccountDataDto;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 import com.marmitt.core.enums.StreamAction;
+import com.marmitt.core.exceptions.ExchangeQueryException;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.mock.balance.MockBalanceStore;
 import com.marmitt.mock.config.MockScenarioConfig;
@@ -14,9 +18,12 @@ import com.marmitt.mock.simulator.MockOrderExecutionSimulator;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Runtime/orchestrator for the mock exchange.
@@ -34,6 +41,8 @@ public class MockExchangeRuntime {
     private final MockMarketDataFeedEngine marketDataFeedEngine;
     private final MockRawMessagePublisher rawMessagePublisher;
     private final MockLifecycle lifecycle;
+    private final Map<String, String> orderIdByClientOrderId = new ConcurrentHashMap<>();
+    private final Map<String, OrderDataDto> latestEventByOrderId = new ConcurrentHashMap<>();
     private Random random;
     private MockBalanceStore balanceStore;
 
@@ -62,24 +71,113 @@ public class MockExchangeRuntime {
     }
 
     public String submitOrder(SendOrderRequest orderRequest) {
+        OrderDataDto accepted = submitOrderRest(orderRequest);
+        return String.format(
+                "{\"status\":\"submitted\",\"clientOrderId\":\"%s\",\"orderId\":\"%s\",\"message\":\"Order submitted to mock exchange\"}",
+                orderRequest.getClientOrderId(), accepted.orderId()
+        );
+    }
+
+    public OrderDataDto submitOrderRest(SendOrderRequest orderRequest) {
         if (!lifecycle.isRunning()) {
-            return "{\"status\":\"ignored\",\"reason\":\"mock lifecycle stopped\"}";
+            return rejectedSnapshot(orderRequest, "MOCK_LIFECYCLE_STOPPED");
         }
 
         log.info("Mock processing order - ClientOrderId: {}, Symbol: {}, Side: {}, Quantity: {}",
                 orderRequest.getClientOrderId(), orderRequest.getSymbol(),
                 orderRequest.getOrderSide(), orderRequest.getQuantity());
 
-        CompletableFuture.runAsync(() -> simulateOrderExecutionAsync(orderRequest))
+        String orderId = generateOrderId();
+        orderIdByClientOrderId.put(orderRequest.getClientOrderId(), orderId);
+
+        OrderDataDto accepted = simulator.simulateAccepted(orderRequest, orderId);
+        latestEventByOrderId.put(orderId, accepted);
+
+        CompletableFuture.runAsync(() -> simulateOrderExecutionAsync(orderRequest, orderId))
                 .exceptionally(throwable -> {
                     log.error("Error in async order simulation - ClientOrderId: {}, Error: {}",
                             orderRequest.getClientOrderId(), throwable.getMessage(), throwable);
                     return null;
                 });
 
-        return String.format(
-                "{\"status\":\"submitted\",\"clientOrderId\":\"%s\",\"message\":\"Order submitted to mock exchange\"}",
-                orderRequest.getClientOrderId()
+        return accepted;
+    }
+
+    public OrderDataDto cancelOrderRest(SendCancelOrderRequest request) {
+        if (!lifecycle.isRunning()) {
+            return rejectedCancelSnapshot(request, "MOCK_LIFECYCLE_STOPPED");
+        }
+
+        OrderDataDto current = latestEventByOrderId.get(request.getOrderId());
+        if (current == null) {
+            return rejectedCancelSnapshot(request, "ORDER_NOT_FOUND");
+        }
+        if (isTerminal(current.status())) {
+            return current;
+        }
+
+        OrderDataDto canceled = new OrderDataDto(
+                current.orderId(),
+                current.clientOrderId(),
+                current.symbol(),
+                current.side(),
+                current.type(),
+                current.quantity(),
+                current.executedQuantity(),
+                current.price(),
+                current.executedPrice(),
+                current.fee(),
+                OrderDataDto.OrderStatus.CANCELED,
+                null,
+                java.time.Instant.now()
+        );
+
+        publishMockOrderResponse(canceled);
+        return canceled;
+    }
+
+    public Optional<OrderDataDto> queryOrderByClientOrderId(String symbol, String clientOrderId) {
+        ensureLifecycleForQuery();
+        String orderId = orderIdByClientOrderId.get(clientOrderId);
+        if (orderId == null) {
+            return Optional.empty();
+        }
+        return queryOrderByExchangeOrderId(symbol, orderId);
+    }
+
+    public Optional<OrderDataDto> queryOrderByExchangeOrderId(String symbol, String exchangeOrderId) {
+        ensureLifecycleForQuery();
+        OrderDataDto order = latestEventByOrderId.get(exchangeOrderId);
+        if (order == null) {
+            return Optional.empty();
+        }
+        if (symbol != null && !symbol.isBlank() && !order.symbol().value().equalsIgnoreCase(symbol)) {
+            return Optional.empty();
+        }
+        return Optional.of(order);
+    }
+
+    public List<OrderDataDto> listOpenOrdersBySymbol(String symbol) {
+        return latestEventByOrderId.values().stream()
+                .filter(order -> !isTerminal(order.status()))
+                .filter(order -> order.symbol().value().equalsIgnoreCase(symbol))
+                .toList();
+    }
+
+    public List<OrderDataDto> listAllOpenOrders() {
+        return latestEventByOrderId.values().stream()
+                .filter(order -> !isTerminal(order.status()))
+                .toList();
+    }
+
+    public AccountDataDto queryAccountSnapshot() {
+        Map<String, java.math.BigDecimal> available = balanceStore.snapshotAvailable();
+        Map<String, java.math.BigDecimal> reserved = balanceStore.snapshotReserved();
+        return new AccountDataDto(
+                "mock-account",
+                available,
+                reserved,
+                java.time.Instant.now()
         );
     }
 
@@ -113,11 +211,10 @@ public class MockExchangeRuntime {
         return lifecycle.isRunning();
     }
 
-    private void simulateOrderExecutionAsync(SendOrderRequest orderRequest) {
+    private void simulateOrderExecutionAsync(SendOrderRequest orderRequest, String orderId) {
         try {
             Random localRandom = this.random;
             MockBalanceStore localBalanceStore = this.balanceStore;
-            String orderId = "MOCK_" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
             List<OrderDataDto> events = simulator.buildScenarioEvents(
                     orderRequest, orderId, config, localRandom, localBalanceStore);
 
@@ -151,6 +248,7 @@ public class MockExchangeRuntime {
 
     private void publishMockOrderResponse(OrderDataDto orderResponse) {
         try {
+            latestEventByOrderId.put(orderResponse.orderId(), orderResponse);
             rawMessagePublisher.publish(orderResponse);
             log.debug("Mock order response event published - OrderId: {}, ClientOrderId: {}",
                     orderResponse.orderId(), orderResponse.clientOrderId());
@@ -165,5 +263,78 @@ public class MockExchangeRuntime {
         marketDataFeedEngine.reset();
         this.random = new Random(seed);
         this.balanceStore = new MockBalanceStore(config.balances().initialBalances());
+        this.orderIdByClientOrderId.clear();
+        this.latestEventByOrderId.clear();
+    }
+
+    private void ensureLifecycleForQuery() {
+        if (lifecycle.isRunning()) {
+            return;
+        }
+        throw new ExchangeQueryException(
+                "MOCK",
+                ExchangeQueryException.ErrorType.TEMPORARY,
+                "Mock lifecycle is stopped for order query"
+        );
+    }
+
+    private static boolean isTerminal(OrderDataDto.OrderStatus status) {
+        return status == OrderDataDto.OrderStatus.FILLED
+                || status == OrderDataDto.OrderStatus.CANCELED
+                || status == OrderDataDto.OrderStatus.EXPIRED
+                || status == OrderDataDto.OrderStatus.REJECTED;
+    }
+
+    private static String generateOrderId() {
+        return "MOCK_" + UUID.randomUUID().toString().substring(0, 8).toUpperCase();
+    }
+
+    private static OrderDataDto rejectedSnapshot(SendOrderRequest request, String reason) {
+        Symbol symbol = Symbol.of(request.getSymbol());
+        OrderDataDto.OrderSide side = request.getOrderSide() == com.marmitt.core.enums.OrderSide.BUY
+                ? OrderDataDto.OrderSide.BUY
+                : OrderDataDto.OrderSide.SELL;
+        OrderDataDto.OrderType type = switch (request.getOrderType()) {
+            case MARKET -> OrderDataDto.OrderType.MARKET;
+            case LIMIT -> OrderDataDto.OrderType.LIMIT;
+            case STOP_LOSS, STOP_LOSS_LIMIT -> OrderDataDto.OrderType.STOP;
+            case TAKE_PROFIT, TAKE_PROFIT_LIMIT -> OrderDataDto.OrderType.STOP_LIMIT;
+        };
+        return new OrderDataDto(
+                "MOCK_REJECTED",
+                request.getClientOrderId(),
+                symbol,
+                side,
+                type,
+                request.getQuantity(),
+                java.math.BigDecimal.ZERO,
+                request.getPrice(),
+                java.math.BigDecimal.ZERO,
+                java.math.BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.REJECTED,
+                reason,
+                java.time.Instant.now()
+        );
+    }
+
+    private static OrderDataDto rejectedCancelSnapshot(SendCancelOrderRequest request, String reason) {
+        String symbol = request.getSymbol() == null || request.getSymbol().isBlank()
+                ? "UNKNOWNUSDT"
+                : request.getSymbol();
+        return new OrderDataDto(
+                request.getOrderId(),
+                null,
+                Symbol.of(symbol),
+                OrderDataDto.OrderSide.SELL,
+                OrderDataDto.OrderType.LIMIT,
+                java.math.BigDecimal.ZERO,
+                java.math.BigDecimal.ZERO,
+                java.math.BigDecimal.ZERO,
+                java.math.BigDecimal.ZERO,
+                java.math.BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.REJECTED,
+                reason,
+                java.time.Instant.now()
+        );
     }
 }

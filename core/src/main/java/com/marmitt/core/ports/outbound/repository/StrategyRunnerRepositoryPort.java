@@ -93,11 +93,22 @@ public interface StrategyRunnerRepositoryPort {
     Optional<Position> findPositionById(UUID positionId);
 
     /**
+     * Busca Position por PK com lock pessimista de linha (FOR UPDATE).
+     * Usado em fluxos de fill para serializar atualizacoes concorrentes na mesma Position.
+     */
+    Optional<Position> findPositionByIdForUpdate(UUID positionId);
+
+    /**
      * Busca Position pelo transactionId de compra que a originou.
      * Retorna OPEN ou CLOSING (lock ativo) - usado para reconciliar fills BUY
      * que chegam enquanto a position esta temporariamente em closing.
      */
     Optional<Position> findPositionByOpenedByTransactionId(UUID transactionId);
+
+    /**
+     * Busca Position originada por uma BUY com lock pessimista de linha (FOR UPDATE).
+     */
+    Optional<Position> findPositionByOpenedByTransactionIdForUpdate(UUID transactionId);
 
 
     /**
@@ -118,6 +129,11 @@ public interface StrategyRunnerRepositoryPort {
      * Usado na lógica de Execution Policy (Single mode).
      */
     Optional<Position> findOpenPositionByRunnerIdAndSymbol(UUID runnerId, String symbol);
+
+    /**
+     * Busca Position OPEN de um Runner para um simbolo com lock pessimista de linha (FOR UPDATE).
+     */
+    Optional<Position> findOpenPositionByRunnerIdAndSymbolForUpdate(UUID runnerId, String symbol);
 
     /**
      * Persiste a Transaction (INSERT ou UPDATE).

@@ -130,11 +130,33 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     }
 
     @Override
+    public Optional<Position> findPositionByIdForUpdate(UUID positionId) {
+        long start = System.nanoTime();
+        log.trace("[REPO] position.findByIdForUpdate({}) - acquiring FOR UPDATE lock", positionId);
+        Optional<Position> result = positionRepo.findByIdForUpdate(positionId)
+                .map(StrategyRunnerEntityMapper::toDomain);
+        log.trace("[REPO] position.findByIdForUpdate({}) - {}ms - {}",
+                positionId, RepoTiming.elapsedMs(start), result.isPresent() ? "1 result" : "0 results");
+        return result;
+    }
+
+    @Override
     public Optional<Position> findPositionByOpenedByTransactionId(UUID transactionId) {
         long start = System.nanoTime();
         Optional<Position> result = positionRepo.findByOpenedByTransactionId(transactionId)
                 .map(StrategyRunnerEntityMapper::toDomain);
         log.trace("[REPO] position.findByOpenedByTransactionId({}) - {}ms", transactionId, RepoTiming.elapsedMs(start));
+        return result;
+    }
+
+    @Override
+    public Optional<Position> findPositionByOpenedByTransactionIdForUpdate(UUID transactionId) {
+        long start = System.nanoTime();
+        log.trace("[REPO] position.findByOpenedByTransactionIdForUpdate({}) - acquiring FOR UPDATE lock", transactionId);
+        Optional<Position> result = positionRepo.findByOpenedByTransactionIdForUpdate(transactionId)
+                .map(StrategyRunnerEntityMapper::toDomain);
+        log.trace("[REPO] position.findByOpenedByTransactionIdForUpdate({}) - {}ms - {}",
+                transactionId, RepoTiming.elapsedMs(start), result.isPresent() ? "1 result" : "0 results");
         return result;
     }
 
@@ -154,6 +176,18 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         Optional<Position> result = positionRepo.findOpenByRunnerIdAndSymbol(runnerId, symbol)
                 .map(StrategyRunnerEntityMapper::toDomain);
         log.trace("[REPO] position.findOpenByRunnerIdAndSymbol({}, {}) - {}ms", runnerId, symbol, RepoTiming.elapsedMs(start));
+        return result;
+    }
+
+    @Override
+    public Optional<Position> findOpenPositionByRunnerIdAndSymbolForUpdate(UUID runnerId, String symbol) {
+        long start = System.nanoTime();
+        log.trace("[REPO] position.findOpenByRunnerIdAndSymbolForUpdate({}, {}) - acquiring FOR UPDATE lock",
+                runnerId, symbol);
+        Optional<Position> result = positionRepo.findOpenByRunnerIdAndSymbolForUpdate(runnerId, symbol)
+                .map(StrategyRunnerEntityMapper::toDomain);
+        log.trace("[REPO] position.findOpenByRunnerIdAndSymbolForUpdate({}, {}) - {}ms - {}",
+                runnerId, symbol, RepoTiming.elapsedMs(start), result.isPresent() ? "1 result" : "0 results");
         return result;
     }
 

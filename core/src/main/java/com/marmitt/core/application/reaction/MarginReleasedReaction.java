@@ -4,76 +4,59 @@ import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.capital.MarginRelease;
 import com.marmitt.core.dto.events.MarginReleaseEvent;
+import com.marmitt.core.ports.outbound.repository.CapitalEventIdempotencyPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
 /**
- * Reação ao evento {@link MarginReleaseEvent} publicado pelo Runner após falha de ordem.
- * <p>
- * Devolve capital de Reserved → Available no {@code GlobalBalance} do Portfolio.
- * Não representa uma intenção de negócio iniciada por ator externo — é uma consequência
- * do fluxo de conciliação de ordens ({@code OrderConciliationUseCase}) para os casos
- * CANCELED, EXPIRED e REJECTED.
- * <p>
- * Sequência de processamento:
- * <ol>
- *   <li>Carrega Runner → obtém {@code portfolioId}</li>
- *   <li>Carrega {@code GlobalBalance}</li>
- *   <li>Guard de idempotência: verifica {@code reservedBalance >= releaseAmount}</li>
- *   <li>Aplica {@code release(releaseAmount)}</li>
- *   <li>Persiste o {@code GlobalBalance} atualizado</li>
- * </ol>
- * <p>
- * <b>Idempotência V1:</b> sem tabela de rastreamento de releases individuais,
- * a guarda é feita verificando se {@code reservedBalance >= releaseAmount}.
- * Se insuficiente, o release é descartado com WARN — indica possível duplicata.
- * Rastreamento por {@code transactionId} está previsto para V2+ com Outbox Pattern.
+ * Reaction to {@link MarginReleaseEvent}.
  *
- * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seções 5.2.3, 5.5.1</a>
+ * <p>Releases reserved capital back to available balance.
  */
 @Slf4j
 public class MarginReleasedReaction {
 
     private final StrategyRunnerRepositoryPort runnerRepository;
     private final GlobalBalanceRepositoryPort globalBalanceRepository;
+    private final CapitalEventIdempotencyPort idempotencyPort;
 
     public MarginReleasedReaction(
             StrategyRunnerRepositoryPort runnerRepository,
-            GlobalBalanceRepositoryPort globalBalanceRepository
+            GlobalBalanceRepositoryPort globalBalanceRepository,
+            CapitalEventIdempotencyPort idempotencyPort
     ) {
         this.runnerRepository = runnerRepository;
         this.globalBalanceRepository = globalBalanceRepository;
+        this.idempotencyPort = idempotencyPort;
     }
 
     public void handle(MarginReleaseEvent event) {
         MarginRelease release = event.release();
+        if (!idempotencyPort.tryRegisterMarginRelease(release.transactionId())) {
+            log.debug("marginReleasedReaction: duplicate event ignored transactionId={}", release.transactionId());
+            return;
+        }
 
-        // ── Carregar Runner → portfolioId ────────────────────────────────────
         StrategyRunner runner = runnerRepository.findById(release.runnerId())
-                .orElseThrow(() -> new IllegalStateException(
-                        "Runner not found: " + release.runnerId()));
+                .orElseThrow(() -> new IllegalStateException("Runner not found: " + release.runnerId()));
 
-        // ── Carregar GlobalBalance ────────────────────────────────────────────
         GlobalBalance balance = globalBalanceRepository
                 .findByPortfolioId(runner.getPortfolioId())
                 .orElseThrow(() -> new IllegalStateException(
                         "GlobalBalance not found for portfolio: " + runner.getPortfolioId()));
 
-        // ── Guard de idempotência (V1) ────────────────────────────────────────
+        // Defensive guard against invalid releases.
         if (balance.getReservedBalance().compareTo(release.releaseAmount()) < 0) {
-            log.warn("marginReleasedReaction: reservedBalance={} < releaseAmount={} for transactionId={} — " +
-                            "possible duplicate release, skipping",
+            log.warn("marginReleasedReaction: reservedBalance={} < releaseAmount={} transactionId={} - skipping",
                     balance.getReservedBalance(), release.releaseAmount(), release.transactionId());
             return;
         }
 
-        // ── Aplicar devolução Reserved → Available ────────────────────────────
         balance.release(release.releaseAmount());
         globalBalanceRepository.save(balance);
 
         log.info("marginReleasedReaction: transactionId={} releaseAmount={} reason={} portfolioId={}",
-                release.transactionId(), release.releaseAmount(),
-                release.reason(), runner.getPortfolioId());
+                release.transactionId(), release.releaseAmount(), release.reason(), runner.getPortfolioId());
     }
 }

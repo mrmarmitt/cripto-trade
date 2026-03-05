@@ -4,8 +4,8 @@ import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.dto.websocket.response.SendWebSocketResponse;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.ports.inbound.websocket.SendMessageWebSocketPort;
-import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 
@@ -26,18 +26,19 @@ public class SendMessageWebSocketUseCase implements SendMessageWebSocketPort {
     public SendWebSocketResponse execute(MessageRequest request) {
         WebSocketConnectionManager manager = connectionRepository.getConnection(request.getExchangeName());
 
-        Optional<ExchangeAdapterPort> adapterOptional = adapterRepository.findByName(request.getExchangeName());
-        if (adapterOptional.isEmpty()) {
+        Optional<ExchangeStreamingPort> streamingOptional = adapterRepository.findStreamingByName(request.getExchangeName());
+        if (streamingOptional.isEmpty()) {
             return SendWebSocketResponse.failure(request.getExchangeName(), "Exchange does not exist");
         }
 
         manager.addRequestToHistory(request);
 
-        ExchangeAdapterPort adapter = adapterOptional.get();
-        SenderMessageProcessorPort senderMessageProcessor = adapter.getSenderMessageProcessor();
+        ExchangeStreamingPort streaming = streamingOptional.get();
+        SenderMessageProcessorPort senderMessageProcessor = streaming.getSenderMessageProcessor();
         String processedMessage = senderMessageProcessor.execute(request);
-        adapter.getWebSocketPort().sendMessage(processedMessage);
+        streaming.getWebSocketPort().sendMessage(processedMessage);
 
         return SendWebSocketResponse.success(request.getExchangeName());
     }
 }
+

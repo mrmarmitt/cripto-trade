@@ -1,8 +1,13 @@
 package com.marmitt.application.spring.config.core;
 
-import com.marmitt.core.application.usecase.runner.createrunner.CreateRunnerUseCase;
-import com.marmitt.core.application.usecase.runner.orderconciliation.OrderConciliationUseCase;
-import com.marmitt.core.application.usecase.runner.queryrunner.QueryRunnerUseCase;
+import com.marmitt.application.spring.bootstrap.PortfolioReservationTtlProperties;
+import com.marmitt.application.spring.bootstrap.RunnerBootPhase3Properties;
+import com.marmitt.core.application.usecase.runner.CreateRunnerUseCase;
+import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
+import com.marmitt.core.application.usecase.runner.OrderConciliationUseCase;
+import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
+import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdate;
+import com.marmitt.core.application.usecase.runner.QueryRunnerUseCase;
 import com.marmitt.core.application.usecase.runner.processsignal.ProcessTradeSignalUseCase;
 import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.Transaction;
@@ -15,12 +20,16 @@ import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.support.TransactionTemplate;
+
+import java.util.concurrent.Executor;
 
 
 /**
@@ -32,8 +41,8 @@ import org.springframework.transaction.support.TransactionTemplate;
  *   <li>Listeners de mercado e ordem do Runner ({@code PortfolioStrategyRunner*})</li>
  * </ul>
  * <p>
- * Os use cases são classes abstratas cujas fronteiras {@code @Transactional} são definidas
- * aqui via subclasses anônimas — mesmo padrão de {@link OrderConciliationUseCase}.
+ * A fronteira transacional da conciliação é centralizada em
+ * {@link ConciliationOrderUpdateExecutor}, reutilizada no fluxo normal e no boot recovery.
  *
  * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 6.2.1, 6.3</a>
  */
@@ -45,29 +54,54 @@ public class RunnerConfig {
      * tanto como {@code OrderConciliationPort} quanto como {@code HandleOrderTerminationPort}.
      */
     @Bean
-    public OrderConciliationUseCase createOrderConciliation(TransactionTemplate txTemplate,
-                                                         StrategyRunnerRepositoryPort strategyRunnerRepository,
-                                                         EventPublisherPort eventPublisher) {
+    public ConciliationOrderUpdate reconcileOrderUpdate(
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            EventPublisherPort eventPublisher
+    ) {
+        return new ConciliationOrderUpdate(strategyRunnerRepository, eventPublisher);
+    }
 
-        return new OrderConciliationUseCase(strategyRunnerRepository, eventPublisher) {
-
+    @Bean
+    public ConciliationOrderUpdateExecutor conciliationOrderUpdateExecutor(
+            TransactionTemplate txTemplate,
+            ConciliationOrderUpdate conciliationOrderUpdate
+    ) {
+        return new ConciliationOrderUpdateExecutor() {
             @Override
-            public void transactionalSubmit(Transaction transaction) {
-                txTemplate.executeWithoutResult(status -> submitTransaction(transaction));
+            public void execute(OrderDataDto orderData) {
+                conciliationOrderUpdate.execute(
+                        orderData,
+                        this::submitTransaction,
+                        this::processFill,
+                        this::releaseMargin
+                );
             }
 
             @Override
-            public void transactionalReleaseMargin(Transaction transaction) {
-                txTemplate.executeWithoutResult(status -> releaseMargin(transaction));
+            public void submitTransaction(Transaction transaction) {
+                txTemplate.executeWithoutResult(status -> conciliationOrderUpdate.submitTransaction(transaction));
             }
 
             @Override
-            public void transactionalProcessFill(Transaction transaction, OrderDataDto orderData,
-                                                 boolean isFinal) {
+            public void processFill(Transaction transaction,
+                                    OrderDataDto orderData,
+                                    boolean isFinal) {
                 txTemplate.executeWithoutResult(status ->
-                        processFill(transaction, orderData, isFinal));
+                        conciliationOrderUpdate.processFill(transaction, orderData, isFinal));
+            }
+
+            @Override
+            public void releaseMargin(Transaction transaction) {
+                txTemplate.executeWithoutResult(status -> conciliationOrderUpdate.releaseMargin(transaction));
             }
         };
+    }
+
+    @Bean
+    public OrderConciliationUseCase createOrderConciliation(
+            ConciliationOrderUpdateExecutor conciliationOrderUpdateExecutor
+    ) {
+        return new OrderConciliationUseCase(conciliationOrderUpdateExecutor);
     }
 
     @Bean
@@ -118,6 +152,31 @@ public class RunnerConfig {
             StrategyRunnerRepositoryPort strategyRunnerRepository
     ) {
         return new QueryRunnerUseCase(strategyRunnerRepository);
+    }
+
+    @Bean
+    public RunnerBootRecoveryUseCase runnerBootRecoveryUseCase(
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            ExchangeAdapterRepositoryPort exchangeAdapterRepository,
+            DeadLetterEntryRepositoryPort deadLetterEntryRepository,
+            ConciliationOrderUpdateExecutor conciliationOrderUpdateExecutor,
+            PortfolioReservationTtlProperties reservationTtlProperties,
+            RunnerBootPhase3Properties phase3Properties,
+            @Qualifier("bootRecoveryQueryExecutor") Executor bootRecoveryQueryExecutor
+    ) {
+        return new RunnerBootRecoveryUseCase(
+                strategyRunnerRepository,
+                exchangeAdapterRepository,
+                deadLetterEntryRepository,
+                conciliationOrderUpdateExecutor,
+                reservationTtlProperties.getTtlMs(),
+                phase3Properties.getExchangeQueryTimeoutMs(),
+                phase3Properties.getExchangeQueryMaxAttempts(),
+                phase3Properties.getExchangeQueryInitialBackoffMs(),
+                phase3Properties.getExchangeQueryBackoffMultiplier(),
+                phase3Properties.getExchangeQueryMaxBackoffMs(),
+                bootRecoveryQueryExecutor
+        );
     }
 
 }

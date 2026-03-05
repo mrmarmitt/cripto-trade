@@ -1,4 +1,4 @@
-package com.marmitt.core.application.usecase.runner.createrunner;
+package com.marmitt.core.application.usecase.runner;
 
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.StrategyRunner;

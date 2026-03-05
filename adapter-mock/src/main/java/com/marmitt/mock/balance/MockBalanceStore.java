@@ -1,7 +1,9 @@
 package com.marmitt.mock.balance;
 
 import java.math.BigDecimal;
+import java.util.Collections;
 import java.util.Locale;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -62,6 +64,14 @@ public class MockBalanceStore {
 
     public synchronized BigDecimal getReserved(String asset) {
         return reserved.getOrDefault(normalize(asset), BigDecimal.ZERO);
+    }
+
+    public synchronized Map<String, BigDecimal> snapshotAvailable() {
+        return Collections.unmodifiableMap(new HashMap<>(available));
+    }
+
+    public synchronized Map<String, BigDecimal> snapshotReserved() {
+        return Collections.unmodifiableMap(new HashMap<>(reserved));
     }
 
     private String normalize(String asset) {

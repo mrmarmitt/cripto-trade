@@ -132,8 +132,8 @@ class SellFillHandler {
      */
     private Optional<Position> resolvePosition(Transaction transaction) {
         return Optional.ofNullable(transaction.getTargetLotId())
-                .flatMap(strategyRunnerRepository::findPositionById)
-                .or(() -> strategyRunnerRepository.findOpenPositionByRunnerIdAndSymbol(
+                .flatMap(strategyRunnerRepository::findPositionByIdForUpdate)
+                .or(() -> strategyRunnerRepository.findOpenPositionByRunnerIdAndSymbolForUpdate(
                         transaction.getRunnerId(), transaction.getSymbol()));
     }
 

@@ -7,7 +7,7 @@ import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.enums.ConnectionStatus;
 import com.marmitt.core.ports.inbound.websocket.ConnectWebSocketPort;
-import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeAdapterPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 
@@ -29,8 +29,8 @@ public class ConnectWebSocketUseCase implements ConnectWebSocketPort {
         connectionRepository.registerConnection(exchangeName);
         WebSocketConnectionManager manager = connectionRepository.getConnection(exchangeName);
 
-        Optional<ExchangeAdapterPort> adapterOptional = adapterRepository.findByName(exchangeName);
-        if (adapterOptional.isEmpty()) {
+        Optional<ExchangeStreamingPort> streamingOptional = adapterRepository.findStreamingByName(exchangeName);
+        if (streamingOptional.isEmpty()) {
             return ConnectionResultMapper.toResponse(
                     ConnectionResultDto.failure(this.getClass().getSimpleName(), "Exchange does not exist"),
                     exchangeName);
@@ -48,11 +48,11 @@ public class ConnectWebSocketUseCase implements ConnectWebSocketPort {
 
         manager.addRequestToHistory(parameters);
 
-        ExchangeAdapterPort adapter = adapterOptional.get();
-        String connectionUrl = adapter.getUrlBuilder().buildConnectionUrl(parameters);
-        adapter.getWebSocketPort().connect(connectionUrl, exchangeName, manager.getConnectionId());
+        ExchangeStreamingPort streaming = streamingOptional.get();
+        String connectionUrl = streaming.getUrlBuilder().buildConnectionUrl(parameters);
+        streaming.getWebSocketPort().connect(connectionUrl, exchangeName, manager.getConnectionId());
 
         return ConnectionResultMapper.toResponse(manager.getConnectionResult(), exchangeName);
     }
-
 }
+

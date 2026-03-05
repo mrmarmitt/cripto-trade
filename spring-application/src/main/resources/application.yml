@@ -27,3 +27,46 @@ logging:
     org.apache: INFO
   pattern:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
+
+event:
+  retry:
+    max-attempts: 5
+    initial-interval-ms: 1000
+    max-interval-ms: 30000
+    multiplier: 2.0
+
+margin:
+  release:
+    max-attempts: 2147483647
+    initial-interval-ms: 1000
+    max-interval-ms: 60000
+    multiplier: 2.0
+
+
+runner:
+  boot:
+    orchestrator-enabled: true
+    phase1:
+      enabled: true
+    phase2:
+      enabled: true
+      mode: WARN_ONLY
+      account-query-policy: SKIP
+      portfolio:
+        sanity-check:
+          enabled: true
+          threshold: 0.00000001
+        cutoff:
+          enabled: true
+        reservation-ttl:
+          enabled: true
+          ttl-ms: 300000
+        zombie-detection:
+          enabled: true
+    phase3:
+      enabled: true
+      exchange-query-timeout-ms: 10000
+      exchange-query-max-attempts: 3
+      exchange-query-initial-backoff-ms: 300
+      exchange-query-backoff-multiplier: 2.0
+      exchange-query-max-backoff-ms: 5000

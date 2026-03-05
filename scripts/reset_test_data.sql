@@ -22,6 +22,8 @@ UPDATE positions
 DELETE FROM transaction_matches;
 DELETE FROM positions;
 DELETE FROM transactions;
+DELETE FROM capital_event_ledger;
+DELETE FROM dead_letter_entries;
 
 -- Restore GlobalBalance to initial state
 UPDATE global_balances
