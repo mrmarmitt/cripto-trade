@@ -11,10 +11,12 @@ import com.marmitt.core.enums.StreamAction;
 import com.marmitt.core.exceptions.ExchangeQueryException;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.mock.balance.MockBalanceStore;
+import com.marmitt.mock.config.MockOrderScenarioOverride;
 import com.marmitt.mock.config.MockScenarioConfig;
 import com.marmitt.mock.processor.MockRawMessagePublisher;
 import com.marmitt.mock.simulator.MockMarketDataFeedEngine;
 import com.marmitt.mock.simulator.MockOrderExecutionSimulator;
+import com.marmitt.mock.simulator.MockScheduledOrderEvent;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
@@ -43,6 +45,7 @@ public class MockExchangeRuntime {
     private final MockLifecycle lifecycle;
     private final Map<String, String> orderIdByClientOrderId = new ConcurrentHashMap<>();
     private final Map<String, OrderDataDto> latestEventByOrderId = new ConcurrentHashMap<>();
+    private final Map<String, MockOrderScenarioOverride> orderScenarioOverrideByClientOrderId = new ConcurrentHashMap<>();
     private Random random;
     private MockBalanceStore balanceStore;
 
@@ -211,19 +214,47 @@ public class MockExchangeRuntime {
         return lifecycle.isRunning();
     }
 
+    /**
+     * Registers a one-shot deterministic scenario for an order.
+     * The override is consumed when that clientOrderId is submitted.
+     */
+    public void registerOrderScenarioOverride(String clientOrderId, MockOrderScenarioOverride override) {
+        if (clientOrderId == null || clientOrderId.isBlank()) {
+            throw new IllegalArgumentException("clientOrderId cannot be null or blank");
+        }
+        if (override == null) {
+            throw new IllegalArgumentException("override cannot be null");
+        }
+        orderScenarioOverrideByClientOrderId.put(clientOrderId, override);
+        log.info("Mock scenario override registered - ClientOrderId: {}, events: {}",
+                clientOrderId, override.events().size());
+    }
+
+    public void clearOrderScenarioOverride(String clientOrderId) {
+        if (clientOrderId == null || clientOrderId.isBlank()) {
+            return;
+        }
+        orderScenarioOverrideByClientOrderId.remove(clientOrderId);
+    }
+
+    public void clearOrderScenarioOverrides() {
+        orderScenarioOverrideByClientOrderId.clear();
+    }
+
     private void simulateOrderExecutionAsync(SendOrderRequest orderRequest, String orderId) {
         try {
             Random localRandom = this.random;
             MockBalanceStore localBalanceStore = this.balanceStore;
-            List<OrderDataDto> events = simulator.buildScenarioEvents(
-                    orderRequest, orderId, config, localRandom, localBalanceStore);
+            MockOrderScenarioOverride override = orderScenarioOverrideByClientOrderId.remove(orderRequest.getClientOrderId());
+            List<MockScheduledOrderEvent> scheduledEvents = simulator.buildScenarioSchedule(
+                    orderRequest, orderId, config, localRandom, localBalanceStore, override);
 
-            for (OrderDataDto event : events) {
-                sleepLatency();
-                publishMockOrderResponse(event);
+            for (MockScheduledOrderEvent scheduledEvent : scheduledEvents) {
+                sleepForEvent(scheduledEvent);
+                publishMockOrderResponse(scheduledEvent.orderData());
             }
 
-            OrderDataDto last = events.isEmpty() ? null : events.get(events.size() - 1);
+            OrderDataDto last = scheduledEvents.isEmpty() ? null : scheduledEvents.get(scheduledEvents.size() - 1).orderData();
             log.info("Mock order simulation completed - ClientOrderId: {}, OrderId: {}, Status: {}",
                     orderRequest.getClientOrderId(), orderId, last != null ? last.status() : "NONE");
 
@@ -235,6 +266,17 @@ public class MockExchangeRuntime {
             log.error("Error simulating order execution - ClientOrderId: {}, Error: {}",
                     orderRequest.getClientOrderId(), e.getMessage(), e);
         }
+    }
+
+    private void sleepForEvent(MockScheduledOrderEvent scheduledEvent) throws InterruptedException {
+        long plannedDelay = scheduledEvent.delayBeforeMs();
+        if (plannedDelay >= 0) {
+            if (plannedDelay > 0) {
+                Thread.sleep(plannedDelay);
+            }
+            return;
+        }
+        sleepLatency();
     }
 
     private void sleepLatency() throws InterruptedException {
@@ -265,6 +307,7 @@ public class MockExchangeRuntime {
         this.balanceStore = new MockBalanceStore(config.balances().initialBalances());
         this.orderIdByClientOrderId.clear();
         this.latestEventByOrderId.clear();
+        this.orderScenarioOverrideByClientOrderId.clear();
     }
 
     private void ensureLifecycleForQuery() {

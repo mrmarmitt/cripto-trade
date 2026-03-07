@@ -4,6 +4,7 @@ import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.mock.balance.MockBalanceStore;
+import com.marmitt.mock.config.MockOrderScenarioOverride;
 import com.marmitt.mock.config.MockScenarioConfig;
 import lombok.extern.slf4j.Slf4j;
 
@@ -107,6 +108,67 @@ public class MockOrderExecutionSimulator {
         events.add(simulateFilled(request, orderId, finalPrice, finalFee));
         applyBalanceForFill(request, balanceStore, finalPrice, finalIncrement, finalFee);
         return applyOrderingAndDuplicates(events, config, random);
+    }
+
+    /**
+     * Builds a deterministic schedule when an order-level override is provided.
+     * Falls back to current random scenario behavior otherwise.
+     */
+    public List<MockScheduledOrderEvent> buildScenarioSchedule(SendOrderRequest request,
+                                                               String orderId,
+                                                               MockScenarioConfig config,
+                                                               Random random,
+                                                               MockBalanceStore balanceStore,
+                                                               MockOrderScenarioOverride override) {
+        if (override == null) {
+            return buildScenarioEvents(request, orderId, config, random, balanceStore)
+                    .stream()
+                    .map(event -> new MockScheduledOrderEvent(event, -1L))
+                    .toList();
+        }
+
+        OrderValidationResult validation = orderValidator.validate(request, config, balanceStore);
+        if (!validation.accepted()) {
+            OrderDataDto rejected = simulateRejected(request, orderId, validation.rejectReason());
+            return List.of(new MockScheduledOrderEvent(rejected, 0L));
+        }
+
+        List<MockScheduledOrderEvent> scheduled = new ArrayList<>();
+        scheduled.add(new MockScheduledOrderEvent(simulateAccepted(request, orderId), 0L));
+
+        BigDecimal previousExecuted = BigDecimal.ZERO;
+        boolean reservationReleased = false;
+        for (MockOrderScenarioOverride.PlannedEvent planned : override.events()) {
+            ScheduledComputation computed = computeEventFromPlan(
+                    request,
+                    orderId,
+                    config,
+                    planned,
+                    previousExecuted
+            );
+            previousExecuted = computed.executedQuantity();
+
+            if (computed.increment().compareTo(BigDecimal.ZERO) > 0
+                    && (computed.event().status() == OrderDataDto.OrderStatus.PARTIALLY_FILLED
+                    || computed.event().status() == OrderDataDto.OrderStatus.FILLED)) {
+                applyBalanceForFill(request, balanceStore, computed.executedPrice(), computed.increment(), computed.fee());
+            }
+
+            if (!reservationReleased && isFailedTerminal(computed.event().status())) {
+                releaseReservation(request, balanceStore, config);
+                reservationReleased = true;
+            }
+
+            scheduled.add(new MockScheduledOrderEvent(computed.event(), planned.delayBeforeMs()));
+            for (int i = 0; i < planned.duplicates(); i++) {
+                scheduled.add(new MockScheduledOrderEvent(computed.event(), 0L));
+            }
+        }
+
+        if (override.ordering() == MockOrderScenarioOverride.EventOrdering.REVERSE) {
+            Collections.reverse(scheduled);
+        }
+        return scheduled;
     }
 
     public OrderDataDto simulateAccepted(SendOrderRequest request, String orderId) {
@@ -239,6 +301,119 @@ public class MockOrderExecutionSimulator {
         return null;
     }
 
+    private ScheduledComputation computeEventFromPlan(SendOrderRequest request,
+                                                      String orderId,
+                                                      MockScenarioConfig config,
+                                                      MockOrderScenarioOverride.PlannedEvent planned,
+                                                      BigDecimal previousExecuted) {
+        OrderDataDto.OrderStatus status = planned.status();
+        BigDecimal requestQty = request.getQuantity();
+        BigDecimal executedPrice = planned.executedPrice() != null ? planned.executedPrice() : request.getPrice();
+        if (executedPrice == null || executedPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            executedPrice = request.getPrice() != null ? request.getPrice() : BigDecimal.ONE;
+        }
+
+        BigDecimal executedQty = resolveExecutedQuantity(status, planned.executedQuantity(), requestQty, previousExecuted);
+        if (executedQty.compareTo(previousExecuted) < 0) {
+            executedQty = previousExecuted;
+        }
+        if (executedQty.compareTo(requestQty) > 0) {
+            executedQty = requestQty;
+        }
+
+        BigDecimal increment = executedQty.subtract(previousExecuted);
+        if (increment.compareTo(BigDecimal.ZERO) < 0) {
+            increment = BigDecimal.ZERO;
+        }
+
+        BigDecimal fee = planned.fee();
+        if (fee == null) {
+            if (status == OrderDataDto.OrderStatus.PARTIALLY_FILLED || status == OrderDataDto.OrderStatus.FILLED) {
+                fee = feeModel.calculateFee(increment, executedPrice, config);
+            } else {
+                fee = BigDecimal.ZERO;
+            }
+        }
+
+        OrderDataDto event = switch (status) {
+            case NEW -> simulateAccepted(request, orderId);
+            case PARTIALLY_FILLED -> simulatePartial(request, orderId, executedQty, executedPrice, fee);
+            case FILLED -> new OrderDataDto(
+                    orderId,
+                    request.getClientOrderId(),
+                    Symbol.of(request.getSymbol()),
+                    convertOrderSide(request.getOrderSide()),
+                    convertOrderType(request.getOrderType()),
+                    request.getQuantity(),
+                    executedQty,
+                    request.getPrice(),
+                    executedPrice,
+                    fee,
+                    OrderDataDto.OrderStatus.FILLED,
+                    null,
+                    Instant.now()
+            );
+            case CANCELED -> new OrderDataDto(
+                    orderId,
+                    request.getClientOrderId(),
+                    Symbol.of(request.getSymbol()),
+                    convertOrderSide(request.getOrderSide()),
+                    convertOrderType(request.getOrderType()),
+                    request.getQuantity(),
+                    executedQty,
+                    request.getPrice(),
+                    executedPrice,
+                    BigDecimal.ZERO,
+                    OrderDataDto.OrderStatus.CANCELED,
+                    null,
+                    Instant.now()
+            );
+            case EXPIRED -> new OrderDataDto(
+                    orderId,
+                    request.getClientOrderId(),
+                    Symbol.of(request.getSymbol()),
+                    convertOrderSide(request.getOrderSide()),
+                    convertOrderType(request.getOrderType()),
+                    request.getQuantity(),
+                    executedQty,
+                    request.getPrice(),
+                    executedPrice,
+                    BigDecimal.ZERO,
+                    OrderDataDto.OrderStatus.EXPIRED,
+                    null,
+                    Instant.now()
+            );
+            case REJECTED -> simulateRejected(
+                    request,
+                    orderId,
+                    planned.rejectReason() != null ? planned.rejectReason() : "MOCK_REJECTED"
+            );
+        };
+
+        return new ScheduledComputation(event, executedQty, executedPrice, increment, fee);
+    }
+
+    private BigDecimal resolveExecutedQuantity(OrderDataDto.OrderStatus status,
+                                               BigDecimal plannedExecutedQuantity,
+                                               BigDecimal requestQuantity,
+                                               BigDecimal previousExecuted) {
+        if (plannedExecutedQuantity != null) {
+            return plannedExecutedQuantity.setScale(8, RoundingMode.HALF_UP);
+        }
+        return switch (status) {
+            case PARTIALLY_FILLED -> previousExecuted;
+            case FILLED -> requestQuantity.setScale(8, RoundingMode.HALF_UP);
+            case CANCELED, EXPIRED -> previousExecuted;
+            case NEW, REJECTED -> BigDecimal.ZERO.setScale(8, RoundingMode.HALF_UP);
+        };
+    }
+
+    private boolean isFailedTerminal(OrderDataDto.OrderStatus status) {
+        return status == OrderDataDto.OrderStatus.CANCELED
+                || status == OrderDataDto.OrderStatus.EXPIRED
+                || status == OrderDataDto.OrderStatus.REJECTED;
+    }
+
     private List<OrderDataDto> applyOrderingAndDuplicates(List<OrderDataDto> baseEvents,
                                                           MockScenarioConfig config,
                                                           Random random) {
@@ -355,5 +530,12 @@ public class MockOrderExecutionSimulator {
             case STOP_LOSS, STOP_LOSS_LIMIT -> OrderDataDto.OrderType.STOP;
             case TAKE_PROFIT, TAKE_PROFIT_LIMIT -> OrderDataDto.OrderType.STOP_LIMIT;
         };
+    }
+
+    private record ScheduledComputation(OrderDataDto event,
+                                        BigDecimal executedQuantity,
+                                        BigDecimal executedPrice,
+                                        BigDecimal increment,
+                                        BigDecimal fee) {
     }
 }

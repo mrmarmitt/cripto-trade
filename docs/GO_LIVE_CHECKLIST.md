@@ -79,23 +79,32 @@ Consolidar os principais critérios para sair do ambiente de simulação (MOCK) 
 - Regra prática: toda evolução desse checklist deve manter rastreabilidade com os conceitos e invariantes já definidos no Blueprint/IG.
 
 
-## Status de Aderencia (2026-03-05)
+## Status de Aderencia (2026-03-07)
 
 - Testing Roadmap Fase 0: CONCLUIDA no branch `develop`.
-- Evidencias de Fase 0 em testes automatizados:
-  - `core/src/test/java/com/marmitt/core/domain/portfolio/GlobalBalanceInvariantsTest.java`
-  - `core/src/test/java/com/marmitt/core/domain/runner/StrategyRunnerInvariantsTest.java`
-  - `core/src/test/java/com/marmitt/core/domain/runner/TransactionInvariantsTest.java`
-  - `core/src/test/java/com/marmitt/core/application/usecase/runner/orderconciliation/ConciliationOrderUpdateIdempotencyTest.java`
-  - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/BootOrchestratorBootMinimumTest.java`
+- Testing Roadmap Fase 1A: CONCLUIDA no branch `develop`.
+
+Evidencias de Fase 0 em testes automatizados:
+- `core/src/test/java/com/marmitt/core/domain/portfolio/GlobalBalanceInvariantsTest.java`
+- `core/src/test/java/com/marmitt/core/domain/runner/StrategyRunnerInvariantsTest.java`
+- `core/src/test/java/com/marmitt/core/domain/runner/TransactionInvariantsTest.java`
+- `core/src/test/java/com/marmitt/core/application/usecase/runner/orderconciliation/ConciliationOrderUpdateIdempotencyTest.java`
+- `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/BootOrchestratorBootMinimumTest.java`
+
+Evidencias de Fase 1A em testes automatizados:
+- `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/ProcessTradeSignalMockIntegrationTest.java`
+- `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/OrderLifecycleMockIntegrationTest.java`
+- `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/OrderTerminationConciliationIntegrationTest.java`
+- `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/RunnerBootRecoveryIntegrationTest.java`
 
 ### Impacto no Go-Live
 
-- Item 1 (Testes automatizados minimos): PARCIAL
-- O baseline de invariantes e boot minimo foi coberto (Fase 0).
-- Ainda faltam as fases de integracao e resiliencia (Fases 1 a 4).
+- Item 1 (Testes automatizados minimos): PARCIAL (AVANCADO).
+- Baseline de invariantes e integracao core com MOCK cobertos (Fases 0 e 1A).
+- Ainda faltam fases de robustez e operacao (Fases 1B, 2, 3 e 4) e integracao real com exchange.
 
 ### Proximo passo recomendado
 
-1. Iniciar Fase 1A (integracao com capacidade atual do MOCK).
-2. Atualizar este checklist a cada fase concluida do Testing Roadmap.
+1. Avancar Fase 1B (controles deterministicos no MOCK para duplicidade/concorrencia/falha).
+2. Entrar na Fase 2 (resiliencia sob concorrencia e eventos repetidos).
+3. Atualizar este checklist a cada fase concluida do Testing Roadmap.
