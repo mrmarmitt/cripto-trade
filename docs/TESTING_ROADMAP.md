@@ -414,10 +414,11 @@ Fora de escopo da Fase 4:
 - **IG:** cobre os fluxos e decisões operacionais já mapeadas no projeto.
 - Este roadmap deve evoluir junto com mudanças de domínio e novos modos de execução.
 
-## Status de Execucao (2026-03-05)
+## Status de Execucao (2026-03-07)
 
 - Fase 0: CONCLUIDA.
-- Fase 1A: PROXIMA ETAPA.
+- Fase 1A: CONCLUIDA.
+- Fase 1B: EM ANDAMENTO.
 
 ### Evidencias de conclusao da Fase 0
 
@@ -427,8 +428,19 @@ Fora de escopo da Fase 4:
   - `WARN_ONLY` sem bloqueio indevido.
   - `FAIL_FAST` com preservacao da fase especifica de falha.
 
+### Evidencias de conclusao da Fase 1A
+
+- Fluxo BUY/PARTIAL/FILLED com MOCK e persistencia:
+  - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/ProcessTradeSignalMockIntegrationTest.java`
+- Fluxo ponta a ponta BUY -> SELL com conciliacao e matches:
+  - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/OrderLifecycleMockIntegrationTest.java`
+- Fluxos de terminacao e liberacao de margem (REJECTED/EXPIRED/CANCELED):
+  - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/OrderTerminationConciliationIntegrationTest.java`
+- Boot recovery basico (zombie, limbo, DLQ -> HALTED):
+  - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/RunnerBootRecoveryIntegrationTest.java`
+
 ### Relacao com Go-Live
 
 - O Testing Roadmap e o Go-Live devem evoluir em paralelo.
 - Ao concluir cada fase do roadmap, atualizar o status do Item 1 do Go-Live.
-- Go-live completo depende da conclusao das Fases 1 a 4 e da integracao real de exchange.
+- Go-live completo depende da conclusao das Fases 1B, 2, 3 e 4, e da integracao real de exchange.

@@ -19,6 +19,7 @@ import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 import com.marmitt.mock.adapter.LocalEventWebSocketAdapter;
 import com.marmitt.mock.config.MockBootReadinessConfig;
+import com.marmitt.mock.config.MockOrderScenarioOverride;
 import com.marmitt.mock.config.MockMarketDataFeedConfig;
 import com.marmitt.mock.config.MockScenarioConfig;
 import com.marmitt.mock.processor.MockReceivedMessageProcessor;
@@ -159,6 +160,22 @@ public class MockExchangeAdapter implements ExchangeStreamingPort,
             case TIMEOUT -> ExchangeBootReadiness.notReady(
                     "MOCK", "TIMEOUT", bootReadinessConfig.message());
         };
+    }
+
+    /**
+     * Registers a deterministic one-shot scenario for a specific clientOrderId.
+     * Useful for integration tests that need strict control over order events.
+     */
+    public void registerOrderScenarioOverride(String clientOrderId, MockOrderScenarioOverride override) {
+        runtime.registerOrderScenarioOverride(clientOrderId, override);
+    }
+
+    public void clearOrderScenarioOverride(String clientOrderId) {
+        runtime.clearOrderScenarioOverride(clientOrderId);
+    }
+
+    public void clearOrderScenarioOverrides() {
+        runtime.clearOrderScenarioOverrides();
     }
 
     private static void simulateDelayIfNeeded(long delayMs) {
