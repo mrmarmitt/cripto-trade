@@ -242,6 +242,14 @@ class MockDeterministicOrderOverrideIntegrationTest {
                 pendingBuy.getId()
         );
         assertEquals(1, openRows);
+
+        Integer countMatches = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transaction_matches WHERE buy_transaction_id = ? OR sell_transaction_id = ?",
+                Integer.class,
+                pendingBuy.getId(),
+                pendingBuy.getId()
+        );
+        assertEquals(0, countMatches);
     }
 
     private MockExchangeAdapter getMockExchangeAdapter() {
