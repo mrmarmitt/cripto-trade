@@ -165,8 +165,13 @@ public class MockOrderExecutionSimulator {
             }
         }
 
-        if (override.ordering() == MockOrderScenarioOverride.EventOrdering.REVERSE) {
-            Collections.reverse(scheduled);
+        if (override.ordering() == MockOrderScenarioOverride.EventOrdering.REVERSE && scheduled.size() > 1) {
+            MockScheduledOrderEvent accepted = scheduled.getFirst();
+            List<MockScheduledOrderEvent> lifecycle = new ArrayList<>(scheduled.subList(1, scheduled.size()));
+            Collections.reverse(lifecycle);
+            scheduled = new ArrayList<>(1 + lifecycle.size());
+            scheduled.add(accepted);
+            scheduled.addAll(lifecycle);
         }
         return scheduled;
     }
@@ -397,6 +402,9 @@ public class MockOrderExecutionSimulator {
                                                BigDecimal plannedExecutedQuantity,
                                                BigDecimal requestQuantity,
                                                BigDecimal previousExecuted) {
+        if (status == OrderDataDto.OrderStatus.FILLED) {
+            return requestQuantity.setScale(8, RoundingMode.HALF_UP);
+        }
         if (plannedExecutedQuantity != null) {
             return plannedExecutedQuantity.setScale(8, RoundingMode.HALF_UP);
         }

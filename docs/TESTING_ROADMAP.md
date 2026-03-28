@@ -182,6 +182,11 @@ Escopo detalhado da Fase 1B:
   - timeout/retry com reconciliação correta;
   - reject com motivo consistente e efeitos esperados.
 
+Plano incremental de execução (1 PR por item):
+1. PR 1: `PARTIAL + FILLED` quase simultâneos (delay zero/curto) com convergência sem drift de quantidade.
+2. PR 2: `FILLED` duplicado sem dupla aplicação econômica (`transaction_matches`, `global_balance`, posição).
+3. PR 3: `REJECTED/EXPIRED` determinístico com validação de `rejectReason` e liberação de reserva.
+
 Critério de pronto da Fase 1B:
 - Mock reproduz cenários críticos de forma determinística e configurável.
 - Suíte de integração cobre cenários de duplicidade/concorrência/falha.
@@ -419,6 +424,12 @@ Fora de escopo da Fase 4:
 - Fase 0: CONCLUIDA.
 - Fase 1A: CONCLUIDA.
 - Fase 1B: EM ANDAMENTO.
+
+### Fase 1B em progresso (1 PR por item)
+
+- PR 1 (atual): `PARTIAL + FILLED` quase simultâneos com convergência.
+- PR 2 (próximo): `FILLED` duplicado sem dupla aplicação econômica.
+- PR 3 (próximo): `REJECTED/EXPIRED` determinístico com validação de efeitos financeiros.
 
 ### Evidencias de conclusao da Fase 0
 

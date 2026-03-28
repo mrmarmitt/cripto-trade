@@ -138,9 +138,66 @@ class MockOrderExecutionSimulatorDeterministicScenarioTest {
         );
 
         assertEquals(3, schedule.size());
-        assertEquals(OrderDataDto.OrderStatus.FILLED, schedule.get(0).orderData().status());
-        assertEquals(OrderDataDto.OrderStatus.PARTIALLY_FILLED, schedule.get(1).orderData().status());
-        assertEquals(OrderDataDto.OrderStatus.NEW, schedule.get(2).orderData().status());
+        assertEquals(OrderDataDto.OrderStatus.NEW, schedule.get(0).orderData().status());
+        assertEquals(OrderDataDto.OrderStatus.FILLED, schedule.get(1).orderData().status());
+        assertEquals(OrderDataDto.OrderStatus.PARTIALLY_FILLED, schedule.get(2).orderData().status());
+    }
+
+    @Test
+    void buildScenarioScheduleShouldForceFilledToOrderQuantityEvenWhenPlannedIsLower() {
+        MockOrderExecutionSimulator simulator = new MockOrderExecutionSimulator();
+        MockScenarioConfig config = scenarioConfig();
+        MockBalanceStore balanceStore = new MockBalanceStore(Map.of(
+                "USDT", new BigDecimal("1000.00000000"),
+                "BTC", BigDecimal.ZERO
+        ));
+        SendOrderRequest request = new SendOrderRequest(
+                "MOCK",
+                "BTCUSDT",
+                new BigDecimal("1.00000000"),
+                new BigDecimal("100.00000000"),
+                OrderType.LIMIT,
+                OrderSide.BUY,
+                "client-order-3"
+        );
+
+        MockOrderScenarioOverride override = new MockOrderScenarioOverride(
+                List.of(
+                        new MockOrderScenarioOverride.PlannedEvent(
+                                OrderDataDto.OrderStatus.PARTIALLY_FILLED,
+                                new BigDecimal("0.40000000"),
+                                new BigDecimal("101.00000000"),
+                                BigDecimal.ZERO,
+                                null,
+                                0L,
+                                0
+                        ),
+                        new MockOrderScenarioOverride.PlannedEvent(
+                                OrderDataDto.OrderStatus.FILLED,
+                                new BigDecimal("0.50000000"),
+                                new BigDecimal("102.00000000"),
+                                BigDecimal.ZERO,
+                                null,
+                                0L,
+                                0
+                        )
+                ),
+                MockOrderScenarioOverride.EventOrdering.AS_IS
+        );
+
+        List<MockScheduledOrderEvent> schedule = simulator.buildScenarioSchedule(
+                request,
+                "MOCK_TEST_3",
+                config,
+                new Random(42L),
+                balanceStore,
+                override
+        );
+
+        assertEquals(3, schedule.size());
+        assertEquals(OrderDataDto.OrderStatus.FILLED, schedule.get(2).orderData().status());
+        assertEquals(0, schedule.get(2).orderData().executedQuantity().compareTo(new BigDecimal("1.00000000")));
+        assertEquals(0, balanceStore.getReserved("USDT").compareTo(BigDecimal.ZERO));
     }
 
     private static MockScenarioConfig scenarioConfig() {
