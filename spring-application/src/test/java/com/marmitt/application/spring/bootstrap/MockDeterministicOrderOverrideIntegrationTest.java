@@ -16,6 +16,7 @@ import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import com.marmitt.mock.config.MockOrderScenarioOverride;
 import org.junit.jupiter.api.BeforeEach;
@@ -39,6 +40,7 @@ import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Testcontainers
 @SpringBootTest(
@@ -51,6 +53,7 @@ class MockDeterministicOrderOverrideIntegrationTest {
     private static final UUID SMA_STRATEGY_ID =
             UUID.fromString("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
     private static final String SYMBOL = "BTCUSDT";
+    private static final BigDecimal INITIAL_CAPITAL = new BigDecimal("10000.00");
     private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(10);
 
     @Container
@@ -77,6 +80,9 @@ class MockDeterministicOrderOverrideIntegrationTest {
 
     @Autowired
     private StrategyRunnerRepositoryPort strategyRunnerRepository;
+
+    @Autowired
+    private GlobalBalanceRepositoryPort globalBalanceRepository;
 
     @Autowired
     private ExchangeAdapterRepositoryPort exchangeAdapterRepository;
@@ -317,6 +323,124 @@ class MockDeterministicOrderOverrideIntegrationTest {
         assertEquals(0, stable.matchCount());
     }
 
+    @Test
+    void rejectedBuyShouldReleaseReservedBalanceWithoutCreatingPosition() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        UUID runnerId = runner.getId();
+
+        BigDecimal quantity = new BigDecimal("0.00200000");
+        BigDecimal price = new BigDecimal("65300.00000000");
+        String clientOrderId = ClientOrderId.generate(runner.getShortCode(), TransactionType.BUY);
+
+        Transaction pendingBuy = new Transaction(
+                runnerId,
+                clientOrderId,
+                TransactionType.BUY,
+                SYMBOL,
+                quantity,
+                price,
+                quantity.multiply(price),
+                new BigDecimal("0.90"),
+                "phase1b rejected financial",
+                null
+        );
+        strategyRunnerRepository.saveTransaction(pendingBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, pendingBuy.getTotal()));
+
+        MockExchangeAdapter mockExchangeAdapter = getMockExchangeAdapter();
+        mockExchangeAdapter.registerOrderScenarioOverride(clientOrderId, new MockOrderScenarioOverride(
+                List.of(
+                        new MockOrderScenarioOverride.PlannedEvent(
+                                com.marmitt.core.dto.websocket.data.OrderDataDto.OrderStatus.REJECTED,
+                                BigDecimal.ZERO,
+                                price,
+                                BigDecimal.ZERO,
+                                "MOCK_REJECT_TEST",
+                                20L,
+                                0
+                        )
+                ),
+                MockOrderScenarioOverride.EventOrdering.AS_IS
+        ));
+
+        orderDispatchPort.dispatch(new OrderDispatchCommand(
+                clientOrderId,
+                runnerId,
+                SYMBOL,
+                "MOCK",
+                TransactionType.BUY,
+                quantity,
+                price
+        ));
+
+        Transaction rejected = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.REJECTED, WAIT_TIMEOUT);
+        assertEquals("MOCK_REJECT_TEST", rejected.getRejectReason());
+
+        awaitBalanceState(portfolioId, INITIAL_CAPITAL, BigDecimal.ZERO, WAIT_TIMEOUT);
+        assertEquals(0, countOpenPositionsByOpenedByTransactionId(pendingBuy.getId()));
+        assertEquals(0, countMatchesByTransactionId(pendingBuy.getId()));
+    }
+
+    @Test
+    void expiredBuyShouldReleaseReservedBalanceWithoutCreatingPosition() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        UUID runnerId = runner.getId();
+
+        BigDecimal quantity = new BigDecimal("0.00200000");
+        BigDecimal price = new BigDecimal("65400.00000000");
+        String clientOrderId = ClientOrderId.generate(runner.getShortCode(), TransactionType.BUY);
+
+        Transaction pendingBuy = new Transaction(
+                runnerId,
+                clientOrderId,
+                TransactionType.BUY,
+                SYMBOL,
+                quantity,
+                price,
+                quantity.multiply(price),
+                new BigDecimal("0.90"),
+                "phase1b expired financial",
+                null
+        );
+        strategyRunnerRepository.saveTransaction(pendingBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, pendingBuy.getTotal()));
+
+        MockExchangeAdapter mockExchangeAdapter = getMockExchangeAdapter();
+        mockExchangeAdapter.registerOrderScenarioOverride(clientOrderId, new MockOrderScenarioOverride(
+                List.of(
+                        new MockOrderScenarioOverride.PlannedEvent(
+                                com.marmitt.core.dto.websocket.data.OrderDataDto.OrderStatus.EXPIRED,
+                                BigDecimal.ZERO,
+                                price,
+                                BigDecimal.ZERO,
+                                null,
+                                20L,
+                                0
+                        )
+                ),
+                MockOrderScenarioOverride.EventOrdering.AS_IS
+        ));
+
+        orderDispatchPort.dispatch(new OrderDispatchCommand(
+                clientOrderId,
+                runnerId,
+                SYMBOL,
+                "MOCK",
+                TransactionType.BUY,
+                quantity,
+                price
+        ));
+
+        Transaction expired = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.EXPIRED, WAIT_TIMEOUT);
+        assertEquals(0, expired.getEffectiveExecutedQuantity().compareTo(BigDecimal.ZERO));
+
+        awaitBalanceState(portfolioId, INITIAL_CAPITAL, BigDecimal.ZERO, WAIT_TIMEOUT);
+        assertEquals(0, countOpenPositionsByOpenedByTransactionId(pendingBuy.getId()));
+        assertEquals(0, countMatchesByTransactionId(pendingBuy.getId()));
+    }
+
     private MockExchangeAdapter getMockExchangeAdapter() {
         Object adapter = exchangeAdapterRepository.findStreamingByName("MOCK")
                 .orElseThrow(() -> new IllegalStateException("MOCK adapter not found"));
@@ -330,7 +454,7 @@ class MockDeterministicOrderOverrideIntegrationTest {
         CreatePortfolioResponse response = createPortfolioPort.execute(
                 CreatePortfolioRequest.builder()
                         .name("phase1b-det-" + UUID.randomUUID())
-                        .initialCapitalAmount(new BigDecimal("10000.00"))
+                        .initialCapitalAmount(INITIAL_CAPITAL)
                         .currency("USDT")
                         .build()
         );
@@ -405,6 +529,64 @@ class MockDeterministicOrderOverrideIntegrationTest {
                 openedByTransactionId
         );
         return rows.isEmpty() ? null : rows.getFirst();
+    }
+
+    private int countOpenPositionsByOpenedByTransactionId(UUID openedByTransactionId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM positions WHERE opened_by_transaction_id = ? AND status = 'OPEN'",
+                Integer.class,
+                openedByTransactionId
+        );
+        return count == null ? 0 : count;
+    }
+
+    private int countMatchesByTransactionId(UUID transactionId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transaction_matches WHERE buy_transaction_id = ? OR sell_transaction_id = ?",
+                Integer.class,
+                transactionId,
+                transactionId
+        );
+        return count == null ? 0 : count;
+    }
+
+    private BalanceRow readBalance(UUID portfolioId) {
+        List<BalanceRow> rows = jdbcTemplate.query(
+                """
+                        SELECT available_balance, reserved_balance
+                          FROM global_balances
+                         WHERE portfolio_id = ?
+                        """,
+                (rs, rowNum) -> new BalanceRow(
+                        rs.getBigDecimal("available_balance"),
+                        rs.getBigDecimal("reserved_balance")
+                ),
+                portfolioId
+        );
+        if (rows.isEmpty()) {
+            throw new IllegalStateException("Balance not found for portfolioId=" + portfolioId);
+        }
+        return rows.getFirst();
+    }
+
+    private void awaitBalanceState(UUID portfolioId,
+                                   BigDecimal expectedAvailable,
+                                   BigDecimal expectedReserved,
+                                   Duration timeout) {
+        Instant deadline = Instant.now().plus(timeout);
+        BalanceRow last = null;
+        while (Instant.now().isBefore(deadline)) {
+            last = readBalance(portfolioId);
+            if (last.available().compareTo(expectedAvailable) == 0
+                    && last.reserved().compareTo(expectedReserved) == 0) {
+                return;
+            }
+            sleep(80);
+        }
+        throw new AssertionError("Timeout waiting balance state for portfolioId=" + portfolioId
+                + " expectedAvailable=" + expectedAvailable
+                + " expectedReserved=" + expectedReserved
+                + " last=" + last);
     }
 
     private BuyStateSnapshot awaitNoLateDriftAfterFilledConvergence(UUID openedByTransactionId,
@@ -492,5 +674,8 @@ class MockDeterministicOrderOverrideIntegrationTest {
                                     BigDecimal positionQuantity,
                                     int openRows,
                                     int matchCount) {
+    }
+
+    private record BalanceRow(BigDecimal available, BigDecimal reserved) {
     }
 }
