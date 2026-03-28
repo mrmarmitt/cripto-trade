@@ -34,6 +34,7 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -302,28 +303,19 @@ class MockDeterministicOrderOverrideIntegrationTest {
                 price
         ));
 
-        Transaction filled = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.FILLED, WAIT_TIMEOUT);
-        assertEquals(0, filled.getEffectiveExecutedQuantity().compareTo(quantity));
-
-        PositionRow position = awaitOpenPositionByOpenedByTransactionId(pendingBuy.getId(), WAIT_TIMEOUT);
-        assertNotNull(position);
-        assertEquals(0, position.quantity().compareTo(quantity),
-                "Duplicate FILLED must not increase position quantity more than once");
-
-        Integer openRows = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM positions WHERE opened_by_transaction_id = ? AND status = 'OPEN'",
-                Integer.class,
-                pendingBuy.getId()
-        );
-        assertEquals(1, openRows);
-
-        Integer countMatches = jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM transaction_matches WHERE buy_transaction_id = ? OR sell_transaction_id = ?",
-                Integer.class,
+        BuyStateSnapshot stable = awaitStableFilledBuyState(
                 pendingBuy.getId(),
-                pendingBuy.getId()
+                WAIT_TIMEOUT,
+                Duration.ofMillis(400)
         );
-        assertEquals(0, countMatches);
+
+        assertEquals(0, stable.executedQuantity().compareTo(quantity),
+                "Duplicate FILLED must not change executed quantity after first finalization");
+        assertNotNull(stable.positionQuantity());
+        assertEquals(0, stable.positionQuantity().compareTo(quantity),
+                "Duplicate FILLED must not increase position quantity more than once");
+        assertEquals(1, stable.openRows());
+        assertEquals(0, stable.matchCount());
     }
 
     private MockExchangeAdapter getMockExchangeAdapter() {
@@ -416,6 +408,78 @@ class MockDeterministicOrderOverrideIntegrationTest {
         return rows.isEmpty() ? null : rows.getFirst();
     }
 
+    private BuyStateSnapshot awaitStableFilledBuyState(UUID openedByTransactionId,
+                                                       Duration timeout,
+                                                       Duration stableWindow) {
+        Instant deadline = Instant.now().plus(timeout);
+        BuyStateSnapshot previous = null;
+        Instant stableSince = null;
+        while (Instant.now().isBefore(deadline)) {
+            BuyStateSnapshot current = readBuyState(openedByTransactionId);
+            if (current.status() == TransactionStatus.FILLED && current.positionQuantity() != null) {
+                if (previous != null && sameState(previous, current)) {
+                    if (stableSince == null) {
+                        stableSince = Instant.now();
+                    }
+                    if (!Instant.now().isBefore(stableSince.plus(stableWindow))) {
+                        return current;
+                    }
+                } else {
+                    stableSince = Instant.now();
+                }
+            } else {
+                stableSince = null;
+            }
+            previous = current;
+            sleep(50);
+        }
+        throw new AssertionError("Timeout waiting stable FILLED state for openedByTransactionId=" + openedByTransactionId);
+    }
+
+    private BuyStateSnapshot readBuyState(UUID openedByTransactionId) {
+        Transaction tx = strategyRunnerRepository.findTransactionById(openedByTransactionId)
+                .orElseThrow(() -> new IllegalStateException("Transaction not found: " + openedByTransactionId));
+        PositionRow position = findOpenPositionByOpenedByTransactionId(openedByTransactionId);
+        Integer openRows = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM positions WHERE opened_by_transaction_id = ? AND status = 'OPEN'",
+                Integer.class,
+                openedByTransactionId
+        );
+        Integer matchCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transaction_matches WHERE buy_transaction_id = ? OR sell_transaction_id = ?",
+                Integer.class,
+                openedByTransactionId,
+                openedByTransactionId
+        );
+        return new BuyStateSnapshot(
+                tx.getStatus(),
+                tx.getEffectiveExecutedQuantity(),
+                tx.getVersion(),
+                position == null ? null : position.quantity(),
+                openRows == null ? 0 : openRows,
+                matchCount == null ? 0 : matchCount
+        );
+    }
+
+    private static boolean sameState(BuyStateSnapshot left, BuyStateSnapshot right) {
+        return left.status() == right.status()
+                && compareNullable(left.executedQuantity(), right.executedQuantity()) == 0
+                && compareNullable(left.positionQuantity(), right.positionQuantity()) == 0
+                && Objects.equals(left.version(), right.version())
+                && left.openRows() == right.openRows()
+                && left.matchCount() == right.matchCount();
+    }
+
+    private static int compareNullable(BigDecimal left, BigDecimal right) {
+        if (left == null && right == null) {
+            return 0;
+        }
+        if (left == null || right == null) {
+            return 1;
+        }
+        return left.compareTo(right);
+    }
+
     private static void sleep(long millis) {
         try {
             Thread.sleep(millis);
@@ -426,5 +490,13 @@ class MockDeterministicOrderOverrideIntegrationTest {
     }
 
     private record PositionRow(UUID id, BigDecimal quantity) {
+    }
+
+    private record BuyStateSnapshot(TransactionStatus status,
+                                    BigDecimal executedQuantity,
+                                    Long version,
+                                    BigDecimal positionQuantity,
+                                    int openRows,
+                                    int matchCount) {
     }
 }
