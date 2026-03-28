@@ -34,7 +34,6 @@ import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
-import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
@@ -303,10 +302,10 @@ class MockDeterministicOrderOverrideIntegrationTest {
                 price
         ));
 
-        BuyStateSnapshot stable = awaitStableFilledBuyState(
+        BuyStateSnapshot stable = awaitNoLateDriftAfterFilledConvergence(
                 pendingBuy.getId(),
                 WAIT_TIMEOUT,
-                Duration.ofMillis(400)
+                quantity
         );
 
         assertEquals(0, stable.executedQuantity().compareTo(quantity),
@@ -408,32 +407,28 @@ class MockDeterministicOrderOverrideIntegrationTest {
         return rows.isEmpty() ? null : rows.getFirst();
     }
 
-    private BuyStateSnapshot awaitStableFilledBuyState(UUID openedByTransactionId,
-                                                       Duration timeout,
-                                                       Duration stableWindow) {
+    private BuyStateSnapshot awaitNoLateDriftAfterFilledConvergence(UUID openedByTransactionId,
+                                                                    Duration timeout,
+                                                                    BigDecimal expectedQuantity) {
         Instant deadline = Instant.now().plus(timeout);
-        BuyStateSnapshot previous = null;
-        Instant stableSince = null;
+        BuyStateSnapshot converged = null;
         while (Instant.now().isBefore(deadline)) {
             BuyStateSnapshot current = readBuyState(openedByTransactionId);
-            if (current.status() == TransactionStatus.FILLED && current.positionQuantity() != null) {
-                if (previous != null && sameState(previous, current)) {
-                    if (stableSince == null) {
-                        stableSince = Instant.now();
-                    }
-                    if (!Instant.now().isBefore(stableSince.plus(stableWindow))) {
-                        return current;
-                    }
-                } else {
-                    stableSince = Instant.now();
+            if (converged == null) {
+                if (isExpectedFilledBuyState(current, expectedQuantity)) {
+                    converged = current;
                 }
-            } else {
-                stableSince = null;
+            } else if (!isExpectedFilledBuyState(current, expectedQuantity)) {
+                throw new AssertionError("Filled buy state drift detected after convergence for openedByTransactionId="
+                        + openedByTransactionId + " current=" + current);
             }
-            previous = current;
             sleep(50);
         }
-        throw new AssertionError("Timeout waiting stable FILLED state for openedByTransactionId=" + openedByTransactionId);
+        if (converged == null) {
+            throw new AssertionError("Timeout waiting FILLED buy convergence for openedByTransactionId="
+                    + openedByTransactionId);
+        }
+        return converged;
     }
 
     private BuyStateSnapshot readBuyState(UUID openedByTransactionId) {
@@ -461,13 +456,12 @@ class MockDeterministicOrderOverrideIntegrationTest {
         );
     }
 
-    private static boolean sameState(BuyStateSnapshot left, BuyStateSnapshot right) {
-        return left.status() == right.status()
-                && compareNullable(left.executedQuantity(), right.executedQuantity()) == 0
-                && compareNullable(left.positionQuantity(), right.positionQuantity()) == 0
-                && Objects.equals(left.version(), right.version())
-                && left.openRows() == right.openRows()
-                && left.matchCount() == right.matchCount();
+    private static boolean isExpectedFilledBuyState(BuyStateSnapshot snapshot, BigDecimal expectedQuantity) {
+        return snapshot.status() == TransactionStatus.FILLED
+                && compareNullable(snapshot.executedQuantity(), expectedQuantity) == 0
+                && compareNullable(snapshot.positionQuantity(), expectedQuantity) == 0
+                && snapshot.openRows() == 1
+                && snapshot.matchCount() == 0;
     }
 
     private static int compareNullable(BigDecimal left, BigDecimal right) {
