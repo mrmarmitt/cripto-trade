@@ -37,6 +37,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -455,12 +457,11 @@ class MockDeterministicOrderOverrideIntegrationTest {
     }
 
     private MockExchangeAdapter getMockExchangeAdapter() {
-        Object adapter = exchangeAdapterRepository.findStreamingByName("MOCK")
-                .orElseThrow(() -> new IllegalStateException("MOCK adapter not found"));
-        if (!(adapter instanceof MockExchangeAdapter mock)) {
-            throw new IllegalStateException("MOCK adapter has unexpected type: " + adapter.getClass().getName());
-        }
-        return mock;
+        return exchangeAdapterRepository.findStreamingByName(MOCK_EXCHANGE)
+                .filter(MockExchangeAdapter.class::isInstance)
+                .map(MockExchangeAdapter.class::cast)
+                .orElseThrow(() -> new IllegalStateException(
+                        MOCK_EXCHANGE + " adapter not found or has invalid type"));
     }
 
     private UUID createPortfolio() {
@@ -499,31 +500,23 @@ class MockDeterministicOrderOverrideIntegrationTest {
     private Transaction awaitTransactionStatus(UUID transactionId,
                                                TransactionStatus expectedStatus,
                                                Duration timeout) {
-        Instant deadline = Instant.now().plus(timeout);
-        Transaction last = null;
-        while (Instant.now().isBefore(deadline)) {
-            last = strategyRunnerRepository.findTransactionById(transactionId).orElse(null);
-            if (last != null && last.getStatus() == expectedStatus) {
-                return last;
-            }
-            sleep(DEFAULT_POLL_INTERVAL_MS);
-        }
-        throw new AssertionError("Timeout waiting transaction status " + expectedStatus
-                + " for transactionId=" + transactionId + " last=" + (last == null ? "null" : last.getStatus()));
+        return awaitCondition(
+                timeout,
+                DEFAULT_POLL_INTERVAL_MS,
+                () -> strategyRunnerRepository.findTransactionById(transactionId).orElse(null),
+                tx -> tx != null && tx.getStatus() == expectedStatus,
+                "Timeout waiting transaction status " + expectedStatus + " for transactionId=" + transactionId
+        );
     }
 
     private PositionRow awaitOpenPositionByOpenedByTransactionId(UUID openedByTransactionId, Duration timeout) {
-        Instant deadline = Instant.now().plus(timeout);
-        PositionRow last = null;
-        while (Instant.now().isBefore(deadline)) {
-            last = findOpenPositionByOpenedByTransactionId(openedByTransactionId);
-            if (last != null) {
-                return last;
-            }
-            sleep(DEFAULT_POLL_INTERVAL_MS);
-        }
-        throw new AssertionError("Timeout waiting OPEN position for openedByTransactionId="
-                + openedByTransactionId + " last=" + last);
+        return awaitCondition(
+                timeout,
+                DEFAULT_POLL_INTERVAL_MS,
+                () -> findOpenPositionByOpenedByTransactionId(openedByTransactionId),
+                position -> position != null,
+                "Timeout waiting OPEN position for openedByTransactionId=" + openedByTransactionId
+        );
     }
 
     private PositionRow findOpenPositionByOpenedByTransactionId(UUID openedByTransactionId) {
@@ -586,20 +579,16 @@ class MockDeterministicOrderOverrideIntegrationTest {
                                    BigDecimal expectedAvailable,
                                    BigDecimal expectedReserved,
                                    Duration timeout) {
-        Instant deadline = Instant.now().plus(timeout);
-        BalanceRow last = null;
-        while (Instant.now().isBefore(deadline)) {
-            last = readBalance(portfolioId);
-            if (last.available().compareTo(expectedAvailable) == 0
-                    && last.reserved().compareTo(expectedReserved) == 0) {
-                return;
-            }
-            sleep(DEFAULT_POLL_INTERVAL_MS);
-        }
-        throw new AssertionError("Timeout waiting balance state for portfolioId=" + portfolioId
-                + " expectedAvailable=" + expectedAvailable
-                + " expectedReserved=" + expectedReserved
-                + " last=" + last);
+        awaitCondition(
+                timeout,
+                DEFAULT_POLL_INTERVAL_MS,
+                () -> readBalance(portfolioId),
+                balance -> balance.available().compareTo(expectedAvailable) == 0
+                        && balance.reserved().compareTo(expectedReserved) == 0,
+                "Timeout waiting balance state for portfolioId=" + portfolioId
+                        + " expectedAvailable=" + expectedAvailable
+                        + " expectedReserved=" + expectedReserved
+        );
     }
 
     private BuyStateSnapshot awaitStableFilledState(UUID openedByTransactionId,
@@ -674,6 +663,23 @@ class MockDeterministicOrderOverrideIntegrationTest {
             return false;
         }
         return left.compareTo(right) == 0;
+    }
+
+    private <T> T awaitCondition(Duration timeout,
+                                 long pollIntervalMs,
+                                 Supplier<T> stateSupplier,
+                                 Predicate<T> isSatisfied,
+                                 String timeoutMessage) {
+        Instant deadline = Instant.now().plus(timeout);
+        T last = null;
+        while (Instant.now().isBefore(deadline)) {
+            last = stateSupplier.get();
+            if (isSatisfied.test(last)) {
+                return last;
+            }
+            sleep(pollIntervalMs);
+        }
+        throw new AssertionError(timeoutMessage + " last=" + last);
     }
 
     private static void sleep(long millis) {
