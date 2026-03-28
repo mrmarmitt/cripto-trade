@@ -252,6 +252,71 @@ class MockDeterministicOrderOverrideIntegrationTest {
         assertEquals(0, countMatches);
     }
 
+    @Test
+    void duplicateFilledShouldNotDoubleApplyEconomicEffects() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        UUID runnerId = runner.getId();
+
+        BigDecimal quantity = new BigDecimal("0.00200000");
+        BigDecimal price = new BigDecimal("65200.00000000");
+        String clientOrderId = ClientOrderId.generate(runner.getShortCode(), TransactionType.BUY);
+
+        Transaction pendingBuy = new Transaction(
+                runnerId,
+                clientOrderId,
+                TransactionType.BUY,
+                SYMBOL,
+                quantity,
+                price,
+                quantity.multiply(price),
+                new BigDecimal("0.90"),
+                "phase1b duplicate filled idempotency",
+                null
+        );
+        strategyRunnerRepository.saveTransaction(pendingBuy);
+
+        MockExchangeAdapter mockExchangeAdapter = getMockExchangeAdapter();
+        mockExchangeAdapter.registerOrderScenarioOverride(clientOrderId, new MockOrderScenarioOverride(
+                List.of(
+                        new MockOrderScenarioOverride.PlannedEvent(
+                                com.marmitt.core.dto.websocket.data.OrderDataDto.OrderStatus.FILLED,
+                                new BigDecimal("0.00200000"),
+                                new BigDecimal("65210.00000000"),
+                                BigDecimal.ZERO,
+                                null,
+                                20L,
+                                2
+                        )
+                ),
+                MockOrderScenarioOverride.EventOrdering.AS_IS
+        ));
+
+        orderDispatchPort.dispatch(new OrderDispatchCommand(
+                clientOrderId,
+                runnerId,
+                SYMBOL,
+                "MOCK",
+                TransactionType.BUY,
+                quantity,
+                price
+        ));
+
+        BuyStateSnapshot stable = awaitNoLateDriftAfterFilledConvergence(
+                pendingBuy.getId(),
+                WAIT_TIMEOUT,
+                quantity
+        );
+
+        assertEquals(0, stable.executedQuantity().compareTo(quantity),
+                "Duplicate FILLED must not change executed quantity after first finalization");
+        assertNotNull(stable.positionQuantity());
+        assertEquals(0, stable.positionQuantity().compareTo(quantity),
+                "Duplicate FILLED must not increase position quantity more than once");
+        assertEquals(1, stable.openRows());
+        assertEquals(0, stable.matchCount());
+    }
+
     private MockExchangeAdapter getMockExchangeAdapter() {
         Object adapter = exchangeAdapterRepository.findStreamingByName("MOCK")
                 .orElseThrow(() -> new IllegalStateException("MOCK adapter not found"));
@@ -342,6 +407,73 @@ class MockDeterministicOrderOverrideIntegrationTest {
         return rows.isEmpty() ? null : rows.getFirst();
     }
 
+    private BuyStateSnapshot awaitNoLateDriftAfterFilledConvergence(UUID openedByTransactionId,
+                                                                    Duration timeout,
+                                                                    BigDecimal expectedQuantity) {
+        Instant deadline = Instant.now().plus(timeout);
+        BuyStateSnapshot converged = null;
+        while (Instant.now().isBefore(deadline)) {
+            BuyStateSnapshot current = readBuyState(openedByTransactionId);
+            if (converged == null) {
+                if (isExpectedFilledBuyState(current, expectedQuantity)) {
+                    converged = current;
+                }
+            } else if (!isExpectedFilledBuyState(current, expectedQuantity)) {
+                throw new AssertionError("Filled buy state drift detected after convergence for openedByTransactionId="
+                        + openedByTransactionId + " current=" + current);
+            }
+            sleep(50);
+        }
+        if (converged == null) {
+            throw new AssertionError("Timeout waiting FILLED buy convergence for openedByTransactionId="
+                    + openedByTransactionId);
+        }
+        return converged;
+    }
+
+    private BuyStateSnapshot readBuyState(UUID openedByTransactionId) {
+        Transaction tx = strategyRunnerRepository.findTransactionById(openedByTransactionId)
+                .orElseThrow(() -> new IllegalStateException("Transaction not found: " + openedByTransactionId));
+        PositionRow position = findOpenPositionByOpenedByTransactionId(openedByTransactionId);
+        Integer openRows = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM positions WHERE opened_by_transaction_id = ? AND status = 'OPEN'",
+                Integer.class,
+                openedByTransactionId
+        );
+        Integer matchCount = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transaction_matches WHERE buy_transaction_id = ? OR sell_transaction_id = ?",
+                Integer.class,
+                openedByTransactionId,
+                openedByTransactionId
+        );
+        return new BuyStateSnapshot(
+                tx.getStatus(),
+                tx.getEffectiveExecutedQuantity(),
+                tx.getVersion(),
+                position == null ? null : position.quantity(),
+                openRows == null ? 0 : openRows,
+                matchCount == null ? 0 : matchCount
+        );
+    }
+
+    private static boolean isExpectedFilledBuyState(BuyStateSnapshot snapshot, BigDecimal expectedQuantity) {
+        return snapshot.status() == TransactionStatus.FILLED
+                && compareNullable(snapshot.executedQuantity(), expectedQuantity) == 0
+                && compareNullable(snapshot.positionQuantity(), expectedQuantity) == 0
+                && snapshot.openRows() == 1
+                && snapshot.matchCount() == 0;
+    }
+
+    private static int compareNullable(BigDecimal left, BigDecimal right) {
+        if (left == null && right == null) {
+            return 0;
+        }
+        if (left == null || right == null) {
+            return 1;
+        }
+        return left.compareTo(right);
+    }
+
     private static void sleep(long millis) {
         try {
             Thread.sleep(millis);
@@ -352,5 +484,13 @@ class MockDeterministicOrderOverrideIntegrationTest {
     }
 
     private record PositionRow(UUID id, BigDecimal quantity) {
+    }
+
+    private record BuyStateSnapshot(TransactionStatus status,
+                                    BigDecimal executedQuantity,
+                                    Long version,
+                                    BigDecimal positionQuantity,
+                                    int openRows,
+                                    int matchCount) {
     }
 }
