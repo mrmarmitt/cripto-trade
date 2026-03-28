@@ -428,8 +428,8 @@ Fora de escopo da Fase 4:
 ### Fase 1B em progresso (1 PR por item)
 
 - PR 1 (concluído): `PARTIAL + FILLED` quase simultâneos com convergência.
-- PR 2 (atual): `FILLED` duplicado sem dupla aplicação econômica.
-- PR 3 (próximo): `REJECTED/EXPIRED` determinístico com validação de efeitos financeiros.
+- PR 2 (concluído): `FILLED` duplicado sem dupla aplicação econômica.
+- PR 3 (atual): `REJECTED/EXPIRED` determinístico com validação de efeitos financeiros.
 
 ### Evidencias de conclusao da Fase 0
 
