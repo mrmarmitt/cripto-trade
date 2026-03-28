@@ -252,6 +252,80 @@ class MockDeterministicOrderOverrideIntegrationTest {
         assertEquals(0, countMatches);
     }
 
+    @Test
+    void duplicateFilledShouldNotDoubleApplyEconomicEffects() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        UUID runnerId = runner.getId();
+
+        BigDecimal quantity = new BigDecimal("0.00200000");
+        BigDecimal price = new BigDecimal("65200.00000000");
+        String clientOrderId = ClientOrderId.generate(runner.getShortCode(), TransactionType.BUY);
+
+        Transaction pendingBuy = new Transaction(
+                runnerId,
+                clientOrderId,
+                TransactionType.BUY,
+                SYMBOL,
+                quantity,
+                price,
+                quantity.multiply(price),
+                new BigDecimal("0.90"),
+                "phase1b duplicate filled idempotency",
+                null
+        );
+        strategyRunnerRepository.saveTransaction(pendingBuy);
+
+        MockExchangeAdapter mockExchangeAdapter = getMockExchangeAdapter();
+        mockExchangeAdapter.registerOrderScenarioOverride(clientOrderId, new MockOrderScenarioOverride(
+                List.of(
+                        new MockOrderScenarioOverride.PlannedEvent(
+                                com.marmitt.core.dto.websocket.data.OrderDataDto.OrderStatus.FILLED,
+                                new BigDecimal("0.00200000"),
+                                new BigDecimal("65210.00000000"),
+                                BigDecimal.ZERO,
+                                null,
+                                20L,
+                                2
+                        )
+                ),
+                MockOrderScenarioOverride.EventOrdering.AS_IS
+        ));
+
+        orderDispatchPort.dispatch(new OrderDispatchCommand(
+                clientOrderId,
+                runnerId,
+                SYMBOL,
+                "MOCK",
+                TransactionType.BUY,
+                quantity,
+                price
+        ));
+
+        Transaction filled = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.FILLED, WAIT_TIMEOUT);
+        assertEquals(0, filled.getEffectiveExecutedQuantity().compareTo(quantity));
+
+        PositionRow position = awaitOpenPositionByOpenedByTransactionId(pendingBuy.getId(), WAIT_TIMEOUT);
+        assertNotNull(position);
+        assertEquals(0, position.quantity().compareTo(quantity),
+                "Duplicate FILLED must not increase position quantity more than once");
+
+        Integer openRows = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM positions WHERE opened_by_transaction_id = ? AND status = 'OPEN'",
+                Integer.class,
+                pendingBuy.getId()
+        );
+        assertEquals(1, openRows);
+
+        Integer countMatches = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM transaction_matches WHERE buy_transaction_id = ? OR sell_transaction_id = ?",
+                Integer.class,
+                pendingBuy.getId(),
+                pendingBuy.getId()
+        );
+        assertEquals(0, countMatches);
+    }
+
     private MockExchangeAdapter getMockExchangeAdapter() {
         Object adapter = exchangeAdapterRepository.findStreamingByName("MOCK")
                 .orElseThrow(() -> new IllegalStateException("MOCK adapter not found"));
