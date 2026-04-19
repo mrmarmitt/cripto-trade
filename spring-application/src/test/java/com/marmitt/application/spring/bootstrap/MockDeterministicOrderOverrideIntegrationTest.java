@@ -37,6 +37,8 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.function.Predicate;
+import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
@@ -53,8 +55,16 @@ class MockDeterministicOrderOverrideIntegrationTest {
     private static final UUID SMA_STRATEGY_ID =
             UUID.fromString("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
     private static final String SYMBOL = "BTCUSDT";
+    private static final String MOCK_EXCHANGE = "MOCK";
     private static final BigDecimal INITIAL_CAPITAL = new BigDecimal("10000.00");
     private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(10);
+    private static final long DEFAULT_POLL_INTERVAL_MS = 80L;
+    private static final long FILLED_STABILITY_POLL_INTERVAL_MS = 50L;
+    private static final String SCENARIO_DUPLICATE_PARTIAL = "phase1b deterministic override";
+    private static final String SCENARIO_PARTIAL_FILLED_CONVERGENCE = "phase1b partial+filled convergence";
+    private static final String SCENARIO_DUPLICATE_FILLED = "phase1b duplicate filled idempotency";
+    private static final String SCENARIO_REJECTED_FINANCIAL = "phase1b rejected financial";
+    private static final String SCENARIO_EXPIRED_FINANCIAL = "phase1b expired financial";
 
     @Container
     @SuppressWarnings("resource")
@@ -100,7 +110,7 @@ class MockDeterministicOrderOverrideIntegrationTest {
     }
 
     @Test
-    void deterministicOverrideShouldConvergeWithoutDoubleApplyingDuplicatePartial() {
+    void shouldNotDoubleApplyQuantityWhenDuplicatePartialEventsOccur() {
         UUID portfolioId = createPortfolio();
         StrategyRunner runner = createAndActivateRunner(portfolioId);
         UUID runnerId = runner.getId();
@@ -118,10 +128,11 @@ class MockDeterministicOrderOverrideIntegrationTest {
                 price,
                 quantity.multiply(price),
                 new BigDecimal("0.90"),
-                "phase1b deterministic override",
+                SCENARIO_DUPLICATE_PARTIAL,
                 null
         );
         strategyRunnerRepository.saveTransaction(pendingBuy);
+        assertNoInitialPositionOrMatch(pendingBuy.getId());
 
         MockExchangeAdapter mockExchangeAdapter = getMockExchangeAdapter();
         mockExchangeAdapter.registerOrderScenarioOverride(clientOrderId, new MockOrderScenarioOverride(
@@ -152,7 +163,7 @@ class MockDeterministicOrderOverrideIntegrationTest {
                 clientOrderId,
                 runnerId,
                 SYMBOL,
-                "MOCK",
+                MOCK_EXCHANGE,
                 TransactionType.BUY,
                 quantity,
                 price
@@ -194,10 +205,11 @@ class MockDeterministicOrderOverrideIntegrationTest {
                 price,
                 quantity.multiply(price),
                 new BigDecimal("0.90"),
-                "phase1b partial+filled convergence",
+                SCENARIO_PARTIAL_FILLED_CONVERGENCE,
                 null
         );
         strategyRunnerRepository.saveTransaction(pendingBuy);
+        assertNoInitialPositionOrMatch(pendingBuy.getId());
 
         MockExchangeAdapter mockExchangeAdapter = getMockExchangeAdapter();
         mockExchangeAdapter.registerOrderScenarioOverride(clientOrderId, new MockOrderScenarioOverride(
@@ -228,7 +240,7 @@ class MockDeterministicOrderOverrideIntegrationTest {
                 clientOrderId,
                 runnerId,
                 SYMBOL,
-                "MOCK",
+                MOCK_EXCHANGE,
                 TransactionType.BUY,
                 quantity,
                 price
@@ -277,10 +289,11 @@ class MockDeterministicOrderOverrideIntegrationTest {
                 price,
                 quantity.multiply(price),
                 new BigDecimal("0.90"),
-                "phase1b duplicate filled idempotency",
+                SCENARIO_DUPLICATE_FILLED,
                 null
         );
         strategyRunnerRepository.saveTransaction(pendingBuy);
+        assertNoInitialPositionOrMatch(pendingBuy.getId());
 
         MockExchangeAdapter mockExchangeAdapter = getMockExchangeAdapter();
         mockExchangeAdapter.registerOrderScenarioOverride(clientOrderId, new MockOrderScenarioOverride(
@@ -302,13 +315,13 @@ class MockDeterministicOrderOverrideIntegrationTest {
                 clientOrderId,
                 runnerId,
                 SYMBOL,
-                "MOCK",
+                MOCK_EXCHANGE,
                 TransactionType.BUY,
                 quantity,
                 price
         ));
 
-        BuyStateSnapshot stable = awaitNoLateDriftAfterFilledConvergence(
+        BuyStateSnapshot stable = awaitStableFilledState(
                 pendingBuy.getId(),
                 WAIT_TIMEOUT,
                 quantity
@@ -342,11 +355,12 @@ class MockDeterministicOrderOverrideIntegrationTest {
                 price,
                 quantity.multiply(price),
                 new BigDecimal("0.90"),
-                "phase1b rejected financial",
+                SCENARIO_REJECTED_FINANCIAL,
                 null
         );
         strategyRunnerRepository.saveTransaction(pendingBuy);
         assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, pendingBuy.getTotal()));
+        assertNoInitialPositionOrMatch(pendingBuy.getId());
 
         MockExchangeAdapter mockExchangeAdapter = getMockExchangeAdapter();
         mockExchangeAdapter.registerOrderScenarioOverride(clientOrderId, new MockOrderScenarioOverride(
@@ -368,7 +382,7 @@ class MockDeterministicOrderOverrideIntegrationTest {
                 clientOrderId,
                 runnerId,
                 SYMBOL,
-                "MOCK",
+                MOCK_EXCHANGE,
                 TransactionType.BUY,
                 quantity,
                 price
@@ -401,11 +415,12 @@ class MockDeterministicOrderOverrideIntegrationTest {
                 price,
                 quantity.multiply(price),
                 new BigDecimal("0.90"),
-                "phase1b expired financial",
+                SCENARIO_EXPIRED_FINANCIAL,
                 null
         );
         strategyRunnerRepository.saveTransaction(pendingBuy);
         assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, pendingBuy.getTotal()));
+        assertNoInitialPositionOrMatch(pendingBuy.getId());
 
         MockExchangeAdapter mockExchangeAdapter = getMockExchangeAdapter();
         mockExchangeAdapter.registerOrderScenarioOverride(clientOrderId, new MockOrderScenarioOverride(
@@ -427,7 +442,7 @@ class MockDeterministicOrderOverrideIntegrationTest {
                 clientOrderId,
                 runnerId,
                 SYMBOL,
-                "MOCK",
+                MOCK_EXCHANGE,
                 TransactionType.BUY,
                 quantity,
                 price
@@ -442,12 +457,11 @@ class MockDeterministicOrderOverrideIntegrationTest {
     }
 
     private MockExchangeAdapter getMockExchangeAdapter() {
-        Object adapter = exchangeAdapterRepository.findStreamingByName("MOCK")
-                .orElseThrow(() -> new IllegalStateException("MOCK adapter not found"));
-        if (!(adapter instanceof MockExchangeAdapter mock)) {
-            throw new IllegalStateException("MOCK adapter has unexpected type: " + adapter.getClass().getName());
-        }
-        return mock;
+        return exchangeAdapterRepository.findStreamingByName(MOCK_EXCHANGE)
+                .filter(MockExchangeAdapter.class::isInstance)
+                .map(MockExchangeAdapter.class::cast)
+                .orElseThrow(() -> new IllegalStateException(
+                        MOCK_EXCHANGE + " adapter not found or has invalid type"));
     }
 
     private UUID createPortfolio() {
@@ -468,7 +482,7 @@ class MockDeterministicOrderOverrideIntegrationTest {
                         .portfolioId(portfolioId)
                         .strategyId(SMA_STRATEGY_ID)
                         .symbol(SYMBOL)
-                        .exchangeName("MOCK")
+                        .exchangeName(MOCK_EXCHANGE)
                         .allowedMarketDataSources(Set.of("BINANCE"))
                         .build()
         );
@@ -486,31 +500,23 @@ class MockDeterministicOrderOverrideIntegrationTest {
     private Transaction awaitTransactionStatus(UUID transactionId,
                                                TransactionStatus expectedStatus,
                                                Duration timeout) {
-        Instant deadline = Instant.now().plus(timeout);
-        Transaction last = null;
-        while (Instant.now().isBefore(deadline)) {
-            last = strategyRunnerRepository.findTransactionById(transactionId).orElse(null);
-            if (last != null && last.getStatus() == expectedStatus) {
-                return last;
-            }
-            sleep(80);
-        }
-        throw new AssertionError("Timeout waiting transaction status " + expectedStatus
-                + " for transactionId=" + transactionId + " last=" + (last == null ? "null" : last.getStatus()));
+        return awaitCondition(
+                timeout,
+                DEFAULT_POLL_INTERVAL_MS,
+                () -> strategyRunnerRepository.findTransactionById(transactionId).orElse(null),
+                tx -> tx != null && tx.getStatus() == expectedStatus,
+                "Timeout waiting transaction status " + expectedStatus + " for transactionId=" + transactionId
+        );
     }
 
     private PositionRow awaitOpenPositionByOpenedByTransactionId(UUID openedByTransactionId, Duration timeout) {
-        Instant deadline = Instant.now().plus(timeout);
-        PositionRow last = null;
-        while (Instant.now().isBefore(deadline)) {
-            last = findOpenPositionByOpenedByTransactionId(openedByTransactionId);
-            if (last != null) {
-                return last;
-            }
-            sleep(80);
-        }
-        throw new AssertionError("Timeout waiting OPEN position for openedByTransactionId="
-                + openedByTransactionId + " last=" + last);
+        return awaitCondition(
+                timeout,
+                DEFAULT_POLL_INTERVAL_MS,
+                () -> findOpenPositionByOpenedByTransactionId(openedByTransactionId),
+                position -> position != null,
+                "Timeout waiting OPEN position for openedByTransactionId=" + openedByTransactionId
+        );
     }
 
     private PositionRow findOpenPositionByOpenedByTransactionId(UUID openedByTransactionId) {
@@ -573,38 +579,34 @@ class MockDeterministicOrderOverrideIntegrationTest {
                                    BigDecimal expectedAvailable,
                                    BigDecimal expectedReserved,
                                    Duration timeout) {
-        Instant deadline = Instant.now().plus(timeout);
-        BalanceRow last = null;
-        while (Instant.now().isBefore(deadline)) {
-            last = readBalance(portfolioId);
-            if (last.available().compareTo(expectedAvailable) == 0
-                    && last.reserved().compareTo(expectedReserved) == 0) {
-                return;
-            }
-            sleep(80);
-        }
-        throw new AssertionError("Timeout waiting balance state for portfolioId=" + portfolioId
-                + " expectedAvailable=" + expectedAvailable
-                + " expectedReserved=" + expectedReserved
-                + " last=" + last);
+        awaitCondition(
+                timeout,
+                DEFAULT_POLL_INTERVAL_MS,
+                () -> readBalance(portfolioId),
+                balance -> balance.available().compareTo(expectedAvailable) == 0
+                        && balance.reserved().compareTo(expectedReserved) == 0,
+                "Timeout waiting balance state for portfolioId=" + portfolioId
+                        + " expectedAvailable=" + expectedAvailable
+                        + " expectedReserved=" + expectedReserved
+        );
     }
 
-    private BuyStateSnapshot awaitNoLateDriftAfterFilledConvergence(UUID openedByTransactionId,
-                                                                    Duration timeout,
-                                                                    BigDecimal expectedQuantity) {
+    private BuyStateSnapshot awaitStableFilledState(UUID openedByTransactionId,
+                                                    Duration timeout,
+                                                    BigDecimal expectedQuantity) {
         Instant deadline = Instant.now().plus(timeout);
         BuyStateSnapshot converged = null;
         while (Instant.now().isBefore(deadline)) {
             BuyStateSnapshot current = readBuyState(openedByTransactionId);
             if (converged == null) {
-                if (isExpectedFilledBuyState(current, expectedQuantity)) {
+                if (isExpectedFilledState(current, expectedQuantity)) {
                     converged = current;
                 }
-            } else if (!isExpectedFilledBuyState(current, expectedQuantity)) {
+            } else if (!isExpectedFilledState(current, expectedQuantity)) {
                 throw new AssertionError("Filled buy state drift detected after convergence for openedByTransactionId="
                         + openedByTransactionId + " current=" + current);
             }
-            sleep(50);
+            sleep(FILLED_STABILITY_POLL_INTERVAL_MS);
         }
         if (converged == null) {
             throw new AssertionError("Timeout waiting FILLED buy convergence for openedByTransactionId="
@@ -638,22 +640,46 @@ class MockDeterministicOrderOverrideIntegrationTest {
         );
     }
 
-    private static boolean isExpectedFilledBuyState(BuyStateSnapshot snapshot, BigDecimal expectedQuantity) {
+    private void assertNoInitialPositionOrMatch(UUID transactionId) {
+        assertEquals(0, countOpenPositionsByOpenedByTransactionId(transactionId),
+                "Initial state must not have OPEN position for transactionId=" + transactionId);
+        assertEquals(0, countMatchesByTransactionId(transactionId),
+                "Initial state must not have transaction_matches for transactionId=" + transactionId);
+    }
+
+    private static boolean isExpectedFilledState(BuyStateSnapshot snapshot, BigDecimal expectedQuantity) {
         return snapshot.status() == TransactionStatus.FILLED
-                && compareNullable(snapshot.executedQuantity(), expectedQuantity) == 0
-                && compareNullable(snapshot.positionQuantity(), expectedQuantity) == 0
+                && isSameValue(snapshot.executedQuantity(), expectedQuantity)
+                && isSameValue(snapshot.positionQuantity(), expectedQuantity)
                 && snapshot.openRows() == 1
                 && snapshot.matchCount() == 0;
     }
 
-    private static int compareNullable(BigDecimal left, BigDecimal right) {
+    private static boolean isSameValue(BigDecimal left, BigDecimal right) {
         if (left == null && right == null) {
-            return 0;
+            return true;
         }
         if (left == null || right == null) {
-            return 1;
+            return false;
         }
-        return left.compareTo(right);
+        return left.compareTo(right) == 0;
+    }
+
+    private <T> T awaitCondition(Duration timeout,
+                                 long pollIntervalMs,
+                                 Supplier<T> stateSupplier,
+                                 Predicate<T> isSatisfied,
+                                 String timeoutMessage) {
+        Instant deadline = Instant.now().plus(timeout);
+        T last = null;
+        while (Instant.now().isBefore(deadline)) {
+            last = stateSupplier.get();
+            if (isSatisfied.test(last)) {
+                return last;
+            }
+            sleep(pollIntervalMs);
+        }
+        throw new AssertionError(timeoutMessage + " last=" + last);
     }
 
     private static void sleep(long millis) {
