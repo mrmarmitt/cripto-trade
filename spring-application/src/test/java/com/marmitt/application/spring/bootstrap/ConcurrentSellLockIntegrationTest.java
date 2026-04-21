@@ -118,18 +118,22 @@ class ConcurrentSellLockIntegrationTest {
         LockResult secondResult;
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
+            CountDownLatch readySignal = new CountDownLatch(2);
             CountDownLatch startSignal = new CountDownLatch(1);
             Future<LockResult> firstAttempt = executor.submit(() -> attemptLockConcurrently(
+                    readySignal,
                     startSignal,
                     position.getId(),
                     firstSell.getId()
             ));
             Future<LockResult> secondAttempt = executor.submit(() -> attemptLockConcurrently(
+                    readySignal,
                     startSignal,
                     position.getId(),
                     secondSell.getId()
             ));
 
+            awaitLatch(readySignal, LOCK_ATTEMPT_TIMEOUT);
             startSignal.countDown();
 
             firstResult = firstAttempt.get(LOCK_ATTEMPT_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
@@ -160,9 +164,11 @@ class ConcurrentSellLockIntegrationTest {
         assertNull(loserTransaction.getRejectReason());
     }
 
-    private LockResult attemptLockConcurrently(CountDownLatch startSignal,
+    private LockResult attemptLockConcurrently(CountDownLatch readySignal,
+                                               CountDownLatch startSignal,
                                                UUID positionId,
                                                UUID transactionId) throws InterruptedException {
+        readySignal.countDown();
         awaitLatch(startSignal, LOCK_ATTEMPT_TIMEOUT);
         boolean locked = strategyRunnerRepository.tryLockPositionForSell(
                 positionId,
