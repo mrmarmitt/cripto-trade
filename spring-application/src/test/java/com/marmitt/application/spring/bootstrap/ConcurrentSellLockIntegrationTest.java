@@ -10,6 +10,7 @@ import com.marmitt.core.dto.portfolio.CreatePortfolioResponse;
 import com.marmitt.core.dto.runner.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.CreateRunnerResponse;
 import com.marmitt.core.enums.PositionStatus;
+import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
@@ -39,6 +40,7 @@ import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Testcontainers
@@ -105,6 +107,8 @@ class ConcurrentSellLockIntegrationTest {
         position.associateBuyTransaction(buy.getId());
         strategyRunnerRepository.savePosition(position);
 
+        // This test isolates the database lock primitive, so both competing SELL intents
+        // are pre-created before the race. The full signal pipeline is covered elsewhere.
         Transaction firstSell = newSellTransaction(runner, position.getId());
         Transaction secondSell = newSellTransaction(runner, position.getId());
         strategyRunnerRepository.saveTransaction(firstSell);
@@ -115,12 +119,12 @@ class ConcurrentSellLockIntegrationTest {
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
             CountDownLatch startSignal = new CountDownLatch(1);
-            Future<LockResult> firstAttempt = executor.submit(() -> tryLockWhenReleased(
+            Future<LockResult> firstAttempt = executor.submit(() -> attemptLockConcurrently(
                     startSignal,
                     position.getId(),
                     firstSell.getId()
             ));
-            Future<LockResult> secondAttempt = executor.submit(() -> tryLockWhenReleased(
+            Future<LockResult> secondAttempt = executor.submit(() -> attemptLockConcurrently(
                     startSignal,
                     position.getId(),
                     secondSell.getId()
@@ -131,7 +135,7 @@ class ConcurrentSellLockIntegrationTest {
             firstResult = firstAttempt.get(LOCK_ATTEMPT_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
             secondResult = secondAttempt.get(LOCK_ATTEMPT_TIMEOUT.toSeconds(), TimeUnit.SECONDS);
         } finally {
-            executor.shutdownNow();
+            shutdownExecutor(executor);
         }
 
         long winners = List.of(firstResult, secondResult).stream()
@@ -148,19 +152,36 @@ class ConcurrentSellLockIntegrationTest {
         assertEquals(0, lockedPosition.getLockedQuantity().compareTo(POSITION_QUANTITY));
         assertNotNull(lockedPosition.getLockedAt());
         assertEquals(1, countLockedPositions(position.getId()));
+
+        LockResult loser = firstResult.locked() ? secondResult : firstResult;
+        Transaction loserTransaction = strategyRunnerRepository.findTransactionById(loser.transactionId())
+                .orElseThrow(() -> new AssertionError("Loser transaction not found: " + loser.transactionId()));
+        assertEquals(TransactionStatus.PENDING, loserTransaction.getStatus());
+        assertNull(loserTransaction.getRejectReason());
     }
 
-    private LockResult tryLockWhenReleased(CountDownLatch startSignal,
-                                           UUID positionId,
-                                           UUID transactionId) throws InterruptedException {
-        assertTrue(startSignal.await(LOCK_ATTEMPT_TIMEOUT.toSeconds(), TimeUnit.SECONDS),
-                "Timed out waiting concurrent lock start signal");
+    private LockResult attemptLockConcurrently(CountDownLatch startSignal,
+                                               UUID positionId,
+                                               UUID transactionId) throws InterruptedException {
+        awaitLatch(startSignal, LOCK_ATTEMPT_TIMEOUT);
         boolean locked = strategyRunnerRepository.tryLockPositionForSell(
                 positionId,
                 transactionId,
                 POSITION_QUANTITY
         );
         return new LockResult(transactionId, locked);
+    }
+
+    private static void awaitLatch(CountDownLatch latch, Duration timeout) throws InterruptedException {
+        assertTrue(latch.await(timeout.toMillis(), TimeUnit.MILLISECONDS),
+                "Timed out waiting latch after " + timeout);
+    }
+
+    private static void shutdownExecutor(ExecutorService executor) throws InterruptedException {
+        executor.shutdown();
+        if (!executor.awaitTermination(LOCK_ATTEMPT_TIMEOUT.toMillis(), TimeUnit.MILLISECONDS)) {
+            executor.shutdownNow();
+        }
     }
 
     private UUID createPortfolio() {
