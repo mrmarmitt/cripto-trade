@@ -157,6 +157,12 @@ class ConcurrentSellLockIntegrationTest {
         assertNotNull(lockedPosition.getLockedAt());
         assertEquals(1, countLockedPositions(position.getId()));
 
+        Transaction winnerTransaction = strategyRunnerRepository.findTransactionById(winner.transactionId())
+                .orElseThrow(() -> new AssertionError("Winner transaction not found: " + winner.transactionId()));
+        assertEquals(TransactionType.SELL, winnerTransaction.getType());
+        assertEquals(TransactionStatus.PENDING, winnerTransaction.getStatus());
+        assertEquals(position.getId(), winnerTransaction.getTargetLotId());
+
         LockResult loser = firstResult.locked() ? secondResult : firstResult;
         Transaction loserTransaction = strategyRunnerRepository.findTransactionById(loser.transactionId())
                 .orElseThrow(() -> new AssertionError("Loser transaction not found: " + loser.transactionId()));
