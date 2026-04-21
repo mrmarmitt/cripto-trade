@@ -64,6 +64,24 @@ ctrade/
 ./gradlew :core:build
 ```
 
+### Padrao local para Gradle
+
+Para execucao local e pelos agentes, o projeto passa a usar um unico cache Gradle do repositorio:
+
+- `GRADLE_USER_HOME=.gradle-local`
+- nao criar diretorios paralelos como `.gradle-local-pr`, `.gradle-local-ci` ou equivalentes
+- em caso de lock transitório, reutilizar o mesmo cache com retry
+
+Use o wrapper documentado abaixo no PowerShell:
+
+```powershell
+./scripts/gradle-run.ps1 -q :core:compileJava
+./scripts/gradle-run.ps1 -q :spring-application:test
+./scripts/gradle-run.ps1 build
+```
+
+O script `scripts/gradle-run.ps1` fixa `GRADLE_USER_HOME` em `.gradle-local` e faz retry curto quando encontrar lock de execucao concorrente.
+
 ### Configuração
 
 - **Porta**: 8080

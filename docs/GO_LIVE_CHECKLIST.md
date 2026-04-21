@@ -79,10 +79,12 @@ Consolidar os principais critérios para sair do ambiente de simulação (MOCK) 
 - Regra prática: toda evolução desse checklist deve manter rastreabilidade com os conceitos e invariantes já definidos no Blueprint/IG.
 
 
-## Status de Aderencia (2026-03-07)
+## Status de Aderencia (2026-04-19)
 
 - Testing Roadmap Fase 0: CONCLUIDA no branch `develop`.
 - Testing Roadmap Fase 1A: CONCLUIDA no branch `develop`.
+- Testing Roadmap Fase 1B: CONCLUIDA no branch `develop`.
+- Testing Roadmap Fase 2: EM ANDAMENTO no branch de feature.
 
 Evidencias de Fase 0 em testes automatizados:
 - `core/src/test/java/com/marmitt/core/domain/portfolio/GlobalBalanceInvariantsTest.java`
@@ -97,14 +99,17 @@ Evidencias de Fase 1A em testes automatizados:
 - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/OrderTerminationConciliationIntegrationTest.java`
 - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/RunnerBootRecoveryIntegrationTest.java`
 
+Evidencias de Fase 1B em testes automatizados:
+- `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/MockDeterministicOrderOverrideIntegrationTest.java`
+
 ### Impacto no Go-Live
 
 - Item 1 (Testes automatizados minimos): PARCIAL (AVANCADO).
-- Baseline de invariantes e integracao core com MOCK cobertos (Fases 0 e 1A).
-- Ainda faltam fases de robustez e operacao (Fases 1B, 2, 3 e 4) e integracao real com exchange.
+- Baseline de invariantes, integracao core com MOCK e controles deterministicos do MOCK cobertos (Fases 0, 1A e 1B).
+- Ainda faltam fases de robustez e operacao (Fases 2, 3 e 4) e integracao real com exchange.
 
 ### Proximo passo recomendado
 
-1. Avancar Fase 1B (controles deterministicos no MOCK para duplicidade/concorrencia/falha).
-2. Entrar na Fase 2 (resiliencia sob concorrencia e eventos repetidos).
+1. Concluir o primeiro PR da Fase 2 com `SELL` concorrente no mesmo lote/posicao.
+2. Avancar para mensagens duplicadas em janela curta.
 3. Atualizar este checklist a cada fase concluida do Testing Roadmap.
