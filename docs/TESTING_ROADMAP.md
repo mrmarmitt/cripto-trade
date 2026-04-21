@@ -419,17 +419,19 @@ Fora de escopo da Fase 4:
 - **IG:** cobre os fluxos e decisões operacionais já mapeadas no projeto.
 - Este roadmap deve evoluir junto com mudanças de domínio e novos modos de execução.
 
-## Status de Execucao (2026-03-07)
+## Status de Execucao (2026-04-19)
 
 - Fase 0: CONCLUIDA.
 - Fase 1A: CONCLUIDA.
-- Fase 1B: EM ANDAMENTO.
+- Fase 1B: CONCLUIDA.
+- Fase 2: EM ANDAMENTO.
 
-### Fase 1B em progresso (1 PR por item)
+### Evidencias de conclusao da Fase 1B
 
 - PR 1 (concluído): `PARTIAL + FILLED` quase simultâneos com convergência.
 - PR 2 (concluído): `FILLED` duplicado sem dupla aplicação econômica.
-- PR 3 (atual): `REJECTED/EXPIRED` determinístico com validação de efeitos financeiros.
+- PR 3 (concluído): `REJECTED/EXPIRED` determinístico com validação de efeitos financeiros.
+- PR 4 (concluído): refinamento de manutenibilidade do teste determinístico da Fase 1B.
 
 ### Evidencias de conclusao da Fase 0
 
@@ -450,8 +452,20 @@ Fora de escopo da Fase 4:
 - Boot recovery basico (zombie, limbo, DLQ -> HALTED):
   - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/RunnerBootRecoveryIntegrationTest.java`
 
+### Evidencias de conclusao da Fase 1B
+
+- Controles determinísticos e cenarios de duplicidade/concorrencia/rejeicao no MOCK:
+  - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/MockDeterministicOrderOverrideIntegrationTest.java`
+- Refinamentos de legibilidade e reuso no teste deterministico ja incorporados na `develop` via PR #46.
+
 ### Relacao com Go-Live
 
 - O Testing Roadmap e o Go-Live devem evoluir em paralelo.
 - Ao concluir cada fase do roadmap, atualizar o status do Item 1 do Go-Live.
-- Go-live completo depende da conclusao das Fases 1B, 2, 3 e 4, e da integracao real de exchange.
+- Go-live completo depende da conclusao das Fases 2, 3 e 4, e da integracao real de exchange.
+
+### Fase 2 em progresso
+
+1. PR 1 (atual): `SELL` concorrente tentando lock no mesmo lote/posicao.
+2. Validar que apenas uma tentativa consegue aplicar `locked_by_transaction_id`.
+3. Validar snapshot final e delta financeiro para detectar dupla aplicacao economica.
