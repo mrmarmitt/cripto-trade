@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.math.BigDecimal;
 
 @Repository
 public interface RunnerPositionJdbcRepository extends CrudRepository<RunnerPositionEntity, UUID> {
@@ -83,6 +84,20 @@ public interface RunnerPositionJdbcRepository extends CrudRepository<RunnerPosit
     int tryLockPositionForSell(
             @Param("positionId") UUID positionId,
             @Param("transactionId") UUID transactionId,
-            @Param("quantity") java.math.BigDecimal quantity
+            @Param("quantity") BigDecimal quantity
+    );
+
+    @Query("""
+            SELECT COUNT(*) > 0
+              FROM positions
+             WHERE id = :positionId
+               AND status = 'CLOSING'
+               AND locked_by_transaction_id = :transactionId
+               AND locked_quantity = :quantity
+            """)
+    boolean isLockedByTransaction(
+            @Param("positionId") UUID positionId,
+            @Param("transactionId") UUID transactionId,
+            @Param("quantity") BigDecimal quantity
     );
 }

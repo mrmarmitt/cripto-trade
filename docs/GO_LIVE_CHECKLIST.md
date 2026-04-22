@@ -84,7 +84,7 @@ Consolidar os principais critérios para sair do ambiente de simulação (MOCK) 
 - Testing Roadmap Fase 0: CONCLUIDA no branch `develop`.
 - Testing Roadmap Fase 1A: CONCLUIDA no branch `develop`.
 - Testing Roadmap Fase 1B: CONCLUIDA no branch `develop`.
-- Testing Roadmap Fase 2: EM ANDAMENTO no branch de feature.
+- Testing Roadmap Fase 2: EM ANDAMENTO.
 
 Evidencias de Fase 0 em testes automatizados:
 - `core/src/test/java/com/marmitt/core/domain/portfolio/GlobalBalanceInvariantsTest.java`
@@ -110,6 +110,6 @@ Evidencias de Fase 1B em testes automatizados:
 
 ### Proximo passo recomendado
 
-1. Concluir o primeiro PR da Fase 2 com `SELL` concorrente no mesmo lote/posicao.
+1. Concluir o PR 2 da Fase 2 com retry idempotente do mesmo `SELL` lock.
 2. Avancar para mensagens duplicadas em janela curta.
 3. Atualizar este checklist a cada fase concluida do Testing Roadmap.
