@@ -39,6 +39,7 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
@@ -100,12 +101,7 @@ class ConcurrentSellLockIntegrationTest {
         UUID portfolioId = createPortfolio();
         StrategyRunner runner = createAndActivateRunner(portfolioId);
 
-        Transaction buy = newBuyTransaction(runner);
-        strategyRunnerRepository.saveTransaction(buy);
-
-        Position position = new Position(runner.getId(), SYMBOL, POSITION_QUANTITY, POSITION_PRICE);
-        position.associateBuyTransaction(buy.getId());
-        strategyRunnerRepository.savePosition(position);
+        Position position = createOpenPosition(runner);
 
         // This test isolates the database lock primitive, so both competing SELL intents
         // are pre-created before the race. The full signal pipeline is covered elsewhere.
@@ -170,6 +166,45 @@ class ConcurrentSellLockIntegrationTest {
         assertNull(loserTransaction.getRejectReason());
     }
 
+    @Test
+    void sellLockRetryForSameTransactionShouldBeIdempotent() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        Position position = createOpenPosition(runner);
+
+        Transaction sell = newSellTransaction(runner, position.getId());
+        Transaction competingSell = newSellTransaction(runner, position.getId());
+        strategyRunnerRepository.saveTransaction(sell);
+        strategyRunnerRepository.saveTransaction(competingSell);
+
+        boolean firstAttempt = strategyRunnerRepository.tryLockPositionForSell(
+                position.getId(),
+                sell.getId(),
+                POSITION_QUANTITY
+        );
+        boolean retryAttempt = strategyRunnerRepository.tryLockPositionForSell(
+                position.getId(),
+                sell.getId(),
+                POSITION_QUANTITY
+        );
+        boolean competingAttempt = strategyRunnerRepository.tryLockPositionForSell(
+                position.getId(),
+                competingSell.getId(),
+                POSITION_QUANTITY
+        );
+
+        assertTrue(firstAttempt, "Initial SELL lock should succeed");
+        assertTrue(retryAttempt, "Retry by the same SELL transaction should be idempotent");
+        assertFalse(competingAttempt, "Different SELL transaction must not take an existing lock");
+
+        Position lockedPosition = strategyRunnerRepository.findPositionById(position.getId())
+                .orElseThrow(() -> new AssertionError("Position not found after lock: " + position.getId()));
+        assertEquals(PositionStatus.CLOSING, lockedPosition.getStatus());
+        assertEquals(sell.getId(), lockedPosition.getLockedByTransactionId());
+        assertEquals(0, lockedPosition.getLockedQuantity().compareTo(POSITION_QUANTITY));
+        assertEquals(1, countLockedPositions(position.getId()));
+    }
+
     private LockResult attemptLockConcurrently(CountDownLatch readySignal,
                                                CountDownLatch startSignal,
                                                UUID positionId,
@@ -226,6 +261,16 @@ class ConcurrentSellLockIntegrationTest {
         runner.activate();
         strategyRunnerRepository.save(runner);
         return runner;
+    }
+
+    private Position createOpenPosition(StrategyRunner runner) {
+        Transaction buy = newBuyTransaction(runner);
+        strategyRunnerRepository.saveTransaction(buy);
+
+        Position position = new Position(runner.getId(), SYMBOL, POSITION_QUANTITY, POSITION_PRICE);
+        position.associateBuyTransaction(buy.getId());
+        strategyRunnerRepository.savePosition(position);
+        return position;
     }
 
     private Transaction newBuyTransaction(StrategyRunner runner) {

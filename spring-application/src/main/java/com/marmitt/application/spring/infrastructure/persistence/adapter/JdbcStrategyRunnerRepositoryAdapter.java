@@ -297,9 +297,9 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     public boolean tryLockPositionForSell(UUID positionId, UUID transactionId, BigDecimal quantity) {
         long start = System.nanoTime();
         int updated = positionRepo.tryLockPositionForSell(positionId, transactionId, quantity);
-        boolean locked = updated == 1;
-        log.trace("[REPO] position.tryLockForSell(pos={}, tx={}, locked={}) - {}ms",
-                positionId, transactionId, locked, RepoTiming.elapsedMs(start));
+        boolean locked = updated == 1 || positionRepo.isLockedByTransaction(positionId, transactionId, quantity);
+        log.trace("[REPO] position.tryLockForSell(pos={}, tx={}, locked={}, updated={}) - {}ms",
+                positionId, transactionId, locked, updated, RepoTiming.elapsedMs(start));
         return locked;
     }
 

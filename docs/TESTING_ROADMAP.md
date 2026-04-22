@@ -466,6 +466,6 @@ Fora de escopo da Fase 4:
 
 ### Fase 2 em progresso
 
-1. PR 1 (atual): `SELL` concorrente tentando lock no mesmo lote/posicao.
-2. Validar que apenas uma tentativa consegue aplicar `locked_by_transaction_id`.
+1. PR 1 (concluido): `SELL` concorrente tentando lock no mesmo lote/posicao.
+2. PR 2 (atual): retry idempotente do mesmo `SELL` lock sem permitir tomada por outra transacao.
 3. Validar snapshot final e delta financeiro para detectar dupla aplicacao economica.
