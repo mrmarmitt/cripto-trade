@@ -59,6 +59,8 @@ class ConcurrentSellLockIntegrationTest {
     private static final String MARKET_DATA_EXCHANGE = "BINANCE";
     private static final BigDecimal INITIAL_CAPITAL = new BigDecimal("10000.00");
     private static final BigDecimal POSITION_QUANTITY = new BigDecimal("0.00200000");
+    private static final BigDecimal HIGH_PRECISION_LOCK_QUANTITY = new BigDecimal("0.002000004");
+    private static final BigDecimal NORMALIZED_HIGH_PRECISION_LOCK_QUANTITY = new BigDecimal("0.00200000");
     private static final BigDecimal POSITION_PRICE = new BigDecimal("65000.00000000");
     private static final Duration LOCK_ATTEMPT_TIMEOUT = Duration.ofSeconds(5);
 
@@ -170,27 +172,27 @@ class ConcurrentSellLockIntegrationTest {
     void sellLockRetryForSameTransactionShouldBeIdempotent() {
         UUID portfolioId = createPortfolio();
         StrategyRunner runner = createAndActivateRunner(portfolioId);
-        Position position = createOpenPosition(runner);
+        Position position = createOpenPosition(runner, HIGH_PRECISION_LOCK_QUANTITY);
 
-        Transaction sell = newSellTransaction(runner, position.getId());
-        Transaction competingSell = newSellTransaction(runner, position.getId());
+        Transaction sell = newSellTransaction(runner, position.getId(), HIGH_PRECISION_LOCK_QUANTITY);
+        Transaction competingSell = newSellTransaction(runner, position.getId(), HIGH_PRECISION_LOCK_QUANTITY);
         strategyRunnerRepository.saveTransaction(sell);
         strategyRunnerRepository.saveTransaction(competingSell);
 
         boolean firstAttempt = strategyRunnerRepository.tryLockPositionForSell(
                 position.getId(),
                 sell.getId(),
-                POSITION_QUANTITY
+                sell.getQuantity()
         );
         boolean retryAttempt = strategyRunnerRepository.tryLockPositionForSell(
                 position.getId(),
                 sell.getId(),
-                POSITION_QUANTITY
+                sell.getQuantity()
         );
         boolean competingAttempt = strategyRunnerRepository.tryLockPositionForSell(
                 position.getId(),
                 competingSell.getId(),
-                POSITION_QUANTITY
+                competingSell.getQuantity()
         );
 
         assertTrue(firstAttempt, "Initial SELL lock should succeed");
@@ -201,7 +203,7 @@ class ConcurrentSellLockIntegrationTest {
                 .orElseThrow(() -> new AssertionError("Position not found after lock: " + position.getId()));
         assertEquals(PositionStatus.CLOSING, lockedPosition.getStatus());
         assertEquals(sell.getId(), lockedPosition.getLockedByTransactionId());
-        assertEquals(0, lockedPosition.getLockedQuantity().compareTo(POSITION_QUANTITY));
+        assertEquals(0, lockedPosition.getLockedQuantity().compareTo(NORMALIZED_HIGH_PRECISION_LOCK_QUANTITY));
         assertEquals(1, countLockedPositions(position.getId()));
     }
 
@@ -264,10 +266,14 @@ class ConcurrentSellLockIntegrationTest {
     }
 
     private Position createOpenPosition(StrategyRunner runner) {
+        return createOpenPosition(runner, POSITION_QUANTITY);
+    }
+
+    private Position createOpenPosition(StrategyRunner runner, BigDecimal quantity) {
         Transaction buy = newBuyTransaction(runner);
         strategyRunnerRepository.saveTransaction(buy);
 
-        Position position = new Position(runner.getId(), SYMBOL, POSITION_QUANTITY, POSITION_PRICE);
+        Position position = new Position(runner.getId(), SYMBOL, quantity, POSITION_PRICE);
         position.associateBuyTransaction(buy.getId());
         strategyRunnerRepository.savePosition(position);
         return position;
@@ -289,14 +295,18 @@ class ConcurrentSellLockIntegrationTest {
     }
 
     private Transaction newSellTransaction(StrategyRunner runner, UUID targetLotId) {
+        return newSellTransaction(runner, targetLotId, POSITION_QUANTITY);
+    }
+
+    private Transaction newSellTransaction(StrategyRunner runner, UUID targetLotId, BigDecimal quantity) {
         return new Transaction(
                 runner.getId(),
                 ClientOrderId.generate(runner.getShortCode(), TransactionType.SELL),
                 TransactionType.SELL,
                 SYMBOL,
-                POSITION_QUANTITY,
+                quantity,
                 POSITION_PRICE,
-                POSITION_QUANTITY.multiply(POSITION_PRICE),
+                quantity.multiply(POSITION_PRICE),
                 new BigDecimal("0.90"),
                 "phase2 concurrent sell lock",
                 targetLotId

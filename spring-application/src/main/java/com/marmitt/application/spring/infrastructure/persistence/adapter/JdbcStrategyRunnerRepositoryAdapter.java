@@ -25,6 +25,7 @@ import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 
 @Slf4j
 @Repository
@@ -296,8 +297,9 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     @Transactional
     public boolean tryLockPositionForSell(UUID positionId, UUID transactionId, BigDecimal quantity) {
         long start = System.nanoTime();
-        int updated = positionRepo.tryLockPositionForSell(positionId, transactionId, quantity);
-        boolean locked = updated == 1 || positionRepo.isLockedByTransaction(positionId, transactionId, quantity);
+        BigDecimal normalizedQuantity = quantity.setScale(8, RoundingMode.HALF_UP);
+        int updated = positionRepo.tryLockPositionForSell(positionId, transactionId, normalizedQuantity);
+        boolean locked = updated == 1 || positionRepo.isLockedByTransaction(positionId, transactionId, normalizedQuantity);
         log.trace("[REPO] position.tryLockForSell(pos={}, tx={}, locked={}, updated={}) - {}ms",
                 positionId, transactionId, locked, updated, RepoTiming.elapsedMs(start));
         return locked;
