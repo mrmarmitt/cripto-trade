@@ -10,6 +10,7 @@ import com.marmitt.core.dto.portfolio.CreatePortfolioResponse;
 import com.marmitt.core.dto.runner.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.CreateRunnerResponse;
 import com.marmitt.core.dto.runner.OrderDispatchCommand;
+import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
@@ -534,7 +535,14 @@ class MockDeterministicOrderOverrideIntegrationTest {
         ));
 
         BuyStateSnapshot stable = awaitStableFilledState(pendingBuy.getId(), WAIT_TIMEOUT, quantity);
+        OrderDataDto latePartial = awaitMockOrderStatus(
+                clientOrderId,
+                OrderDataDto.OrderStatus.PARTIALLY_FILLED,
+                WAIT_TIMEOUT
+        );
 
+        assertEquals(OrderDataDto.OrderStatus.PARTIALLY_FILLED, latePartial.status(),
+                "Mock must emit the delayed BUY PARTIAL after FILLED to prove reorder coverage");
         assertEquals(TransactionStatus.FILLED, stable.status());
         assertEquals(0, stable.executedQuantity().compareTo(quantity),
                 "Late BUY PARTIAL after FILLED must not reduce executed quantity");
@@ -610,7 +618,14 @@ class MockDeterministicOrderOverrideIntegrationTest {
                 quantity,
                 expectedPnl
         );
+        OrderDataDto latePartial = awaitMockOrderStatus(
+                sellSetup.sellTransaction().getClientOrderId(),
+                OrderDataDto.OrderStatus.PARTIALLY_FILLED,
+                WAIT_TIMEOUT
+        );
 
+        assertEquals(OrderDataDto.OrderStatus.PARTIALLY_FILLED, latePartial.status(),
+                "Mock must emit the delayed SELL PARTIAL after FILLED to prove reorder coverage");
         assertEquals(TransactionStatus.FILLED, stable.status());
         assertEquals(0, stable.executedQuantity().compareTo(quantity),
                 "Late SELL PARTIAL after FILLED must not reduce executed quantity");
@@ -786,6 +801,21 @@ class MockDeterministicOrderOverrideIntegrationTest {
         strategyRunnerRepository.save(runner);
 
         return runner;
+    }
+
+    private OrderDataDto awaitMockOrderStatus(String clientOrderId,
+                                              OrderDataDto.OrderStatus expectedStatus,
+                                              Duration timeout) {
+        return awaitCondition(
+                timeout,
+                DEFAULT_POLL_INTERVAL_MS,
+                () -> getMockExchangeAdapter()
+                        .queryOrderByClientOrderId(SYMBOL, clientOrderId)
+                        .orElse(null),
+                order -> order != null && order.status() == expectedStatus,
+                "Timeout waiting mock emitted order status " + expectedStatus
+                        + " for clientOrderId=" + clientOrderId
+        );
     }
 
     private SellSetup createFilledBuyAndLockedSell(UUID portfolioId,
