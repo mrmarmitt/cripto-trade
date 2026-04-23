@@ -63,6 +63,7 @@ class MockDeterministicOrderOverrideIntegrationTest {
     private static final String SCENARIO_DUPLICATE_PARTIAL = "phase1b deterministic override";
     private static final String SCENARIO_PARTIAL_FILLED_CONVERGENCE = "phase1b partial+filled convergence";
     private static final String SCENARIO_DUPLICATE_FILLED = "phase1b duplicate filled idempotency";
+    private static final String SCENARIO_DUPLICATE_SELL_FILLED = "phase2 duplicate sell filled idempotency";
     private static final String SCENARIO_REJECTED_FINANCIAL = "phase1b rejected financial";
     private static final String SCENARIO_EXPIRED_FINANCIAL = "phase1b expired financial";
 
@@ -337,6 +338,138 @@ class MockDeterministicOrderOverrideIntegrationTest {
     }
 
     @Test
+    void duplicateSellFilledShouldNotDoubleApplyEconomicEffects() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        UUID runnerId = runner.getId();
+
+        BigDecimal quantity = new BigDecimal("0.00200000");
+        BigDecimal buyPrice = new BigDecimal("65000.00000000");
+        BigDecimal sellPrice = new BigDecimal("66000.00000000");
+        BigDecimal buyCost = quantity.multiply(buyPrice);
+        BigDecimal expectedPnl = quantity.multiply(sellPrice.subtract(buyPrice));
+
+        String buyClientOrderId = ClientOrderId.generate(runner.getShortCode(), TransactionType.BUY);
+        Transaction pendingBuy = new Transaction(
+                runnerId,
+                buyClientOrderId,
+                TransactionType.BUY,
+                SYMBOL,
+                quantity,
+                buyPrice,
+                buyCost,
+                new BigDecimal("0.90"),
+                SCENARIO_DUPLICATE_SELL_FILLED + " setup buy",
+                null
+        );
+        strategyRunnerRepository.saveTransaction(pendingBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, buyCost),
+                "Seeded BUY must reserve capital like ProcessTradeSignalUseCase would");
+        assertNoInitialPositionOrMatch(pendingBuy.getId());
+
+        MockExchangeAdapter mockExchangeAdapter = getMockExchangeAdapter();
+        mockExchangeAdapter.registerOrderScenarioOverride(buyClientOrderId, new MockOrderScenarioOverride(
+                List.of(
+                        new MockOrderScenarioOverride.PlannedEvent(
+                                com.marmitt.core.dto.websocket.data.OrderDataDto.OrderStatus.FILLED,
+                                quantity,
+                                buyPrice,
+                                BigDecimal.ZERO,
+                                null,
+                                20L,
+                                0
+                        )
+                ),
+                MockOrderScenarioOverride.EventOrdering.AS_IS
+        ));
+
+        orderDispatchPort.dispatch(new OrderDispatchCommand(
+                buyClientOrderId,
+                runnerId,
+                SYMBOL,
+                MOCK_EXCHANGE,
+                TransactionType.BUY,
+                quantity,
+                buyPrice
+        ));
+
+        BuyStateSnapshot buyState = awaitStableFilledState(pendingBuy.getId(), WAIT_TIMEOUT, quantity);
+        assertEquals(0, buyState.positionQuantity().compareTo(quantity));
+
+        PositionRow openedPosition = awaitOpenPositionByOpenedByTransactionId(pendingBuy.getId(), WAIT_TIMEOUT);
+        String sellClientOrderId = ClientOrderId.generate(runner.getShortCode(), TransactionType.SELL);
+        Transaction pendingSell = new Transaction(
+                runnerId,
+                sellClientOrderId,
+                TransactionType.SELL,
+                SYMBOL,
+                quantity,
+                sellPrice,
+                quantity.multiply(sellPrice),
+                new BigDecimal("0.90"),
+                SCENARIO_DUPLICATE_SELL_FILLED,
+                openedPosition.id()
+        );
+        strategyRunnerRepository.saveTransaction(pendingSell);
+        assertEquals(0, countMatchesByTransactionId(pendingSell.getId()));
+        assertTrue(strategyRunnerRepository.tryLockPositionForSell(openedPosition.id(), pendingSell.getId(), quantity),
+                "Seeded SELL must lock the target position like ProcessTradeSignalUseCase would");
+
+        mockExchangeAdapter.registerOrderScenarioOverride(sellClientOrderId, new MockOrderScenarioOverride(
+                List.of(
+                        new MockOrderScenarioOverride.PlannedEvent(
+                                com.marmitt.core.dto.websocket.data.OrderDataDto.OrderStatus.FILLED,
+                                quantity,
+                                sellPrice,
+                                BigDecimal.ZERO,
+                                null,
+                                20L,
+                                2
+                        )
+                ),
+                MockOrderScenarioOverride.EventOrdering.AS_IS
+        ));
+
+        orderDispatchPort.dispatch(new OrderDispatchCommand(
+                sellClientOrderId,
+                runnerId,
+                SYMBOL,
+                MOCK_EXCHANGE,
+                TransactionType.SELL,
+                quantity,
+                sellPrice
+        ));
+
+        SellStateSnapshot stable = awaitStableSellState(
+                portfolioId,
+                pendingSell.getId(),
+                openedPosition.id(),
+                WAIT_TIMEOUT,
+                quantity,
+                expectedPnl
+        );
+
+        assertEquals(TransactionStatus.FILLED, stable.status());
+        assertEquals(0, stable.executedQuantity().compareTo(quantity),
+                "Duplicate SELL FILLED must not change executed quantity after first finalization");
+        assertEquals(1, stable.matchCount(),
+                "Duplicate SELL FILLED must persist exactly one transaction_match");
+        assertEquals(0, stable.matchedQuantity().compareTo(quantity),
+                "Duplicate SELL FILLED must not duplicate matched quantity");
+        assertEquals(0, stable.pnlRealized().compareTo(expectedPnl),
+                "Duplicate SELL FILLED must not duplicate realized PnL");
+        assertEquals("CLOSED", stable.positionStatus());
+        assertEquals(0, stable.positionQuantity().compareTo(BigDecimal.ZERO),
+                "Duplicate SELL FILLED must not reduce position more than once");
+        assertEquals(0, stable.realizedBalance().compareTo(expectedPnl),
+                "Duplicate SELL FILLED must release capital and apply PnL exactly once");
+        assertEquals(0, stable.availableBalance().compareTo(INITIAL_CAPITAL.add(expectedPnl)),
+                "Duplicate SELL FILLED must not credit available balance twice");
+        assertEquals(0, stable.reservedBalance().compareTo(BigDecimal.ZERO),
+                "Duplicate SELL FILLED must release the reserved buy cost exactly once");
+    }
+
+    @Test
     void rejectedBuyShouldReleaseReservedBalanceWithoutCreatingPosition() {
         UUID portfolioId = createPortfolio();
         StrategyRunner runner = createAndActivateRunner(portfolioId);
@@ -560,12 +693,14 @@ class MockDeterministicOrderOverrideIntegrationTest {
         List<BalanceRow> rows = jdbcTemplate.query(
                 """
                         SELECT available_balance, reserved_balance
+                              , realized_balance
                           FROM global_balances
                          WHERE portfolio_id = ?
                         """,
                 (rs, rowNum) -> new BalanceRow(
                         rs.getBigDecimal("available_balance"),
-                        rs.getBigDecimal("reserved_balance")
+                        rs.getBigDecimal("reserved_balance"),
+                        rs.getBigDecimal("realized_balance")
                 ),
                 portfolioId
         );
@@ -615,6 +750,33 @@ class MockDeterministicOrderOverrideIntegrationTest {
         return converged;
     }
 
+    private SellStateSnapshot awaitStableSellState(UUID portfolioId,
+                                                   UUID sellTransactionId,
+                                                   UUID positionId,
+                                                   Duration timeout,
+                                                   BigDecimal expectedQuantity,
+                                                   BigDecimal expectedPnl) {
+        Instant deadline = Instant.now().plus(timeout);
+        SellStateSnapshot converged = null;
+        while (Instant.now().isBefore(deadline)) {
+            SellStateSnapshot current = readSellState(portfolioId, sellTransactionId, positionId);
+            if (converged == null) {
+                if (isExpectedSellFilledState(current, expectedQuantity, expectedPnl)) {
+                    converged = current;
+                }
+            } else if (!isExpectedSellFilledState(current, expectedQuantity, expectedPnl)) {
+                throw new AssertionError("Filled sell state drift detected after convergence for sellTransactionId="
+                        + sellTransactionId + " current=" + current);
+            }
+            sleep(FILLED_STABILITY_POLL_INTERVAL_MS);
+        }
+        if (converged == null) {
+            throw new AssertionError("Timeout waiting FILLED sell convergence for sellTransactionId="
+                    + sellTransactionId);
+        }
+        return converged;
+    }
+
     private BuyStateSnapshot readBuyState(UUID openedByTransactionId) {
         Transaction tx = strategyRunnerRepository.findTransactionById(openedByTransactionId)
                 .orElseThrow(() -> new IllegalStateException("Transaction not found: " + openedByTransactionId));
@@ -640,6 +802,66 @@ class MockDeterministicOrderOverrideIntegrationTest {
         );
     }
 
+    private SellStateSnapshot readSellState(UUID portfolioId, UUID sellTransactionId, UUID positionId) {
+        Transaction tx = strategyRunnerRepository.findTransactionById(sellTransactionId)
+                .orElseThrow(() -> new IllegalStateException("Transaction not found: " + sellTransactionId));
+        PositionLifecycleRow position = findPositionById(positionId);
+        MatchAggregateRow matches = readMatchAggregateBySellTransactionId(sellTransactionId);
+        BalanceRow balance = readBalance(portfolioId);
+        return new SellStateSnapshot(
+                tx.getStatus(),
+                tx.getEffectiveExecutedQuantity(),
+                tx.getVersion(),
+                position.status(),
+                position.quantity(),
+                position.lockedByTransactionId(),
+                matches.matchCount(),
+                matches.matchedQuantity(),
+                matches.pnlRealized(),
+                balance.available(),
+                balance.reserved(),
+                balance.realized()
+        );
+    }
+
+    private PositionLifecycleRow findPositionById(UUID positionId) {
+        List<PositionLifecycleRow> rows = jdbcTemplate.query(
+                """
+                        SELECT status, quantity, locked_by_transaction_id
+                          FROM positions
+                         WHERE id = ?
+                        """,
+                (rs, rowNum) -> new PositionLifecycleRow(
+                        rs.getString("status"),
+                        rs.getBigDecimal("quantity"),
+                        rs.getObject("locked_by_transaction_id", UUID.class)
+                ),
+                positionId
+        );
+        if (rows.isEmpty()) {
+            throw new IllegalStateException("Position not found: " + positionId);
+        }
+        return rows.getFirst();
+    }
+
+    private MatchAggregateRow readMatchAggregateBySellTransactionId(UUID sellTransactionId) {
+        return jdbcTemplate.queryForObject(
+                """
+                        SELECT COUNT(*) AS match_count,
+                               COALESCE(SUM(matched_quantity), 0) AS matched_quantity,
+                               COALESCE(SUM(pnl_realized), 0) AS pnl_realized
+                          FROM transaction_matches
+                         WHERE sell_transaction_id = ?
+                        """,
+                (rs, rowNum) -> new MatchAggregateRow(
+                        rs.getInt("match_count"),
+                        rs.getBigDecimal("matched_quantity"),
+                        rs.getBigDecimal("pnl_realized")
+                ),
+                sellTransactionId
+        );
+    }
+
     private void assertNoInitialPositionOrMatch(UUID transactionId) {
         assertEquals(0, countOpenPositionsByOpenedByTransactionId(transactionId),
                 "Initial state must not have OPEN position for transactionId=" + transactionId);
@@ -653,6 +875,22 @@ class MockDeterministicOrderOverrideIntegrationTest {
                 && isSameValue(snapshot.positionQuantity(), expectedQuantity)
                 && snapshot.openRows() == 1
                 && snapshot.matchCount() == 0;
+    }
+
+    private static boolean isExpectedSellFilledState(SellStateSnapshot snapshot,
+                                                     BigDecimal expectedQuantity,
+                                                     BigDecimal expectedPnl) {
+        return snapshot.status() == TransactionStatus.FILLED
+                && isSameValue(snapshot.executedQuantity(), expectedQuantity)
+                && "CLOSED".equals(snapshot.positionStatus())
+                && isSameValue(snapshot.positionQuantity(), BigDecimal.ZERO)
+                && snapshot.lockedByTransactionId() == null
+                && snapshot.matchCount() == 1
+                && isSameValue(snapshot.matchedQuantity(), expectedQuantity)
+                && isSameValue(snapshot.pnlRealized(), expectedPnl)
+                && isSameValue(snapshot.reservedBalance(), BigDecimal.ZERO)
+                && isSameValue(snapshot.realizedBalance(), expectedPnl)
+                && isSameValue(snapshot.availableBalance(), INITIAL_CAPITAL.add(expectedPnl));
     }
 
     private static boolean isSameValue(BigDecimal left, BigDecimal right) {
@@ -694,6 +932,16 @@ class MockDeterministicOrderOverrideIntegrationTest {
     private record PositionRow(UUID id, BigDecimal quantity) {
     }
 
+    private record PositionLifecycleRow(String status,
+                                        BigDecimal quantity,
+                                        UUID lockedByTransactionId) {
+    }
+
+    private record MatchAggregateRow(int matchCount,
+                                     BigDecimal matchedQuantity,
+                                     BigDecimal pnlRealized) {
+    }
+
     private record BuyStateSnapshot(TransactionStatus status,
                                     BigDecimal executedQuantity,
                                     Long version,
@@ -702,6 +950,20 @@ class MockDeterministicOrderOverrideIntegrationTest {
                                     int matchCount) {
     }
 
-    private record BalanceRow(BigDecimal available, BigDecimal reserved) {
+    private record SellStateSnapshot(TransactionStatus status,
+                                     BigDecimal executedQuantity,
+                                     Long version,
+                                     String positionStatus,
+                                     BigDecimal positionQuantity,
+                                     UUID lockedByTransactionId,
+                                     int matchCount,
+                                     BigDecimal matchedQuantity,
+                                     BigDecimal pnlRealized,
+                                     BigDecimal availableBalance,
+                                     BigDecimal reservedBalance,
+                                     BigDecimal realizedBalance) {
+    }
+
+    private record BalanceRow(BigDecimal available, BigDecimal reserved, BigDecimal realized) {
     }
 }
