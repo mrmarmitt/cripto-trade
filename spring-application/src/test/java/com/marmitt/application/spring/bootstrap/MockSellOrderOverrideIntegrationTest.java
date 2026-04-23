@@ -4,7 +4,6 @@ import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
-import com.marmitt.core.dto.runner.OrderDispatchCommand;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
@@ -66,15 +65,7 @@ class MockSellOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationT
                 MockOrderScenarioOverride.EventOrdering.AS_IS
         ));
 
-        orderDispatchPort.dispatch(new OrderDispatchCommand(
-                buyClientOrderId,
-                runnerId,
-                SYMBOL,
-                MOCK_EXCHANGE,
-                TransactionType.BUY,
-                quantity,
-                buyPrice
-        ));
+        submitOrderToMock(buyClientOrderId, TransactionType.BUY, quantity, buyPrice);
 
         BuyStateSnapshot buyState = awaitStableFilledState(pendingBuy.getId(), WAIT_TIMEOUT, quantity);
         assertEquals(0, buyState.positionQuantity().compareTo(quantity));
@@ -113,15 +104,7 @@ class MockSellOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationT
                 MockOrderScenarioOverride.EventOrdering.AS_IS
         ));
 
-        orderDispatchPort.dispatch(new OrderDispatchCommand(
-                sellClientOrderId,
-                runnerId,
-                SYMBOL,
-                MOCK_EXCHANGE,
-                TransactionType.SELL,
-                quantity,
-                sellPrice
-        ));
+        submitOrderToMock(sellClientOrderId, TransactionType.SELL, quantity, sellPrice);
 
         SellStateSnapshot stable = awaitStableSellState(
                 portfolioId,
@@ -199,15 +182,7 @@ class MockSellOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationT
                 )
         );
 
-        orderDispatchPort.dispatch(new OrderDispatchCommand(
-                sellSetup.sellTransaction().getClientOrderId(),
-                runner.getId(),
-                SYMBOL,
-                MOCK_EXCHANGE,
-                TransactionType.SELL,
-                quantity,
-                sellPrice
-        ));
+        submitOrderToMock(sellSetup.sellTransaction().getClientOrderId(), TransactionType.SELL, quantity, sellPrice);
 
         SellStateSnapshot stable = awaitStableSellState(
                 portfolioId,

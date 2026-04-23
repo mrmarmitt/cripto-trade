@@ -5,7 +5,6 @@ import com.marmitt.core.application.usecase.runner.OrderConciliationUseCase;
 import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
-import com.marmitt.core.dto.runner.OrderDispatchCommand;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
@@ -76,15 +75,7 @@ class MockTransientOrderFailureIntegrationTest extends MockOrderOverrideIntegrat
                 MockOrderScenarioOverride.EventOrdering.AS_IS
         ));
 
-        orderDispatchPort.dispatch(new OrderDispatchCommand(
-                sellClientOrderId,
-                runner.getId(),
-                SYMBOL,
-                MOCK_EXCHANGE,
-                TransactionType.SELL,
-                quantity,
-                sellPrice
-        ));
+        submitOrderToMock(sellClientOrderId, TransactionType.SELL, quantity, sellPrice);
 
         SellStateSnapshot stable = awaitStableSellState(
                 portfolioId,

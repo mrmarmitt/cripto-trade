@@ -4,7 +4,6 @@ import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
-import com.marmitt.core.dto.runner.OrderDispatchCommand;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
@@ -62,15 +61,7 @@ class MockTerminalOrderOverrideIntegrationTest extends MockOrderOverrideIntegrat
                 MockOrderScenarioOverride.EventOrdering.AS_IS
         ));
 
-        orderDispatchPort.dispatch(new OrderDispatchCommand(
-                clientOrderId,
-                runnerId,
-                SYMBOL,
-                MOCK_EXCHANGE,
-                TransactionType.BUY,
-                quantity,
-                price
-        ));
+        submitOrderToMock(clientOrderId, TransactionType.BUY, quantity, price);
 
         Transaction rejected = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.REJECTED, WAIT_TIMEOUT);
         assertEquals("MOCK_REJECT_TEST", rejected.getRejectReason());
@@ -122,15 +113,7 @@ class MockTerminalOrderOverrideIntegrationTest extends MockOrderOverrideIntegrat
                 MockOrderScenarioOverride.EventOrdering.AS_IS
         ));
 
-        orderDispatchPort.dispatch(new OrderDispatchCommand(
-                clientOrderId,
-                runnerId,
-                SYMBOL,
-                MOCK_EXCHANGE,
-                TransactionType.BUY,
-                quantity,
-                price
-        ));
+        submitOrderToMock(clientOrderId, TransactionType.BUY, quantity, price);
 
         Transaction expired = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.EXPIRED, WAIT_TIMEOUT);
         assertEquals(0, expired.getEffectiveExecutedQuantity().compareTo(BigDecimal.ZERO));
