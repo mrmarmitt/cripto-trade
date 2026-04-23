@@ -112,6 +112,6 @@ Evidencias de Fase 1B em testes automatizados:
 
 ### Proximo passo recomendado
 
-1. Revisar/mergear o PR 5 da Fase 2 com a refatoracao da suite deterministica do mock.
-2. Avancar para retry/falha transitoria apos estabilizar a organizacao dos testes de BUY, SELL e terminais.
+1. Revisar/mergear o PR 6 da Fase 2 com redelivery idempotente apos falha transitoria simulada.
+2. Avancar para os proximos cenarios de falha/retry apos validar que `SELL FILLED` redelivered nao duplica efeito financeiro.
 3. Atualizar este checklist a cada fase concluida do Testing Roadmap.

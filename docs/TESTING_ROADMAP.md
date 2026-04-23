@@ -472,4 +472,5 @@ Fora de escopo da Fase 4:
 2. PR 2 (concluido): retry idempotente do mesmo `SELL` lock sem permitir tomada por outra transacao.
 3. PR 3 (concluido): callbacks duplicados de `SELL FILLED` em janela curta sem dupla aplicacao economica.
 4. PR 4 (concluido): reorder controlado com `FILLED` antes de `PARTIAL` para BUY e SELL.
-5. PR 5 (atual): refatorar a suite deterministica do mock por responsabilidade antes dos cenarios de retry/falha transitoria.
+5. PR 5 (concluido): refatorar a suite deterministica do mock por responsabilidade antes dos cenarios de retry/falha transitoria.
+6. PR 6 (atual): redelivery idempotente apos falha transitoria simulada no processamento de `SELL FILLED`.
