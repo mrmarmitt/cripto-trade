@@ -36,7 +36,7 @@ class MockTransientOrderFailureIntegrationTest extends MockOrderOverrideIntegrat
     private PlannedOrderConciliationFailurePlan failurePlan;
 
     @Test
-    void duplicateSellFilledAfterTransientFailureShouldApplyEconomicEffectsOnce() {
+    void exchangeRedeliveredSellFilledAfterTransientFailureShouldApplyEconomicEffectsOnce() {
         UUID portfolioId = createPortfolio();
         StrategyRunner runner = createAndActivateRunner(portfolioId);
 
@@ -67,6 +67,9 @@ class MockTransientOrderFailureIntegrationTest extends MockOrderOverrideIntegrat
                                 BigDecimal.ZERO,
                                 null,
                                 20L,
+                                // The order callback path has no internal retry.
+                                // This duplicate intentionally simulates exchange/mock redelivery
+                                // after the first local processing failure.
                                 1
                         )
                 ),
