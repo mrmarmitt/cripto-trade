@@ -53,7 +53,7 @@ class MockBuyOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationTe
                                 new BigDecimal("65010.00000000"),
                                 BigDecimal.ZERO,
                                 null,
-                                30L,
+                                INITIAL_CALLBACK_DELAY_MS,
                                 1
                         ),
                         new MockOrderScenarioOverride.PlannedEvent(
@@ -62,7 +62,7 @@ class MockBuyOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationTe
                                 new BigDecimal("65020.00000000"),
                                 BigDecimal.ZERO,
                                 null,
-                                30L,
+                                INITIAL_CALLBACK_DELAY_MS + NEAR_SIMULTANEOUS_CALLBACK_GAP_MS,
                                 0
                         )
                 ),
@@ -122,7 +122,7 @@ class MockBuyOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationTe
                                 new BigDecimal("65110.00000000"),
                                 BigDecimal.ZERO,
                                 null,
-                                0L,
+                                INITIAL_CALLBACK_DELAY_MS,
                                 0
                         ),
                         new MockOrderScenarioOverride.PlannedEvent(
@@ -131,7 +131,7 @@ class MockBuyOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationTe
                                 new BigDecimal("65120.00000000"),
                                 BigDecimal.ZERO,
                                 null,
-                                100L,
+                                INITIAL_CALLBACK_DELAY_MS + NEAR_SIMULTANEOUS_CALLBACK_GAP_MS,
                                 0
                         )
                 ),
@@ -198,7 +198,7 @@ class MockBuyOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationTe
                                 new BigDecimal("65210.00000000"),
                                 BigDecimal.ZERO,
                                 null,
-                                20L,
+                                INITIAL_CALLBACK_DELAY_MS,
                                 2
                         )
                 ),
@@ -256,7 +256,7 @@ class MockBuyOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationTe
                                 new BigDecimal("65505.00000000"),
                                 BigDecimal.ZERO,
                                 null,
-                                20L,
+                                INITIAL_CALLBACK_DELAY_MS,
                                 0
                         ),
                         new MockOrderScenarioOverride.PlannedEvent(
@@ -265,7 +265,7 @@ class MockBuyOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationTe
                                 new BigDecimal("65510.00000000"),
                                 BigDecimal.ZERO,
                                 null,
-                                20L,
+                                INITIAL_CALLBACK_DELAY_MS + NEAR_SIMULTANEOUS_CALLBACK_GAP_MS,
                                 0
                         )
                 ),

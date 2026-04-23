@@ -62,6 +62,8 @@ abstract class MockOrderOverrideIntegrationTestSupport {
     protected static final Duration WAIT_TIMEOUT = Duration.ofSeconds(10);
     protected static final long DEFAULT_POLL_INTERVAL_MS = 80L;
     protected static final long FILLED_STABILITY_POLL_INTERVAL_MS = 50L;
+    protected static final long INITIAL_CALLBACK_DELAY_MS = 120L;
+    protected static final long NEAR_SIMULTANEOUS_CALLBACK_GAP_MS = 20L;
     protected static final String SCENARIO_DUPLICATE_PARTIAL = "phase1b deterministic override";
     protected static final String SCENARIO_PARTIAL_FILLED_CONVERGENCE = "phase1b partial+filled convergence";
     protected static final String SCENARIO_DUPLICATE_FILLED = "phase1b duplicate filled idempotency";
@@ -219,7 +221,7 @@ abstract class MockOrderOverrideIntegrationTestSupport {
                                 buyPrice,
                                 BigDecimal.ZERO,
                                 null,
-                                20L,
+                                INITIAL_CALLBACK_DELAY_MS,
                                 0
                         )
                 ),

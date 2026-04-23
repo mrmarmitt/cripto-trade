@@ -58,7 +58,7 @@ class MockSellOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationT
                                 buyPrice,
                                 BigDecimal.ZERO,
                                 null,
-                                20L,
+                                INITIAL_CALLBACK_DELAY_MS,
                                 0
                         )
                 ),
@@ -97,7 +97,7 @@ class MockSellOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationT
                                 sellPrice,
                                 BigDecimal.ZERO,
                                 null,
-                                20L,
+                                INITIAL_CALLBACK_DELAY_MS,
                                 2
                         )
                 ),
@@ -165,7 +165,7 @@ class MockSellOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationT
                                         new BigDecimal("66090.00000000"),
                                         BigDecimal.ZERO,
                                         null,
-                                        20L,
+                                        INITIAL_CALLBACK_DELAY_MS,
                                         0
                                 ),
                                 new MockOrderScenarioOverride.PlannedEvent(
@@ -174,7 +174,7 @@ class MockSellOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationT
                                         sellPrice,
                                         BigDecimal.ZERO,
                                         null,
-                                        20L,
+                                        INITIAL_CALLBACK_DELAY_MS + NEAR_SIMULTANEOUS_CALLBACK_GAP_MS,
                                         0
                                 )
                         ),

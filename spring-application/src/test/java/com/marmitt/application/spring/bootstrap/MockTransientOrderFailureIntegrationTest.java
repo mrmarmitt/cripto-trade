@@ -65,7 +65,7 @@ class MockTransientOrderFailureIntegrationTest extends MockOrderOverrideIntegrat
                                 sellPrice,
                                 BigDecimal.ZERO,
                                 null,
-                                20L,
+                                INITIAL_CALLBACK_DELAY_MS,
                                 // The order callback path has no internal retry.
                                 // This duplicate intentionally simulates exchange/mock redelivery
                                 // after the first local processing failure.

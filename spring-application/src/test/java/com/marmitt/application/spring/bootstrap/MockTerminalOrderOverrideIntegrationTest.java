@@ -54,7 +54,7 @@ class MockTerminalOrderOverrideIntegrationTest extends MockOrderOverrideIntegrat
                                 price,
                                 BigDecimal.ZERO,
                                 "MOCK_REJECT_TEST",
-                                20L,
+                                INITIAL_CALLBACK_DELAY_MS,
                                 0
                         )
                 ),
@@ -106,7 +106,7 @@ class MockTerminalOrderOverrideIntegrationTest extends MockOrderOverrideIntegrat
                                 price,
                                 BigDecimal.ZERO,
                                 null,
-                                20L,
+                                INITIAL_CALLBACK_DELAY_MS,
                                 0
                         )
                 ),
