@@ -100,7 +100,9 @@ Evidencias de Fase 1A em testes automatizados:
 - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/RunnerBootRecoveryIntegrationTest.java`
 
 Evidencias de Fase 1B em testes automatizados:
-- `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/MockDeterministicOrderOverrideIntegrationTest.java`
+- `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/MockBuyOrderOverrideIntegrationTest.java`
+- `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/MockSellOrderOverrideIntegrationTest.java`
+- `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/MockTerminalOrderOverrideIntegrationTest.java`
 
 ### Impacto no Go-Live
 
@@ -110,6 +112,6 @@ Evidencias de Fase 1B em testes automatizados:
 
 ### Proximo passo recomendado
 
-1. Revisar/mergear o PR 4 da Fase 2 com reorder controlado de eventos (`FILLED` antes de `PARTIAL`).
-2. Avancar para retry/falha transitoria apos validar convergencia sem drift financeiro em eventos fora de ordem.
+1. Revisar/mergear o PR 5 da Fase 2 com a refatoracao da suite deterministica do mock.
+2. Avancar para retry/falha transitoria apos estabilizar a organizacao dos testes de BUY, SELL e terminais.
 3. Atualizar este checklist a cada fase concluida do Testing Roadmap.

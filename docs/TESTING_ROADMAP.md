@@ -455,7 +455,9 @@ Fora de escopo da Fase 4:
 ### Evidencias de conclusao da Fase 1B
 
 - Controles determinísticos e cenarios de duplicidade/concorrencia/rejeicao no MOCK:
-  - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/MockDeterministicOrderOverrideIntegrationTest.java`
+  - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/MockBuyOrderOverrideIntegrationTest.java`
+  - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/MockSellOrderOverrideIntegrationTest.java`
+  - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/MockTerminalOrderOverrideIntegrationTest.java`
 - Refinamentos de legibilidade e reuso no teste deterministico ja incorporados na `develop` via PR #46.
 
 ### Relacao com Go-Live
@@ -469,4 +471,5 @@ Fora de escopo da Fase 4:
 1. PR 1 (concluido): `SELL` concorrente tentando lock no mesmo lote/posicao.
 2. PR 2 (concluido): retry idempotente do mesmo `SELL` lock sem permitir tomada por outra transacao.
 3. PR 3 (concluido): callbacks duplicados de `SELL FILLED` em janela curta sem dupla aplicacao economica.
-4. PR 4 (atual): reorder controlado com `FILLED` antes de `PARTIAL` para BUY e SELL.
+4. PR 4 (concluido): reorder controlado com `FILLED` antes de `PARTIAL` para BUY e SELL.
+5. PR 5 (atual): refatorar a suite deterministica do mock por responsabilidade antes dos cenarios de retry/falha transitoria.
