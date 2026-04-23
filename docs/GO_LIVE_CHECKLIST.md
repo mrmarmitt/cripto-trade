@@ -110,6 +110,6 @@ Evidencias de Fase 1B em testes automatizados:
 
 ### Proximo passo recomendado
 
-1. Revisar/mergear o PR 3 da Fase 2 com callbacks duplicados de `SELL FILLED` em janela curta.
-2. Avancar para o proximo item da Fase 2 apos validar ausencia de dupla criacao de `transaction_matches`, PnL e liberacao de capital.
+1. Revisar/mergear o PR 4 da Fase 2 com reorder controlado de eventos (`FILLED` antes de `PARTIAL`).
+2. Avancar para retry/falha transitoria apos validar convergencia sem drift financeiro em eventos fora de ordem.
 3. Atualizar este checklist a cada fase concluida do Testing Roadmap.
