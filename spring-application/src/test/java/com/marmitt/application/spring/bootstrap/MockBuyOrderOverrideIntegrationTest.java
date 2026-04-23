@@ -4,7 +4,6 @@ import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
-import com.marmitt.core.dto.runner.OrderDispatchCommand;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
@@ -54,7 +53,7 @@ class MockBuyOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationTe
                                 new BigDecimal("65010.00000000"),
                                 BigDecimal.ZERO,
                                 null,
-                                30L,
+                                INITIAL_CALLBACK_DELAY_MS,
                                 1
                         ),
                         new MockOrderScenarioOverride.PlannedEvent(
@@ -63,22 +62,14 @@ class MockBuyOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationTe
                                 new BigDecimal("65020.00000000"),
                                 BigDecimal.ZERO,
                                 null,
-                                30L,
+                                INITIAL_CALLBACK_DELAY_MS + NEAR_SIMULTANEOUS_CALLBACK_GAP_MS,
                                 0
                         )
                 ),
                 MockOrderScenarioOverride.EventOrdering.AS_IS
         ));
 
-        orderDispatchPort.dispatch(new OrderDispatchCommand(
-                clientOrderId,
-                runnerId,
-                SYMBOL,
-                MOCK_EXCHANGE,
-                TransactionType.BUY,
-                quantity,
-                price
-        ));
+        submitOrderToMock(clientOrderId, TransactionType.BUY, quantity, price);
 
         Transaction filled = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.FILLED, WAIT_TIMEOUT);
         assertEquals(0, filled.getEffectiveExecutedQuantity().compareTo(quantity));
@@ -131,7 +122,7 @@ class MockBuyOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationTe
                                 new BigDecimal("65110.00000000"),
                                 BigDecimal.ZERO,
                                 null,
-                                0L,
+                                INITIAL_CALLBACK_DELAY_MS,
                                 0
                         ),
                         new MockOrderScenarioOverride.PlannedEvent(
@@ -140,22 +131,14 @@ class MockBuyOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationTe
                                 new BigDecimal("65120.00000000"),
                                 BigDecimal.ZERO,
                                 null,
-                                100L,
+                                INITIAL_CALLBACK_DELAY_MS + NEAR_SIMULTANEOUS_CALLBACK_GAP_MS,
                                 0
                         )
                 ),
                 MockOrderScenarioOverride.EventOrdering.AS_IS
         ));
 
-        orderDispatchPort.dispatch(new OrderDispatchCommand(
-                clientOrderId,
-                runnerId,
-                SYMBOL,
-                MOCK_EXCHANGE,
-                TransactionType.BUY,
-                quantity,
-                price
-        ));
+        submitOrderToMock(clientOrderId, TransactionType.BUY, quantity, price);
 
         Transaction filled = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.FILLED, WAIT_TIMEOUT);
         assertEquals(0, filled.getEffectiveExecutedQuantity().compareTo(quantity));
@@ -215,22 +198,14 @@ class MockBuyOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationTe
                                 new BigDecimal("65210.00000000"),
                                 BigDecimal.ZERO,
                                 null,
-                                20L,
+                                INITIAL_CALLBACK_DELAY_MS,
                                 2
                         )
                 ),
                 MockOrderScenarioOverride.EventOrdering.AS_IS
         ));
 
-        orderDispatchPort.dispatch(new OrderDispatchCommand(
-                clientOrderId,
-                runnerId,
-                SYMBOL,
-                MOCK_EXCHANGE,
-                TransactionType.BUY,
-                quantity,
-                price
-        ));
+        submitOrderToMock(clientOrderId, TransactionType.BUY, quantity, price);
 
         BuyStateSnapshot stable = awaitStableFilledState(
                 pendingBuy.getId(),
@@ -281,7 +256,7 @@ class MockBuyOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationTe
                                 new BigDecimal("65505.00000000"),
                                 BigDecimal.ZERO,
                                 null,
-                                20L,
+                                INITIAL_CALLBACK_DELAY_MS,
                                 0
                         ),
                         new MockOrderScenarioOverride.PlannedEvent(
@@ -290,22 +265,14 @@ class MockBuyOrderOverrideIntegrationTest extends MockOrderOverrideIntegrationTe
                                 new BigDecimal("65510.00000000"),
                                 BigDecimal.ZERO,
                                 null,
-                                20L,
+                                INITIAL_CALLBACK_DELAY_MS + NEAR_SIMULTANEOUS_CALLBACK_GAP_MS,
                                 0
                         )
                 ),
                 MockOrderScenarioOverride.EventOrdering.REVERSE
         ));
 
-        orderDispatchPort.dispatch(new OrderDispatchCommand(
-                clientOrderId,
-                runnerId,
-                SYMBOL,
-                MOCK_EXCHANGE,
-                TransactionType.BUY,
-                quantity,
-                price
-        ));
+        submitOrderToMock(clientOrderId, TransactionType.BUY, quantity, price);
 
         BuyStateSnapshot stable = awaitStableFilledState(pendingBuy.getId(), WAIT_TIMEOUT, quantity);
         OrderDataDto latePartial = awaitMockOrderStatus(

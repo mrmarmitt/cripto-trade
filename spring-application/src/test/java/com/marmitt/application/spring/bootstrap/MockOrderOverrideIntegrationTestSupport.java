@@ -9,13 +9,14 @@ import com.marmitt.core.dto.portfolio.CreatePortfolioRequest;
 import com.marmitt.core.dto.portfolio.CreatePortfolioResponse;
 import com.marmitt.core.dto.runner.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.CreateRunnerResponse;
-import com.marmitt.core.dto.runner.OrderDispatchCommand;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.dto.websocket.request.SendOrderRequest;
+import com.marmitt.core.enums.OrderSide;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
-import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
@@ -61,6 +62,8 @@ abstract class MockOrderOverrideIntegrationTestSupport {
     protected static final Duration WAIT_TIMEOUT = Duration.ofSeconds(10);
     protected static final long DEFAULT_POLL_INTERVAL_MS = 80L;
     protected static final long FILLED_STABILITY_POLL_INTERVAL_MS = 50L;
+    protected static final long INITIAL_CALLBACK_DELAY_MS = 120L;
+    protected static final long NEAR_SIMULTANEOUS_CALLBACK_GAP_MS = 20L;
     protected static final String SCENARIO_DUPLICATE_PARTIAL = "phase1b deterministic override";
     protected static final String SCENARIO_PARTIAL_FILLED_CONVERGENCE = "phase1b partial+filled convergence";
     protected static final String SCENARIO_DUPLICATE_FILLED = "phase1b duplicate filled idempotency";
@@ -102,9 +105,6 @@ abstract class MockOrderOverrideIntegrationTestSupport {
 
     @Autowired
     protected ExchangeAdapterRepositoryPort exchangeAdapterRepository;
-
-    @Autowired
-    protected OrderDispatchPort orderDispatchPort;
 
     @Autowired
     protected JdbcTemplate jdbcTemplate;
@@ -156,6 +156,22 @@ abstract class MockOrderOverrideIntegrationTestSupport {
         return runner;
     }
 
+    protected void submitOrderToMock(String clientOrderId,
+                                     TransactionType type,
+                                     BigDecimal quantity,
+                                     BigDecimal price) {
+        OrderSide side = type == TransactionType.BUY ? OrderSide.BUY : OrderSide.SELL;
+        getMockExchangeAdapter().submitOrder(new SendOrderRequest(
+                MOCK_EXCHANGE,
+                SYMBOL,
+                quantity,
+                price,
+                OrderType.LIMIT,
+                side,
+                clientOrderId
+        ));
+    }
+
     protected OrderDataDto awaitMockOrderStatus(String clientOrderId,
                                               OrderDataDto.OrderStatus expectedStatus,
                                               Duration timeout) {
@@ -205,22 +221,14 @@ abstract class MockOrderOverrideIntegrationTestSupport {
                                 buyPrice,
                                 BigDecimal.ZERO,
                                 null,
-                                20L,
+                                INITIAL_CALLBACK_DELAY_MS,
                                 0
                         )
                 ),
                 MockOrderScenarioOverride.EventOrdering.AS_IS
         ));
 
-        orderDispatchPort.dispatch(new OrderDispatchCommand(
-                buyClientOrderId,
-                runner.getId(),
-                SYMBOL,
-                MOCK_EXCHANGE,
-                TransactionType.BUY,
-                quantity,
-                buyPrice
-        ));
+        submitOrderToMock(buyClientOrderId, TransactionType.BUY, quantity, buyPrice);
 
         BuyStateSnapshot buyState = awaitStableFilledState(pendingBuy.getId(), WAIT_TIMEOUT, quantity);
         assertEquals(0, buyState.positionQuantity().compareTo(quantity));
