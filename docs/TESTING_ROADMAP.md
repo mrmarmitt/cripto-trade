@@ -474,4 +474,5 @@ Fora de escopo da Fase 4:
 4. PR 4 (concluido): reorder controlado com `FILLED` antes de `PARTIAL` para BUY e SELL.
 5. PR 5 (concluido): refatorar a suite deterministica do mock por responsabilidade antes dos cenarios de retry/falha transitoria.
 6. PR 6 (concluido): redelivery idempotente apos falha transitoria simulada no processamento de `SELL FILLED`.
-7. PR 7 (atual): eventos terminais fora de ordem (`FILLED -> CANCELED` atrasado) sem regressao de estado ou dupla aplicacao economica.
+7. PR 7 (concluido): eventos terminais fora de ordem (`FILLED -> CANCELED` atrasado) sem regressao de estado ou dupla aplicacao economica.
+8. PR 8 (atual): repeticao controlada dos cenarios mais frageis para validar monotonicidade terminal e estabilidade sem flakiness.

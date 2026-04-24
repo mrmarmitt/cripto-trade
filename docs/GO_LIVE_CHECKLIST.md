@@ -112,6 +112,6 @@ Evidencias de Fase 1B em testes automatizados:
 
 ### Proximo passo recomendado
 
-1. Concluir o PR 7 da Fase 2 com cenarios de evento terminal atrasado (`FILLED -> CANCELED`) sem regressao de estado.
-2. Avancar para os proximos cenarios de falha/retry apos validar monotonicidade de estados terminais em BUY e SELL.
+1. Concluir o PR 8 da Fase 2 com repeticao controlada dos cenarios terminais mais frageis para reduzir risco de flakiness residual.
+2. Encerrar a Fase 2 no roadmap e neste checklist apos validar estabilidade repetida dos cenarios de reorder e terminal monotonicity.
 3. Atualizar este checklist a cada fase concluida do Testing Roadmap.
