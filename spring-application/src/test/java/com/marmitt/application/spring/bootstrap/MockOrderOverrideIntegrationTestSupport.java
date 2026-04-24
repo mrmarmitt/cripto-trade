@@ -72,6 +72,10 @@ abstract class MockOrderOverrideIntegrationTestSupport {
             "phase2 reordered buy filled before partial";
     protected static final String SCENARIO_REORDERED_SELL_FILLED_BEFORE_PARTIAL =
             "phase2 reordered sell filled before partial";
+    protected static final String SCENARIO_LATE_CANCELED_AFTER_BUY_FILLED =
+            "phase2 late canceled after buy filled";
+    protected static final String SCENARIO_LATE_CANCELED_AFTER_SELL_FILLED =
+            "phase2 late canceled after sell filled";
     protected static final String SCENARIO_REJECTED_FINANCIAL = "phase1b rejected financial";
     protected static final String SCENARIO_EXPIRED_FINANCIAL = "phase1b expired financial";
 

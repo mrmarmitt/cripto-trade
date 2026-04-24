@@ -419,7 +419,7 @@ Fora de escopo da Fase 4:
 - **IG:** cobre os fluxos e decisões operacionais já mapeadas no projeto.
 - Este roadmap deve evoluir junto com mudanças de domínio e novos modos de execução.
 
-## Status de Execucao (2026-04-19)
+## Status de Execucao (2026-04-24)
 
 - Fase 0: CONCLUIDA.
 - Fase 1A: CONCLUIDA.
@@ -473,4 +473,5 @@ Fora de escopo da Fase 4:
 3. PR 3 (concluido): callbacks duplicados de `SELL FILLED` em janela curta sem dupla aplicacao economica.
 4. PR 4 (concluido): reorder controlado com `FILLED` antes de `PARTIAL` para BUY e SELL.
 5. PR 5 (concluido): refatorar a suite deterministica do mock por responsabilidade antes dos cenarios de retry/falha transitoria.
-6. PR 6 (atual): redelivery idempotente apos falha transitoria simulada no processamento de `SELL FILLED`.
+6. PR 6 (concluido): redelivery idempotente apos falha transitoria simulada no processamento de `SELL FILLED`.
+7. PR 7 (atual): eventos terminais fora de ordem (`FILLED -> CANCELED` atrasado) sem regressao de estado ou dupla aplicacao economica.
