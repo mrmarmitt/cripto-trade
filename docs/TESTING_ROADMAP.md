@@ -480,4 +480,5 @@ Fora de escopo da Fase 4:
 
 ### Fase 3 em progresso
 
-1. PR 1 (atual): zombies `PENDING` sem `exchangeOrderId` dentro do TTL e reexecucao idempotente do recovery para zombies vencidos.
+1. PR 1 (concluido): zombies `PENDING` sem `exchangeOrderId` dentro do TTL e reexecucao idempotente do recovery para zombies vencidos.
+2. PR 2 (atual): limbo `SUBMITTED/PARTIAL` reconciliado via query positiva do MOCK (`SUBMITTED -> FILLED` e `PARTIAL -> FILLED`) sem drift financeiro.

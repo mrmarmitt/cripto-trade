@@ -1,8 +1,11 @@
 package com.marmitt.application.spring.bootstrap;
 
 import com.marmitt.application.spring.CTradeApplication;
+import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
+import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.domain.portfolio.GlobalBalance;
+import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
@@ -10,12 +13,14 @@ import com.marmitt.core.dto.portfolio.CreatePortfolioRequest;
 import com.marmitt.core.dto.portfolio.CreatePortfolioResponse;
 import com.marmitt.core.dto.runner.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.CreateRunnerResponse;
+import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.junit.jupiter.api.BeforeEach;
@@ -94,6 +99,9 @@ class RunnerBootRecoveryIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private ExchangeAdapterRepositoryPort exchangeAdapterRepository;
 
     @BeforeEach
     void cleanDatabase() {
@@ -254,6 +262,141 @@ class RunnerBootRecoveryIntegrationTest {
     }
 
     @Test
+    void recoveryShouldReconcileSubmittedBuyFoundAsFilledOnExchange() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        BigDecimal quantity = new BigDecimal("0.00150000");
+        BigDecimal fillPrice = new BigDecimal("60000.00000000");
+        BigDecimal reservedAmount = quantity.multiply(fillPrice);
+
+        Transaction submittedBuy = newTransaction(
+                runner,
+                TransactionType.BUY,
+                quantity,
+                fillPrice,
+                reservedAmount
+        );
+        submittedBuy.submit("EX_FOUND_FILLED");
+        strategyRunnerRepository.saveTransaction(submittedBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+
+        getMockExchangeAdapter().seedQueriedOrderSnapshot(orderData(
+                submittedBuy,
+                OrderDataDto.OrderStatus.FILLED,
+                quantity,
+                fillPrice,
+                BigDecimal.ZERO
+        ));
+
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+
+        Transaction filled = awaitTransactionStatus(submittedBuy.getId(), TransactionStatus.FILLED, WAIT_TIMEOUT);
+        assertNotNull(filled);
+        assertEquals(1, summary.inFlightCount());
+        assertEquals(0, summary.zombiesCount());
+        assertEquals(1, summary.limboCount());
+
+        Position position = strategyRunnerRepository.findPositionByOpenedByTransactionId(submittedBuy.getId())
+                .orElseThrow(() -> new IllegalStateException("Position not found for openedByTransactionId="
+                        + submittedBuy.getId()));
+        assertEquals(0, position.getQuantity().compareTo(quantity));
+        assertEquals(0, position.getAveragePrice().compareTo(fillPrice));
+
+        awaitBalance(
+                portfolioId,
+                INITIAL_CAPITAL.subtract(reservedAmount),
+                reservedAmount,
+                WAIT_TIMEOUT
+        );
+    }
+
+    @Test
+    void recoveryShouldReconcilePartialBuyFoundAsFilledOnExchangeWithoutQuantityDrift() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        BigDecimal totalQuantity = new BigDecimal("1.00000000");
+        BigDecimal totalReserved = new BigDecimal("112.00000000");
+        BigDecimal partialQuantity = new BigDecimal("0.40000000");
+        BigDecimal partialPrice = new BigDecimal("100.00000000");
+        BigDecimal finalExecutedPrice = new BigDecimal("112.00000000");
+        BigDecimal partialExecutedCost = partialQuantity.multiply(partialPrice);
+
+        Transaction partialBuy = newTransaction(
+                runner,
+                TransactionType.BUY,
+                totalQuantity,
+                finalExecutedPrice,
+                totalReserved
+        );
+        partialBuy.submit("EX_PARTIAL_THEN_FILLED");
+        partialBuy.partialFill(partialQuantity, partialPrice);
+        strategyRunnerRepository.saveTransaction(partialBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, totalReserved));
+
+        Position partialPosition = new Position(runner.getId(), SYMBOL, partialQuantity, partialPrice);
+        partialPosition.associateBuyTransaction(partialBuy.getId());
+        strategyRunnerRepository.savePosition(partialPosition);
+
+        GlobalBalance balanceAfterPartial = globalBalanceRepository.findByPortfolioId(portfolioId)
+                .orElseThrow(() -> new IllegalStateException("GlobalBalance not found"));
+        balanceAfterPartial.confirmExecution(partialExecutedCost, BigDecimal.ZERO, BigDecimal.ZERO);
+        globalBalanceRepository.save(balanceAfterPartial);
+
+        getMockExchangeAdapter().seedQueriedOrderSnapshot(orderData(
+                partialBuy,
+                OrderDataDto.OrderStatus.FILLED,
+                totalQuantity,
+                finalExecutedPrice,
+                BigDecimal.ZERO
+        ));
+
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+
+        Transaction filled = awaitTransactionStatus(partialBuy.getId(), TransactionStatus.FILLED, WAIT_TIMEOUT);
+        assertNotNull(filled);
+        assertEquals(1, summary.inFlightCount());
+        assertEquals(0, summary.zombiesCount());
+        assertEquals(1, summary.limboCount());
+        assertEquals(0, filled.getEffectiveExecutedQuantity().compareTo(totalQuantity));
+        assertEquals(0, filled.getEffectiveExecutedPrice().compareTo(finalExecutedPrice));
+
+        Position position = strategyRunnerRepository.findPositionByOpenedByTransactionId(partialBuy.getId())
+                .orElseThrow(() -> new IllegalStateException("Position not found for openedByTransactionId="
+                        + partialBuy.getId()));
+        assertEquals(0, position.getQuantity().compareTo(totalQuantity));
+        assertEquals(0, position.getAveragePrice().compareTo(finalExecutedPrice));
+
+        awaitBalance(
+                portfolioId,
+                INITIAL_CAPITAL.subtract(totalReserved).add(partialExecutedCost),
+                totalReserved.subtract(partialExecutedCost),
+                WAIT_TIMEOUT
+        );
+
+        RunnerBootRecoveryUseCase.RecoverySummary second = runnerBootRecoveryUseCase.recoverRunner(runner);
+
+        assertEquals(0, second.inFlightCount());
+        assertEquals(0, second.zombiesCount());
+        assertEquals(0, second.limboCount());
+
+        Transaction filledAgain = strategyRunnerRepository.findTransactionById(partialBuy.getId())
+                .orElseThrow(() -> new IllegalStateException("Transaction not found after repeated recovery"));
+        assertEquals(0, filledAgain.getEffectiveExecutedQuantity().compareTo(totalQuantity));
+
+        Position positionAgain = strategyRunnerRepository.findPositionByOpenedByTransactionId(partialBuy.getId())
+                .orElseThrow(() -> new IllegalStateException("Position not found after repeated recovery"));
+        assertEquals(0, positionAgain.getQuantity().compareTo(totalQuantity));
+        assertEquals(0, positionAgain.getAveragePrice().compareTo(finalExecutedPrice));
+
+        awaitBalance(
+                portfolioId,
+                INITIAL_CAPITAL.subtract(totalReserved).add(partialExecutedCost),
+                totalReserved.subtract(partialExecutedCost),
+                WAIT_TIMEOUT
+        );
+    }
+
+    @Test
     void recoveryShouldHaltActiveRunnerWhenUnresolvedDlqExists() {
         UUID portfolioId = createPortfolio();
         StrategyRunner runner = createAndActivateRunner(portfolioId);
@@ -329,6 +472,35 @@ class RunnerBootRecoveryIntegrationTest {
                 new BigDecimal("0.80"),
                 "phase1a boot recovery test",
                 null
+        );
+    }
+
+    private MockExchangeAdapter getMockExchangeAdapter() {
+        return exchangeAdapterRepository.findStreamingByName("MOCK")
+                .filter(MockExchangeAdapter.class::isInstance)
+                .map(MockExchangeAdapter.class::cast)
+                .orElseThrow(() -> new IllegalStateException("MOCK adapter not found or has invalid type"));
+    }
+
+    private OrderDataDto orderData(Transaction transaction,
+                                   OrderDataDto.OrderStatus status,
+                                   BigDecimal executedQuantity,
+                                   BigDecimal executedPrice,
+                                   BigDecimal fee) {
+        return new OrderDataDto(
+                transaction.getExchangeOrderId(),
+                transaction.getClientOrderId(),
+                Symbol.of(SYMBOL),
+                transaction.isBuy() ? OrderDataDto.OrderSide.BUY : OrderDataDto.OrderSide.SELL,
+                OrderDataDto.OrderType.LIMIT,
+                transaction.getQuantity(),
+                executedQuantity,
+                transaction.getPrice(),
+                executedPrice,
+                fee,
+                status,
+                null,
+                Instant.now()
         );
     }
 

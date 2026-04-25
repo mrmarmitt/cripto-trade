@@ -241,6 +241,30 @@ public class MockExchangeRuntime {
         orderScenarioOverrideByClientOrderId.clear();
     }
 
+    /**
+     * Seeds the latest queried order snapshot without publishing websocket callbacks.
+     *
+     * <p>Used by integration tests that need deterministic REST query responses for
+     * boot recovery scenarios (for example, limbo SUBMITTED/PARTIAL orders found as
+     * FILLED on the exchange after application restart).
+     */
+    public void seedQueriedOrderSnapshot(OrderDataDto orderData) {
+        if (orderData == null) {
+            throw new IllegalArgumentException("orderData cannot be null");
+        }
+        if (orderData.clientOrderId() == null || orderData.clientOrderId().isBlank()) {
+            throw new IllegalArgumentException("orderData.clientOrderId cannot be null or blank");
+        }
+        if (orderData.orderId() == null || orderData.orderId().isBlank()) {
+            throw new IllegalArgumentException("orderData.orderId cannot be null or blank");
+        }
+
+        orderIdByClientOrderId.put(orderData.clientOrderId(), orderData.orderId());
+        latestEventByOrderId.put(orderData.orderId(), orderData);
+        log.info("Mock queried order snapshot seeded - OrderId: {}, ClientOrderId: {}, Status: {}",
+                orderData.orderId(), orderData.clientOrderId(), orderData.status());
+    }
+
     private void simulateOrderExecutionAsync(SendOrderRequest orderRequest, String orderId) {
         try {
             Random localRandom = this.random;
