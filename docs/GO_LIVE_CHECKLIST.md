@@ -113,6 +113,6 @@ Evidencias de Fase 1B em testes automatizados:
 
 ### Proximo passo recomendado
 
-1. Concluir o PR 3 da Fase 3 com cobertura de limbo `SUBMITTED/PARTIAL` nao encontrado na exchange e fallback terminal sintetico idempotente.
-2. Avancar para cenarios de query unsupported e retry/backoff transitorio na sequencia da Fase 3.
+1. Concluir o PR 4 da Fase 3 com cobertura de `query unsupported` e `retry/backoff` transitorio no boot recovery.
+2. Avancar para o cenario de falha transitoria esgotada (retry exhausted) na sequencia da Fase 3.
 3. Atualizar este checklist a cada fase concluida do Testing Roadmap.

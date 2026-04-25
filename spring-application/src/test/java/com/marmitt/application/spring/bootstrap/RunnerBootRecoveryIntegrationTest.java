@@ -17,6 +17,7 @@ import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
+import com.marmitt.core.exceptions.ExchangeQueryException;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
@@ -77,6 +78,11 @@ class RunnerBootRecoveryIntegrationTest {
         registry.add("spring.flyway.enabled", () -> "true");
         registry.add("runner.boot.orchestrator-enabled", () -> "false");
         registry.add("runner.boot.phase2.portfolio.reservation-ttl.ttl-ms", () -> ZOMBIE_TTL_MS);
+        registry.add("runner.boot.phase3.exchange-query-timeout-ms", () -> 500L);
+        registry.add("runner.boot.phase3.exchange-query-max-attempts", () -> 3);
+        registry.add("runner.boot.phase3.exchange-query-initial-backoff-ms", () -> 10L);
+        registry.add("runner.boot.phase3.exchange-query-backoff-multiplier", () -> 1.0d);
+        registry.add("runner.boot.phase3.exchange-query-max-backoff-ms", () -> 10L);
     }
 
     @Autowired
@@ -336,6 +342,116 @@ class RunnerBootRecoveryIntegrationTest {
         assertEquals(0, positionAgain.getAveragePrice().compareTo(partialPrice));
 
         awaitBalance(portfolioId, INITIAL_CAPITAL, BigDecimal.ZERO, WAIT_TIMEOUT);
+    }
+
+    @Test
+    void recoveryShouldHaltRunnerWhenLimboExistsButQueryCapabilityIsUnavailable() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner created = createAndActivateRunner(portfolioId);
+        BigDecimal reservedAmount = new BigDecimal("90.00000000");
+
+        jdbcTemplate.update(
+                "UPDATE strategy_runners SET exchange_id = ? WHERE id = ?",
+                "MOCK_NO_QUERY",
+                created.getId()
+        );
+        StrategyRunner runner = strategyRunnerRepository.findById(created.getId())
+                .orElseThrow(() -> new IllegalStateException("Runner not found after exchange override"));
+
+        Transaction submittedBuy = newTransaction(
+                runner,
+                TransactionType.BUY,
+                new BigDecimal("0.00150000"),
+                new BigDecimal("60000.00000000"),
+                reservedAmount
+        );
+        submittedBuy.submit("EX_UNSUPPORTED_QUERY");
+        strategyRunnerRepository.saveTransaction(submittedBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+
+        Transaction stillSubmitted = awaitTransactionStatus(submittedBuy.getId(), TransactionStatus.SUBMITTED, WAIT_TIMEOUT);
+        assertNotNull(stillSubmitted);
+        assertEquals(1, summary.inFlightCount());
+        assertEquals(0, summary.zombiesCount());
+        assertEquals(1, summary.limboCount());
+        assertTrue(summary.notes().stream().anyMatch(note -> note.contains("Step 2 ERROR")),
+                "Recovery summary should record missing query capability");
+        assertTrue(summary.notes().stream().anyMatch(note -> note.contains("Step 4 ERROR")),
+                "Recovery summary should record limbo without query capability");
+
+        StrategyRunner halted = strategyRunnerRepository.findById(runner.getId())
+                .orElseThrow(() -> new IllegalStateException("Runner not found after unsupported query recovery"));
+        assertEquals(com.marmitt.core.enums.RunnerStatus.HALTED, halted.getStatus());
+        assertTrue(halted.isReconciling());
+
+        awaitBalance(
+                portfolioId,
+                INITIAL_CAPITAL.subtract(reservedAmount),
+                reservedAmount,
+                WAIT_TIMEOUT
+        );
+    }
+
+    @Test
+    void recoveryShouldRetryTransientQueryFailureAndReconcileOnNextAttempt() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        BigDecimal quantity = new BigDecimal("0.00150000");
+        BigDecimal fillPrice = new BigDecimal("60000.00000000");
+        BigDecimal reservedAmount = quantity.multiply(fillPrice);
+
+        Transaction submittedBuy = newTransaction(
+                runner,
+                TransactionType.BUY,
+                quantity,
+                fillPrice,
+                reservedAmount
+        );
+        submittedBuy.submit("EX_QUERY_RETRY_FILLED");
+        strategyRunnerRepository.saveTransaction(submittedBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+
+        MockExchangeAdapter mock = getMockExchangeAdapter();
+        mock.seedQueriedOrderSnapshot(orderData(
+                submittedBuy,
+                OrderDataDto.OrderStatus.FILLED,
+                quantity,
+                fillPrice,
+                BigDecimal.ZERO
+        ));
+        mock.registerQueryFailurePlan(
+                submittedBuy.getClientOrderId(),
+                1,
+                ExchangeQueryException.ErrorType.TEMPORARY,
+                "Planned transient query failure"
+        );
+
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+
+        Transaction filled = awaitTransactionStatus(submittedBuy.getId(), TransactionStatus.FILLED, WAIT_TIMEOUT);
+        assertNotNull(filled);
+        assertEquals(1, summary.inFlightCount());
+        assertEquals(0, summary.zombiesCount());
+        assertEquals(1, summary.limboCount());
+        assertTrue(summary.notes().stream().anyMatch(note -> note.contains("transient query failure")),
+                "Recovery summary should record the transient query failure");
+        assertTrue(summary.notes().stream().anyMatch(note -> note.contains("exchange query recovered")),
+                "Recovery summary should record recovery after retry");
+
+        Position position = strategyRunnerRepository.findPositionByOpenedByTransactionId(submittedBuy.getId())
+                .orElseThrow(() -> new IllegalStateException("Position not found for openedByTransactionId="
+                        + submittedBuy.getId()));
+        assertEquals(0, position.getQuantity().compareTo(quantity));
+        assertEquals(0, position.getAveragePrice().compareTo(fillPrice));
+
+        awaitBalance(
+                portfolioId,
+                INITIAL_CAPITAL.subtract(reservedAmount),
+                reservedAmount,
+                WAIT_TIMEOUT
+        );
     }
 
     @Test

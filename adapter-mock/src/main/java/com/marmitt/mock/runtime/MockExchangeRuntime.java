@@ -9,6 +9,7 @@ import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 import com.marmitt.core.enums.StreamAction;
 import com.marmitt.core.exceptions.ExchangeQueryException;
+import com.marmitt.core.exceptions.ExchangeQueryException.ErrorType;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.mock.balance.MockBalanceStore;
 import com.marmitt.mock.config.MockOrderScenarioOverride;
@@ -46,6 +47,7 @@ public class MockExchangeRuntime {
     private final Map<String, String> orderIdByClientOrderId = new ConcurrentHashMap<>();
     private final Map<String, OrderDataDto> latestEventByOrderId = new ConcurrentHashMap<>();
     private final Map<String, MockOrderScenarioOverride> orderScenarioOverrideByClientOrderId = new ConcurrentHashMap<>();
+    private final Map<String, QueryFailurePlan> queryFailurePlanByClientOrderId = new ConcurrentHashMap<>();
     private Random random;
     private MockBalanceStore balanceStore;
 
@@ -141,6 +143,7 @@ public class MockExchangeRuntime {
 
     public Optional<OrderDataDto> queryOrderByClientOrderId(String symbol, String clientOrderId) {
         ensureLifecycleForQuery();
+        maybeFailQuery(clientOrderId);
         String orderId = orderIdByClientOrderId.get(clientOrderId);
         if (orderId == null) {
             return Optional.empty();
@@ -242,6 +245,32 @@ public class MockExchangeRuntime {
     }
 
     /**
+     * Registers a deterministic fail-N-times plan for REST order queries by clientOrderId.
+     * Used by boot recovery integration tests to validate retry/backoff behavior.
+     */
+    public void registerQueryFailurePlan(String clientOrderId,
+                                         int failuresBeforeSuccess,
+                                         ErrorType errorType,
+                                         String message) {
+        if (clientOrderId == null || clientOrderId.isBlank()) {
+            throw new IllegalArgumentException("clientOrderId cannot be null or blank");
+        }
+        if (failuresBeforeSuccess <= 0) {
+            throw new IllegalArgumentException("failuresBeforeSuccess must be > 0");
+        }
+        queryFailurePlanByClientOrderId.put(
+                clientOrderId,
+                new QueryFailurePlan(failuresBeforeSuccess, errorType, message)
+        );
+        log.info("Mock query failure plan registered - ClientOrderId: {}, failuresBeforeSuccess: {}, errorType: {}",
+                clientOrderId, failuresBeforeSuccess, errorType);
+    }
+
+    public void clearQueryFailurePlans() {
+        queryFailurePlanByClientOrderId.clear();
+    }
+
+    /**
      * Seeds the latest queried order snapshot without publishing websocket callbacks.
      *
      * <p>Used by integration tests that need deterministic REST query responses for
@@ -332,6 +361,7 @@ public class MockExchangeRuntime {
         this.orderIdByClientOrderId.clear();
         this.latestEventByOrderId.clear();
         this.orderScenarioOverrideByClientOrderId.clear();
+        this.queryFailurePlanByClientOrderId.clear();
     }
 
     private void ensureLifecycleForQuery() {
@@ -342,6 +372,28 @@ public class MockExchangeRuntime {
                 "MOCK",
                 ExchangeQueryException.ErrorType.TEMPORARY,
                 "Mock lifecycle is stopped for order query"
+        );
+    }
+
+    private void maybeFailQuery(String clientOrderId) {
+        QueryFailurePlan plan = queryFailurePlanByClientOrderId.get(clientOrderId);
+        if (plan == null) {
+            return;
+        }
+
+        if (plan.remainingFailures() <= 1) {
+            queryFailurePlanByClientOrderId.remove(clientOrderId);
+        } else {
+            queryFailurePlanByClientOrderId.put(
+                    clientOrderId,
+                    new QueryFailurePlan(plan.remainingFailures() - 1, plan.errorType(), plan.message())
+            );
+        }
+
+        throw new ExchangeQueryException(
+                "MOCK",
+                plan.errorType(),
+                plan.message() != null ? plan.message() : "Planned mock query failure"
         );
     }
 
@@ -403,5 +455,10 @@ public class MockExchangeRuntime {
                 reason,
                 java.time.Instant.now()
         );
+    }
+
+    private record QueryFailurePlan(int remainingFailures,
+                                    ErrorType errorType,
+                                    String message) {
     }
 }
