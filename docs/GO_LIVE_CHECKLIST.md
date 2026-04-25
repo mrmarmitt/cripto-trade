@@ -113,6 +113,6 @@ Evidencias de Fase 1B em testes automatizados:
 
 ### Proximo passo recomendado
 
-1. Concluir o PR 2 da Fase 3 com cobertura de limbo `SUBMITTED/PARTIAL` reconciliado via query positiva da exchange/mock.
-2. Avancar para os cenarios de limbo `SUBMITTED/PARTIAL` nao encontrados na exchange e fallback terminal sintetico.
+1. Concluir o PR 3 da Fase 3 com cobertura de limbo `SUBMITTED/PARTIAL` nao encontrado na exchange e fallback terminal sintetico idempotente.
+2. Avancar para cenarios de query unsupported e retry/backoff transitorio na sequencia da Fase 3.
 3. Atualizar este checklist a cada fase concluida do Testing Roadmap.
