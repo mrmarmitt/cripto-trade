@@ -1,6 +1,8 @@
 package com.marmitt.application.spring.controller;
 
 import com.marmitt.core.dto.portfolio.DeadLetterEntryDto;
+import com.marmitt.core.dto.portfolio.ReprocessDeadLetterRequest;
+import com.marmitt.core.dto.portfolio.ReprocessDeadLetterResponse;
 import com.marmitt.core.dto.portfolio.ResolveDeadLetterRequest;
 import com.marmitt.core.dto.portfolio.ResolveDeadLetterResponse;
 import com.marmitt.core.ports.inbound.portfolio.ManageDeadLetterPort;
@@ -67,6 +69,36 @@ public class DeadLetterController {
             log.error("deadLetter: unexpected error resolving id={}", id, e);
             return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
                     .body(ResolveDeadLetterResponse.failure(id, "Internal server error: " + e.getMessage()));
+        }
+    }
+
+    @PostMapping("/{id}/reprocess")
+    public ResponseEntity<ReprocessDeadLetterResponse> reprocess(
+            @PathVariable UUID id,
+            @Valid @RequestBody ReprocessDeadLetterRequest request
+    ) {
+        try {
+            ReprocessDeadLetterResponse response = manageDeadLetter.reprocess(
+                    id,
+                    request.requestedBy(),
+                    request.resolutionNote()
+            );
+
+            if (response.reprocessed()) {
+                return ResponseEntity.ok(response);
+            }
+            if (response.message() != null && response.message().toLowerCase().contains("not found")) {
+                return ResponseEntity.status(HttpStatus.NOT_FOUND).body(response);
+            }
+            return ResponseEntity.status(HttpStatus.CONFLICT).body(response);
+        } catch (IllegalArgumentException e) {
+            log.warn("deadLetter: invalid reprocess request id={} reason={}", id, e.getMessage());
+            return ResponseEntity.badRequest()
+                    .body(ReprocessDeadLetterResponse.failure(id, "Invalid request: " + e.getMessage()));
+        } catch (Exception e) {
+            log.error("deadLetter: unexpected error reprocessing id={}", id, e);
+            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR)
+                    .body(ReprocessDeadLetterResponse.failure(id, "Internal server error: " + e.getMessage()));
         }
     }
 }

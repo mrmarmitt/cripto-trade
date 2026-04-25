@@ -1,6 +1,7 @@
 package com.marmitt.application.spring.controller;
 
 import com.marmitt.core.dto.portfolio.DeadLetterEntryDto;
+import com.marmitt.core.dto.portfolio.ReprocessDeadLetterResponse;
 import com.marmitt.core.dto.portfolio.ResolveDeadLetterResponse;
 import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.ports.inbound.portfolio.ManageDeadLetterPort;
@@ -156,5 +157,89 @@ class DeadLetterControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.resolved").value(false))
                 .andExpect(jsonPath("$.message").value("Invalid request: resolvedBy cannot be blank"));
+    }
+
+    @Test
+    void reprocessShouldReturnOkWhenEntryIsReprocessed() throws Exception {
+        UUID deadLetterId = UUID.randomUUID();
+        UUID portfolioId = UUID.randomUUID();
+        UUID runnerId = UUID.randomUUID();
+        DeadLetterEntryDto entry = newEntry(deadLetterId, portfolioId, runnerId, true, "operator@test");
+        when(manageDeadLetter.reprocess(deadLetterId, "operator@test", "retry capital flow"))
+                .thenReturn(ReprocessDeadLetterResponse.success(entry, "Dead letter entry reprocessed successfully"));
+
+        mockMvc.perform(post("/api/dead-letters/{id}/reprocess", deadLetterId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "requestedBy": "operator@test",
+                                  "resolutionNote": "retry capital flow"
+                                }
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.reprocessed").value(true))
+                .andExpect(jsonPath("$.deadLetterId").value(deadLetterId.toString()))
+                .andExpect(jsonPath("$.entry.resolvedBy").value("operator@test"));
+    }
+
+    @Test
+    void reprocessShouldReturnConflictWhenEntryCannotBeReprocessedAutomatically() throws Exception {
+        UUID deadLetterId = UUID.randomUUID();
+        when(manageDeadLetter.reprocess(deadLetterId, "operator@test", "retry capital flow"))
+                .thenReturn(ReprocessDeadLetterResponse.failure(
+                        deadLetterId,
+                        "Dead letter entry cannot be reprocessed automatically"
+                ));
+
+        mockMvc.perform(post("/api/dead-letters/{id}/reprocess", deadLetterId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "requestedBy": "operator@test",
+                                  "resolutionNote": "retry capital flow"
+                                }
+                                """))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.reprocessed").value(false))
+                .andExpect(jsonPath("$.message").value("Dead letter entry cannot be reprocessed automatically"));
+    }
+
+    @Test
+    void reprocessShouldReturnBadRequestWhenUseCaseRejectsInput() throws Exception {
+        UUID deadLetterId = UUID.randomUUID();
+        when(manageDeadLetter.reprocess(deadLetterId, "", "retry capital flow"))
+                .thenThrow(new IllegalArgumentException("requestedBy cannot be blank"));
+
+        mockMvc.perform(post("/api/dead-letters/{id}/reprocess", deadLetterId)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {
+                                  "requestedBy": "",
+                                  "resolutionNote": "retry capital flow"
+                                }
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.reprocessed").value(false))
+                .andExpect(jsonPath("$.message").value("Invalid request: requestedBy cannot be blank"));
+    }
+
+    private static DeadLetterEntryDto newEntry(UUID deadLetterId,
+                                               UUID portfolioId,
+                                               UUID runnerId,
+                                               boolean resolved,
+                                               String resolvedBy) {
+        return new DeadLetterEntryDto(
+                deadLetterId,
+                portfolioId,
+                runnerId,
+                "client-1",
+                "EX_1",
+                "{\"source\":\"test\"}",
+                DlqReason.RECONCILIATION_CONFLICT,
+                resolved,
+                resolvedBy,
+                resolved ? Instant.parse("2026-04-25T12:10:00Z") : null,
+                Instant.parse("2026-04-25T12:00:00Z")
+        );
     }
 }

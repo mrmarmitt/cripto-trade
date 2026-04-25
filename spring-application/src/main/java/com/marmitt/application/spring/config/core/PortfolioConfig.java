@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.config.core;
 
+import com.marmitt.core.ports.outbound.repository.DeadLetterReprocessingPort;
 import com.marmitt.core.application.usecase.portfolio.CreatePortfolioUseCase;
 import com.marmitt.core.application.usecase.portfolio.ManageDeadLetterUseCase;
 import com.marmitt.core.application.usecase.portfolio.PortfolioBootSanityUseCase;
@@ -71,8 +72,9 @@ public class PortfolioConfig {
 
     @Bean
     public ManageDeadLetterPort manageDeadLetter(
-            DeadLetterEntryRepositoryPort deadLetterEntryRepository
+            DeadLetterEntryRepositoryPort deadLetterEntryRepository,
+            DeadLetterReprocessingPort deadLetterReprocessingPort
     ) {
-        return new ManageDeadLetterUseCase(deadLetterEntryRepository);
+        return new ManageDeadLetterUseCase(deadLetterEntryRepository, deadLetterReprocessingPort);
     }
 }

@@ -503,7 +503,9 @@ Fora de escopo da Fase 4:
 ### Fase 4 em progresso
 
 1. PR 1 (concluido): observabilidade do boot validada por teste cobrindo evento de fail-fast e metricas minimas por fase/resultado.
-2. PR 2 (atual): DLQ operacional no boot cobrindo abertura de entry e nao duplicacao da mesma identidade do problema.
+2. PR 2 (concluido): DLQ operacional no boot cobrindo abertura de entry e nao duplicacao da mesma identidade do problema.
+3. PR 3 (concluido): gestao manual da DLQ cobrindo listagem e resolucao via use case/controller.
+4. PR 4 (atual): reprocessamento seguro de DLQ para eventos de capital com retries esgotados.
 
 ## Backlog Pos-Testes
 

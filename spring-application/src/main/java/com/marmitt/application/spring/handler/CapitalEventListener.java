@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.handler;
 
+import com.marmitt.application.spring.deadletter.CapitalDeadLetterPayloadCodec;
 import com.marmitt.core.application.reaction.ExecutionConfirmedReaction;
 import com.marmitt.core.application.reaction.MarginReleasedReaction;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
@@ -38,17 +39,20 @@ public class CapitalEventListener {
     private final MarginReleasedReaction handleMarginRelease;
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final DeadLetterEntryRepositoryPort deadLetterEntryRepository;
+    private final CapitalDeadLetterPayloadCodec payloadCodec;
 
     public CapitalEventListener(
             ExecutionConfirmedReaction handleExecutionConfirmed,
             MarginReleasedReaction handleMarginRelease,
             StrategyRunnerRepositoryPort strategyRunnerRepository,
-            DeadLetterEntryRepositoryPort deadLetterEntryRepository
+            DeadLetterEntryRepositoryPort deadLetterEntryRepository,
+            CapitalDeadLetterPayloadCodec payloadCodec
     ) {
         this.handleExecutionConfirmed = handleExecutionConfirmed;
         this.handleMarginRelease = handleMarginRelease;
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.deadLetterEntryRepository = deadLetterEntryRepository;
+        this.payloadCodec = payloadCodec;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -77,15 +81,7 @@ public class CapitalEventListener {
 
     @Recover
     public void recoverExecutionConfirmed(Exception ex, ExecutionConfirmedEvent event) {
-        String rawPayload = "event=EXECUTION_CONFIRMED"
-                + ", runnerId=" + event.confirmation().runnerId()
-                + ", transactionId=" + event.confirmation().transactionId()
-                + ", matchId=" + event.confirmation().matchId()
-                + ", totalCost=" + event.confirmation().totalCost()
-                + ", pnlRealized=" + event.confirmation().pnlRealized()
-                + ", isFinal=" + event.confirmation().isFinal()
-                + ", failure=" + ex.getClass().getSimpleName() + ":" + safeMessage(ex);
-
+        String rawPayload = payloadCodec.encodeExecutionConfirmed(event, ex);
         persistCapitalDlq("EXECUTION_CONFIRMED", event.confirmation().runnerId(), rawPayload, ex);
     }
 
@@ -115,13 +111,7 @@ public class CapitalEventListener {
 
     @Recover
     public void recoverMarginRelease(Exception ex, MarginReleaseEvent event) {
-        String rawPayload = "event=MARGIN_RELEASE"
-                + ", runnerId=" + event.release().runnerId()
-                + ", transactionId=" + event.release().transactionId()
-                + ", releaseAmount=" + event.release().releaseAmount()
-                + ", reason=" + event.release().reason()
-                + ", failure=" + ex.getClass().getSimpleName() + ":" + safeMessage(ex);
-
+        String rawPayload = payloadCodec.encodeMarginRelease(event, ex);
         persistCapitalDlq("MARGIN_RELEASE", event.release().runnerId(), rawPayload, ex);
     }
 
