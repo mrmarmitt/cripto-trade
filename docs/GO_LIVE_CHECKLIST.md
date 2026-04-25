@@ -79,13 +79,14 @@ Consolidar os principais critérios para sair do ambiente de simulação (MOCK) 
 - Regra prática: toda evolução desse checklist deve manter rastreabilidade com os conceitos e invariantes já definidos no Blueprint/IG.
 
 
-## Status de Aderencia (2026-04-24)
+## Status de Aderencia (2026-04-25)
 
 - Testing Roadmap Fase 0: CONCLUIDA no branch `develop`.
 - Testing Roadmap Fase 1A: CONCLUIDA no branch `develop`.
 - Testing Roadmap Fase 1B: CONCLUIDA no branch `develop`.
 - Testing Roadmap Fase 2: CONCLUIDA no branch `develop`.
-- Testing Roadmap Fase 3: EM ANDAMENTO.
+- Testing Roadmap Fase 3: CONCLUIDA no branch `develop`.
+- Testing Roadmap Fase 4: EM PLANEJAMENTO.
 
 Evidencias de Fase 0 em testes automatizados:
 - `core/src/test/java/com/marmitt/core/domain/portfolio/GlobalBalanceInvariantsTest.java`
@@ -108,11 +109,22 @@ Evidencias de Fase 1B em testes automatizados:
 ### Impacto no Go-Live
 
 - Item 1 (Testes automatizados minimos): PARCIAL (AVANCADO).
-- Baseline de invariantes, integracao core com MOCK, controles deterministicos do MOCK e robustez contra duplicidade/concorrencia cobertos (Fases 0, 1A, 1B e 2).
-- Ainda faltam boot recovery completo, operacao e integracao real com exchange (Fases 3 e 4).
+- Baseline de invariantes, integracao core com MOCK, controles deterministicos do MOCK, robustez contra duplicidade/concorrencia e boot recovery completo cobertos (Fases 0, 1A, 1B, 2 e 3).
+- Ainda faltam observabilidade operacional, DLQ operacional e integracao real com exchange (Fase 4 + integracoes reais).
+
+### Evidencias adicionais de Fase 3
+
+- `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/RunnerBootRecoveryIntegrationTest.java`
+- Cobertura consolidada de:
+  - zombie `PENDING` com TTL
+  - limbo com query positiva
+  - limbo `not found`
+  - `query unsupported`
+  - `query transient failure + retry`
+  - `query retry exhausted`
 
 ### Proximo passo recomendado
 
-1. Concluir o PR 5 da Fase 3 com cobertura de falha transitoria esgotada (`retry exhausted`) no boot recovery.
-2. Reavaliar se a Fase 3 fica concluida ou se ainda resta algum gap real de recovery antes de avancar para a Fase 4.
+1. Iniciar a Fase 4 pelo PR 1 de observabilidade validada por teste.
+2. Cobrir evento de fail-fast e metricas minimas de boot por fase/resultado.
 3. Atualizar este checklist a cada fase concluida do Testing Roadmap.

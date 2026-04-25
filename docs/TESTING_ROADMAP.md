@@ -419,13 +419,14 @@ Fora de escopo da Fase 4:
 - **IG:** cobre os fluxos e decisões operacionais já mapeadas no projeto.
 - Este roadmap deve evoluir junto com mudanças de domínio e novos modos de execução.
 
-## Status de Execucao (2026-04-24)
+## Status de Execucao (2026-04-25)
 
 - Fase 0: CONCLUIDA.
 - Fase 1A: CONCLUIDA.
 - Fase 1B: CONCLUIDA.
 - Fase 2: CONCLUIDA.
-- Fase 3: EM ANDAMENTO.
+- Fase 3: CONCLUIDA.
+- Fase 4: EM PLANEJAMENTO.
 
 ### Evidencias de conclusao da Fase 1B
 
@@ -478,10 +479,23 @@ Fora de escopo da Fase 4:
 7. PR 7 (concluido): eventos terminais fora de ordem (`FILLED -> CANCELED` atrasado) sem regressao de estado ou dupla aplicacao economica.
 8. PR 8 (concluido): repeticao controlada dos cenarios mais frageis para validar monotonicidade terminal e estabilidade sem flakiness.
 
-### Fase 3 em progresso
+### Fase 3 concluida
 
 1. PR 1 (concluido): zombies `PENDING` sem `exchangeOrderId` dentro do TTL e reexecucao idempotente do recovery para zombies vencidos.
 2. PR 2 (concluido): limbo `SUBMITTED/PARTIAL` reconciliado via query positiva do MOCK (`SUBMITTED -> FILLED` e `PARTIAL -> FILLED`) sem drift financeiro.
 3. PR 3 (concluido): limbo nao encontrado na exchange com fallback sintetico (`SUBMITTED -> EXPIRED`, `PARTIAL -> CANCELED`) e reexecucao idempotente do recovery.
 4. PR 4 (concluido): falha de query no boot recovery cobrindo `query unsupported` e `query transient failure + retry/backoff` com recuperacao sem drift.
-5. PR 5 (atual): falha transitoria esgotada no boot recovery (`retry exhausted`) preservando limbo sem persistencia parcial indevida e levando o runner a `HALTED`.
+5. PR 5 (concluido): falha transitoria esgotada no boot recovery (`retry exhausted`) preservando limbo sem persistencia parcial indevida e levando o runner a `HALTED`.
+
+### Evidencias de conclusao da Fase 3
+
+- Boot recovery completo consolidado em:
+  - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/RunnerBootRecoveryIntegrationTest.java`
+- Cobertura funcional consolidada:
+  - zombie `PENDING` dentro e fora do TTL
+  - limbo `SUBMITTED/PARTIAL` com query positiva
+  - limbo `SUBMITTED/PARTIAL` nao encontrado na exchange
+  - `query unsupported`
+  - `query transient failure + retry/backoff`
+  - `query retry exhausted`
+  - reexecucao idempotente do recovery nos cenarios relevantes
