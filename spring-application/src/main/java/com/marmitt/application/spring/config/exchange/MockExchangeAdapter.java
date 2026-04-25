@@ -7,6 +7,7 @@ import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
+import com.marmitt.core.exceptions.ExchangeQueryException.ErrorType;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
@@ -184,6 +185,21 @@ public class MockExchangeAdapter implements ExchangeStreamingPort,
      */
     public void seedQueriedOrderSnapshot(OrderDataDto orderData) {
         runtime.seedQueriedOrderSnapshot(orderData);
+    }
+
+    /**
+     * Registers a deterministic fail-N-times plan for query-by-clientOrderId.
+     * Intended for boot recovery retry/backoff integration tests.
+     */
+    public void registerQueryFailurePlan(String clientOrderId,
+                                         int failuresBeforeSuccess,
+                                         ErrorType errorType,
+                                         String message) {
+        runtime.registerQueryFailurePlan(clientOrderId, failuresBeforeSuccess, errorType, message);
+    }
+
+    public void clearQueryFailurePlans() {
+        runtime.clearQueryFailurePlans();
     }
 
     private static void simulateDelayIfNeeded(long delayMs) {
