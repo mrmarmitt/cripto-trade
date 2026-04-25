@@ -426,7 +426,7 @@ Fora de escopo da Fase 4:
 - Fase 1B: CONCLUIDA.
 - Fase 2: CONCLUIDA.
 - Fase 3: CONCLUIDA.
-- Fase 4: EM PLANEJAMENTO.
+- Fase 4: EM ANDAMENTO.
 
 ### Evidencias de conclusao da Fase 1B
 
@@ -499,3 +499,7 @@ Fora de escopo da Fase 4:
   - `query transient failure + retry/backoff`
   - `query retry exhausted`
   - reexecucao idempotente do recovery nos cenarios relevantes
+
+### Fase 4 em progresso
+
+1. PR 1 (atual): observabilidade do boot validada por teste cobrindo evento de fail-fast e metricas minimas por fase/resultado.
