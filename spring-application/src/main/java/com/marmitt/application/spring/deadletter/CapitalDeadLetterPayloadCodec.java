@@ -7,6 +7,7 @@ import com.marmitt.core.dto.capital.ExecutionConfirmation;
 import com.marmitt.core.dto.capital.MarginRelease;
 import com.marmitt.core.dto.events.ExecutionConfirmedEvent;
 import com.marmitt.core.dto.events.MarginReleaseEvent;
+import com.marmitt.core.dto.portfolio.CapitalDeadLetterPayload;
 import org.springframework.stereotype.Component;
 
 @Component

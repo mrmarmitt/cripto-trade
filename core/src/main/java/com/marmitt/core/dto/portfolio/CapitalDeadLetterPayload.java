@@ -1,4 +1,4 @@
-package com.marmitt.application.spring.deadletter;
+package com.marmitt.core.dto.portfolio;
 
 import com.marmitt.core.enums.FeeType;
 import com.marmitt.core.enums.ReleaseReason;
@@ -6,7 +6,7 @@ import com.marmitt.core.enums.ReleaseReason;
 import java.math.BigDecimal;
 import java.util.UUID;
 
-record CapitalDeadLetterPayload(
+public record CapitalDeadLetterPayload(
         String eventType,
         UUID runnerId,
         UUID transactionId,

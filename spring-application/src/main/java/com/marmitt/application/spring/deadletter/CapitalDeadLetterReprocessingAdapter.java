@@ -3,6 +3,7 @@ package com.marmitt.application.spring.deadletter;
 import com.marmitt.core.application.reaction.ExecutionConfirmedReaction;
 import com.marmitt.core.application.reaction.MarginReleasedReaction;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
+import com.marmitt.core.dto.portfolio.CapitalDeadLetterPayload;
 import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.ports.outbound.repository.DeadLetterReprocessingPort;
 import org.springframework.stereotype.Component;
