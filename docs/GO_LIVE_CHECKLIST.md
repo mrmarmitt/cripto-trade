@@ -125,6 +125,6 @@ Evidencias de Fase 1B em testes automatizados:
 
 ### Proximo passo recomendado
 
-1. Concluir o PR 1 da Fase 4 com observabilidade validada por teste.
-2. Avancar para DLQ operacional e continuidade da observabilidade de boot/recovery.
+1. Concluir o PR 2 da Fase 4 com DLQ operacional no boot (abertura e nao duplicacao).
+2. Avancar para resolucao/reprocessamento operacional da DLQ e continuidade da observabilidade de boot/recovery.
 3. Atualizar este checklist a cada fase concluida do Testing Roadmap.
