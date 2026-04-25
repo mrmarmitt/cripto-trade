@@ -84,7 +84,8 @@ Consolidar os principais critérios para sair do ambiente de simulação (MOCK) 
 - Testing Roadmap Fase 0: CONCLUIDA no branch `develop`.
 - Testing Roadmap Fase 1A: CONCLUIDA no branch `develop`.
 - Testing Roadmap Fase 1B: CONCLUIDA no branch `develop`.
-- Testing Roadmap Fase 2: EM ANDAMENTO.
+- Testing Roadmap Fase 2: CONCLUIDA no branch `develop`.
+- Testing Roadmap Fase 3: EM ANDAMENTO.
 
 Evidencias de Fase 0 em testes automatizados:
 - `core/src/test/java/com/marmitt/core/domain/portfolio/GlobalBalanceInvariantsTest.java`
@@ -107,11 +108,11 @@ Evidencias de Fase 1B em testes automatizados:
 ### Impacto no Go-Live
 
 - Item 1 (Testes automatizados minimos): PARCIAL (AVANCADO).
-- Baseline de invariantes, integracao core com MOCK e controles deterministicos do MOCK cobertos (Fases 0, 1A e 1B).
-- Ainda faltam fases de robustez e operacao (Fases 2, 3 e 4) e integracao real com exchange.
+- Baseline de invariantes, integracao core com MOCK, controles deterministicos do MOCK e robustez contra duplicidade/concorrencia cobertos (Fases 0, 1A, 1B e 2).
+- Ainda faltam boot recovery completo, operacao e integracao real com exchange (Fases 3 e 4).
 
 ### Proximo passo recomendado
 
-1. Concluir o PR 8 da Fase 2 com repeticao controlada dos cenarios terminais mais frageis para reduzir risco de flakiness residual.
-2. Encerrar a Fase 2 no roadmap e neste checklist apos validar estabilidade repetida dos cenarios de reorder e terminal monotonicity.
+1. Concluir o PR 1 da Fase 3 com cobertura de zombie `PENDING` dentro do TTL e reexecucao idempotente do recovery para zombies vencidos.
+2. Avancar para os cenarios de limbo `SUBMITTED/PARTIAL` com query de exchange/mock na sequencia da Fase 3.
 3. Atualizar este checklist a cada fase concluida do Testing Roadmap.

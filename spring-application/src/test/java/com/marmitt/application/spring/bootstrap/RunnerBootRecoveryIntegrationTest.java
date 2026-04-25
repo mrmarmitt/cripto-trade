@@ -55,6 +55,7 @@ class RunnerBootRecoveryIntegrationTest {
     private static final String SYMBOL = "BTCUSDT";
     private static final BigDecimal INITIAL_CAPITAL = new BigDecimal("1000.00000000");
     private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(8);
+    private static final long ZOMBIE_TTL_MS = 300_000L;
 
     @Container
     @SuppressWarnings("resource")
@@ -70,6 +71,7 @@ class RunnerBootRecoveryIntegrationTest {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("spring.flyway.enabled", () -> "true");
         registry.add("runner.boot.orchestrator-enabled", () -> "false");
+        registry.add("runner.boot.phase2.portfolio.reservation-ttl.ttl-ms", () -> ZOMBIE_TTL_MS);
     }
 
     @Autowired
@@ -134,6 +136,91 @@ class RunnerBootRecoveryIntegrationTest {
 
         StrategyRunner latestRunner = strategyRunnerRepository.findById(runner.getId())
                 .orElseThrow(() -> new IllegalStateException("Runner not found after recovery"));
+        assertEquals(com.marmitt.core.enums.RunnerStatus.ACTIVE, latestRunner.getStatus());
+        assertFalse(latestRunner.isReconciling());
+    }
+
+    @Test
+    void recoveryShouldKeepZombiePendingWithinTtlAndPreserveReservedBalance() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        BigDecimal reservedAmount = new BigDecimal("120.00000000");
+
+        Transaction pendingBuy = newTransaction(
+                runner,
+                TransactionType.BUY,
+                new BigDecimal("0.00200000"),
+                new BigDecimal("60000.00000000"),
+                reservedAmount
+        );
+        strategyRunnerRepository.saveTransaction(pendingBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+
+        jdbcTemplate.update(
+                "UPDATE transactions SET requested_at = ? WHERE id = ?",
+                Timestamp.from(Instant.now().minusMillis(ZOMBIE_TTL_MS / 2)),
+                pendingBuy.getId()
+        );
+
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+
+        Transaction stillPending = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.PENDING, WAIT_TIMEOUT);
+        assertNotNull(stillPending);
+        assertEquals(1, summary.inFlightCount());
+        assertEquals(1, summary.zombiesCount());
+        assertEquals(0, summary.limboCount());
+        assertTrue(summary.notes().stream().anyMatch(note -> note.contains("zombie within TTL")),
+                "Recovery summary should record that the zombie stayed pending within TTL");
+
+        awaitBalance(portfolioId, INITIAL_CAPITAL.subtract(reservedAmount), reservedAmount, WAIT_TIMEOUT);
+
+        StrategyRunner latestRunner = strategyRunnerRepository.findById(runner.getId())
+                .orElseThrow(() -> new IllegalStateException("Runner not found after recovery"));
+        assertEquals(com.marmitt.core.enums.RunnerStatus.ACTIVE, latestRunner.getStatus());
+        assertFalse(latestRunner.isReconciling());
+    }
+
+    @Test
+    void recoveryShouldBeIdempotentWhenExpiringTheSameZombieTwice() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        BigDecimal reservedAmount = new BigDecimal("140.00000000");
+
+        Transaction pendingBuy = newTransaction(
+                runner,
+                TransactionType.BUY,
+                new BigDecimal("0.00280000"),
+                new BigDecimal("50000.00000000"),
+                reservedAmount
+        );
+        strategyRunnerRepository.saveTransaction(pendingBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+
+        jdbcTemplate.update(
+                "UPDATE transactions SET requested_at = ? WHERE id = ?",
+                Timestamp.from(Instant.now().minus(Duration.ofHours(2))),
+                pendingBuy.getId()
+        );
+
+        RunnerBootRecoveryUseCase.RecoverySummary first = runnerBootRecoveryUseCase.recoverRunner(runner);
+        Transaction expired = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.EXPIRED, WAIT_TIMEOUT);
+        assertNotNull(expired);
+        awaitBalance(portfolioId, INITIAL_CAPITAL, BigDecimal.ZERO, WAIT_TIMEOUT);
+
+        RunnerBootRecoveryUseCase.RecoverySummary second = runnerBootRecoveryUseCase.recoverRunner(runner);
+
+        Transaction expiredAgain = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.EXPIRED, WAIT_TIMEOUT);
+        assertNotNull(expiredAgain);
+        assertEquals(1, first.inFlightCount());
+        assertEquals(1, first.zombiesCount());
+        assertEquals(0, first.limboCount());
+        assertEquals(0, second.inFlightCount());
+        assertEquals(0, second.zombiesCount());
+        assertEquals(0, second.limboCount());
+        awaitBalance(portfolioId, INITIAL_CAPITAL, BigDecimal.ZERO, WAIT_TIMEOUT);
+
+        StrategyRunner latestRunner = strategyRunnerRepository.findById(runner.getId())
+                .orElseThrow(() -> new IllegalStateException("Runner not found after repeated recovery"));
         assertEquals(com.marmitt.core.enums.RunnerStatus.ACTIVE, latestRunner.getStatus());
         assertFalse(latestRunner.isReconciling());
     }

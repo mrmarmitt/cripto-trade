@@ -424,7 +424,8 @@ Fora de escopo da Fase 4:
 - Fase 0: CONCLUIDA.
 - Fase 1A: CONCLUIDA.
 - Fase 1B: CONCLUIDA.
-- Fase 2: EM ANDAMENTO.
+- Fase 2: CONCLUIDA.
+- Fase 3: EM ANDAMENTO.
 
 ### Evidencias de conclusao da Fase 1B
 
@@ -466,7 +467,7 @@ Fora de escopo da Fase 4:
 - Ao concluir cada fase do roadmap, atualizar o status do Item 1 do Go-Live.
 - Go-live completo depende da conclusao das Fases 2, 3 e 4, e da integracao real de exchange.
 
-### Fase 2 em progresso
+### Fase 2 concluida
 
 1. PR 1 (concluido): `SELL` concorrente tentando lock no mesmo lote/posicao.
 2. PR 2 (concluido): retry idempotente do mesmo `SELL` lock sem permitir tomada por outra transacao.
@@ -475,4 +476,8 @@ Fora de escopo da Fase 4:
 5. PR 5 (concluido): refatorar a suite deterministica do mock por responsabilidade antes dos cenarios de retry/falha transitoria.
 6. PR 6 (concluido): redelivery idempotente apos falha transitoria simulada no processamento de `SELL FILLED`.
 7. PR 7 (concluido): eventos terminais fora de ordem (`FILLED -> CANCELED` atrasado) sem regressao de estado ou dupla aplicacao economica.
-8. PR 8 (atual): repeticao controlada dos cenarios mais frageis para validar monotonicidade terminal e estabilidade sem flakiness.
+8. PR 8 (concluido): repeticao controlada dos cenarios mais frageis para validar monotonicidade terminal e estabilidade sem flakiness.
+
+### Fase 3 em progresso
+
+1. PR 1 (atual): zombies `PENDING` sem `exchangeOrderId` dentro do TTL e reexecucao idempotente do recovery para zombies vencidos.
