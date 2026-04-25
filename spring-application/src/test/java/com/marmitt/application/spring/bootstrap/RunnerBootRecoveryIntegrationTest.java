@@ -55,6 +55,7 @@ class RunnerBootRecoveryIntegrationTest {
     private static final String SYMBOL = "BTCUSDT";
     private static final BigDecimal INITIAL_CAPITAL = new BigDecimal("1000.00000000");
     private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(8);
+    private static final long ZOMBIE_TTL_MS = 300_000L;
 
     @Container
     @SuppressWarnings("resource")
@@ -70,6 +71,7 @@ class RunnerBootRecoveryIntegrationTest {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("spring.flyway.enabled", () -> "true");
         registry.add("runner.boot.orchestrator-enabled", () -> "false");
+        registry.add("runner.boot.phase2.portfolio.reservation-ttl.ttl-ms", () -> ZOMBIE_TTL_MS);
     }
 
     @Autowired
@@ -156,7 +158,7 @@ class RunnerBootRecoveryIntegrationTest {
 
         jdbcTemplate.update(
                 "UPDATE transactions SET requested_at = ? WHERE id = ?",
-                Timestamp.from(Instant.now().minus(Duration.ofMinutes(2))),
+                Timestamp.from(Instant.now().minusMillis(ZOMBIE_TTL_MS / 2)),
                 pendingBuy.getId()
         );
 
