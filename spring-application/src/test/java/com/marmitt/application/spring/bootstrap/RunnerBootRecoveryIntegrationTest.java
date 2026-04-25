@@ -455,6 +455,68 @@ class RunnerBootRecoveryIntegrationTest {
     }
 
     @Test
+    void recoveryShouldHaltRunnerWhenTransientQueryFailuresExhaustRetries() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        BigDecimal quantity = new BigDecimal("0.00150000");
+        BigDecimal price = new BigDecimal("60000.00000000");
+        BigDecimal reservedAmount = quantity.multiply(price);
+
+        Transaction submittedBuy = newTransaction(
+                runner,
+                TransactionType.BUY,
+                quantity,
+                price,
+                reservedAmount
+        );
+        submittedBuy.submit("EX_QUERY_RETRY_EXHAUSTED");
+        strategyRunnerRepository.saveTransaction(submittedBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+
+        MockExchangeAdapter mock = getMockExchangeAdapter();
+        mock.seedQueriedOrderSnapshot(orderData(
+                submittedBuy,
+                OrderDataDto.OrderStatus.FILLED,
+                quantity,
+                price,
+                BigDecimal.ZERO
+        ));
+        mock.registerQueryFailurePlan(
+                submittedBuy.getClientOrderId(),
+                3,
+                ExchangeQueryException.ErrorType.TEMPORARY,
+                "Planned transient query failure exhausted"
+        );
+
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+
+        Transaction stillSubmitted = awaitTransactionStatus(submittedBuy.getId(), TransactionStatus.SUBMITTED, WAIT_TIMEOUT);
+        assertNotNull(stillSubmitted);
+        assertEquals(1, summary.inFlightCount());
+        assertEquals(0, summary.zombiesCount());
+        assertEquals(1, summary.limboCount());
+        assertTrue(summary.notes().stream().anyMatch(note -> note.contains("transient query failure")),
+                "Recovery summary should record transient query failures");
+        assertTrue(summary.notes().stream().anyMatch(note -> note.contains("Step 4 ERROR")),
+                "Recovery summary should record the exhausted query failure");
+
+        StrategyRunner halted = strategyRunnerRepository.findById(runner.getId())
+                .orElseThrow(() -> new IllegalStateException("Runner not found after exhausted query recovery"));
+        assertEquals(com.marmitt.core.enums.RunnerStatus.HALTED, halted.getStatus());
+        assertTrue(halted.isReconciling());
+
+        assertTrue(strategyRunnerRepository.findPositionByOpenedByTransactionId(submittedBuy.getId()).isEmpty(),
+                "Exhausted query retries must not create a position");
+
+        awaitBalance(
+                portfolioId,
+                INITIAL_CAPITAL.subtract(reservedAmount),
+                reservedAmount,
+                WAIT_TIMEOUT
+        );
+    }
+
+    @Test
     void recoveryShouldReconcileSubmittedBuyFoundAsFilledOnExchange() {
         UUID portfolioId = createPortfolio();
         StrategyRunner runner = createAndActivateRunner(portfolioId);

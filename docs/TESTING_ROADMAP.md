@@ -483,4 +483,5 @@ Fora de escopo da Fase 4:
 1. PR 1 (concluido): zombies `PENDING` sem `exchangeOrderId` dentro do TTL e reexecucao idempotente do recovery para zombies vencidos.
 2. PR 2 (concluido): limbo `SUBMITTED/PARTIAL` reconciliado via query positiva do MOCK (`SUBMITTED -> FILLED` e `PARTIAL -> FILLED`) sem drift financeiro.
 3. PR 3 (concluido): limbo nao encontrado na exchange com fallback sintetico (`SUBMITTED -> EXPIRED`, `PARTIAL -> CANCELED`) e reexecucao idempotente do recovery.
-4. PR 4 (atual): falha de query no boot recovery cobrindo `query unsupported` e `query transient failure + retry/backoff` com recuperacao sem drift.
+4. PR 4 (concluido): falha de query no boot recovery cobrindo `query unsupported` e `query transient failure + retry/backoff` com recuperacao sem drift.
+5. PR 5 (atual): falha transitoria esgotada no boot recovery (`retry exhausted`) preservando limbo sem persistencia parcial indevida e levando o runner a `HALTED`.
