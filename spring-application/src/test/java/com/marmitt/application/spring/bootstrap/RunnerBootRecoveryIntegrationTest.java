@@ -259,6 +259,83 @@ class RunnerBootRecoveryIntegrationTest {
         assertEquals(1, summary.limboCount());
 
         awaitBalance(portfolioId, INITIAL_CAPITAL, BigDecimal.ZERO, WAIT_TIMEOUT);
+
+        RunnerBootRecoveryUseCase.RecoverySummary second = runnerBootRecoveryUseCase.recoverRunner(runner);
+
+        assertEquals(0, second.inFlightCount());
+        assertEquals(0, second.zombiesCount());
+        assertEquals(0, second.limboCount());
+
+        Transaction expiredAgain = strategyRunnerRepository.findTransactionById(submittedBuy.getId())
+                .orElseThrow(() -> new IllegalStateException("Transaction not found after repeated recovery"));
+        assertEquals(TransactionStatus.EXPIRED, expiredAgain.getStatus());
+
+        awaitBalance(portfolioId, INITIAL_CAPITAL, BigDecimal.ZERO, WAIT_TIMEOUT);
+    }
+
+    @Test
+    void recoveryShouldCancelPartialBuyNotFoundOnExchangeAndReleaseOutstandingReserveOnly() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        BigDecimal totalQuantity = new BigDecimal("1.00000000");
+        BigDecimal totalReserved = new BigDecimal("112.00000000");
+        BigDecimal partialQuantity = new BigDecimal("0.40000000");
+        BigDecimal partialPrice = new BigDecimal("100.00000000");
+        BigDecimal partialExecutedCost = partialQuantity.multiply(partialPrice);
+
+        Transaction partialBuy = newTransaction(
+                runner,
+                TransactionType.BUY,
+                totalQuantity,
+                new BigDecimal("112.00000000"),
+                totalReserved
+        );
+        partialBuy.submit("EX_PARTIAL_MISSING_ON_EXCHANGE");
+        partialBuy.partialFill(partialQuantity, partialPrice);
+        strategyRunnerRepository.saveTransaction(partialBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, totalReserved));
+
+        Position partialPosition = new Position(runner.getId(), SYMBOL, partialQuantity, partialPrice);
+        partialPosition.associateBuyTransaction(partialBuy.getId());
+        strategyRunnerRepository.savePosition(partialPosition);
+
+        GlobalBalance balanceAfterPartial = globalBalanceRepository.findByPortfolioId(portfolioId)
+                .orElseThrow(() -> new IllegalStateException("GlobalBalance not found"));
+        balanceAfterPartial.confirmExecution(partialExecutedCost, BigDecimal.ZERO, BigDecimal.ZERO);
+        globalBalanceRepository.save(balanceAfterPartial);
+
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+
+        Transaction canceled = awaitTransactionStatus(partialBuy.getId(), TransactionStatus.CANCELED, WAIT_TIMEOUT);
+        assertNotNull(canceled);
+        assertEquals(1, summary.inFlightCount());
+        assertEquals(0, summary.zombiesCount());
+        assertEquals(1, summary.limboCount());
+
+        Position position = strategyRunnerRepository.findPositionByOpenedByTransactionId(partialBuy.getId())
+                .orElseThrow(() -> new IllegalStateException("Position not found for openedByTransactionId="
+                        + partialBuy.getId()));
+        assertEquals(0, position.getQuantity().compareTo(partialQuantity));
+        assertEquals(0, position.getAveragePrice().compareTo(partialPrice));
+
+        awaitBalance(portfolioId, INITIAL_CAPITAL, BigDecimal.ZERO, WAIT_TIMEOUT);
+
+        RunnerBootRecoveryUseCase.RecoverySummary second = runnerBootRecoveryUseCase.recoverRunner(runner);
+
+        assertEquals(0, second.inFlightCount());
+        assertEquals(0, second.zombiesCount());
+        assertEquals(0, second.limboCount());
+
+        Transaction canceledAgain = strategyRunnerRepository.findTransactionById(partialBuy.getId())
+                .orElseThrow(() -> new IllegalStateException("Transaction not found after repeated recovery"));
+        assertEquals(TransactionStatus.CANCELED, canceledAgain.getStatus());
+
+        Position positionAgain = strategyRunnerRepository.findPositionByOpenedByTransactionId(partialBuy.getId())
+                .orElseThrow(() -> new IllegalStateException("Position not found after repeated recovery"));
+        assertEquals(0, positionAgain.getQuantity().compareTo(partialQuantity));
+        assertEquals(0, positionAgain.getAveragePrice().compareTo(partialPrice));
+
+        awaitBalance(portfolioId, INITIAL_CAPITAL, BigDecimal.ZERO, WAIT_TIMEOUT);
     }
 
     @Test
