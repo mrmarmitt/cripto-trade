@@ -86,7 +86,7 @@ Consolidar os principais critérios para sair do ambiente de simulação (MOCK) 
 - Testing Roadmap Fase 1B: CONCLUIDA no branch `develop`.
 - Testing Roadmap Fase 2: CONCLUIDA no branch `develop`.
 - Testing Roadmap Fase 3: CONCLUIDA no branch `develop`.
-- Testing Roadmap Fase 4: EM PLANEJAMENTO.
+- Testing Roadmap Fase 4: EM ANDAMENTO.
 
 Evidencias de Fase 0 em testes automatizados:
 - `core/src/test/java/com/marmitt/core/domain/portfolio/GlobalBalanceInvariantsTest.java`
@@ -125,6 +125,6 @@ Evidencias de Fase 1B em testes automatizados:
 
 ### Proximo passo recomendado
 
-1. Iniciar a Fase 4 pelo PR 1 de observabilidade validada por teste.
-2. Cobrir evento de fail-fast e metricas minimas de boot por fase/resultado.
+1. Concluir o PR 1 da Fase 4 com observabilidade validada por teste.
+2. Avancar para DLQ operacional e continuidade da observabilidade de boot/recovery.
 3. Atualizar este checklist a cada fase concluida do Testing Roadmap.
