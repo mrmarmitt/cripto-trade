@@ -113,6 +113,6 @@ Evidencias de Fase 1B em testes automatizados:
 
 ### Proximo passo recomendado
 
-1. Concluir o PR 4 da Fase 3 com cobertura de `query unsupported` e `retry/backoff` transitorio no boot recovery.
-2. Avancar para o cenario de falha transitoria esgotada (retry exhausted) na sequencia da Fase 3.
+1. Concluir o PR 5 da Fase 3 com cobertura de falha transitoria esgotada (`retry exhausted`) no boot recovery.
+2. Reavaliar se a Fase 3 fica concluida ou se ainda resta algum gap real de recovery antes de avancar para a Fase 4.
 3. Atualizar este checklist a cada fase concluida do Testing Roadmap.
