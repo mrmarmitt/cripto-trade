@@ -502,4 +502,14 @@ Fora de escopo da Fase 4:
 
 ### Fase 4 em progresso
 
-1. PR 1 (atual): observabilidade do boot validada por teste cobrindo evento de fail-fast e metricas minimas por fase/resultado.
+1. PR 1 (concluido): observabilidade do boot validada por teste cobrindo evento de fail-fast e metricas minimas por fase/resultado.
+2. PR 2 (atual): DLQ operacional no boot cobrindo abertura de entry e nao duplicacao da mesma identidade do problema.
+
+## Backlog Pos-Testes
+
+- Refatorar o `BootOrchestrator` para aproximar o fluxo de boot do padrao `usecase first`.
+- Objetivo da refatoracao:
+  - manter o adapter Spring restrito a lifecycle/evento/configuracao/observabilidade;
+  - extrair a orquestracao do boot para um use case do `core`;
+  - reduzir o acoplamento atual entre framework e sequenciamento das fases de boot.
+- Prioridade: somente depois de concluir a trilha atual de testes e endurecimento operacional.
