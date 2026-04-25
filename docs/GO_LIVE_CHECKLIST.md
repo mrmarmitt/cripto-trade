@@ -113,6 +113,6 @@ Evidencias de Fase 1B em testes automatizados:
 
 ### Proximo passo recomendado
 
-1. Concluir o PR 1 da Fase 3 com cobertura de zombie `PENDING` dentro do TTL e reexecucao idempotente do recovery para zombies vencidos.
-2. Avancar para os cenarios de limbo `SUBMITTED/PARTIAL` com query de exchange/mock na sequencia da Fase 3.
+1. Concluir o PR 2 da Fase 3 com cobertura de limbo `SUBMITTED/PARTIAL` reconciliado via query positiva da exchange/mock.
+2. Avancar para os cenarios de limbo `SUBMITTED/PARTIAL` nao encontrados na exchange e fallback terminal sintetico.
 3. Atualizar este checklist a cada fase concluida do Testing Roadmap.

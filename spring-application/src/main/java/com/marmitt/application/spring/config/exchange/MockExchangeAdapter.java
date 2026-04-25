@@ -178,6 +178,14 @@ public class MockExchangeAdapter implements ExchangeStreamingPort,
         runtime.clearOrderScenarioOverrides();
     }
 
+    /**
+     * Seeds a deterministic REST query snapshot without emitting callbacks.
+     * Intended for boot recovery integration tests that exercise limbo reconciliation.
+     */
+    public void seedQueriedOrderSnapshot(OrderDataDto orderData) {
+        runtime.seedQueriedOrderSnapshot(orderData);
+    }
+
     private static void simulateDelayIfNeeded(long delayMs) {
         if (delayMs <= 0) {
             return;
