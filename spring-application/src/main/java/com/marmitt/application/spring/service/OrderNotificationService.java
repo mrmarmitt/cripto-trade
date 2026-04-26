@@ -1,9 +1,9 @@
 package com.marmitt.application.spring.service;
 
-import com.marmitt.application.spring.controller.dto.order.OrderNotificationStreamRequest;
-import com.marmitt.application.spring.controller.dto.order.OrderNotificationStreamResponse;
 import com.marmitt.application.spring.controller.mapper.OrderNotificationMapper;
 import com.marmitt.core.dto.websocket.request.MessageRequest;
+import com.marmitt.core.dto.websocket.request.OrderNotificationStreamRequest;
+import com.marmitt.core.dto.websocket.response.OrderNotificationStreamResponse;
 import com.marmitt.core.ports.inbound.websocket.SendMessageWebSocketPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

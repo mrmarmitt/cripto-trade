@@ -1,6 +1,5 @@
 package com.marmitt.application.spring.controller;
 
-import com.marmitt.application.spring.controller.dto.portfolio.CreatePortfolioDto;
 import com.marmitt.core.dto.portfolio.CreatePortfolioRequest;
 import com.marmitt.core.dto.portfolio.CreatePortfolioResponse;
 import com.marmitt.core.dto.portfolio.AggregatedTransactionsResponse;
@@ -10,7 +9,6 @@ import com.marmitt.core.dto.portfolio.PortfolioPnlDto;
 import com.marmitt.core.dto.portfolio.TransactionDto;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.portfolio.QueryPortfolioPort;
-import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -47,18 +45,12 @@ public class PortfolioController {
      */
     @PostMapping
     public ResponseEntity<CreatePortfolioResponse> createPortfolio(
-            @Valid @RequestBody CreatePortfolioDto dto
+            @RequestBody CreatePortfolioRequest request
     ) {
         log.info("Received request to create portfolio - Name: {}, InitialCapital: {}, Currency: {}",
-                dto.name(), dto.initialCapitalAmount(), dto.currency());
+                request.name(), request.initialCapitalAmount(), request.currency());
 
         try {
-            CreatePortfolioRequest request = CreatePortfolioRequest.builder()
-                    .name(dto.name())
-                    .initialCapitalAmount(dto.initialCapitalAmount())
-                    .currency(dto.currency())
-                    .build();
-
             CreatePortfolioResponse response = createPortfolio.execute(request);
 
             if (response.portfolioId() != null) {

@@ -1,12 +1,11 @@
 package com.marmitt.application.spring.controller.mapper;
 
-import com.marmitt.application.spring.controller.dto.order.OrderCancelRequest;
-import com.marmitt.application.spring.controller.dto.order.OrderCreateRequest;
-import com.marmitt.core.dto.websocket.request.SendOrderRequest;
+import com.marmitt.core.dto.websocket.request.OrderCancelRequest;
+import com.marmitt.core.dto.websocket.request.OrderCreateRequest;
 import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
+import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.enums.OrderSide;
 import com.marmitt.core.enums.OrderType;
-import jakarta.validation.Valid;
 
 public class OrderManagementMapper {
 
@@ -29,7 +28,7 @@ public class OrderManagementMapper {
         return "WEB_" + System.currentTimeMillis(); // Placeholder para ordens via web
     }
     
-    public static SendCancelOrderRequest toSendCancelOrderRequest(@Valid OrderCancelRequest request) {
+    public static SendCancelOrderRequest toSendCancelOrderRequest(OrderCancelRequest request) {
         return new SendCancelOrderRequest(
                 request.exchange(),
                 request.orderId(),

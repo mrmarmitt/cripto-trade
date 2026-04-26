@@ -1,4 +1,4 @@
-package com.marmitt.application.spring.controller.dto.market;
+package com.marmitt.core.dto.websocket.response;
 
 public record MarketDataStreamResponse(
         String message,

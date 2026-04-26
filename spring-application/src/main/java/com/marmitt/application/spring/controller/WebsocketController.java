@@ -1,12 +1,11 @@
 package com.marmitt.application.spring.controller;
 
-import com.marmitt.application.spring.controller.dto.WebSocketConnectRequest;
 import com.marmitt.application.spring.service.ExchangeConnectService;
 import com.marmitt.application.spring.service.ExchangeDisconnectService;
 import com.marmitt.application.spring.service.ExchangeWebSocketQueryService;
+import com.marmitt.core.dto.websocket.request.WebSocketConnectRequest;
 import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
 import com.marmitt.core.dto.websocket.response.WebSocketStatsResponse;
-import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -38,7 +37,7 @@ public class WebsocketController {
 
     @PostMapping("/connect")
     public ResponseEntity<WebSocketConnectionResponse> connect(
-            @Valid @RequestBody WebSocketConnectRequest request) {
+            @RequestBody WebSocketConnectRequest request) {
         WebSocketConnectionResponse response = exchangeConnectionService.connect(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }

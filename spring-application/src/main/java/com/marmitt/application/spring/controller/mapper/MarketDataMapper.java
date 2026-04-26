@@ -1,8 +1,8 @@
 package com.marmitt.application.spring.controller.mapper;
 
-import com.marmitt.application.spring.controller.dto.common.CurrencyPairRequest;
-import com.marmitt.application.spring.controller.dto.market.MarketDataStreamRequest;
 import com.marmitt.core.dto.common.CurrencyPair;
+import com.marmitt.core.dto.websocket.request.CurrencyPairRequest;
+import com.marmitt.core.dto.websocket.request.MarketDataStreamRequest;
 import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 import com.marmitt.core.enums.StreamAction;
 

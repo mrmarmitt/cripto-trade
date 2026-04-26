@@ -1,4 +1,4 @@
-package com.marmitt.application.spring.controller.dto.order;
+package com.marmitt.core.dto.websocket.response;
 
 public record OrderManagementResponse(
         String message,
