@@ -2,6 +2,7 @@ package com.marmitt.core.application.usecase.portfolio;
 
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
 import com.marmitt.core.dto.portfolio.DeadLetterEntryDto;
+import com.marmitt.core.dto.portfolio.DeadLetterReprocessingResult;
 import com.marmitt.core.dto.portfolio.ReprocessDeadLetterResponse;
 import com.marmitt.core.dto.portfolio.ResolveDeadLetterResponse;
 import com.marmitt.core.ports.inbound.portfolio.ManageDeadLetterPort;
@@ -87,7 +88,11 @@ public class ManageDeadLetterUseCase implements ManageDeadLetterPort {
             );
         }
 
-        deadLetterReprocessingPort.reprocess(entry);
+        DeadLetterReprocessingResult reprocessingResult = deadLetterReprocessingPort.reprocess(entry);
+        if (!reprocessingResult.applied()) {
+            return ReprocessDeadLetterResponse.failure(deadLetterId, reprocessingResult.message());
+        }
+
         entry.resolve(requestedBy);
         deadLetterEntryRepository.save(entry);
 

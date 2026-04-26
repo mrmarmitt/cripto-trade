@@ -2,6 +2,7 @@ package com.marmitt.core.application.usecase.portfolio;
 
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
 import com.marmitt.core.dto.portfolio.DeadLetterEntryDto;
+import com.marmitt.core.dto.portfolio.DeadLetterReprocessingResult;
 import com.marmitt.core.dto.portfolio.ReprocessDeadLetterResponse;
 import com.marmitt.core.dto.portfolio.ResolveDeadLetterResponse;
 import com.marmitt.core.enums.DlqReason;
@@ -137,6 +138,7 @@ class ManageDeadLetterUseCaseTest {
         DeadLetterEntry entry = newRetryExhaustedEntry(UUID.randomUUID(), UUID.randomUUID(), "client-4");
         when(repository.findById(entry.getId())).thenReturn(Optional.of(entry));
         when(reprocessingPort.supports(entry)).thenReturn(true);
+        when(reprocessingPort.reprocess(entry)).thenReturn(DeadLetterReprocessingResult.applied("Replay applied"));
 
         ManageDeadLetterUseCase useCase = new ManageDeadLetterUseCase(repository, reprocessingPort);
 
@@ -197,6 +199,26 @@ class ManageDeadLetterUseCaseTest {
         assertFalse(response.reprocessed());
         assertEquals("Dead letter entry cannot be reprocessed automatically", response.message());
         verify(reprocessingPort, never()).reprocess(entry);
+    }
+
+    @Test
+    void reprocessShouldReturnFailureWhenReplayProducesNoStateChange() {
+        DeadLetterEntryRepositoryPort repository = mock(DeadLetterEntryRepositoryPort.class);
+        DeadLetterReprocessingPort reprocessingPort = mock(DeadLetterReprocessingPort.class);
+        DeadLetterEntry entry = newRetryExhaustedEntry(UUID.randomUUID(), UUID.randomUUID(), "client-7");
+        when(repository.findById(entry.getId())).thenReturn(Optional.of(entry));
+        when(reprocessingPort.supports(entry)).thenReturn(true);
+        when(reprocessingPort.reprocess(entry)).thenReturn(
+                DeadLetterReprocessingResult.notApplied("Dead letter replay produced no state change and requires manual review")
+        );
+
+        ManageDeadLetterUseCase useCase = new ManageDeadLetterUseCase(repository, reprocessingPort);
+
+        ReprocessDeadLetterResponse response = useCase.reprocess(entry.getId(), "operator@test", "retry capital flow");
+
+        assertFalse(response.reprocessed());
+        assertEquals("Dead letter replay produced no state change and requires manual review", response.message());
+        verify(repository, never()).save(entry);
     }
 
     @Test
