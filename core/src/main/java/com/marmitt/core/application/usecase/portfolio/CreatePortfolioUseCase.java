@@ -2,8 +2,8 @@ package com.marmitt.core.application.usecase.portfolio;
 
 import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.portfolio.Portfolio;
-import com.marmitt.core.dto.portfolio.CreatePortfolioRequest;
-import com.marmitt.core.dto.portfolio.CreatePortfolioResponse;
+import com.marmitt.core.dto.portfolio.request.CreatePortfolioRequest;
+import com.marmitt.core.dto.portfolio.response.CreatePortfolioResponse;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
@@ -70,3 +70,4 @@ public class CreatePortfolioUseCase implements CreatePortfolioPort {
         }
     }
 }
+

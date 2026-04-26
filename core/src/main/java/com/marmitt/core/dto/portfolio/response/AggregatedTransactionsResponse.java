@@ -1,4 +1,4 @@
-package com.marmitt.core.dto.portfolio;
+package com.marmitt.core.dto.portfolio.response;
 
 import java.util.List;
 import java.util.UUID;
@@ -10,3 +10,4 @@ public record AggregatedTransactionsResponse(
         int totalCount
 ) {
 }
+

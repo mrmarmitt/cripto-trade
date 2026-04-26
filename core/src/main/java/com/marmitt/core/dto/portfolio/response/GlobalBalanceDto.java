@@ -1,4 +1,4 @@
-package com.marmitt.core.dto.portfolio;
+package com.marmitt.core.dto.portfolio.response;
 
 import com.marmitt.core.domain.portfolio.GlobalBalance;
 import lombok.Builder;
@@ -34,3 +34,4 @@ public record GlobalBalanceDto(
                 .build();
     }
 }
+

@@ -1,4 +1,4 @@
-package com.marmitt.core.dto.portfolio;
+package com.marmitt.core.dto.portfolio.request;
 
 import lombok.Builder;
 
@@ -29,3 +29,4 @@ public record CreatePortfolioRequest(
         }
     }
 }
+

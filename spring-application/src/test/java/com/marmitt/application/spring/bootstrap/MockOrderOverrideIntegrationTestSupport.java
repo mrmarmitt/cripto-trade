@@ -5,8 +5,8 @@ import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
-import com.marmitt.core.dto.portfolio.CreatePortfolioRequest;
-import com.marmitt.core.dto.portfolio.CreatePortfolioResponse;
+import com.marmitt.core.dto.portfolio.request.CreatePortfolioRequest;
+import com.marmitt.core.dto.portfolio.response.CreatePortfolioResponse;
 import com.marmitt.core.dto.runner.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.CreateRunnerResponse;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
@@ -601,3 +601,4 @@ abstract class MockOrderOverrideIntegrationTestSupport {
     protected record BalanceRow(BigDecimal available, BigDecimal reserved, BigDecimal realized) {
     }
 }
+

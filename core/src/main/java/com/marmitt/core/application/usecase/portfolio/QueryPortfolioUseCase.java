@@ -1,9 +1,9 @@
 package com.marmitt.core.application.usecase.portfolio;
 
-import com.marmitt.core.dto.portfolio.PortfolioDto;
-import com.marmitt.core.dto.portfolio.GlobalBalanceDto;
-import com.marmitt.core.dto.portfolio.PortfolioPnlDto;
-import com.marmitt.core.dto.portfolio.TransactionDto;
+import com.marmitt.core.dto.portfolio.response.PortfolioDto;
+import com.marmitt.core.dto.portfolio.response.GlobalBalanceDto;
+import com.marmitt.core.dto.portfolio.response.PortfolioPnlDto;
+import com.marmitt.core.dto.portfolio.response.TransactionDto;
 import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.enums.TransactionStatus;
@@ -126,3 +126,4 @@ public class QueryPortfolioUseCase implements QueryPortfolioPort {
                 .build());
     }
 }
+

@@ -1,4 +1,4 @@
-package com.marmitt.core.dto.portfolio;
+package com.marmitt.core.dto.portfolio.response;
 
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.enums.TransactionStatus;
@@ -55,3 +55,4 @@ public record TransactionDto(
                 .build();
     }
 }
+

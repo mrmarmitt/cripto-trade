@@ -1,6 +1,6 @@
 package com.marmitt.application.spring.controller;
 
-import com.marmitt.core.dto.portfolio.PortfolioDto;
+import com.marmitt.core.dto.portfolio.response.PortfolioDto;
 import com.marmitt.core.dto.runner.CreateRunnerDto;
 import com.marmitt.core.dto.runner.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.CreateRunnerResponse;
@@ -105,3 +105,4 @@ public class PortfolioRunnerController {
         return ResponseEntity.ok(runners);
     }
 }
+

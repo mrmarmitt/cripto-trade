@@ -1,4 +1,4 @@
-package com.marmitt.core.dto.portfolio;
+package com.marmitt.core.dto.portfolio.response;
 
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
 import com.marmitt.core.enums.DlqReason;
@@ -35,3 +35,4 @@ public record DeadLetterEntryDto(
         );
     }
 }
+

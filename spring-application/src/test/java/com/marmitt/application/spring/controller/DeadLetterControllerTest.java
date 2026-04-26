@@ -1,8 +1,8 @@
 package com.marmitt.application.spring.controller;
 
-import com.marmitt.core.dto.portfolio.DeadLetterEntryDto;
-import com.marmitt.core.dto.portfolio.ReprocessDeadLetterResponse;
-import com.marmitt.core.dto.portfolio.ResolveDeadLetterResponse;
+import com.marmitt.core.dto.portfolio.response.DeadLetterEntryDto;
+import com.marmitt.core.dto.portfolio.response.ReprocessDeadLetterResponse;
+import com.marmitt.core.dto.portfolio.response.ResolveDeadLetterResponse;
 import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.ports.inbound.portfolio.ManageDeadLetterPort;
 import org.junit.jupiter.api.BeforeEach;
@@ -243,3 +243,4 @@ class DeadLetterControllerTest {
         );
     }
 }
+

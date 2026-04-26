@@ -1,4 +1,4 @@
-package com.marmitt.core.dto.portfolio;
+package com.marmitt.core.dto.portfolio.request;
 
 import org.junit.jupiter.api.Test;
 
@@ -27,3 +27,4 @@ class CreatePortfolioRequestTest {
         ));
     }
 }
+

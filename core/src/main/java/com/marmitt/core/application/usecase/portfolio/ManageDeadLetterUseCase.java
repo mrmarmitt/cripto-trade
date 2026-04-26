@@ -1,10 +1,10 @@
 package com.marmitt.core.application.usecase.portfolio;
 
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
-import com.marmitt.core.dto.portfolio.DeadLetterEntryDto;
+import com.marmitt.core.dto.portfolio.response.DeadLetterEntryDto;
 import com.marmitt.core.dto.portfolio.DeadLetterReprocessingResult;
-import com.marmitt.core.dto.portfolio.ReprocessDeadLetterResponse;
-import com.marmitt.core.dto.portfolio.ResolveDeadLetterResponse;
+import com.marmitt.core.dto.portfolio.response.ReprocessDeadLetterResponse;
+import com.marmitt.core.dto.portfolio.response.ResolveDeadLetterResponse;
 import com.marmitt.core.ports.inbound.portfolio.ManageDeadLetterPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterReprocessingPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
@@ -105,3 +105,4 @@ public class ManageDeadLetterUseCase implements ManageDeadLetterPort {
         );
     }
 }
+
