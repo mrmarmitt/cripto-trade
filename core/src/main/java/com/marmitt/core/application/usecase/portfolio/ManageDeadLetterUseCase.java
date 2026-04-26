@@ -2,8 +2,11 @@ package com.marmitt.core.application.usecase.portfolio;
 
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
 import com.marmitt.core.dto.portfolio.DeadLetterEntryDto;
+import com.marmitt.core.dto.portfolio.DeadLetterReprocessingResult;
+import com.marmitt.core.dto.portfolio.ReprocessDeadLetterResponse;
 import com.marmitt.core.dto.portfolio.ResolveDeadLetterResponse;
 import com.marmitt.core.ports.inbound.portfolio.ManageDeadLetterPort;
+import com.marmitt.core.ports.outbound.repository.DeadLetterReprocessingPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
@@ -17,9 +20,12 @@ public class ManageDeadLetterUseCase implements ManageDeadLetterPort {
     private static final int MAX_LIMIT = 500;
 
     private final DeadLetterEntryRepositoryPort deadLetterEntryRepository;
+    private final DeadLetterReprocessingPort deadLetterReprocessingPort;
 
-    public ManageDeadLetterUseCase(DeadLetterEntryRepositoryPort deadLetterEntryRepository) {
+    public ManageDeadLetterUseCase(DeadLetterEntryRepositoryPort deadLetterEntryRepository,
+                                   DeadLetterReprocessingPort deadLetterReprocessingPort) {
         this.deadLetterEntryRepository = deadLetterEntryRepository;
+        this.deadLetterReprocessingPort = deadLetterReprocessingPort;
     }
 
     @Override
@@ -57,6 +63,45 @@ public class ManageDeadLetterUseCase implements ManageDeadLetterPort {
         return ResolveDeadLetterResponse.success(
                 DeadLetterEntryDto.fromDomain(entry),
                 "Dead letter entry resolved successfully"
+        );
+    }
+
+    @Override
+    public ReprocessDeadLetterResponse reprocess(UUID deadLetterId, String requestedBy, String resolutionNote) {
+        if (requestedBy == null || requestedBy.isBlank()) {
+            throw new IllegalArgumentException("requestedBy cannot be blank");
+        }
+
+        DeadLetterEntry entry = deadLetterEntryRepository.findById(deadLetterId).orElse(null);
+        if (entry == null) {
+            return ReprocessDeadLetterResponse.failure(deadLetterId, "Dead letter entry not found");
+        }
+
+        if (entry.isResolved()) {
+            return ReprocessDeadLetterResponse.failure(deadLetterId, "Dead letter entry is already resolved");
+        }
+
+        if (!deadLetterReprocessingPort.supports(entry)) {
+            return ReprocessDeadLetterResponse.failure(
+                    deadLetterId,
+                    "Dead letter entry cannot be reprocessed automatically"
+            );
+        }
+
+        DeadLetterReprocessingResult reprocessingResult = deadLetterReprocessingPort.reprocess(entry);
+        if (!reprocessingResult.applied()) {
+            return ReprocessDeadLetterResponse.failure(deadLetterId, reprocessingResult.message());
+        }
+
+        entry.resolve(requestedBy);
+        deadLetterEntryRepository.save(entry);
+
+        log.info("deadLetter: reprocessed id={} portfolioId={} runnerId={} requestedBy={} note={}",
+                entry.getId(), entry.getPortfolioId(), entry.getRunnerId(), requestedBy, resolutionNote);
+
+        return ReprocessDeadLetterResponse.success(
+                DeadLetterEntryDto.fromDomain(entry),
+                "Dead letter entry reprocessed successfully"
         );
     }
 }

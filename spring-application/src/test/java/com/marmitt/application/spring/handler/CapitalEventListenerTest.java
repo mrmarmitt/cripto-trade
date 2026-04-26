@@ -1,5 +1,7 @@
 package com.marmitt.application.spring.handler;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.marmitt.application.spring.deadletter.CapitalDeadLetterPayloadCodec;
 import com.marmitt.core.application.reaction.ExecutionConfirmedReaction;
 import com.marmitt.core.application.reaction.MarginReleasedReaction;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
@@ -47,7 +49,8 @@ class CapitalEventListenerTest {
                 executionReaction,
                 marginReaction,
                 runnerRepository,
-                deadLetterRepository
+                deadLetterRepository,
+                payloadCodec()
         );
         ExecutionConfirmedEvent event = executionConfirmedEvent(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
 
@@ -67,7 +70,8 @@ class CapitalEventListenerTest {
                 executionReaction,
                 marginReaction,
                 runnerRepository,
-                deadLetterRepository
+                deadLetterRepository,
+                payloadCodec()
         );
         MarginReleaseEvent event = marginReleaseEvent(UUID.randomUUID(), UUID.randomUUID());
 
@@ -90,7 +94,8 @@ class CapitalEventListenerTest {
                 executionReaction,
                 marginReaction,
                 runnerRepository,
-                deadLetterRepository
+                deadLetterRepository,
+                payloadCodec()
         );
         ExecutionConfirmedEvent event = executionConfirmedEvent(UUID.randomUUID(), runnerId, UUID.randomUUID());
         RuntimeException failure = new RuntimeException("temporary failure");
@@ -103,10 +108,10 @@ class CapitalEventListenerTest {
         assertEquals(portfolioId, entry.getPortfolioId());
         assertEquals(runnerId, entry.getRunnerId());
         assertEquals(DlqReason.RETRY_EXHAUSTED, entry.getReason());
-        assertTrue(entry.getRawPayload().contains("event=EXECUTION_CONFIRMED"));
-        assertTrue(entry.getRawPayload().contains("transactionId=" + event.confirmation().transactionId()));
-        assertTrue(entry.getRawPayload().contains("matchId=" + event.confirmation().matchId()));
-        assertTrue(entry.getRawPayload().contains("failure=RuntimeException:temporary failure"));
+        assertTrue(entry.getRawPayload().contains("\"eventType\":\"EXECUTION_CONFIRMED\""));
+        assertTrue(entry.getRawPayload().contains("\"transactionId\":\"" + event.confirmation().transactionId() + "\""));
+        assertTrue(entry.getRawPayload().contains("\"matchId\":\"" + event.confirmation().matchId() + "\""));
+        assertTrue(entry.getRawPayload().contains("\"failureMessage\":\"temporary failure\""));
     }
 
     @Test
@@ -122,7 +127,8 @@ class CapitalEventListenerTest {
                 executionReaction,
                 marginReaction,
                 runnerRepository,
-                deadLetterRepository
+                deadLetterRepository,
+                payloadCodec()
         );
         MarginReleaseEvent event = marginReleaseEvent(UUID.randomUUID(), runnerId);
         RuntimeException failure = new RuntimeException("temporary failure");
@@ -135,10 +141,10 @@ class CapitalEventListenerTest {
         assertEquals(portfolioId, entry.getPortfolioId());
         assertEquals(runnerId, entry.getRunnerId());
         assertEquals(DlqReason.RETRY_EXHAUSTED, entry.getReason());
-        assertTrue(entry.getRawPayload().contains("event=MARGIN_RELEASE"));
-        assertTrue(entry.getRawPayload().contains("transactionId=" + event.release().transactionId()));
-        assertTrue(entry.getRawPayload().contains("reason=" + event.release().reason()));
-        assertTrue(entry.getRawPayload().contains("failure=RuntimeException:temporary failure"));
+        assertTrue(entry.getRawPayload().contains("\"eventType\":\"MARGIN_RELEASE\""));
+        assertTrue(entry.getRawPayload().contains("\"transactionId\":\"" + event.release().transactionId() + "\""));
+        assertTrue(entry.getRawPayload().contains("\"reason\":\"" + event.release().reason() + "\""));
+        assertTrue(entry.getRawPayload().contains("\"failureMessage\":\"temporary failure\""));
     }
 
     @Test
@@ -153,7 +159,8 @@ class CapitalEventListenerTest {
                 executionReaction,
                 marginReaction,
                 runnerRepository,
-                deadLetterRepository
+                deadLetterRepository,
+                payloadCodec()
         );
         ExecutionConfirmedEvent event = executionConfirmedEvent(UUID.randomUUID(), runnerId, UUID.randomUUID());
 
@@ -176,7 +183,8 @@ class CapitalEventListenerTest {
                 executionReaction,
                 marginReaction,
                 runnerRepository,
-                deadLetterRepository
+                deadLetterRepository,
+                payloadCodec()
         );
         MarginReleaseEvent event = marginReleaseEvent(UUID.randomUUID(), runnerId);
 
@@ -184,6 +192,10 @@ class CapitalEventListenerTest {
                 listener.recoverMarginRelease(new RuntimeException("temporary failure"), event));
 
         verify(deadLetterRepository).save(any(DeadLetterEntry.class));
+    }
+
+    private static CapitalDeadLetterPayloadCodec payloadCodec() {
+        return new CapitalDeadLetterPayloadCodec(new ObjectMapper());
     }
 
     private static ExecutionConfirmedEvent executionConfirmedEvent(UUID transactionId, UUID runnerId, UUID matchId) {
