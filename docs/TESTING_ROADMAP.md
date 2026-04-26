@@ -419,7 +419,7 @@ Fora de escopo da Fase 4:
 - **IG:** cobre os fluxos e decisões operacionais já mapeadas no projeto.
 - Este roadmap deve evoluir junto com mudanças de domínio e novos modos de execução.
 
-## Status de Execucao (2026-04-25)
+## Status de Execucao (2026-04-26)
 
 - Fase 0: CONCLUIDA.
 - Fase 1A: CONCLUIDA.
@@ -505,7 +505,8 @@ Fora de escopo da Fase 4:
 1. PR 1 (concluido): observabilidade do boot validada por teste cobrindo evento de fail-fast e metricas minimas por fase/resultado.
 2. PR 2 (concluido): DLQ operacional no boot cobrindo abertura de entry e nao duplicacao da mesma identidade do problema.
 3. PR 3 (concluido): gestao manual da DLQ cobrindo listagem e resolucao via use case/controller.
-4. PR 4 (atual): reprocessamento seguro de DLQ para eventos de capital com retries esgotados.
+4. PR 4 (concluido): reprocessamento seguro de DLQ para eventos de capital com retries esgotados.
+5. PR 5 (atual): replay ponta a ponta de DLQ de capital, do recover ate o reprocessamento via controller, com validacao de efeito economico e idempotencia.
 
 ## Backlog Pos-Testes
 
