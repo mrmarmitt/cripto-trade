@@ -1,9 +1,9 @@
 package com.marmitt.application.spring.service;
 
-import com.marmitt.application.spring.controller.dto.market.MarketDataStreamRequest;
-import com.marmitt.application.spring.controller.dto.market.MarketDataStreamResponse;
 import com.marmitt.application.spring.controller.mapper.MarketDataMapper;
+import com.marmitt.core.dto.websocket.request.MarketDataStreamRequest;
 import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
+import com.marmitt.core.dto.websocket.response.MarketDataStreamResponse;
 import com.marmitt.core.ports.inbound.websocket.SendMessageWebSocketPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;

@@ -1,16 +1,15 @@
 package com.marmitt.application.spring.controller;
 
-import com.marmitt.application.spring.controller.dto.market.MarketDataStreamRequest;
-import com.marmitt.application.spring.controller.dto.market.MarketDataStreamResponse;
-import com.marmitt.application.spring.controller.dto.order.OrderCancelRequest;
-import com.marmitt.application.spring.controller.dto.order.OrderCreateRequest;
-import com.marmitt.application.spring.controller.dto.order.OrderManagementResponse;
-import com.marmitt.application.spring.controller.dto.order.OrderNotificationStreamRequest;
-import com.marmitt.application.spring.controller.dto.order.OrderNotificationStreamResponse;
 import com.marmitt.application.spring.service.MarketDataService;
 import com.marmitt.application.spring.service.OrderManagementService;
 import com.marmitt.application.spring.service.OrderNotificationService;
-import jakarta.validation.Valid;
+import com.marmitt.core.dto.websocket.request.MarketDataStreamRequest;
+import com.marmitt.core.dto.websocket.request.OrderCancelRequest;
+import com.marmitt.core.dto.websocket.request.OrderCreateRequest;
+import com.marmitt.core.dto.websocket.request.OrderNotificationStreamRequest;
+import com.marmitt.core.dto.websocket.response.MarketDataStreamResponse;
+import com.marmitt.core.dto.websocket.response.OrderManagementResponse;
+import com.marmitt.core.dto.websocket.response.OrderNotificationStreamResponse;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,37 +32,37 @@ public class WebsocketExchangeController {
     }
 
     @PostMapping("/market-data/subscribe")
-    public ResponseEntity<MarketDataStreamResponse> subscribeMarketData(@Valid @RequestBody MarketDataStreamRequest request) {
+    public ResponseEntity<MarketDataStreamResponse> subscribeMarketData(@RequestBody MarketDataStreamRequest request) {
         MarketDataStreamResponse response = marketDataService.subscribe(request);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }
 
     @PostMapping("/market-data/unsubscribe")
-    public ResponseEntity<MarketDataStreamResponse> unsubscribeMarketData(@Valid @RequestBody MarketDataStreamRequest request) {
+    public ResponseEntity<MarketDataStreamResponse> unsubscribeMarketData(@RequestBody MarketDataStreamRequest request) {
         MarketDataStreamResponse response = marketDataService.unsubscribe(request);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }
 
     @PostMapping("/order-notifications/subscribe")
-    public ResponseEntity<OrderNotificationStreamResponse> subscribeOrderNotifications(@Valid @RequestBody OrderNotificationStreamRequest request) {
+    public ResponseEntity<OrderNotificationStreamResponse> subscribeOrderNotifications(@RequestBody OrderNotificationStreamRequest request) {
         OrderNotificationStreamResponse response = orderNotificationService.subscribe(request);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }
 
     @PostMapping("/order-notifications/unsubscribe")
-    public ResponseEntity<OrderNotificationStreamResponse> unsubscribeOrderNotifications(@Valid @RequestBody OrderNotificationStreamRequest request) {
+    public ResponseEntity<OrderNotificationStreamResponse> unsubscribeOrderNotifications(@RequestBody OrderNotificationStreamRequest request) {
         OrderNotificationStreamResponse response = orderNotificationService.unsubscribe(request);
         return ResponseEntity.status(HttpStatus.ACCEPTED).body(response);
     }
 
     @PostMapping("/orders/create")
-    public ResponseEntity<OrderManagementResponse> createOrder(@Valid @RequestBody OrderCreateRequest request) {
+    public ResponseEntity<OrderManagementResponse> createOrder(@RequestBody OrderCreateRequest request) {
         OrderManagementResponse response = orderManagementService.subscribe(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     @PostMapping("/orders/cancel")
-    public ResponseEntity<OrderManagementResponse> cancelOrder(@Valid @RequestBody OrderCancelRequest request) {
+    public ResponseEntity<OrderManagementResponse> cancelOrder(@RequestBody OrderCancelRequest request) {
         OrderManagementResponse response = orderManagementService.unsubscribe(request);
         return ResponseEntity.ok(response);
     }

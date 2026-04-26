@@ -20,6 +20,10 @@ public record CreatePortfolioRequest(
             throw new IllegalArgumentException("Portfolio name cannot be blank");
         }
 
+        if (currency.isBlank()) {
+            throw new IllegalArgumentException("Currency cannot be blank");
+        }
+
         if (initialCapitalAmount.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Initial capital must be positive");
         }
