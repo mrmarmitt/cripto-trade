@@ -79,7 +79,7 @@ Consolidar os principais critérios para sair do ambiente de simulação (MOCK) 
 - Regra prática: toda evolução desse checklist deve manter rastreabilidade com os conceitos e invariantes já definidos no Blueprint/IG.
 
 
-## Status de Aderencia (2026-04-25)
+## Status de Aderencia (2026-04-26)
 
 - Testing Roadmap Fase 0: CONCLUIDA no branch `develop`.
 - Testing Roadmap Fase 1A: CONCLUIDA no branch `develop`.
@@ -125,6 +125,6 @@ Evidencias de Fase 1B em testes automatizados:
 
 ### Proximo passo recomendado
 
-1. Concluir o PR 4 da Fase 4 com reprocessamento seguro de DLQ para eventos de capital com retries esgotados.
+1. Concluir o PR 5 da Fase 4 com replay ponta a ponta de DLQ de capital, cobrindo persistencia, reprocessamento e ausencia de drift economico.
 2. Avancar para os proximos blocos de resiliencia operacional e continuidade da observabilidade de boot/recovery.
 3. Atualizar este checklist a cada fase concluida do Testing Roadmap.
