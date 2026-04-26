@@ -1,4 +1,4 @@
-package com.marmitt.core.dto.portfolio;
+package com.marmitt.core.dto.portfolio.response;
 
 import java.util.UUID;
 
@@ -16,3 +16,4 @@ public record ResolveDeadLetterResponse(
         return new ResolveDeadLetterResponse(deadLetterId, false, message, null);
     }
 }
+

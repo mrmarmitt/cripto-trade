@@ -1,6 +1,6 @@
 package com.marmitt.core.application.usecase.runner;
 
-import com.marmitt.core.dto.portfolio.TransactionDto;
+import com.marmitt.core.dto.portfolio.response.TransactionDto;
 import com.marmitt.core.dto.runner.RunnerDto;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.ports.inbound.runner.QueryRunnerPort;
@@ -50,3 +50,4 @@ public class QueryRunnerUseCase implements QueryRunnerPort {
                 .toList();
     }
 }
+

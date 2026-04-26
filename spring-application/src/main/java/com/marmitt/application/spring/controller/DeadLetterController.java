@@ -1,10 +1,10 @@
 package com.marmitt.application.spring.controller;
 
-import com.marmitt.core.dto.portfolio.DeadLetterEntryDto;
-import com.marmitt.core.dto.portfolio.ReprocessDeadLetterRequest;
-import com.marmitt.core.dto.portfolio.ReprocessDeadLetterResponse;
-import com.marmitt.core.dto.portfolio.ResolveDeadLetterRequest;
-import com.marmitt.core.dto.portfolio.ResolveDeadLetterResponse;
+import com.marmitt.core.dto.portfolio.response.DeadLetterEntryDto;
+import com.marmitt.core.dto.portfolio.request.ReprocessDeadLetterRequest;
+import com.marmitt.core.dto.portfolio.response.ReprocessDeadLetterResponse;
+import com.marmitt.core.dto.portfolio.request.ResolveDeadLetterRequest;
+import com.marmitt.core.dto.portfolio.response.ResolveDeadLetterResponse;
 import com.marmitt.core.ports.inbound.portfolio.ManageDeadLetterPort;
 import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
@@ -102,3 +102,4 @@ public class DeadLetterController {
         }
     }
 }
+

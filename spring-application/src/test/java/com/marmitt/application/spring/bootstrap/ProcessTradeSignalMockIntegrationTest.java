@@ -3,8 +3,8 @@ package com.marmitt.application.spring.bootstrap;
 import com.marmitt.application.spring.CTradeApplication;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.runner.StrategyRunner;
-import com.marmitt.core.dto.portfolio.CreatePortfolioRequest;
-import com.marmitt.core.dto.portfolio.CreatePortfolioResponse;
+import com.marmitt.core.dto.portfolio.request.CreatePortfolioRequest;
+import com.marmitt.core.dto.portfolio.response.CreatePortfolioResponse;
 import com.marmitt.core.dto.runner.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.CreateRunnerResponse;
 import com.marmitt.core.dto.websocket.data.MarketDataDto;
@@ -292,3 +292,4 @@ class ProcessTradeSignalMockIntegrationTest {
                                         Set<String> seenStatuses) {
     }
 }
+

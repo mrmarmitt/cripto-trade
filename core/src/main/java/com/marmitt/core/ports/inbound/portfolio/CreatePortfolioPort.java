@@ -1,7 +1,7 @@
 package com.marmitt.core.ports.inbound.portfolio;
 
-import com.marmitt.core.dto.portfolio.CreatePortfolioRequest;
-import com.marmitt.core.dto.portfolio.CreatePortfolioResponse;
+import com.marmitt.core.dto.portfolio.request.CreatePortfolioRequest;
+import com.marmitt.core.dto.portfolio.response.CreatePortfolioResponse;
 
 public interface CreatePortfolioPort {
 
@@ -13,3 +13,4 @@ public interface CreatePortfolioPort {
      */
     CreatePortfolioResponse execute(CreatePortfolioRequest request);
 }
+

@@ -1,6 +1,6 @@
 package com.marmitt.application.spring.controller;
 
-import com.marmitt.core.dto.portfolio.TransactionDto;
+import com.marmitt.core.dto.portfolio.response.TransactionDto;
 import com.marmitt.core.ports.inbound.runner.QueryRunnerPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.ResponseEntity;
@@ -36,3 +36,4 @@ public class RunnerController {
         return ResponseEntity.ok(transactions);
     }
 }
+

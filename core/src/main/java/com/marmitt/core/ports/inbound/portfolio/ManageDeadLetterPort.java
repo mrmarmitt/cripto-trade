@@ -1,8 +1,8 @@
 package com.marmitt.core.ports.inbound.portfolio;
 
-import com.marmitt.core.dto.portfolio.DeadLetterEntryDto;
-import com.marmitt.core.dto.portfolio.ReprocessDeadLetterResponse;
-import com.marmitt.core.dto.portfolio.ResolveDeadLetterResponse;
+import com.marmitt.core.dto.portfolio.response.DeadLetterEntryDto;
+import com.marmitt.core.dto.portfolio.response.ReprocessDeadLetterResponse;
+import com.marmitt.core.dto.portfolio.response.ResolveDeadLetterResponse;
 
 import java.util.List;
 import java.util.UUID;
@@ -15,3 +15,4 @@ public interface ManageDeadLetterPort {
 
     ReprocessDeadLetterResponse reprocess(UUID deadLetterId, String requestedBy, String resolutionNote);
 }
+

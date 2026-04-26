@@ -5,8 +5,8 @@ import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
-import com.marmitt.core.dto.portfolio.CreatePortfolioRequest;
-import com.marmitt.core.dto.portfolio.CreatePortfolioResponse;
+import com.marmitt.core.dto.portfolio.request.CreatePortfolioRequest;
+import com.marmitt.core.dto.portfolio.response.CreatePortfolioResponse;
 import com.marmitt.core.dto.runner.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.CreateRunnerResponse;
 import com.marmitt.core.enums.PositionStatus;
@@ -331,3 +331,4 @@ class ConcurrentSellLockIntegrationTest {
     private record LockResult(UUID transactionId, boolean locked) {
     }
 }
+

@@ -1,4 +1,4 @@
-package com.marmitt.core.dto.portfolio;
+package com.marmitt.core.dto.portfolio.response;
 
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.enums.CapitalPoolingMode;
@@ -29,3 +29,4 @@ public record PortfolioDto(
                 .build();
     }
 }
+

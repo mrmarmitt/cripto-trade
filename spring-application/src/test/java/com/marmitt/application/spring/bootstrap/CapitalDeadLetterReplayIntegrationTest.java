@@ -11,8 +11,8 @@ import com.marmitt.core.dto.capital.ExecutionConfirmation;
 import com.marmitt.core.dto.capital.MarginRelease;
 import com.marmitt.core.dto.events.ExecutionConfirmedEvent;
 import com.marmitt.core.dto.events.MarginReleaseEvent;
-import com.marmitt.core.dto.portfolio.CreatePortfolioRequest;
-import com.marmitt.core.dto.portfolio.CreatePortfolioResponse;
+import com.marmitt.core.dto.portfolio.request.CreatePortfolioRequest;
+import com.marmitt.core.dto.portfolio.response.CreatePortfolioResponse;
 import com.marmitt.core.dto.runner.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.CreateRunnerResponse;
 import com.marmitt.core.enums.ReleaseReason;
@@ -385,3 +385,4 @@ class CapitalDeadLetterReplayIntegrationTest {
         }
     }
 }
+

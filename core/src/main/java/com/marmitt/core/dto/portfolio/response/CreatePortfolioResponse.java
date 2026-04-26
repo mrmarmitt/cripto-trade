@@ -1,4 +1,4 @@
-package com.marmitt.core.dto.portfolio;
+package com.marmitt.core.dto.portfolio.response;
 
 import lombok.Builder;
 
@@ -40,3 +40,4 @@ public record CreatePortfolioResponse(
                 .build();
     }
 }
+

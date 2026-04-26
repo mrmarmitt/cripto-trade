@@ -1,9 +1,9 @@
 package com.marmitt.core.ports.inbound.portfolio;
 
-import com.marmitt.core.dto.portfolio.PortfolioDto;
-import com.marmitt.core.dto.portfolio.GlobalBalanceDto;
-import com.marmitt.core.dto.portfolio.PortfolioPnlDto;
-import com.marmitt.core.dto.portfolio.TransactionDto;
+import com.marmitt.core.dto.portfolio.response.PortfolioDto;
+import com.marmitt.core.dto.portfolio.response.GlobalBalanceDto;
+import com.marmitt.core.dto.portfolio.response.PortfolioPnlDto;
+import com.marmitt.core.dto.portfolio.response.TransactionDto;
 
 import java.util.List;
 import java.util.Optional;
@@ -23,3 +23,4 @@ public interface QueryPortfolioPort {
 
     Optional<PortfolioPnlDto> findPnlByPortfolioId(UUID portfolioId);
 }
+

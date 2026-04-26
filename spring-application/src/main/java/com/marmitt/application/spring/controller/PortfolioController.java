@@ -1,12 +1,12 @@
 package com.marmitt.application.spring.controller;
 
-import com.marmitt.core.dto.portfolio.CreatePortfolioRequest;
-import com.marmitt.core.dto.portfolio.CreatePortfolioResponse;
-import com.marmitt.core.dto.portfolio.AggregatedTransactionsResponse;
-import com.marmitt.core.dto.portfolio.GlobalBalanceDto;
-import com.marmitt.core.dto.portfolio.PortfolioDto;
-import com.marmitt.core.dto.portfolio.PortfolioPnlDto;
-import com.marmitt.core.dto.portfolio.TransactionDto;
+import com.marmitt.core.dto.portfolio.request.CreatePortfolioRequest;
+import com.marmitt.core.dto.portfolio.response.CreatePortfolioResponse;
+import com.marmitt.core.dto.portfolio.response.AggregatedTransactionsResponse;
+import com.marmitt.core.dto.portfolio.response.GlobalBalanceDto;
+import com.marmitt.core.dto.portfolio.response.PortfolioDto;
+import com.marmitt.core.dto.portfolio.response.PortfolioPnlDto;
+import com.marmitt.core.dto.portfolio.response.TransactionDto;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.portfolio.QueryPortfolioPort;
 import lombok.extern.slf4j.Slf4j;
@@ -155,3 +155,4 @@ public class PortfolioController {
     }
 
 }
+

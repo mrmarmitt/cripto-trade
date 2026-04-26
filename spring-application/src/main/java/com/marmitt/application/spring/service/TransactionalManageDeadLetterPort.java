@@ -1,8 +1,8 @@
 package com.marmitt.application.spring.service;
 
-import com.marmitt.core.dto.portfolio.DeadLetterEntryDto;
-import com.marmitt.core.dto.portfolio.ReprocessDeadLetterResponse;
-import com.marmitt.core.dto.portfolio.ResolveDeadLetterResponse;
+import com.marmitt.core.dto.portfolio.response.DeadLetterEntryDto;
+import com.marmitt.core.dto.portfolio.response.ReprocessDeadLetterResponse;
+import com.marmitt.core.dto.portfolio.response.ResolveDeadLetterResponse;
 import com.marmitt.core.ports.inbound.portfolio.ManageDeadLetterPort;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -36,3 +36,4 @@ public class TransactionalManageDeadLetterPort implements ManageDeadLetterPort {
         return delegate.reprocess(deadLetterId, requestedBy, resolutionNote);
     }
 }
+
