@@ -86,7 +86,7 @@ Consolidar os principais critérios para sair do ambiente de simulação (MOCK) 
 - Testing Roadmap Fase 1B: CONCLUIDA no branch `develop`.
 - Testing Roadmap Fase 2: CONCLUIDA no branch `develop`.
 - Testing Roadmap Fase 3: CONCLUIDA no branch `develop`.
-- Testing Roadmap Fase 4: EM ANDAMENTO.
+- Testing Roadmap Fase 4: CONCLUIDA no branch `develop`.
 
 Evidencias de Fase 0 em testes automatizados:
 - `core/src/test/java/com/marmitt/core/domain/portfolio/GlobalBalanceInvariantsTest.java`
@@ -109,8 +109,8 @@ Evidencias de Fase 1B em testes automatizados:
 ### Impacto no Go-Live
 
 - Item 1 (Testes automatizados minimos): PARCIAL (AVANCADO).
-- Baseline de invariantes, integracao core com MOCK, controles deterministicos do MOCK, robustez contra duplicidade/concorrencia e boot recovery completo cobertos (Fases 0, 1A, 1B, 2 e 3).
-- Ainda faltam observabilidade operacional, DLQ operacional e integracao real com exchange (Fase 4 + integracoes reais).
+- Baseline de invariantes, integracao core com MOCK, controles deterministicos do MOCK, robustez contra duplicidade/concorrencia, boot recovery completo, observabilidade operacional e ciclo de DLQ operacional cobertos (Fases 0, 1A, 1B, 2, 3 e 4).
+- Ainda faltam staging/soak test, carga controlada, guardrails finais de producao e integracao real com exchange.
 
 ### Evidencias adicionais de Fase 3
 
@@ -125,6 +125,15 @@ Evidencias de Fase 1B em testes automatizados:
 
 ### Proximo passo recomendado
 
-1. Concluir o PR 5 da Fase 4 com replay ponta a ponta de DLQ de capital, cobrindo persistencia, reprocessamento e ausencia de drift economico.
-2. Avancar para os proximos blocos de resiliencia operacional e continuidade da observabilidade de boot/recovery.
-3. Atualizar este checklist a cada fase concluida do Testing Roadmap.
+1. Iniciar a trilha de go-live fora do escopo atual com `MOCK`: staging, soak test e carga controlada.
+2. Priorizar integracao real de exchange com os mesmos invariantes ja protegidos pela suite atual.
+3. Atualizar este checklist conforme avancarem guardrails de producao, segredos, observabilidade e operacao real.
+
+### Backlog de Go-Live Apos a Fase 4
+
+- staging com comportamento proximo ao real
+- soak test por janela prolongada
+- carga controlada e medicionamento de latencia/convergencia
+- integracao real com exchange
+- kill switch global e circuit breaker por exchange
+- governanca de segredos e endurecimento operacional final

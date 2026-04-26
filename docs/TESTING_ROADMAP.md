@@ -426,7 +426,7 @@ Fora de escopo da Fase 4:
 - Fase 1B: CONCLUIDA.
 - Fase 2: CONCLUIDA.
 - Fase 3: CONCLUIDA.
-- Fase 4: EM ANDAMENTO.
+- Fase 4: CONCLUIDA.
 
 ### Evidencias de conclusao da Fase 1B
 
@@ -500,13 +500,28 @@ Fora de escopo da Fase 4:
   - `query retry exhausted`
   - reexecucao idempotente do recovery nos cenarios relevantes
 
-### Fase 4 em progresso
+### Fase 4 concluida
 
 1. PR 1 (concluido): observabilidade do boot validada por teste cobrindo evento de fail-fast e metricas minimas por fase/resultado.
 2. PR 2 (concluido): DLQ operacional no boot cobrindo abertura de entry e nao duplicacao da mesma identidade do problema.
 3. PR 3 (concluido): gestao manual da DLQ cobrindo listagem e resolucao via use case/controller.
 4. PR 4 (concluido): reprocessamento seguro de DLQ para eventos de capital com retries esgotados.
-5. PR 5 (atual): replay ponta a ponta de DLQ de capital, do recover ate o reprocessamento via controller, com validacao de efeito economico e idempotencia.
+5. PR 5 (concluido): replay ponta a ponta de DLQ de capital, do recover ate o reprocessamento via controller, com validacao de efeito economico e idempotencia.
+
+### Evidencias de conclusao da Fase 4
+
+- Observabilidade de boot consolidada em:
+  - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/BootOrchestratorObservabilityTest.java`
+- DLQ operacional de boot consolidada em:
+  - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/BootOrchestratorDlqOperationalTest.java`
+- Gestao manual de DLQ consolidada em:
+  - `core/src/test/java/com/marmitt/core/application/usecase/portfolio/ManageDeadLetterUseCaseTest.java`
+  - `spring-application/src/test/java/com/marmitt/application/spring/controller/DeadLetterControllerTest.java`
+- Resiliencia do listener de capital consolidada em:
+  - `spring-application/src/test/java/com/marmitt/application/spring/handler/CapitalEventListenerTest.java`
+- Reprocessamento seguro e replay ponta a ponta de DLQ de capital consolidados em:
+  - `spring-application/src/test/java/com/marmitt/application/spring/deadletter/CapitalDeadLetterReprocessingAdapterTest.java`
+  - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/CapitalDeadLetterReplayIntegrationTest.java`
 
 ## Backlog Pos-Testes
 
@@ -516,3 +531,6 @@ Fora de escopo da Fase 4:
   - extrair a orquestracao do boot para um use case do `core`;
   - reduzir o acoplamento atual entre framework e sequenciamento das fases de boot.
 - Prioridade: somente depois de concluir a trilha atual de testes e endurecimento operacional.
+- Executar soak tests de maior duracao para monitorar acumulacao de pendencias e degradacao progressiva.
+- Executar testes de carga controlada para medir latencia de conciliacao e convergencia sob pressao.
+- Avancar para staging e integracao real de exchange como proxima trilha fora do escopo atual com `MOCK`.
