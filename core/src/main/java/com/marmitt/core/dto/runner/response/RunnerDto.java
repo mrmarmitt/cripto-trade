@@ -1,4 +1,4 @@
-package com.marmitt.core.dto.runner;
+package com.marmitt.core.dto.runner.response;
 
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.enums.RunnerStatus;
@@ -34,3 +34,4 @@ public record RunnerDto(
                 .build();
     }
 }
+

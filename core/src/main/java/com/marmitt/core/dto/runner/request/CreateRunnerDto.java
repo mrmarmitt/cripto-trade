@@ -1,21 +1,16 @@
-package com.marmitt.core.dto.runner;
-
-import lombok.Builder;
+package com.marmitt.core.dto.runner.request;
 
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 
-@Builder
-public record CreateRunnerRequest(
-        UUID portfolioId,
+public record CreateRunnerDto(
         UUID strategyId,
         String symbol,
         String exchangeName,
         Set<String> allowedMarketDataSources
 ) {
-    public CreateRunnerRequest {
-        Objects.requireNonNull(portfolioId, "portfolioId cannot be null");
+    public CreateRunnerDto {
         Objects.requireNonNull(strategyId, "strategyId cannot be null");
         Objects.requireNonNull(symbol, "symbol cannot be null");
         Objects.requireNonNull(exchangeName, "exchangeName cannot be null");
@@ -29,3 +24,4 @@ public record CreateRunnerRequest(
         }
     }
 }
+

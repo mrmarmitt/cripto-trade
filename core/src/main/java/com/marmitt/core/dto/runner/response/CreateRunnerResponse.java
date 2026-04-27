@@ -1,4 +1,4 @@
-package com.marmitt.core.dto.runner;
+package com.marmitt.core.dto.runner.response;
 
 import com.marmitt.core.enums.RunnerStatus;
 import lombok.Builder;
@@ -52,3 +52,4 @@ public record CreateRunnerResponse(
                 .build();
     }
 }
+

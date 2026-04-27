@@ -5,8 +5,8 @@ import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.portfolio.request.CreatePortfolioRequest;
 import com.marmitt.core.dto.portfolio.response.CreatePortfolioResponse;
-import com.marmitt.core.dto.runner.CreateRunnerRequest;
-import com.marmitt.core.dto.runner.CreateRunnerResponse;
+import com.marmitt.core.dto.runner.request.CreateRunnerRequest;
+import com.marmitt.core.dto.runner.response.CreateRunnerResponse;
 import com.marmitt.core.dto.websocket.data.MarketDataDto;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
@@ -292,4 +292,5 @@ class ProcessTradeSignalMockIntegrationTest {
                                         Set<String> seenStatuses) {
     }
 }
+
 

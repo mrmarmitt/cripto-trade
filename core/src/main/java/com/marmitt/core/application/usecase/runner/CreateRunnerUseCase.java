@@ -2,8 +2,8 @@ package com.marmitt.core.application.usecase.runner;
 
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.StrategyRunner;
-import com.marmitt.core.dto.runner.CreateRunnerRequest;
-import com.marmitt.core.dto.runner.CreateRunnerResponse;
+import com.marmitt.core.dto.runner.request.CreateRunnerRequest;
+import com.marmitt.core.dto.runner.response.CreateRunnerResponse;
 import com.marmitt.core.enums.AccountingPolicyType;
 import com.marmitt.core.enums.ExecutionPolicy;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
@@ -117,3 +117,4 @@ public class CreateRunnerUseCase implements CreateRunnerPort {
         }
     }
 }
+

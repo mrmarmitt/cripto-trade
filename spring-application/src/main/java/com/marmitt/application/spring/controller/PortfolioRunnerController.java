@@ -1,14 +1,13 @@
 package com.marmitt.application.spring.controller;
 
 import com.marmitt.core.dto.portfolio.response.PortfolioDto;
-import com.marmitt.core.dto.runner.CreateRunnerDto;
-import com.marmitt.core.dto.runner.CreateRunnerRequest;
-import com.marmitt.core.dto.runner.CreateRunnerResponse;
-import com.marmitt.core.dto.runner.RunnerDto;
+import com.marmitt.core.dto.runner.request.CreateRunnerDto;
+import com.marmitt.core.dto.runner.request.CreateRunnerRequest;
+import com.marmitt.core.dto.runner.response.CreateRunnerResponse;
+import com.marmitt.core.dto.runner.response.RunnerDto;
 import com.marmitt.core.ports.inbound.portfolio.QueryPortfolioPort;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
 import com.marmitt.core.ports.inbound.runner.QueryRunnerPort;
-import jakarta.validation.Valid;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -49,7 +48,7 @@ public class PortfolioRunnerController {
     @PostMapping("/{id}/runners")
     public ResponseEntity<CreateRunnerResponse> createRunner(
             @PathVariable UUID id,
-            @Valid @RequestBody CreateRunnerDto dto
+            @RequestBody CreateRunnerDto dto
     ) {
         log.info("Received request to create runner - PortfolioId: {}, StrategyId: {}, Symbol: {}, Exchange: {}",
                 id, dto.strategyId(), dto.symbol(), dto.exchangeName());
@@ -105,4 +104,5 @@ public class PortfolioRunnerController {
         return ResponseEntity.ok(runners);
     }
 }
+
 
