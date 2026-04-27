@@ -1,6 +1,7 @@
 package com.marmitt.application.spring.bootstrap;
 
 import com.marmitt.core.application.usecase.boot.BootFailFastException;
+import com.marmitt.core.application.usecase.boot.BootPhaseExecutionException;
 import com.marmitt.core.application.usecase.boot.RunBootSequenceUseCase;
 import com.marmitt.core.dto.boot.BootExecutionCommand;
 import com.marmitt.core.dto.boot.BootExecutionSummary;
@@ -63,6 +64,12 @@ public class BootOrchestrator {
             bootMetricsRecorder.recordRun(BootRunStatus.FAILED);
             log.error("bootOrchestrator: failed runId={} phase={} code={} reason={}",
                     bootStatusTracker.currentRunId(), e.phase(), e.code(), e.getMessage(), e);
+            throw new IllegalStateException(e.getMessage(), e);
+        } catch (BootPhaseExecutionException e) {
+            failRunIfStillRunning(e.phase(), e.getMessage());
+            bootMetricsRecorder.recordRun(BootRunStatus.FAILED);
+            log.error("bootOrchestrator: failed runId={} phase={} reason={}",
+                    bootStatusTracker.currentRunId(), e.phase(), e.getMessage(), e);
             throw new IllegalStateException(e.getMessage(), e);
         } catch (RuntimeException e) {
             failRunIfStillRunning("boot", e.getMessage());

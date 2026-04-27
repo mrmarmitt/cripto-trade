@@ -140,6 +140,31 @@ class BootOrchestratorBootMinimumTest {
         verify(eventPublisher).publishEvent(any(BootFailFastEvent.class));
     }
 
+    @Test
+    void unexpectedPhaseRuntimePreservesSpecificFailurePhase() {
+        Portfolio portfolio = new Portfolio(UUID.randomUUID(), "p1");
+        StrategyRunner runner = activeRunner(portfolio.getId(), "MOCK");
+
+        BootStatusTracker tracker = new BootStatusTracker();
+        DeadLetterEntryRepositoryPort deadLetterRepository = mock(DeadLetterEntryRepositoryPort.class);
+        ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
+        BootOrchestrator orchestrator = newOrchestratorWithZombieFailure(
+                portfolio,
+                runner,
+                tracker,
+                deadLetterRepository,
+                eventPublisher
+        );
+
+        assertThrows(IllegalStateException.class, orchestrator::onApplicationReady);
+
+        BootRunSnapshot snapshot = tracker.snapshot();
+        assertEquals(BootRunStatus.FAILED, snapshot.status());
+        assertEquals("phase2.zombie", snapshot.failurePhase());
+        verifyNoInteractions(deadLetterRepository);
+        verifyNoInteractions(eventPublisher);
+    }
+
     private static BootOrchestrator newOrchestrator(Phase2Mode mode,
                                                     Portfolio portfolio,
                                                     StrategyRunner runner,
@@ -166,6 +191,73 @@ class BootOrchestratorBootMinimumTest {
         RunnerBootPhase2Properties phase2Properties = new RunnerBootPhase2Properties();
         phase2Properties.setEnabled(true);
         phase2Properties.setMode(mode);
+
+        RunnerBootPhase3Properties phase3Properties = new RunnerBootPhase3Properties();
+        phase3Properties.setEnabled(false);
+
+        PortfolioSanityCheckProperties sanityProperties = new PortfolioSanityCheckProperties();
+        sanityProperties.setEnabled(false);
+
+        PortfolioReservationTtlProperties ttlProperties = new PortfolioReservationTtlProperties();
+        ttlProperties.setEnabled(false);
+
+        PortfolioZombieDetectionProperties zombieProperties = new PortfolioZombieDetectionProperties();
+        zombieProperties.setEnabled(true);
+
+        PortfolioCutoffProperties cutoffProperties = new PortfolioCutoffProperties();
+        cutoffProperties.setEnabled(true);
+
+        RunBootSequenceUseCase runBootSequenceUseCase = new RunBootSequenceUseCase(
+                portfolioRepository,
+                strategyRunnerRepository,
+                exchangeAdapterRepository,
+                portfolioBootSanityUseCase,
+                portfolioReservationTtlUseCase,
+                portfolioZombieDetectionUseCase,
+                deadLetterRepository,
+                runnerBootRecoveryUseCase
+        );
+
+        return new BootOrchestrator(
+                phase1Properties,
+                phase2Properties,
+                phase3Properties,
+                sanityProperties,
+                ttlProperties,
+                zombieProperties,
+                cutoffProperties,
+                runBootSequenceUseCase,
+                tracker,
+                bootMetricsRecorder,
+                eventPublisher
+        );
+    }
+
+    private static BootOrchestrator newOrchestratorWithZombieFailure(Portfolio portfolio,
+                                                                     StrategyRunner runner,
+                                                                     BootStatusTracker tracker,
+                                                                     DeadLetterEntryRepositoryPort deadLetterRepository,
+                                                                     ApplicationEventPublisher eventPublisher) {
+        PortfolioRepositoryPort portfolioRepository = mock(PortfolioRepositoryPort.class);
+        StrategyRunnerRepositoryPort strategyRunnerRepository = mock(StrategyRunnerRepositoryPort.class);
+        ExchangeAdapterRepositoryPort exchangeAdapterRepository = mock(ExchangeAdapterRepositoryPort.class);
+        PortfolioBootSanityUseCase portfolioBootSanityUseCase = mock(PortfolioBootSanityUseCase.class);
+        PortfolioReservationTtlUseCase portfolioReservationTtlUseCase = mock(PortfolioReservationTtlUseCase.class);
+        PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase = mock(PortfolioZombieDetectionUseCase.class);
+        RunnerBootRecoveryUseCase runnerBootRecoveryUseCase = mock(RunnerBootRecoveryUseCase.class);
+        BootMetricsRecorder bootMetricsRecorder = mock(BootMetricsRecorder.class);
+
+        when(portfolioRepository.findAll()).thenReturn(List.of(portfolio));
+        when(strategyRunnerRepository.findByPortfolioId(portfolio.getId())).thenReturn(List.of(runner));
+        when(portfolioZombieDetectionUseCase.execute(portfolio.getId(), "MOCK", true))
+                .thenThrow(new IllegalStateException("Simulated unexpected zombie failure"));
+
+        RunnerBootPhase1Properties phase1Properties = new RunnerBootPhase1Properties();
+        phase1Properties.setEnabled(false);
+
+        RunnerBootPhase2Properties phase2Properties = new RunnerBootPhase2Properties();
+        phase2Properties.setEnabled(true);
+        phase2Properties.setMode(Phase2Mode.WARN_ONLY);
 
         RunnerBootPhase3Properties phase3Properties = new RunnerBootPhase3Properties();
         phase3Properties.setEnabled(false);

@@ -476,7 +476,10 @@ public class RunBootSequenceUseCase {
         } catch (RuntimeException e) {
             long durationMs = (System.nanoTime() - startedNs) / 1_000_000L;
             observer.onPhaseCompleted(phase, false, durationMs, e.getMessage());
-            throw e;
+            if (e instanceof BootFailFastException) {
+                throw e;
+            }
+            throw new BootPhaseExecutionException(phase, e.getMessage(), e);
         }
     }
 
