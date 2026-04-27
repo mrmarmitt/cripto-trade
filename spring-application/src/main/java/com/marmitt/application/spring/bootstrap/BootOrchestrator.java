@@ -4,7 +4,10 @@ import com.marmitt.core.application.usecase.boot.BootFailFastException;
 import com.marmitt.core.application.usecase.boot.BootPhaseExecutionException;
 import com.marmitt.core.application.usecase.boot.RunBootSequenceUseCase;
 import com.marmitt.core.dto.boot.BootExecutionCommand;
+import com.marmitt.core.dto.boot.BootRunSnapshot;
 import com.marmitt.core.dto.boot.BootExecutionSummary;
+import com.marmitt.core.enums.BootPhaseStatus;
+import com.marmitt.core.enums.BootRunStatus;
 import com.marmitt.core.enums.BootAccountQueryPolicy;
 import com.marmitt.core.enums.BootFailureMode;
 import com.marmitt.core.ports.outbound.boot.BootExecutionObserverPort;
@@ -85,8 +88,8 @@ public class BootOrchestrator {
                 phase1Properties.isEnabled(),
                 phase2Properties.isEnabled(),
                 phase3Properties.isEnabled(),
-                toFailureMode(phase2Properties.getMode()),
-                toAccountQueryPolicy(phase2Properties.getAccountQueryPolicy()),
+                phase2Properties.getMode(),
+                phase2Properties.getAccountQueryPolicy(),
                 portfolioSanityCheckProperties.isEnabled(),
                 portfolioSanityCheckProperties.getThreshold(),
                 portfolioZombieDetectionProperties.isEnabled(),
@@ -101,20 +104,6 @@ public class BootOrchestrator {
         if (snapshot.status() == BootRunStatus.RUNNING) {
             bootStatusTracker.failRun(phase, message);
         }
-    }
-
-    private static BootFailureMode toFailureMode(Phase2Mode mode) {
-        return switch (mode) {
-            case WARN_ONLY -> BootFailureMode.WARN_ONLY;
-            case FAIL_FAST -> BootFailureMode.FAIL_FAST;
-        };
-    }
-
-    private static BootAccountQueryPolicy toAccountQueryPolicy(Phase2AccountQueryPolicy policy) {
-        return switch (policy) {
-            case SKIP -> BootAccountQueryPolicy.SKIP;
-            case FAIL -> BootAccountQueryPolicy.FAIL;
-        };
     }
 
     private final class SpringBootExecutionObserver implements BootExecutionObserverPort {

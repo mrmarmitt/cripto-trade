@@ -5,6 +5,9 @@ import com.marmitt.core.application.usecase.portfolio.PortfolioBootSanityUseCase
 import com.marmitt.core.application.usecase.portfolio.PortfolioReservationTtlUseCase;
 import com.marmitt.core.application.usecase.portfolio.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
+import com.marmitt.core.enums.BootFailureMode;
+import com.marmitt.core.enums.BootPhaseStatus;
+import com.marmitt.core.enums.BootRunStatus;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.portfolio.PortfolioZombieCandidate;
@@ -49,7 +52,7 @@ class BootOrchestratorObservabilityTest {
         SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
         CapturingEventPublisher eventPublisher = new CapturingEventPublisher();
         BootOrchestrator orchestrator = newOrchestrator(
-                Phase2Mode.WARN_ONLY,
+                BootFailureMode.WARN_ONLY,
                 portfolio,
                 runner,
                 detected,
@@ -77,14 +80,14 @@ class BootOrchestratorObservabilityTest {
                 .tag("phase", "phase2.zombie")
                 .tag("status", "DETECTED")
                 .tag("exchange", "MOCK")
-                .tag("mode", Phase2Mode.WARN_ONLY.name())
+                .tag("mode", BootFailureMode.WARN_ONLY.name())
                 .counter()
                 .count());
         assertEquals(1L, meterRegistry.get("boot.phase.portfolio.duration")
                 .tag("phase", "phase2.zombie")
                 .tag("status", "DETECTED")
                 .tag("exchange", "MOCK")
-                .tag("mode", Phase2Mode.WARN_ONLY.name())
+                .tag("mode", BootFailureMode.WARN_ONLY.name())
                 .timer()
                 .count());
         assertEquals(0, eventPublisher.events().size());
@@ -109,7 +112,7 @@ class BootOrchestratorObservabilityTest {
         SimpleMeterRegistry meterRegistry = new SimpleMeterRegistry();
         CapturingEventPublisher eventPublisher = new CapturingEventPublisher();
         BootOrchestrator orchestrator = newOrchestrator(
-                Phase2Mode.FAIL_FAST,
+                BootFailureMode.FAIL_FAST,
                 portfolio,
                 runner,
                 detected,
@@ -137,7 +140,7 @@ class BootOrchestratorObservabilityTest {
                 .tag("phase", "phase2.zombie")
                 .tag("status", "DETECTED")
                 .tag("exchange", "MOCK")
-                .tag("mode", Phase2Mode.FAIL_FAST.name())
+                .tag("mode", BootFailureMode.FAIL_FAST.name())
                 .counter()
                 .count());
         assertEquals(1.0d, meterRegistry.get("boot.failfast.total")
@@ -155,7 +158,7 @@ class BootOrchestratorObservabilityTest {
         assertNotNull(event.timestamp());
     }
 
-    private static BootOrchestrator newOrchestrator(Phase2Mode mode,
+    private static BootOrchestrator newOrchestrator(BootFailureMode mode,
                                                     Portfolio portfolio,
                                                     StrategyRunner runner,
                                                     PortfolioZombieDetectionResult zombieResult,
