@@ -5,11 +5,14 @@ import com.marmitt.core.application.usecase.portfolio.PortfolioBootSanityUseCase
 import com.marmitt.core.application.usecase.portfolio.PortfolioReservationTtlUseCase;
 import com.marmitt.core.application.usecase.portfolio.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
+import com.marmitt.core.dto.boot.BootRunSnapshot;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.portfolio.PortfolioZombieCandidate;
 import com.marmitt.core.dto.portfolio.PortfolioZombieDetectionResult;
 import com.marmitt.core.enums.AccountingPolicyType;
+import com.marmitt.core.enums.BootFailureMode;
+import com.marmitt.core.enums.BootRunStatus;
 import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.enums.ExecutionPolicy;
 import com.marmitt.core.enums.RunnerStatus;
@@ -51,7 +54,7 @@ class BootOrchestratorBootMinimumTest {
         DeadLetterEntryRepositoryPort deadLetterRepository = mock(DeadLetterEntryRepositoryPort.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         BootOrchestrator orchestrator = newOrchestrator(
-                Phase2Mode.WARN_ONLY,
+                BootFailureMode.WARN_ONLY,
                 portfolio,
                 runner,
                 detected,
@@ -89,7 +92,7 @@ class BootOrchestratorBootMinimumTest {
         DeadLetterEntryRepositoryPort deadLetterRepository = mock(DeadLetterEntryRepositoryPort.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         BootOrchestrator orchestrator = newOrchestrator(
-                Phase2Mode.FAIL_FAST,
+                BootFailureMode.FAIL_FAST,
                 portfolio,
                 runner,
                 detected,
@@ -122,7 +125,7 @@ class BootOrchestratorBootMinimumTest {
         DeadLetterEntryRepositoryPort deadLetterRepository = mock(DeadLetterEntryRepositoryPort.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         BootOrchestrator orchestrator = newOrchestrator(
-                Phase2Mode.FAIL_FAST,
+                BootFailureMode.FAIL_FAST,
                 portfolio,
                 runner,
                 failed,
@@ -165,7 +168,7 @@ class BootOrchestratorBootMinimumTest {
         verifyNoInteractions(eventPublisher);
     }
 
-    private static BootOrchestrator newOrchestrator(Phase2Mode mode,
+    private static BootOrchestrator newOrchestrator(BootFailureMode mode,
                                                     Portfolio portfolio,
                                                     StrategyRunner runner,
                                                     PortfolioZombieDetectionResult zombieResult,
@@ -257,7 +260,7 @@ class BootOrchestratorBootMinimumTest {
 
         RunnerBootPhase2Properties phase2Properties = new RunnerBootPhase2Properties();
         phase2Properties.setEnabled(true);
-        phase2Properties.setMode(Phase2Mode.WARN_ONLY);
+        phase2Properties.setMode(BootFailureMode.WARN_ONLY);
 
         RunnerBootPhase3Properties phase3Properties = new RunnerBootPhase3Properties();
         phase3Properties.setEnabled(false);

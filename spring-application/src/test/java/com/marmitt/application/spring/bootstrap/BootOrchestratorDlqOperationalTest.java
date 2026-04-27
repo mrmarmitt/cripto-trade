@@ -11,6 +11,7 @@ import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.portfolio.PortfolioZombieCandidate;
 import com.marmitt.core.dto.portfolio.PortfolioZombieDetectionResult;
 import com.marmitt.core.enums.AccountingPolicyType;
+import com.marmitt.core.enums.BootFailureMode;
 import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.enums.ExecutionPolicy;
 import com.marmitt.core.enums.RunnerStatus;
@@ -173,7 +174,7 @@ class BootOrchestratorDlqOperationalTest {
 
         RunnerBootPhase2Properties phase2Properties = new RunnerBootPhase2Properties();
         phase2Properties.setEnabled(true);
-        phase2Properties.setMode(Phase2Mode.FAIL_FAST);
+        phase2Properties.setMode(BootFailureMode.FAIL_FAST);
 
         RunnerBootPhase3Properties phase3Properties = new RunnerBootPhase3Properties();
         phase3Properties.setEnabled(false);

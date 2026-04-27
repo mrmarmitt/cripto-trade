@@ -1,7 +1,7 @@
 package com.marmitt.application.spring.controller;
 
-import com.marmitt.application.spring.bootstrap.BootRunSnapshot;
 import com.marmitt.application.spring.bootstrap.BootStatusTracker;
+import com.marmitt.core.dto.boot.BootRunSnapshot;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;

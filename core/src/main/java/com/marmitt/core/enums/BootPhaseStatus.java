@@ -1,4 +1,4 @@
-package com.marmitt.application.spring.bootstrap;
+package com.marmitt.core.enums;
 
 public enum BootPhaseStatus {
     RUNNING,

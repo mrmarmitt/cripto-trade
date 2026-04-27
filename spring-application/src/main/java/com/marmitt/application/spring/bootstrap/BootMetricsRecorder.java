@@ -1,5 +1,7 @@
 package com.marmitt.application.spring.bootstrap;
 
+import com.marmitt.core.enums.BootPhaseStatus;
+import com.marmitt.core.enums.BootRunStatus;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Component;
