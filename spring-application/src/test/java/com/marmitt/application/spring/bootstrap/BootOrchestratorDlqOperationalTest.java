@@ -1,22 +1,24 @@
 package com.marmitt.application.spring.bootstrap;
 
 import com.marmitt.core.application.usecase.boot.RunBootSequenceUseCase;
-import com.marmitt.core.application.usecase.portfolio.PortfolioBootSanityUseCase;
-import com.marmitt.core.application.usecase.portfolio.PortfolioReservationTtlUseCase;
-import com.marmitt.core.application.usecase.portfolio.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
+import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
+import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.portfolio.PortfolioZombieCandidate;
 import com.marmitt.core.dto.portfolio.PortfolioZombieDetectionResult;
+import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.AccountingPolicyType;
 import com.marmitt.core.enums.BootFailureMode;
 import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.enums.ExecutionPolicy;
 import com.marmitt.core.enums.RunnerStatus;
+import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.junit.jupiter.api.Test;
@@ -153,21 +155,18 @@ class BootOrchestratorDlqOperationalTest {
         PortfolioRepositoryPort portfolioRepository = mock(PortfolioRepositoryPort.class);
         StrategyRunnerRepositoryPort strategyRunnerRepository = mock(StrategyRunnerRepositoryPort.class);
         ExchangeAdapterRepositoryPort exchangeAdapterRepository = mock(ExchangeAdapterRepositoryPort.class);
-        PortfolioBootSanityUseCase portfolioBootSanityUseCase = mock(PortfolioBootSanityUseCase.class);
-        PortfolioReservationTtlUseCase portfolioReservationTtlUseCase = mock(PortfolioReservationTtlUseCase.class);
-        PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase = mock(PortfolioZombieDetectionUseCase.class);
+        GlobalBalanceRepositoryPort globalBalanceRepository = mock(GlobalBalanceRepositoryPort.class);
         RunnerBootRecoveryUseCase runnerBootRecoveryUseCase = mock(RunnerBootRecoveryUseCase.class);
+        ConciliationOrderUpdateExecutor conciliationOrderUpdate = mock(ConciliationOrderUpdateExecutor.class);
         BootMetricsRecorder bootMetricsRecorder = mock(BootMetricsRecorder.class);
         BootStatusTracker tracker = new BootStatusTracker();
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
 
         when(portfolioRepository.findAll()).thenReturn(List.of(portfolio));
         when(strategyRunnerRepository.findByPortfolioId(portfolio.getId())).thenReturn(List.of(runner));
-        when(strategyRunnerRepository.findTransactionByClientOrderId("v1rx1t1234567890s001B_deadbeefcafe"))
-                .thenReturn(Optional.empty());
         when(strategyRunnerRepository.findByShortCodeAndPortfolioId("x1", portfolio.getId()))
                 .thenReturn(Optional.of(runner));
-        when(portfolioZombieDetectionUseCase.execute(portfolio.getId(), "MOCK", true)).thenReturn(zombieResult);
+        stubZombieDetection(exchangeAdapterRepository, strategyRunnerRepository, runner, zombieResult);
 
         RunnerBootPhase1Properties phase1Properties = new RunnerBootPhase1Properties();
         phase1Properties.setEnabled(false);
@@ -195,10 +194,9 @@ class BootOrchestratorDlqOperationalTest {
                 portfolioRepository,
                 strategyRunnerRepository,
                 exchangeAdapterRepository,
-                portfolioBootSanityUseCase,
-                portfolioReservationTtlUseCase,
-                portfolioZombieDetectionUseCase,
+                globalBalanceRepository,
                 deadLetterRepository,
+                conciliationOrderUpdate,
                 runnerBootRecoveryUseCase
         );
 
@@ -239,6 +237,43 @@ class BootOrchestratorDlqOperationalTest {
                 null,
                 null,
                 0L
+        );
+    }
+
+    private static void stubZombieDetection(ExchangeAdapterRepositoryPort exchangeAdapterRepository,
+                                            StrategyRunnerRepositoryPort strategyRunnerRepository,
+                                            StrategyRunner runner,
+                                            PortfolioZombieDetectionResult result) {
+        ExchangeOrderQueryPort orderQuery = mock(ExchangeOrderQueryPort.class);
+        when(exchangeAdapterRepository.findOrderQueryByName("MOCK")).thenReturn(Optional.of(orderQuery));
+
+        List<OrderDataDto> openOrders = result.samples().stream()
+                .map(sample -> toOpenOrder(sample, runner))
+                .toList();
+        when(orderQuery.listAllOpenOrders()).thenReturn(openOrders);
+        result.samples().stream()
+                .map(PortfolioZombieCandidate::clientOrderId)
+                .filter(clientOrderId -> clientOrderId != null && !clientOrderId.isBlank())
+                .forEach(clientOrderId ->
+                        when(strategyRunnerRepository.findTransactionByClientOrderId(clientOrderId))
+                                .thenReturn(Optional.empty()));
+    }
+
+    private static OrderDataDto toOpenOrder(PortfolioZombieCandidate sample, StrategyRunner runner) {
+        return new OrderDataDto(
+                sample.exchangeOrderId(),
+                sample.clientOrderId(),
+                Symbol.of(sample.symbol() != null ? sample.symbol() : runner.getSymbol()),
+                OrderDataDto.OrderSide.BUY,
+                OrderDataDto.OrderType.LIMIT,
+                new BigDecimal("0.001"),
+                BigDecimal.ZERO,
+                new BigDecimal("65000"),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.NEW,
+                null,
+                Instant.now()
         );
     }
 }

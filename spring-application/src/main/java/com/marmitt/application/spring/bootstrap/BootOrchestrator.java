@@ -2,7 +2,6 @@ package com.marmitt.application.spring.bootstrap;
 
 import com.marmitt.core.application.usecase.boot.BootFailFastException;
 import com.marmitt.core.application.usecase.boot.BootPhaseExecutionException;
-import com.marmitt.core.application.usecase.boot.RunBootSequenceUseCase;
 import com.marmitt.core.dto.boot.BootExecutionCommand;
 import com.marmitt.core.dto.boot.BootRunSnapshot;
 import com.marmitt.core.dto.boot.BootExecutionSummary;
@@ -10,6 +9,7 @@ import com.marmitt.core.enums.BootPhaseStatus;
 import com.marmitt.core.enums.BootRunStatus;
 import com.marmitt.core.enums.BootAccountQueryPolicy;
 import com.marmitt.core.enums.BootFailureMode;
+import com.marmitt.core.ports.inbound.boot.RunBootSequencePort;
 import com.marmitt.core.ports.outbound.boot.BootExecutionObserverPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -38,7 +38,7 @@ public class BootOrchestrator {
     private final PortfolioReservationTtlProperties portfolioReservationTtlProperties;
     private final PortfolioZombieDetectionProperties portfolioZombieDetectionProperties;
     private final PortfolioCutoffProperties portfolioCutoffProperties;
-    private final RunBootSequenceUseCase runBootSequenceUseCase;
+    private final RunBootSequencePort runBootSequenceUseCase;
     private final BootStatusTracker bootStatusTracker;
     private final BootMetricsRecorder bootMetricsRecorder;
     private final ApplicationEventPublisher applicationEventPublisher;
