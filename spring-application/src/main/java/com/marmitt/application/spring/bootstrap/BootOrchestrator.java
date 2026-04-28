@@ -68,7 +68,7 @@ public class BootOrchestrator {
         return new BootExecutionObserverPort() {
             @Override
             public void onRunStarted(String runId, String mode) {
-                bootStatusTracker.startRun(mode);
+                bootStatusTracker.startRun(runId, mode);
                 log.info("bootOrchestrator: start runId={} mode={} phase1Enabled={} phase2Enabled={} phase3Enabled={}",
                         runId, mode,
                         phase1Properties.isEnabled(),

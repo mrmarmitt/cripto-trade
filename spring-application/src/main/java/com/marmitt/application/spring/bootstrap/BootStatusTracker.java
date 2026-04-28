@@ -12,7 +12,6 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.UUID;
 
 @Component
 public class BootStatusTracker {
@@ -27,8 +26,8 @@ public class BootStatusTracker {
     private String failureMessage;
     private final Map<String, PhaseMutable> phases = new LinkedHashMap<>();
 
-    public synchronized void startRun(String mode) {
-        this.runId = UUID.randomUUID().toString();
+    public synchronized void startRun(String runId, String mode) {
+        this.runId = runId;
         this.runStatus = BootRunStatus.RUNNING;
         this.mode = mode;
         this.runStartedAt = Instant.now();
