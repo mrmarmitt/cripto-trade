@@ -1,8 +1,9 @@
 package com.marmitt.application.spring.bootstrap;
 
-import com.marmitt.core.application.usecase.portfolio.PortfolioBootSanityUseCase;
-import com.marmitt.core.application.usecase.portfolio.PortfolioReservationTtlUseCase;
-import com.marmitt.core.application.usecase.portfolio.PortfolioZombieDetectionUseCase;
+import com.marmitt.core.application.usecase.boot.RunBootSequenceUseCase;
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioReservationTtlUseCase;
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
 import com.marmitt.core.domain.portfolio.Portfolio;
@@ -190,7 +191,7 @@ class BootOrchestratorDlqOperationalTest {
         PortfolioCutoffProperties cutoffProperties = new PortfolioCutoffProperties();
         cutoffProperties.setEnabled(true);
 
-        return new BootOrchestrator(
+        RunBootSequenceUseCase runBootSequence = new RunBootSequenceUseCase(
                 portfolioRepository,
                 strategyRunnerRepository,
                 exchangeAdapterRepository,
@@ -198,6 +199,10 @@ class BootOrchestratorDlqOperationalTest {
                 portfolioReservationTtlUseCase,
                 portfolioZombieDetectionUseCase,
                 deadLetterRepository,
+                runnerBootRecoveryUseCase
+        );
+
+        return new BootOrchestrator(
                 phase1Properties,
                 phase2Properties,
                 phase3Properties,
@@ -205,7 +210,7 @@ class BootOrchestratorDlqOperationalTest {
                 ttlProperties,
                 zombieProperties,
                 cutoffProperties,
-                runnerBootRecoveryUseCase,
+                runBootSequence,
                 tracker,
                 bootMetricsRecorder,
                 eventPublisher

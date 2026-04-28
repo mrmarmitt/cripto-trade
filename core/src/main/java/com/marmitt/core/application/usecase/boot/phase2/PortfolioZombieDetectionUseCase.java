@@ -1,4 +1,4 @@
-package com.marmitt.core.application.usecase.portfolio;
+package com.marmitt.core.application.usecase.boot.phase2;
 
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.runner.ClientOrderId;
@@ -26,9 +26,6 @@ import java.util.UUID;
 import java.util.function.Function;
 import java.util.stream.Collectors;
 
-/**
- * Phase 2 (Portfolio): identifica ordens abertas na exchange sem correspondencia local valida.
- */
 @Slf4j
 public class PortfolioZombieDetectionUseCase {
 
