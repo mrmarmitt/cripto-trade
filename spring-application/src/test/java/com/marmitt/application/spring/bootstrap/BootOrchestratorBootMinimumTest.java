@@ -1,8 +1,9 @@
 package com.marmitt.application.spring.bootstrap;
 
-import com.marmitt.core.application.usecase.portfolio.PortfolioBootSanityUseCase;
-import com.marmitt.core.application.usecase.portfolio.PortfolioReservationTtlUseCase;
-import com.marmitt.core.application.usecase.portfolio.PortfolioZombieDetectionUseCase;
+import com.marmitt.core.application.usecase.boot.RunBootSequenceUseCase;
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioReservationTtlUseCase;
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.StrategyRunner;
@@ -184,7 +185,7 @@ class BootOrchestratorBootMinimumTest {
         PortfolioCutoffProperties cutoffProperties = new PortfolioCutoffProperties();
         cutoffProperties.setEnabled(true);
 
-        return new BootOrchestrator(
+        RunBootSequenceUseCase runBootSequence = new RunBootSequenceUseCase(
                 portfolioRepository,
                 strategyRunnerRepository,
                 exchangeAdapterRepository,
@@ -192,6 +193,10 @@ class BootOrchestratorBootMinimumTest {
                 portfolioReservationTtlUseCase,
                 portfolioZombieDetectionUseCase,
                 deadLetterRepository,
+                runnerBootRecoveryUseCase
+        );
+
+        return new BootOrchestrator(
                 phase1Properties,
                 phase2Properties,
                 phase3Properties,
@@ -199,7 +204,7 @@ class BootOrchestratorBootMinimumTest {
                 ttlProperties,
                 zombieProperties,
                 cutoffProperties,
-                runnerBootRecoveryUseCase,
+                runBootSequence,
                 tracker,
                 bootMetricsRecorder,
                 eventPublisher

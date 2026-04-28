@@ -1,4 +1,4 @@
-package com.marmitt.core.application.usecase.portfolio;
+package com.marmitt.core.application.usecase.boot.phase2;
 
 import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
 import com.marmitt.core.domain.Symbol;
@@ -16,16 +16,6 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 
-/**
- * Phase 2 (Portfolio): expira reservas locais "zumbis" por TTL durante o boot.
- *
- * <p>Escopo:
- * <ul>
- *   <li>Somente transacoes PENDING.</li>
- *   <li>Somente transacoes sem exchangeOrderId.</li>
- *   <li>Somente quando requestedAt <= now - ttlMs.</li>
- * </ul>
- */
 @Slf4j
 public class PortfolioReservationTtlUseCase {
 

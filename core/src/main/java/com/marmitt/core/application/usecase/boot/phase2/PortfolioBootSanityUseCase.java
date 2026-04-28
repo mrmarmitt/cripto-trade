@@ -1,4 +1,4 @@
-package com.marmitt.core.application.usecase.portfolio;
+package com.marmitt.core.application.usecase.boot.phase2;
 
 import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.dto.portfolio.PortfolioBootSanityResult;
@@ -13,9 +13,6 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
-/**
- * Phase 2 (Portfolio): sanity check de saldo conforme IG 10.3.
- */
 @Slf4j
 public class PortfolioBootSanityUseCase {
 
