@@ -11,6 +11,9 @@ import com.marmitt.core.dto.portfolio.PortfolioZombieDetectionResult;
 import com.marmitt.core.enums.AccountingPolicyType;
 import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.enums.ExecutionPolicy;
+import com.marmitt.core.dto.boot.BootRunSnapshot;
+import com.marmitt.core.enums.BootFailureMode;
+import com.marmitt.core.enums.BootRunStatus;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
@@ -50,7 +53,7 @@ class BootOrchestratorBootMinimumTest {
         DeadLetterEntryRepositoryPort deadLetterRepository = mock(DeadLetterEntryRepositoryPort.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         BootOrchestrator orchestrator = newOrchestrator(
-                Phase2Mode.WARN_ONLY,
+                BootFailureMode.WARN_ONLY,
                 portfolio,
                 runner,
                 detected,
@@ -88,7 +91,7 @@ class BootOrchestratorBootMinimumTest {
         DeadLetterEntryRepositoryPort deadLetterRepository = mock(DeadLetterEntryRepositoryPort.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         BootOrchestrator orchestrator = newOrchestrator(
-                Phase2Mode.FAIL_FAST,
+                BootFailureMode.FAIL_FAST,
                 portfolio,
                 runner,
                 detected,
@@ -121,7 +124,7 @@ class BootOrchestratorBootMinimumTest {
         DeadLetterEntryRepositoryPort deadLetterRepository = mock(DeadLetterEntryRepositoryPort.class);
         ApplicationEventPublisher eventPublisher = mock(ApplicationEventPublisher.class);
         BootOrchestrator orchestrator = newOrchestrator(
-                Phase2Mode.FAIL_FAST,
+                BootFailureMode.FAIL_FAST,
                 portfolio,
                 runner,
                 failed,
@@ -139,7 +142,7 @@ class BootOrchestratorBootMinimumTest {
         verify(eventPublisher).publishEvent(any(BootFailFastEvent.class));
     }
 
-    private static BootOrchestrator newOrchestrator(Phase2Mode mode,
+    private static BootOrchestrator newOrchestrator(BootFailureMode mode,
                                                     Portfolio portfolio,
                                                     StrategyRunner runner,
                                                     PortfolioZombieDetectionResult zombieResult,
