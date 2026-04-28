@@ -1,25 +1,23 @@
 package com.marmitt.application.spring.bootstrap;
 
 import com.marmitt.core.application.usecase.boot.RunBootSequenceUseCase;
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioReservationTtlUseCase;
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
-import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
-import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.dto.boot.BootRunSnapshot;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.portfolio.PortfolioZombieCandidate;
 import com.marmitt.core.dto.portfolio.PortfolioZombieDetectionResult;
-import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.AccountingPolicyType;
 import com.marmitt.core.enums.BootFailureMode;
 import com.marmitt.core.enums.BootRunStatus;
 import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.enums.ExecutionPolicy;
 import com.marmitt.core.enums.RunnerStatus;
-import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
-import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.junit.jupiter.api.Test;
@@ -28,7 +26,6 @@ import org.springframework.context.ApplicationEventPublisher;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 
@@ -50,15 +47,7 @@ class BootOrchestratorBootMinimumTest {
         Portfolio portfolio = new Portfolio(UUID.randomUUID(), "p1");
         StrategyRunner runner = activeRunner(portfolio.getId(), "MOCK");
         PortfolioZombieDetectionResult detected = PortfolioZombieDetectionResult.detected(
-                portfolio.getId(), "MOCK", 1, 1, 0, 0, 0, 0, List.of(
-                        new PortfolioZombieCandidate(
-                                "v1rx1t1234567890s001B_deadbeefcafe",
-                                "EX_ORDER_123",
-                                "BTCUSDT",
-                                DlqReason.RECONCILIATION_CONFLICT,
-                                "NO_LOCAL_MATCH"
-                        )
-                )
+                portfolio.getId(), "MOCK", 1, 1, 0, 0, 0, 0, List.of()
         );
 
         BootStatusTracker tracker = new BootStatusTracker();
@@ -90,11 +79,11 @@ class BootOrchestratorBootMinimumTest {
         PortfolioZombieDetectionResult detected = PortfolioZombieDetectionResult.detected(
                 portfolio.getId(), "MOCK", 1, 1, 0, 0, 0, 0, List.of(
                         new PortfolioZombieCandidate(
-                                "v1rx1t1234567890s001B_deadbeefcafe",
+                                "",
                                 "EX_ORDER_123",
                                 "BTCUSDT",
-                                DlqReason.RECONCILIATION_CONFLICT,
-                                "NO_LOCAL_MATCH"
+                                DlqReason.INVALID_FORMAT,
+                                "INVALID_FORMAT"
                         )
                 )
         );
@@ -175,7 +164,7 @@ class BootOrchestratorBootMinimumTest {
         BootRunSnapshot snapshot = tracker.snapshot();
         assertEquals(BootRunStatus.FAILED, snapshot.status());
         assertEquals("phase2.zombie", snapshot.failurePhase());
-        verify(deadLetterRepository, never()).save(any());
+        verifyNoInteractions(deadLetterRepository);
         verifyNoInteractions(eventPublisher);
     }
 
@@ -189,14 +178,15 @@ class BootOrchestratorBootMinimumTest {
         PortfolioRepositoryPort portfolioRepository = mock(PortfolioRepositoryPort.class);
         StrategyRunnerRepositoryPort strategyRunnerRepository = mock(StrategyRunnerRepositoryPort.class);
         ExchangeAdapterRepositoryPort exchangeAdapterRepository = mock(ExchangeAdapterRepositoryPort.class);
-        GlobalBalanceRepositoryPort globalBalanceRepository = mock(GlobalBalanceRepositoryPort.class);
+        PortfolioBootSanityUseCase portfolioBootSanityUseCase = mock(PortfolioBootSanityUseCase.class);
+        PortfolioReservationTtlUseCase portfolioReservationTtlUseCase = mock(PortfolioReservationTtlUseCase.class);
+        PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase = mock(PortfolioZombieDetectionUseCase.class);
         RunnerBootRecoveryUseCase runnerBootRecoveryUseCase = mock(RunnerBootRecoveryUseCase.class);
-        ConciliationOrderUpdateExecutor conciliationOrderUpdate = mock(ConciliationOrderUpdateExecutor.class);
         BootMetricsRecorder bootMetricsRecorder = mock(BootMetricsRecorder.class);
 
         when(portfolioRepository.findAll()).thenReturn(List.of(portfolio));
         when(strategyRunnerRepository.findByPortfolioId(portfolio.getId())).thenReturn(List.of(runner));
-        stubZombieDetection(exchangeAdapterRepository, strategyRunnerRepository, runner, zombieResult);
+        when(portfolioZombieDetectionUseCase.execute(portfolio.getId(), "MOCK", true)).thenReturn(zombieResult);
 
         RunnerBootPhase1Properties phase1Properties = new RunnerBootPhase1Properties();
         phase1Properties.setEnabled(false);
@@ -224,9 +214,10 @@ class BootOrchestratorBootMinimumTest {
                 portfolioRepository,
                 strategyRunnerRepository,
                 exchangeAdapterRepository,
-                globalBalanceRepository,
+                portfolioBootSanityUseCase,
+                portfolioReservationTtlUseCase,
+                portfolioZombieDetectionUseCase,
                 deadLetterRepository,
-                conciliationOrderUpdate,
                 runnerBootRecoveryUseCase
         );
 
@@ -253,26 +244,15 @@ class BootOrchestratorBootMinimumTest {
         PortfolioRepositoryPort portfolioRepository = mock(PortfolioRepositoryPort.class);
         StrategyRunnerRepositoryPort strategyRunnerRepository = mock(StrategyRunnerRepositoryPort.class);
         ExchangeAdapterRepositoryPort exchangeAdapterRepository = mock(ExchangeAdapterRepositoryPort.class);
-        GlobalBalanceRepositoryPort globalBalanceRepository = mock(GlobalBalanceRepositoryPort.class);
+        PortfolioBootSanityUseCase portfolioBootSanityUseCase = mock(PortfolioBootSanityUseCase.class);
+        PortfolioReservationTtlUseCase portfolioReservationTtlUseCase = mock(PortfolioReservationTtlUseCase.class);
+        PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase = mock(PortfolioZombieDetectionUseCase.class);
         RunnerBootRecoveryUseCase runnerBootRecoveryUseCase = mock(RunnerBootRecoveryUseCase.class);
-        ConciliationOrderUpdateExecutor conciliationOrderUpdate = mock(ConciliationOrderUpdateExecutor.class);
         BootMetricsRecorder bootMetricsRecorder = mock(BootMetricsRecorder.class);
 
         when(portfolioRepository.findAll()).thenReturn(List.of(portfolio));
         when(strategyRunnerRepository.findByPortfolioId(portfolio.getId())).thenReturn(List.of(runner));
-        PortfolioZombieDetectionResult detected = PortfolioZombieDetectionResult.detected(
-                portfolio.getId(), "MOCK", 1, 1, 0, 0, 0, 0, List.of(
-                        new PortfolioZombieCandidate(
-                                "v1rx1t1234567890s001B_deadbeefcafe",
-                                "EX_ORDER_123",
-                                "BTCUSDT",
-                                DlqReason.RECONCILIATION_CONFLICT,
-                                "NO_LOCAL_MATCH"
-                        )
-                )
-        );
-        stubZombieDetection(exchangeAdapterRepository, strategyRunnerRepository, runner, detected);
-        when(deadLetterRepository.existsUnresolvedByIdentity(any(), any(), any(), any(), any()))
+        when(portfolioZombieDetectionUseCase.execute(portfolio.getId(), "MOCK", true))
                 .thenThrow(new IllegalStateException("Simulated unexpected zombie failure"));
 
         RunnerBootPhase1Properties phase1Properties = new RunnerBootPhase1Properties();
@@ -280,7 +260,7 @@ class BootOrchestratorBootMinimumTest {
 
         RunnerBootPhase2Properties phase2Properties = new RunnerBootPhase2Properties();
         phase2Properties.setEnabled(true);
-        phase2Properties.setMode(BootFailureMode.FAIL_FAST);
+        phase2Properties.setMode(BootFailureMode.WARN_ONLY);
 
         RunnerBootPhase3Properties phase3Properties = new RunnerBootPhase3Properties();
         phase3Properties.setEnabled(false);
@@ -301,9 +281,10 @@ class BootOrchestratorBootMinimumTest {
                 portfolioRepository,
                 strategyRunnerRepository,
                 exchangeAdapterRepository,
-                globalBalanceRepository,
+                portfolioBootSanityUseCase,
+                portfolioReservationTtlUseCase,
+                portfolioZombieDetectionUseCase,
                 deadLetterRepository,
-                conciliationOrderUpdate,
                 runnerBootRecoveryUseCase
         );
 
@@ -344,53 +325,6 @@ class BootOrchestratorBootMinimumTest {
                 null,
                 null,
                 0L
-        );
-    }
-
-    private static void stubZombieDetection(ExchangeAdapterRepositoryPort exchangeAdapterRepository,
-                                            StrategyRunnerRepositoryPort strategyRunnerRepository,
-                                            StrategyRunner runner,
-                                            PortfolioZombieDetectionResult result) {
-        ExchangeOrderQueryPort orderQuery = mock(ExchangeOrderQueryPort.class);
-        when(exchangeAdapterRepository.findOrderQueryByName("MOCK")).thenReturn(Optional.of(orderQuery));
-
-        if (result.status().name().equals("FAILED")) {
-            when(orderQuery.listAllOpenOrders()).thenThrow(new IllegalStateException(result.message()));
-            return;
-        }
-
-        if (result.samples().isEmpty()) {
-            when(orderQuery.listAllOpenOrders()).thenReturn(List.of());
-            return;
-        }
-
-        List<OrderDataDto> openOrders = result.samples().stream()
-                .map(sample -> toOpenOrder(sample, runner))
-                .toList();
-        when(orderQuery.listAllOpenOrders()).thenReturn(openOrders);
-        result.samples().stream()
-                .map(PortfolioZombieCandidate::clientOrderId)
-                .filter(clientOrderId -> clientOrderId != null && !clientOrderId.isBlank())
-                .forEach(clientOrderId ->
-                        when(strategyRunnerRepository.findTransactionByClientOrderId(clientOrderId))
-                                .thenReturn(Optional.empty()));
-    }
-
-    private static OrderDataDto toOpenOrder(PortfolioZombieCandidate sample, StrategyRunner runner) {
-        return new OrderDataDto(
-                sample.exchangeOrderId(),
-                sample.clientOrderId(),
-                Symbol.of(sample.symbol() != null ? sample.symbol() : runner.getSymbol()),
-                OrderDataDto.OrderSide.BUY,
-                OrderDataDto.OrderType.LIMIT,
-                new BigDecimal("0.001"),
-                BigDecimal.ZERO,
-                new BigDecimal("65000"),
-                BigDecimal.ZERO,
-                BigDecimal.ZERO,
-                OrderDataDto.OrderStatus.NEW,
-                null,
-                Instant.now()
         );
     }
 }

@@ -1,71 +1,53 @@
 package com.marmitt.core.application.usecase.boot;
 
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioReservationTtlUseCase;
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
-import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
-import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
-import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.StrategyRunner;
-import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.boot.BootExecutionCommand;
 import com.marmitt.core.dto.boot.BootExecutionSummary;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
-import com.marmitt.core.dto.websocket.data.AccountDataDto;
-import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.portfolio.PortfolioBootSanityResult;
 import com.marmitt.core.dto.portfolio.PortfolioReservationTtlResult;
 import com.marmitt.core.dto.portfolio.PortfolioZombieCandidate;
 import com.marmitt.core.dto.portfolio.PortfolioZombieDetectionResult;
 import com.marmitt.core.enums.BootAccountQueryPolicy;
 import com.marmitt.core.enums.BootFailureMode;
-import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.enums.PortfolioReservationTtlStatus;
 import com.marmitt.core.enums.PortfolioSanityStatus;
 import com.marmitt.core.enums.PortfolioZombieDetectionStatus;
 import com.marmitt.core.enums.RunnerStatus;
-import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.ports.inbound.boot.RunBootSequencePort;
 import com.marmitt.core.ports.outbound.boot.BootExecutionObserverPort;
-import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
-import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
-import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 
-import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
-import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
 import java.util.stream.Stream;
 
 @Slf4j
 @RequiredArgsConstructor
 public class RunBootSequenceUseCase implements RunBootSequencePort {
 
-    private static final BigDecimal DEFAULT_SANITY_THRESHOLD = new BigDecimal("0.00000001");
-    private static final int MAX_ZOMBIE_LOG_SAMPLES = 10;
-    private static final int MAX_TTL_SAMPLES = 10;
-    private static final List<TransactionStatus> PENDING_STATUS = List.of(TransactionStatus.PENDING);
-
     private final PortfolioRepositoryPort portfolioRepository;
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
-    private final GlobalBalanceRepositoryPort globalBalanceRepository;
+    private final PortfolioBootSanityUseCase portfolioBootSanityUseCase;
+    private final PortfolioReservationTtlUseCase portfolioReservationTtlUseCase;
+    private final PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase;
     private final DeadLetterEntryRepositoryPort deadLetterEntryRepository;
-    private final ConciliationOrderUpdateExecutor conciliationOrderUpdate;
     private final RunnerBootRecoveryUseCase runnerBootRecoveryUseCase;
 
     @Override
@@ -156,7 +138,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
 
             for (String exchange : exchanges) {
                 long startedNs = System.nanoTime();
-                PortfolioBootSanityResult result = executePortfolioBootSanity(
+                PortfolioBootSanityResult result = portfolioBootSanityUseCase.execute(
                         portfolio.getId(),
                         exchange,
                         command.sanityThreshold()
@@ -247,7 +229,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
             for (String exchange : exchanges) {
                 long startedNs = System.nanoTime();
                 PortfolioZombieDetectionResult result =
-                        executePortfolioZombieDetection(
+                        portfolioZombieDetectionUseCase.execute(
                                 portfolio.getId(),
                                 exchange,
                                 command.cutoffEnabled()
@@ -357,7 +339,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
                         .toList();
 
                 long startedNs = System.nanoTime();
-                PortfolioReservationTtlResult result = executePortfolioReservationTtl(
+                PortfolioReservationTtlResult result = portfolioReservationTtlUseCase.execute(
                         portfolio.getId(),
                         exchange,
                         ttlMs,
@@ -444,394 +426,6 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
         }
 
         log.info("bootOrchestrator.phase2.ttl: completed");
-    }
-
-    private PortfolioBootSanityResult executePortfolioBootSanity(UUID portfolioId,
-                                                                 String exchangeId,
-                                                                 BigDecimal threshold) {
-        Optional<GlobalBalance> balanceOptional = globalBalanceRepository.findByPortfolioId(portfolioId);
-        if (balanceOptional.isEmpty()) {
-            return PortfolioBootSanityResult.failed(
-                    portfolioId, exchangeId, "GLOBAL_BALANCE_NOT_FOUND",
-                    "GlobalBalance not found for portfolio.");
-        }
-
-        Optional<ExchangeAccountQueryPort> accountQuery =
-                exchangeAdapterRepository.findAccountQueryByName(exchangeId);
-        if (accountQuery.isEmpty()) {
-            return PortfolioBootSanityResult.skipped(
-                    portfolioId, exchangeId, "ACCOUNT_QUERY_NOT_AVAILABLE",
-                    "Exchange account query capability is not available.");
-        }
-
-        try {
-            GlobalBalance local = balanceOptional.get();
-            AccountDataDto account = accountQuery.get().queryAccountSnapshot();
-
-            String baseCurrency = local.getBaseCurrency().toUpperCase();
-            BigDecimal localTotal = local.getTotalBalance();
-            BigDecimal exchangeTotal = readTotalForCurrency(account, baseCurrency);
-            BigDecimal signedDelta = exchangeTotal.subtract(localTotal);
-            BigDecimal absoluteDeviation = signedDelta.abs();
-            BigDecimal effectiveThreshold = threshold != null ? threshold : DEFAULT_SANITY_THRESHOLD;
-
-            if (absoluteDeviation.compareTo(effectiveThreshold) <= 0) {
-                return PortfolioBootSanityResult.pass(
-                        portfolioId, exchangeId, baseCurrency, localTotal, exchangeTotal, signedDelta, absoluteDeviation);
-            }
-
-            if (signedDelta.compareTo(BigDecimal.ZERO) > 0) {
-                return PortfolioBootSanityResult.warnSurplus(
-                        portfolioId, exchangeId, baseCurrency, localTotal, exchangeTotal, signedDelta, absoluteDeviation);
-            }
-
-            return PortfolioBootSanityResult.failDeficit(
-                    portfolioId, exchangeId, baseCurrency, localTotal, exchangeTotal, signedDelta, absoluteDeviation);
-        } catch (UnsupportedOperationException e) {
-            return PortfolioBootSanityResult.skipped(
-                    portfolioId, exchangeId, "ACCOUNT_QUERY_UNSUPPORTED", e.getMessage());
-        } catch (Exception e) {
-            log.warn("portfolioBootSanity: failed portfolioId={} exchange={} reason={}",
-                    portfolioId, exchangeId, e.getMessage());
-            return PortfolioBootSanityResult.failed(
-                    portfolioId, exchangeId, "ACCOUNT_QUERY_FAILED", e.getMessage());
-        }
-    }
-
-    private PortfolioZombieDetectionResult executePortfolioZombieDetection(UUID portfolioId,
-                                                                           String exchangeId,
-                                                                           boolean cutoffEnabled) {
-        List<StrategyRunner> scopedRunners = strategyRunnerRepository.findByPortfolioId(portfolioId).stream()
-                .filter(runner -> runner.getStatus() != RunnerStatus.ARCHIVED)
-                .filter(runner -> runner.getExchangeId() != null
-                        && exchangeId != null
-                        && exchangeId.equalsIgnoreCase(runner.getExchangeId()))
-                .toList();
-
-        if (scopedRunners.isEmpty()) {
-            return PortfolioZombieDetectionResult.skipped(
-                    portfolioId,
-                    exchangeId,
-                    "NO_RUNNERS",
-                    "No eligible runners found for portfolio/exchange."
-            );
-        }
-
-        Optional<ExchangeOrderQueryPort> orderQueryOptional =
-                exchangeAdapterRepository.findOrderQueryByName(exchangeId);
-        if (orderQueryOptional.isEmpty()) {
-            return PortfolioZombieDetectionResult.skipped(
-                    portfolioId, exchangeId, "ORDER_QUERY_NOT_AVAILABLE",
-                    "Exchange order query capability is not available.");
-        }
-
-        try {
-            List<OrderDataDto> openOrders = orderQueryOptional.get().listAllOpenOrders();
-            return classifyOpenOrders(
-                    portfolioId,
-                    exchangeId,
-                    openOrders != null ? openOrders : List.of(),
-                    scopedRunners,
-                    cutoffEnabled
-            );
-        } catch (UnsupportedOperationException e) {
-            return PortfolioZombieDetectionResult.skipped(
-                    portfolioId, exchangeId, "ORDER_QUERY_UNSUPPORTED", e.getMessage());
-        } catch (Exception e) {
-            log.warn("portfolioZombieDetection: failed portfolioId={} exchange={} reason={}",
-                    portfolioId, exchangeId, e.getMessage());
-            return PortfolioZombieDetectionResult.failed(
-                    portfolioId, exchangeId, "ORDER_QUERY_FAILED", e.getMessage());
-        }
-    }
-
-    private PortfolioZombieDetectionResult classifyOpenOrders(UUID portfolioId,
-                                                              String exchangeId,
-                                                              List<OrderDataDto> openOrders,
-                                                              List<StrategyRunner> scopedRunners,
-                                                              boolean cutoffEnabled) {
-        Map<UUID, StrategyRunner> scopedRunnerById = scopedRunners.stream()
-                .collect(java.util.stream.Collectors.toMap(StrategyRunner::getId, Function.identity()));
-        Map<String, StrategyRunner> scopedRunnerByShortCode = scopedRunners.stream()
-                .collect(java.util.stream.Collectors.toMap(
-                        runner -> runner.getShortCode().toLowerCase(Locale.ROOT),
-                        Function.identity(),
-                        (left, right) -> left
-                ));
-        Set<UUID> scopedRunnerIds = scopedRunnerById.keySet();
-
-        int invalidFormatCount = 0;
-        int unknownRunnerCount = 0;
-        int noLocalMatchCount = 0;
-        int beforeCutoffCount = 0;
-        int unknownSymbolCount = 0;
-        List<PortfolioZombieCandidate> samples = new ArrayList<>();
-        Instant portfolioCutoff = cutoffEnabled ? resolvePortfolioCutoff(scopedRunners) : null;
-
-        for (OrderDataDto order : openOrders) {
-            String clientOrderId = order.clientOrderId();
-            Optional<Transaction> transactionOptional = (clientOrderId == null || clientOrderId.isBlank())
-                    ? Optional.empty()
-                    : strategyRunnerRepository.findTransactionByClientOrderId(clientOrderId);
-            String shortCode = ClientOrderId.getRunnerShortCode(clientOrderId);
-            if (shortCode != null) {
-                shortCode = shortCode.toLowerCase(Locale.ROOT);
-            }
-            final String normalizedShortCode = shortCode;
-
-            boolean belongsToCurrentPortfolio = transactionOptional
-                    .map(tx -> scopedRunnerIds.contains(tx.getRunnerId()))
-                    .orElseGet(() -> normalizedShortCode != null
-                            && scopedRunnerByShortCode.containsKey(normalizedShortCode));
-
-            if (!belongsToCurrentPortfolio) {
-                continue;
-            }
-
-            if (cutoffEnabled && isBeforeCutoff(order.timestamp(), portfolioCutoff)) {
-                beforeCutoffCount++;
-                addZombieSample(samples, order, DlqReason.RECONCILIATION_CONFLICT, "BEFORE_CUTOFF");
-                continue;
-            }
-
-            if (shortCode == null) {
-                invalidFormatCount++;
-                addZombieSample(samples, order, DlqReason.INVALID_FORMAT, "INVALID_FORMAT");
-                continue;
-            }
-
-            if (transactionOptional.isEmpty()) {
-                noLocalMatchCount++;
-                addZombieSample(samples, order, DlqReason.RECONCILIATION_CONFLICT, "NO_LOCAL_MATCH");
-                continue;
-            }
-
-            StrategyRunner runnerByShortCode = scopedRunnerByShortCode.get(shortCode);
-            if (runnerByShortCode == null || runnerByShortCode.getStatus() == RunnerStatus.ARCHIVED) {
-                unknownRunnerCount++;
-                addZombieSample(samples, order, DlqReason.UNKNOWN_RUNNER, "RUNNER_NOT_FOUND");
-                continue;
-            }
-
-            StrategyRunner runner = scopedRunnerById.get(transactionOptional.get().getRunnerId());
-            if (runner == null || runner.getStatus() == RunnerStatus.ARCHIVED) {
-                unknownRunnerCount++;
-                addZombieSample(samples, order, DlqReason.UNKNOWN_RUNNER, "RUNNER_NOT_FOUND");
-                continue;
-            }
-
-            if (cutoffEnabled && isBeforeCutoff(order.timestamp(), resolveRunnerCutoff(runner))) {
-                beforeCutoffCount++;
-                addZombieSample(samples, order, DlqReason.RECONCILIATION_CONFLICT, "BEFORE_CUTOFF");
-                continue;
-            }
-
-            if (!transactionOptional.get().getRunnerId().equals(runnerByShortCode.getId())) {
-                unknownRunnerCount++;
-                addZombieSample(samples, order, DlqReason.UNKNOWN_RUNNER, "OWNER_MISMATCH");
-                continue;
-            }
-
-            if (!isOrderSymbolCompatible(order.symbol(), runner.getSymbol())) {
-                unknownSymbolCount++;
-                addZombieSample(samples, order, DlqReason.UNKNOWN_SYMBOL, "SYMBOL_MISMATCH");
-            }
-        }
-
-        if (invalidFormatCount == 0
-                && unknownRunnerCount == 0
-                && noLocalMatchCount == 0
-                && beforeCutoffCount == 0
-                && unknownSymbolCount == 0) {
-            return PortfolioZombieDetectionResult.clean(portfolioId, exchangeId, openOrders.size());
-        }
-
-        return PortfolioZombieDetectionResult.detected(
-                portfolioId,
-                exchangeId,
-                openOrders.size(),
-                invalidFormatCount,
-                unknownRunnerCount,
-                noLocalMatchCount,
-                beforeCutoffCount,
-                unknownSymbolCount,
-                samples
-        );
-    }
-
-    private PortfolioReservationTtlResult executePortfolioReservationTtl(UUID portfolioId,
-                                                                         String exchangeId,
-                                                                         long ttlMs,
-                                                                         List<StrategyRunner> scopedRunners) {
-        if (ttlMs <= 0) {
-            return PortfolioReservationTtlResult.skipped(
-                    portfolioId, exchangeId, ttlMs, "TTL_DISABLED",
-                    "Reservation TTL is disabled (ttlMs <= 0).");
-        }
-        if (scopedRunners == null || scopedRunners.isEmpty()) {
-            return PortfolioReservationTtlResult.skipped(
-                    portfolioId, exchangeId, ttlMs, "NO_RUNNERS",
-                    "No eligible runners found for portfolio/exchange.");
-        }
-
-        Instant cutoff = Instant.now().minusMillis(ttlMs);
-        int scannedPendingCount = 0;
-        int eligibleNoExchangeOrderIdCount = 0;
-        int expiredCount = 0;
-        int freshCount = 0;
-        int errorCount = 0;
-        List<UUID> samples = new ArrayList<>();
-
-        for (StrategyRunner runner : scopedRunners) {
-            List<Transaction> pending = strategyRunnerRepository
-                    .findByRunnerIdAndStatuses(runner.getId(), PENDING_STATUS);
-            scannedPendingCount += pending.size();
-
-            for (Transaction tx : pending) {
-                if (hasExchangeOrderId(tx)) {
-                    continue;
-                }
-                eligibleNoExchangeOrderIdCount++;
-
-                if (tx.getRequestedAt() != null && tx.getRequestedAt().isAfter(cutoff)) {
-                    freshCount++;
-                    continue;
-                }
-
-                try {
-                    conciliationOrderUpdate.execute(buildSyntheticTtlExpired(tx));
-                    expiredCount++;
-                    if (samples.size() < MAX_TTL_SAMPLES) {
-                        samples.add(tx.getId());
-                    }
-                } catch (Exception e) {
-                    errorCount++;
-                    log.error(
-                            "reservationTtl: failed expiring transactionId={} runnerId={} portfolioId={} exchange={} reason={}",
-                            tx.getId(),
-                            tx.getRunnerId(),
-                            portfolioId,
-                            exchangeId,
-                            e.getMessage(),
-                            e
-                    );
-                }
-            }
-        }
-
-        if (errorCount > 0) {
-            return PortfolioReservationTtlResult.failed(
-                    portfolioId,
-                    exchangeId,
-                    ttlMs,
-                    "TTL_PARTIAL_FAILURE",
-                    "One or more transactions failed to expire during boot reservation TTL cleanup.",
-                    scannedPendingCount,
-                    eligibleNoExchangeOrderIdCount,
-                    expiredCount,
-                    freshCount,
-                    errorCount,
-                    samples
-            );
-        }
-
-        if (expiredCount > 0) {
-            return PortfolioReservationTtlResult.expired(
-                    portfolioId,
-                    exchangeId,
-                    ttlMs,
-                    scannedPendingCount,
-                    eligibleNoExchangeOrderIdCount,
-                    expiredCount,
-                    freshCount,
-                    samples
-            );
-        }
-
-        return PortfolioReservationTtlResult.clean(
-                portfolioId,
-                exchangeId,
-                ttlMs,
-                scannedPendingCount,
-                eligibleNoExchangeOrderIdCount,
-                freshCount
-        );
-    }
-
-    private static BigDecimal readTotalForCurrency(AccountDataDto account, String currency) {
-        Map<String, BigDecimal> available = account.balances();
-        Map<String, BigDecimal> locked = account.lockedBalances();
-        BigDecimal exchangeAvailable = available != null
-                ? available.getOrDefault(currency, BigDecimal.ZERO)
-                : BigDecimal.ZERO;
-        BigDecimal exchangeLocked = locked != null
-                ? locked.getOrDefault(currency, BigDecimal.ZERO)
-                : BigDecimal.ZERO;
-        return exchangeAvailable.add(exchangeLocked);
-    }
-
-    private static void addZombieSample(List<PortfolioZombieCandidate> samples,
-                                        OrderDataDto order,
-                                        DlqReason reason,
-                                        String code) {
-        if (samples.size() >= MAX_ZOMBIE_LOG_SAMPLES) {
-            return;
-        }
-        samples.add(new PortfolioZombieCandidate(
-                order.clientOrderId(),
-                order.orderId(),
-                order.symbol() != null ? order.symbol().toString() : null,
-                reason,
-                code
-        ));
-    }
-
-    private static Instant resolvePortfolioCutoff(List<StrategyRunner> scopedRunners) {
-        return scopedRunners.stream()
-                .map(RunBootSequenceUseCase::resolveRunnerCutoff)
-                .min(Comparator.naturalOrder())
-                .orElse(null);
-    }
-
-    private static Instant resolveRunnerCutoff(StrategyRunner runner) {
-        if (runner.getLastReconciliationAt() != null) {
-            return runner.getLastReconciliationAt();
-        }
-        return runner.getCreatedAt();
-    }
-
-    private static boolean isBeforeCutoff(Instant orderTimestamp, Instant cutoff) {
-        return cutoff != null && orderTimestamp != null && orderTimestamp.isBefore(cutoff);
-    }
-
-    private static boolean isOrderSymbolCompatible(Symbol orderSymbol, String runnerSymbol) {
-        if (runnerSymbol == null || runnerSymbol.isBlank() || orderSymbol == null) {
-            return true;
-        }
-        return runnerSymbol.equalsIgnoreCase(orderSymbol.toString());
-    }
-
-    private static boolean hasExchangeOrderId(Transaction tx) {
-        String exchangeOrderId = tx.getExchangeOrderId();
-        return exchangeOrderId != null && !exchangeOrderId.isBlank();
-    }
-
-    private static OrderDataDto buildSyntheticTtlExpired(Transaction tx) {
-        return new OrderDataDto(
-                tx.getExchangeOrderId() != null ? tx.getExchangeOrderId() : "BOOT_TTL_" + tx.getId(),
-                tx.getClientOrderId(),
-                Symbol.of(tx.getSymbol()),
-                tx.isBuy() ? OrderDataDto.OrderSide.BUY : OrderDataDto.OrderSide.SELL,
-                OrderDataDto.OrderType.LIMIT,
-                tx.getQuantity(),
-                tx.getEffectiveExecutedQuantity(),
-                tx.getPrice(),
-                tx.getEffectiveExecutedPrice(),
-                BigDecimal.ZERO,
-                OrderDataDto.OrderStatus.EXPIRED,
-                "BOOT_TTL_EXPIRED",
-                Instant.now()
-        );
     }
 
     private Set<String> resolvePortfolioExchanges(Portfolio portfolio, List<StrategyRunner> eligibleRunners) {

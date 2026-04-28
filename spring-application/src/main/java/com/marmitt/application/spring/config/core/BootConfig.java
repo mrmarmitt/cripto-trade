@@ -1,6 +1,9 @@
 package com.marmitt.application.spring.config.core;
 
 import com.marmitt.core.application.usecase.boot.RunBootSequenceUseCase;
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioReservationTtlUseCase;
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
 import com.marmitt.core.ports.inbound.boot.RunBootSequencePort;
@@ -16,22 +19,48 @@ import org.springframework.context.annotation.Configuration;
 public class BootConfig {
 
     @Bean
+    public PortfolioBootSanityUseCase portfolioBootSanityUseCase(
+            GlobalBalanceRepositoryPort globalBalanceRepository,
+            ExchangeAdapterRepositoryPort exchangeAdapterRepository
+    ) {
+        return new PortfolioBootSanityUseCase(globalBalanceRepository, exchangeAdapterRepository);
+    }
+
+    @Bean
+    public PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase(
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            ExchangeAdapterRepositoryPort exchangeAdapterRepository
+    ) {
+        return new PortfolioZombieDetectionUseCase(strategyRunnerRepository, exchangeAdapterRepository);
+    }
+
+    @Bean
+    public PortfolioReservationTtlUseCase portfolioReservationTtlUseCase(
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            ConciliationOrderUpdateExecutor conciliationOrderUpdate
+    ) {
+        return new PortfolioReservationTtlUseCase(strategyRunnerRepository, conciliationOrderUpdate);
+    }
+
+    @Bean
     public RunBootSequencePort runBootSequenceUseCase(
             PortfolioRepositoryPort portfolioRepository,
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             ExchangeAdapterRepositoryPort exchangeAdapterRepository,
-            GlobalBalanceRepositoryPort globalBalanceRepository,
+            PortfolioBootSanityUseCase portfolioBootSanityUseCase,
+            PortfolioReservationTtlUseCase portfolioReservationTtlUseCase,
+            PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase,
             DeadLetterEntryRepositoryPort deadLetterEntryRepository,
-            ConciliationOrderUpdateExecutor conciliationOrderUpdate,
             RunnerBootRecoveryUseCase runnerBootRecoveryUseCase
     ) {
         return new RunBootSequenceUseCase(
                 portfolioRepository,
                 strategyRunnerRepository,
                 exchangeAdapterRepository,
-                globalBalanceRepository,
+                portfolioBootSanityUseCase,
+                portfolioReservationTtlUseCase,
+                portfolioZombieDetectionUseCase,
                 deadLetterEntryRepository,
-                conciliationOrderUpdate,
                 runnerBootRecoveryUseCase
         );
     }
