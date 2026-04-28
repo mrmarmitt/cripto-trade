@@ -212,6 +212,84 @@ class RecoverTransactionStatusUseCaseTest {
     }
 
     @Test
+    void executeReturnsInvalidExchangeResponseWhenClientOrderIdDoesNotMatchRequestedTransaction() {
+        StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
+        ExchangeAdapterRepositoryPort exchangeRepository = mock(ExchangeAdapterRepositoryPort.class);
+        ExchangeOrderQueryPort orderQueryPort = mock(ExchangeOrderQueryPort.class);
+
+        Transaction transaction = newBuyTransaction();
+        transaction.submit("EX_ORDER_LOCAL");
+        StrategyRunner runner = newRunner(transaction.getRunnerId(), "BINANCE");
+
+        when(repository.findTransactionById(transaction.getId())).thenReturn(Optional.of(transaction));
+        when(repository.findById(transaction.getRunnerId())).thenReturn(Optional.of(runner));
+        when(exchangeRepository.findOrderQueryByName("BINANCE")).thenReturn(Optional.of(orderQueryPort));
+        when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
+                .thenReturn(Optional.of(orderData(
+                        "another-client-order-id",
+                        transaction,
+                        OrderDataDto.OrderStatus.FILLED,
+                        new BigDecimal("2.50000000"),
+                        new BigDecimal("10.20000000"),
+                        "EX_ORDER_REMOTE",
+                        null
+                )));
+
+        RecoverTransactionStatusUseCase useCase = new RecoverTransactionStatusUseCase(
+                repository,
+                exchangeRepository,
+                newExecutor(repository)
+        );
+
+        RecoverTransactionStatusResponse response = useCase.execute(
+                new RecoverTransactionStatusRequest(transaction.getId()));
+
+        assertEquals(RecoverTransactionStatusResponse.RecoveryOutcome.FAILED, response.outcome());
+        assertEquals(RecoverTransactionStatusResponse.FailureReason.INVALID_EXCHANGE_RESPONSE,
+                response.failureReason());
+        assertEquals(TransactionStatus.SUBMITTED, transaction.getStatus());
+    }
+
+    @Test
+    void executeReturnsInvalidExchangeResponseWhenFillPayloadIsIncomplete() {
+        StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
+        ExchangeAdapterRepositoryPort exchangeRepository = mock(ExchangeAdapterRepositoryPort.class);
+        ExchangeOrderQueryPort orderQueryPort = mock(ExchangeOrderQueryPort.class);
+
+        Transaction transaction = newBuyTransaction();
+        transaction.submit("EX_ORDER_LOCAL");
+        StrategyRunner runner = newRunner(transaction.getRunnerId(), "BINANCE");
+
+        when(repository.findTransactionById(transaction.getId())).thenReturn(Optional.of(transaction));
+        when(repository.findById(transaction.getRunnerId())).thenReturn(Optional.of(runner));
+        when(exchangeRepository.findOrderQueryByName("BINANCE")).thenReturn(Optional.of(orderQueryPort));
+        when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
+                .thenReturn(Optional.of(orderData(
+                        transaction.getClientOrderId(),
+                        transaction,
+                        OrderDataDto.OrderStatus.FILLED,
+                        null,
+                        new BigDecimal("10.20000000"),
+                        "EX_ORDER_REMOTE",
+                        null
+                )));
+
+        RecoverTransactionStatusUseCase useCase = new RecoverTransactionStatusUseCase(
+                repository,
+                exchangeRepository,
+                newExecutor(repository)
+        );
+
+        RecoverTransactionStatusResponse response = useCase.execute(
+                new RecoverTransactionStatusRequest(transaction.getId()));
+
+        assertEquals(RecoverTransactionStatusResponse.RecoveryOutcome.FAILED, response.outcome());
+        assertEquals(RecoverTransactionStatusResponse.FailureReason.INVALID_EXCHANGE_RESPONSE,
+                response.failureReason());
+        assertEquals(TransactionStatus.SUBMITTED, transaction.getStatus());
+    }
+
+    @Test
     void executeSkipsTerminalTransactions() {
         StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
         ExchangeAdapterRepositoryPort exchangeRepository = mock(ExchangeAdapterRepositoryPort.class);
@@ -310,9 +388,27 @@ class RecoverTransactionStatusUseCaseTest {
                                           BigDecimal executedQty,
                                           BigDecimal executedPrice,
                                           String exchangeOrderId) {
+        return orderData(
+                transaction.getClientOrderId(),
+                transaction,
+                status,
+                executedQty,
+                executedPrice,
+                exchangeOrderId,
+                null
+        );
+    }
+
+    private static OrderDataDto orderData(String clientOrderId,
+                                          Transaction transaction,
+                                          OrderDataDto.OrderStatus status,
+                                          BigDecimal executedQty,
+                                          BigDecimal executedPrice,
+                                          String exchangeOrderId,
+                                          String rejectReason) {
         return new OrderDataDto(
                 exchangeOrderId,
-                transaction.getClientOrderId(),
+                clientOrderId,
                 Symbol.of(transaction.getSymbol()),
                 OrderDataDto.OrderSide.BUY,
                 OrderDataDto.OrderType.LIMIT,
@@ -322,7 +418,7 @@ class RecoverTransactionStatusUseCaseTest {
                 executedPrice,
                 BigDecimal.ZERO,
                 status,
-                null,
+                rejectReason,
                 Instant.now()
         );
     }

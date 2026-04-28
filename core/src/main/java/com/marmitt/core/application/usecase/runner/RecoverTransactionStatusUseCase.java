@@ -149,9 +149,31 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
                         "Exchange returned an order without status."
                 );
             }
+            String validationFailure = validateExchangeResponse(transaction, orderData);
+            if (validationFailure != null) {
+                return RecoverTransactionStatusResponse.failed(
+                        transaction.getId(),
+                        transaction.getRunnerId(),
+                        exchangeId,
+                        statusBefore,
+                        RecoverTransactionStatusResponse.FailureReason.INVALID_EXCHANGE_RESPONSE,
+                        validationFailure
+                );
+            }
 
             OrderDataDto normalized = normalizeQueriedOrder(transaction, orderData);
-            conciliationOrderUpdateExecutor.execute(normalized);
+            try {
+                conciliationOrderUpdateExecutor.execute(normalized);
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                return RecoverTransactionStatusResponse.failed(
+                        transaction.getId(),
+                        transaction.getRunnerId(),
+                        exchangeId,
+                        statusBefore,
+                        RecoverTransactionStatusResponse.FailureReason.INVALID_EXCHANGE_RESPONSE,
+                        "Exchange response could not be reconciled: " + e.getMessage()
+                );
+            }
             return RecoverTransactionStatusResponse.recovered(
                     transaction.getId(),
                     transaction.getRunnerId(),
@@ -182,6 +204,44 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
                 action,
                 "Exchange did not find order; applied local " + fallbackStatus + " fallback."
         );
+    }
+
+    private String validateExchangeResponse(Transaction transaction, OrderDataDto orderData) {
+        if (orderData.clientOrderId() != null
+                && !orderData.clientOrderId().isBlank()
+                && !transaction.getClientOrderId().equals(orderData.clientOrderId())) {
+            return "Exchange returned a mismatched clientOrderId for the requested transaction.";
+        }
+
+        return switch (orderData.status()) {
+            case NEW -> {
+                String orderId = orderData.orderId() != null && !orderData.orderId().isBlank()
+                        ? orderData.orderId()
+                        : transaction.getExchangeOrderId();
+                if (orderId == null || orderId.isBlank()) {
+                    yield "Exchange returned NEW without orderId for reconciliation.";
+                }
+                yield null;
+            }
+            case FILLED, PARTIALLY_FILLED -> {
+                if (orderData.executedQuantity() == null
+                        || orderData.executedQuantity().compareTo(BigDecimal.ZERO) <= 0) {
+                    yield "Exchange returned fill status without a positive executedQuantity.";
+                }
+                if (orderData.executedPrice() == null
+                        || orderData.executedPrice().compareTo(BigDecimal.ZERO) <= 0) {
+                    yield "Exchange returned fill status without a positive executedPrice.";
+                }
+                yield null;
+            }
+            case REJECTED -> {
+                if (orderData.rejectReason() == null || orderData.rejectReason().isBlank()) {
+                    yield "Exchange returned REJECTED without rejectReason.";
+                }
+                yield null;
+            }
+            case CANCELED, EXPIRED -> null;
+        };
     }
 
     private RecoverTransactionStatusResponse failureFromQuery(Transaction transaction,
@@ -225,7 +285,7 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
 
         return new OrderDataDto(
                 queried.orderId() != null ? queried.orderId() : tx.getExchangeOrderId(),
-                queried.clientOrderId() != null ? queried.clientOrderId() : tx.getClientOrderId(),
+                tx.getClientOrderId(),
                 symbol,
                 side,
                 type,
