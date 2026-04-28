@@ -1,5 +1,9 @@
 package com.marmitt.application.spring.bootstrap;
 
+import com.marmitt.core.dto.boot.BootPhaseSnapshot;
+import com.marmitt.core.dto.boot.BootRunSnapshot;
+import com.marmitt.core.enums.BootPhaseStatus;
+import com.marmitt.core.enums.BootRunStatus;
 import org.springframework.stereotype.Component;
 
 import java.time.Duration;

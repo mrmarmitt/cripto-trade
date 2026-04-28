@@ -1,4 +1,6 @@
-package com.marmitt.application.spring.bootstrap;
+package com.marmitt.core.dto.boot;
+
+import com.marmitt.core.enums.BootRunStatus;
 
 import java.time.Instant;
 import java.util.List;

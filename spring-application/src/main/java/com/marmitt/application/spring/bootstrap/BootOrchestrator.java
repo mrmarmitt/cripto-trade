@@ -5,6 +5,11 @@ import com.marmitt.core.application.usecase.portfolio.PortfolioBootSanityUseCase
 import com.marmitt.core.application.usecase.portfolio.PortfolioReservationTtlUseCase;
 import com.marmitt.core.application.usecase.portfolio.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
+import com.marmitt.core.dto.boot.BootRunSnapshot;
+import com.marmitt.core.enums.BootAccountQueryPolicy;
+import com.marmitt.core.enums.BootFailureMode;
+import com.marmitt.core.enums.BootPhaseStatus;
+import com.marmitt.core.enums.BootRunStatus;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.StrategyRunner;
@@ -168,7 +173,7 @@ public class BootOrchestrator {
     }
 
     private void runPhase2PortfolioSanity(List<Portfolio> portfolios, List<StrategyRunner> eligibleRunners) {
-        Phase2Mode mode = phase2Properties.getMode();
+        BootFailureMode mode = phase2Properties.getMode();
         log.info("bootOrchestrator.phase2.sanity: start portfolios={} mode={} accountQueryPolicy={} threshold={}",
                 portfolios.size(), mode, phase2Properties.getAccountQueryPolicy(), portfolioSanityCheckProperties.getThreshold());
 
@@ -241,10 +246,10 @@ public class BootOrchestrator {
                 }
 
                 boolean skippedWithFailPolicy = result.status() == PortfolioSanityStatus.SKIPPED
-                        && phase2Properties.getAccountQueryPolicy() == Phase2AccountQueryPolicy.FAIL;
+                        && phase2Properties.getAccountQueryPolicy() == BootAccountQueryPolicy.FAIL;
                 boolean criticalFailure = result.status() == PortfolioSanityStatus.FAIL_DEFICIT
                         || result.status() == PortfolioSanityStatus.FAILED;
-                if ((skippedWithFailPolicy || criticalFailure) && mode == Phase2Mode.FAIL_FAST) {
+                if ((skippedWithFailPolicy || criticalFailure) && mode == BootFailureMode.FAIL_FAST) {
                     throw failFast(
                             "phase2.sanity",
                             result.code(),
@@ -260,7 +265,7 @@ public class BootOrchestrator {
     }
 
     private void runPhase2ZombieDetection(List<Portfolio> portfolios, List<StrategyRunner> eligibleRunners) {
-        Phase2Mode mode = phase2Properties.getMode();
+        BootFailureMode mode = phase2Properties.getMode();
         log.info("bootOrchestrator.phase2.zombie: start portfolios={} mode={} cutoffEnabled={}",
                 portfolios.size(), mode, portfolioCutoffProperties.isEnabled());
 
@@ -297,7 +302,7 @@ public class BootOrchestrator {
                             result.zombieCount()
                     );
                     case DETECTED -> {
-                        boolean persistToDlq = mode == Phase2Mode.FAIL_FAST;
+                        boolean persistToDlq = mode == BootFailureMode.FAIL_FAST;
                         int persistedSamples = persistToDlq ? persistZombieSamplesToDlq(result) : 0;
                         log.warn(
                                 "bootOrchestrator.phase2.zombie: portfolio={} exchange={} mode={} status={} code={} openOrders={} zombies={} invalidFormat={} unknownRunner={} noLocalMatch={} beforeCutoff={} unknownSymbol={} persistedSamples={} dlqPersisted={}",
@@ -347,7 +352,7 @@ public class BootOrchestrator {
 
                 boolean criticalFailure = result.status() == PortfolioZombieDetectionStatus.FAILED
                         || result.status() == PortfolioZombieDetectionStatus.DETECTED;
-                if (criticalFailure && mode == Phase2Mode.FAIL_FAST) {
+                if (criticalFailure && mode == BootFailureMode.FAIL_FAST) {
                     throw failFast(
                             "phase2.zombie",
                             result.code(),
@@ -364,7 +369,7 @@ public class BootOrchestrator {
 
     private void runPhase2ReservationTtl(List<Portfolio> portfolios, List<StrategyRunner> eligibleRunners) {
         long ttlMs = portfolioReservationTtlProperties.getTtlMs();
-        Phase2Mode mode = phase2Properties.getMode();
+        BootFailureMode mode = phase2Properties.getMode();
         log.info("bootOrchestrator.phase2.ttl: start portfolios={} mode={} ttlMs={}",
                 portfolios.size(), mode, ttlMs);
 
@@ -456,7 +461,7 @@ public class BootOrchestrator {
                 }
 
                 boolean criticalFailure = result.status() == PortfolioReservationTtlStatus.FAILED;
-                if (criticalFailure && mode == Phase2Mode.FAIL_FAST) {
+                if (criticalFailure && mode == BootFailureMode.FAIL_FAST) {
                     throw failFast(
                             "phase2.reservation_ttl",
                             result.code(),

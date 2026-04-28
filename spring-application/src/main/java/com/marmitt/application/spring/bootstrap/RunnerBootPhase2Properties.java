@@ -1,5 +1,7 @@
 package com.marmitt.application.spring.bootstrap;
 
+import com.marmitt.core.enums.BootAccountQueryPolicy;
+import com.marmitt.core.enums.BootFailureMode;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
@@ -8,8 +10,8 @@ import org.springframework.stereotype.Component;
 public class RunnerBootPhase2Properties {
 
     private boolean enabled = true;
-    private Phase2Mode mode = Phase2Mode.WARN_ONLY;
-    private Phase2AccountQueryPolicy accountQueryPolicy = Phase2AccountQueryPolicy.SKIP;
+    private BootFailureMode mode = BootFailureMode.WARN_ONLY;
+    private BootAccountQueryPolicy accountQueryPolicy = BootAccountQueryPolicy.SKIP;
 
     public boolean isEnabled() {
         return enabled;
@@ -19,19 +21,19 @@ public class RunnerBootPhase2Properties {
         this.enabled = enabled;
     }
 
-    public Phase2Mode getMode() {
+    public BootFailureMode getMode() {
         return mode;
     }
 
-    public void setMode(Phase2Mode mode) {
+    public void setMode(BootFailureMode mode) {
         this.mode = mode;
     }
 
-    public Phase2AccountQueryPolicy getAccountQueryPolicy() {
+    public BootAccountQueryPolicy getAccountQueryPolicy() {
         return accountQueryPolicy;
     }
 
-    public void setAccountQueryPolicy(Phase2AccountQueryPolicy accountQueryPolicy) {
+    public void setAccountQueryPolicy(BootAccountQueryPolicy accountQueryPolicy) {
         this.accountQueryPolicy = accountQueryPolicy;
     }
 }
