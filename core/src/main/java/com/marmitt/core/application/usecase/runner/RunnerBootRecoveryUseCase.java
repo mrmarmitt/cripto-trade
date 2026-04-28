@@ -245,37 +245,43 @@ public class RunnerBootRecoveryUseCase {
         }
 
         for (Transaction tx : ctx.limbo()) {
-            RecoverTransactionStatusResponse response = recoverTransactionStatusUseCase.execute(
-                    new RecoverTransactionStatusRequest(tx.getId()),
-                    (orderQuery, transaction, runner) -> queryOrderByClientOrderIdWithRetry(ctx, transaction)
-            );
+            try {
+                RecoverTransactionStatusResponse response = recoverTransactionStatusUseCase.execute(
+                        new RecoverTransactionStatusRequest(tx.getId()),
+                        (orderQuery, transaction, runner) -> queryOrderByClientOrderIdWithRetry(ctx, transaction)
+                );
 
-            if (response.outcome() == RecoverTransactionStatusResponse.RecoveryOutcome.RECOVERED) {
-                if (response.action() == RecoverTransactionStatusResponse.RecoveryAction.RECONCILED_FROM_EXCHANGE) {
-                    ctx.note("Step 4: reconciled from exchange transactionId=" + tx.getId()
-                            + " status=" + response.statusAfter());
-                } else if (response.action() == RecoverTransactionStatusResponse.RecoveryAction.MARKED_CANCELED
-                        || response.action() == RecoverTransactionStatusResponse.RecoveryAction.MARKED_EXPIRED) {
-                    String fallbackStatus = response.action() == RecoverTransactionStatusResponse.RecoveryAction.MARKED_CANCELED
-                            ? OrderDataDto.OrderStatus.CANCELED.name()
-                            : OrderDataDto.OrderStatus.EXPIRED.name();
-                    ctx.note("Step 4: exchange not found -> local " + fallbackStatus
-                            + " transactionId=" + tx.getId());
+                if (response.outcome() == RecoverTransactionStatusResponse.RecoveryOutcome.RECOVERED) {
+                    if (response.action() == RecoverTransactionStatusResponse.RecoveryAction.RECONCILED_FROM_EXCHANGE) {
+                        ctx.note("Step 4: reconciled from exchange transactionId=" + tx.getId()
+                                + " status=" + response.statusAfter());
+                    } else if (response.action() == RecoverTransactionStatusResponse.RecoveryAction.MARKED_CANCELED
+                            || response.action() == RecoverTransactionStatusResponse.RecoveryAction.MARKED_EXPIRED) {
+                        String fallbackStatus = response.action() == RecoverTransactionStatusResponse.RecoveryAction.MARKED_CANCELED
+                                ? OrderDataDto.OrderStatus.CANCELED.name()
+                                : OrderDataDto.OrderStatus.EXPIRED.name();
+                        ctx.note("Step 4: exchange not found -> local " + fallbackStatus
+                                + " transactionId=" + tx.getId());
+                    }
+                    continue;
                 }
-                continue;
-            }
 
-            if (response.failureReason() == RecoverTransactionStatusResponse.FailureReason.ORDER_QUERY_UNSUPPORTED) {
-                ctx.error("Step 4 ERROR: exchange query unsupported exchange=" + ctx.exchangeId()
-                        + " transactionId=" + tx.getId());
-                log.warn("bootRecovery: order query unsupported exchange={} runnerId={} transactionId={}",
-                        ctx.exchangeId(), ctx.runnerId(), tx.getId());
-                break;
-            }
+                if (response.failureReason() == RecoverTransactionStatusResponse.FailureReason.ORDER_QUERY_UNSUPPORTED) {
+                    ctx.error("Step 4 ERROR: exchange query unsupported exchange=" + ctx.exchangeId()
+                            + " transactionId=" + tx.getId());
+                    log.warn("bootRecovery: order query unsupported exchange={} runnerId={} transactionId={}",
+                            ctx.exchangeId(), ctx.runnerId(), tx.getId());
+                    break;
+                }
 
-            ctx.error("Step 4 ERROR: transactionId=" + tx.getId() + " reason=" + response.message());
-            log.error("bootRecovery: failed to reconcile limbo transactionId={} runnerId={} reason={}",
-                    tx.getId(), ctx.runnerId(), response.message());
+                ctx.error("Step 4 ERROR: transactionId=" + tx.getId() + " reason=" + response.message());
+                log.error("bootRecovery: failed to reconcile limbo transactionId={} runnerId={} reason={}",
+                        tx.getId(), ctx.runnerId(), response.message());
+            } catch (Exception e) {
+                ctx.error("Step 4 ERROR: transactionId=" + tx.getId() + " reason=" + e.getMessage());
+                log.error("bootRecovery: failed to reconcile limbo transactionId={} runnerId={}",
+                        tx.getId(), ctx.runnerId(), e);
+            }
         }
     }
 
