@@ -3,6 +3,7 @@ package com.marmitt.application.spring.config.core;
 import com.marmitt.application.spring.bootstrap.PortfolioReservationTtlProperties;
 import com.marmitt.application.spring.bootstrap.RunnerBootPhase3Properties;
 import com.marmitt.core.application.usecase.runner.CreateRunnerUseCase;
+import com.marmitt.core.application.usecase.runner.RecoverTransactionStatusUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.application.usecase.runner.OrderConciliationUseCase;
 import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
@@ -155,11 +156,25 @@ public class RunnerConfig {
     }
 
     @Bean
+    public RecoverTransactionStatusUseCase recoverTransactionStatusUseCase(
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            ExchangeAdapterRepositoryPort exchangeAdapterRepository,
+            ConciliationOrderUpdateExecutor conciliationOrderUpdateExecutor
+    ) {
+        return new RecoverTransactionStatusUseCase(
+                strategyRunnerRepository,
+                exchangeAdapterRepository,
+                conciliationOrderUpdateExecutor
+        );
+    }
+
+    @Bean
     public RunnerBootRecoveryUseCase runnerBootRecoveryUseCase(
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             ExchangeAdapterRepositoryPort exchangeAdapterRepository,
             DeadLetterEntryRepositoryPort deadLetterEntryRepository,
             ConciliationOrderUpdateExecutor conciliationOrderUpdateExecutor,
+            RecoverTransactionStatusUseCase recoverTransactionStatusUseCase,
             PortfolioReservationTtlProperties reservationTtlProperties,
             RunnerBootPhase3Properties phase3Properties,
             @Qualifier("bootRecoveryQueryExecutor") Executor bootRecoveryQueryExecutor
@@ -169,6 +184,7 @@ public class RunnerConfig {
                 exchangeAdapterRepository,
                 deadLetterEntryRepository,
                 conciliationOrderUpdateExecutor,
+                recoverTransactionStatusUseCase,
                 reservationTtlProperties.getTtlMs(),
                 phase3Properties.getExchangeQueryTimeoutMs(),
                 phase3Properties.getExchangeQueryMaxAttempts(),

@@ -45,6 +45,12 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
 
     @Override
     public RecoverTransactionStatusResponse execute(RecoverTransactionStatusRequest request) {
+        return execute(request, (orderQuery, transaction, runner) ->
+                orderQuery.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()));
+    }
+
+    RecoverTransactionStatusResponse execute(RecoverTransactionStatusRequest request,
+                                             OrderQueryOperation orderQueryOperation) {
         Transaction transaction = strategyRunnerRepository.findTransactionById(request.transactionId()).orElse(null);
         if (transaction == null) {
             return RecoverTransactionStatusResponse.failed(
@@ -96,8 +102,7 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
 
         Optional<OrderDataDto> queried;
         try {
-            queried = orderQueryOptional.get()
-                    .queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId());
+            queried = orderQueryOperation.query(orderQueryOptional.get(), transaction, runner);
         } catch (UnsupportedOperationException e) {
             return failureFromQuery(
                     transaction,
@@ -350,5 +355,12 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
             return false;
         }
         return isRetryableQueryFailure(cause);
+    }
+
+    @FunctionalInterface
+    interface OrderQueryOperation {
+        Optional<OrderDataDto> query(ExchangeOrderQueryPort orderQuery,
+                                     Transaction transaction,
+                                     StrategyRunner runner);
     }
 }
