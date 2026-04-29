@@ -28,9 +28,10 @@ public interface RunnerTransactionJdbcRepository extends CrudRepository<RunnerTr
             @Param("statuses") Collection<String> statuses
     );
 
-    @Query("SELECT * FROM transactions WHERE status IN (:statuses) AND updated_at < :updatedBefore ORDER BY updated_at")
+    @Query("SELECT * FROM transactions WHERE status IN (:statuses) AND updated_at < :updatedBefore ORDER BY updated_at LIMIT :limit")
     List<RunnerTransactionEntity> findByStatusesUpdatedBefore(
             @Param("statuses") Collection<String> statuses,
-            @Param("updatedBefore") Instant updatedBefore
+            @Param("updatedBefore") Instant updatedBefore,
+            @Param("limit") int limit
     );
 }

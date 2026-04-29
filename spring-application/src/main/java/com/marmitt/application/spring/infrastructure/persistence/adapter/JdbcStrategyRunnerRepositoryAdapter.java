@@ -249,8 +249,11 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         long start = System.nanoTime();
         List<String> statusNames = statuses.stream().map(Enum::name).toList();
         int boundedLimit = Math.max(0, limit);
-        List<Transaction> result = transactionRepo.findByStatusesUpdatedBefore(statusNames, updatedBefore).stream()
-                .limit(boundedLimit)
+        List<Transaction> result = transactionRepo.findByStatusesUpdatedBefore(
+                        statusNames,
+                        updatedBefore,
+                        boundedLimit
+                ).stream()
                 .map(StrategyRunnerEntityMapper::toDomain)
                 .toList();
         log.trace("[REPO] transaction.findByStatusesUpdatedBefore({}, {}, {}) - {}ms - {} results",
