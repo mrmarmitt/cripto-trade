@@ -21,6 +21,7 @@ import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -238,6 +239,25 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
                 .toList();
         log.trace("[REPO] transaction.findByRunnerIdAndStatuses({}, {}) - {}ms - {} results",
                 runnerId, statusNames, RepoTiming.elapsedMs(start), result.size());
+        return result;
+    }
+
+    @Override
+    public List<Transaction> findByStatusesUpdatedBefore(Collection<TransactionStatus> statuses,
+                                                         Instant updatedBefore,
+                                                         int limit) {
+        long start = System.nanoTime();
+        List<String> statusNames = statuses.stream().map(Enum::name).toList();
+        int boundedLimit = Math.max(0, limit);
+        List<Transaction> result = transactionRepo.findByStatusesUpdatedBefore(
+                        statusNames,
+                        updatedBefore,
+                        boundedLimit
+                ).stream()
+                .map(StrategyRunnerEntityMapper::toDomain)
+                .toList();
+        log.trace("[REPO] transaction.findByStatusesUpdatedBefore({}, {}, {}) - {}ms - {} results",
+                statusNames, updatedBefore, boundedLimit, RepoTiming.elapsedMs(start), result.size());
         return result;
     }
 

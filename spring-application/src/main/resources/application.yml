@@ -70,3 +70,9 @@ runner:
       exchange-query-initial-backoff-ms: 300
       exchange-query-backoff-multiplier: 2.0
       exchange-query-max-backoff-ms: 5000
+  recovery:
+    transaction:
+      enabled: true
+      interval-ms: 60000
+      stale-threshold-ms: 30000
+      max-per-run: 50

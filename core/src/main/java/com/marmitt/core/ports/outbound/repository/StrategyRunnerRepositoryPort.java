@@ -9,6 +9,7 @@ import com.marmitt.core.enums.TransactionStatus;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -169,6 +170,14 @@ public interface StrategyRunnerRepositoryPort {
      * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 6.6.2</a>
      */
     List<Transaction> findByRunnerIdAndStatuses(UUID runnerId, Collection<TransactionStatus> statuses);
+
+    /**
+     * Busca transações em estados transitórios cujo updatedAt esteja antes do cutoff.
+     * Usado pelo watchdog operacional para recuperar ordens em voo sem depender de restart.
+     */
+    List<Transaction> findByStatusesUpdatedBefore(Collection<TransactionStatus> statuses,
+                                                  Instant updatedBefore,
+                                                  int limit);
 
     /**
      * Persiste o TransactionMatch (INSERT apenas — imutável após criação).

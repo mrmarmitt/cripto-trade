@@ -9,6 +9,7 @@ import org.springframework.stereotype.Repository;
 import java.util.Collection;
 import java.util.List;
 import java.util.Optional;
+import java.time.Instant;
 import java.util.UUID;
 
 @Repository
@@ -25,5 +26,12 @@ public interface RunnerTransactionJdbcRepository extends CrudRepository<RunnerTr
     List<RunnerTransactionEntity> findByRunnerIdAndStatuses(
             @Param("runnerId") UUID runnerId,
             @Param("statuses") Collection<String> statuses
+    );
+
+    @Query("SELECT * FROM transactions WHERE status IN (:statuses) AND updated_at < :updatedBefore ORDER BY updated_at LIMIT :limit")
+    List<RunnerTransactionEntity> findByStatusesUpdatedBefore(
+            @Param("statuses") Collection<String> statuses,
+            @Param("updatedBefore") Instant updatedBefore,
+            @Param("limit") int limit
     );
 }
