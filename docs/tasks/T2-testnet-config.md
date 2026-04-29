@@ -67,14 +67,14 @@ O repositório passa a receber os adapters por injeção (`List<ExchangeStreamin
 ## Escopo técnico
 
 **Arquivos a criar:**
-- `spring-application/.../config/BinanceAdapterConfiguration.java` — bean condicional com `@ConditionalOnExpression`
-- `spring-application/.../config/BinanceProperties.java` — `@ConfigurationProperties` com `@NotBlank` em ambos os campos de credencial
+- `spring-application/.../config/exchange/BinanceAdapterConfiguration.java` — bean condicional com `@ConditionalOnExpression`
+- `spring-application/.../config/exchange/BinanceProperties.java` — `@ConfigurationProperties` com `@NotBlank` em ambos os campos de credencial
 - `spring-application/src/main/resources/application-testnet.yml` — perfil testnet
 
 **Arquivos a modificar:**
 - `adapter-binance/.../Configuration.java` — remover URLs hardcoded; receber por construtor
-- `spring-application/.../config/exchange/BinanceExchangeAdapter.java` — receber `BinanceProperties` por construtor
-- `spring-application/.../config/MockExchangeAdapter.java` (ou configuração equivalente) — converter em `@Bean` explícito dentro de uma `MockAdapterConfiguration`
+- `spring-application/.../config/exchange/BinanceExchangeAdapter.java` — receber configuração por construtor
+- `spring-application/.../config/exchange/MockExchangeAdapter.java` — passar a ser registrado por `MockAdapterConfiguration`
 - `spring-application/.../repository/InMemoryExchangeAdapterRepository.java` — remover `@PostConstruct`; receber `List<ExchangeStreamingPort>` por injeção
 - `spring-application/src/main/resources/application.yml` — adicionar bloco `binance:` com defaults de produção
 - `docker-compose.yml` — documentar variáveis de ambiente esperadas (valores de exemplo, sem secrets reais)
@@ -110,10 +110,10 @@ BINANCE_REST_BASE_URL     https://testnet.binance.vision
 
 ## Testes de integração obrigatórios
 
-| Cenário | Verificações obrigatórias |
-|---------|--------------------------|
-| Ambas as credenciais presentes e válidas | `hasAdapter("BINANCE") == true`; `hasAdapter("MOCK") == true` |
-| `BINANCE_API_KEY` presente, `BINANCE_API_SECRET` ausente | Startup falha; mensagem de erro referencia `binance.api-secret` |
-| `BINANCE_API_SECRET` presente, `BINANCE_API_KEY` ausente | Startup falha; mensagem de erro referencia `binance.api-key` |
-| Ambas as credenciais ausentes | Aplicação sobe; `hasAdapter("BINANCE") == false`; `hasAdapter("MOCK") == true` |
-| Perfil `testnet` ativo com credenciais presentes | A URL efetiva usada pelo URL builder do adapter (WebSocket e REST) contém `testnet.binance.vision`; verificar via campo exposto no adapter ou propriedade resolvida — não apenas o binding da propriedade |
+| Cenário                                                  | Verificações obrigatórias                                                                                                                                                                                 |
+|----------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Ambas as credenciais presentes e válidas                 | `hasAdapter("BINANCE") == true`; `hasAdapter("MOCK") == true`                                                                                                                                             |
+| `BINANCE_API_KEY` presente, `BINANCE_API_SECRET` ausente | Startup falha; mensagem de erro referencia `binance.api-secret`                                                                                                                                           |
+| `BINANCE_API_SECRET` presente, `BINANCE_API_KEY` ausente | Startup falha; mensagem de erro referencia `binance.api-key`                                                                                                                                              |
+| Ambas as credenciais ausentes                            | Aplicação sobe; `hasAdapter("BINANCE") == false`; `hasAdapter("MOCK") == true`                                                                                                                            |
+| Perfil `testnet` ativo com credenciais presentes         | A URL efetiva usada pelo URL builder do adapter (WebSocket e REST) contém `testnet.binance.vision`; verificar via campo exposto no adapter ou propriedade resolvida — não apenas o binding da propriedade |
