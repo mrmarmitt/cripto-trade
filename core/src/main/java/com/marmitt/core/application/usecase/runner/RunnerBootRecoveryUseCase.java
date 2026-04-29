@@ -266,6 +266,13 @@ public class RunnerBootRecoveryUseCase {
                     continue;
                 }
 
+                if (response.outcome() == RecoverTransactionStatusResponse.RecoveryOutcome.SKIPPED) {
+                    ctx.note("Step 4: skip transactionId=" + tx.getId()
+                            + " status=" + response.statusAfter()
+                            + " reason=" + response.message());
+                    continue;
+                }
+
                 if (response.failureReason() == RecoverTransactionStatusResponse.FailureReason.ORDER_QUERY_UNSUPPORTED) {
                     ctx.error("Step 4 ERROR: exchange query unsupported exchange=" + ctx.exchangeId()
                             + " transactionId=" + tx.getId());
