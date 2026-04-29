@@ -5,6 +5,8 @@ import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.runner.RecoveryContext;
+import com.marmitt.core.dto.runner.request.RecoverTransactionStatusRequest;
+import com.marmitt.core.dto.runner.response.RecoverTransactionStatusResponse;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.enums.TransactionStatus;
@@ -61,6 +63,7 @@ public class RunnerBootRecoveryUseCase {
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
     private final DeadLetterEntryRepositoryPort deadLetterEntryRepository;
     private final ConciliationOrderUpdateExecutor conciliationOrderUpdate;
+    private final RecoverTransactionStatusUseCase recoverTransactionStatusUseCase;
     private final long pendingWithoutExchangeOrderIdTtlMs;
     private final long exchangeQueryTimeoutMs;
     private final int exchangeQueryMaxAttempts;
@@ -73,6 +76,7 @@ public class RunnerBootRecoveryUseCase {
                                      ExchangeAdapterRepositoryPort exchangeAdapterRepository,
                                      DeadLetterEntryRepositoryPort deadLetterEntryRepository,
                                      ConciliationOrderUpdateExecutor conciliationOrderUpdate,
+                                     RecoverTransactionStatusUseCase recoverTransactionStatusUseCase,
                                      long pendingWithoutExchangeOrderIdTtlMs,
                                      long exchangeQueryTimeoutMs,
                                      int exchangeQueryMaxAttempts,
@@ -84,6 +88,7 @@ public class RunnerBootRecoveryUseCase {
         this.exchangeAdapterRepository = exchangeAdapterRepository;
         this.deadLetterEntryRepository = deadLetterEntryRepository;
         this.conciliationOrderUpdate = conciliationOrderUpdate;
+        this.recoverTransactionStatusUseCase = recoverTransactionStatusUseCase;
         this.pendingWithoutExchangeOrderIdTtlMs = pendingWithoutExchangeOrderIdTtlMs;
         this.exchangeQueryTimeoutMs = Math.max(0L, exchangeQueryTimeoutMs);
         this.exchangeQueryMaxAttempts = Math.max(1, exchangeQueryMaxAttempts);
@@ -241,31 +246,44 @@ public class RunnerBootRecoveryUseCase {
 
         for (Transaction tx : ctx.limbo()) {
             try {
-                Optional<OrderDataDto> queried = queryOrderByClientOrderIdWithRetry(ctx, tx);
+                RecoverTransactionStatusResponse response = recoverTransactionStatusUseCase.execute(
+                        new RecoverTransactionStatusRequest(tx.getId()),
+                        (orderQuery, transaction, runner) -> queryOrderByClientOrderIdWithRetry(ctx, transaction)
+                );
 
-                if (queried.isPresent()) {
-                    OrderDataDto normalized = normalizeQueriedOrder(tx, queried.get());
-                    conciliationOrderUpdate.execute(normalized);
-                    ctx.note("Step 4: reconciled from exchange transactionId=" + tx.getId()
-                            + " status=" + normalized.status());
+                if (response.outcome() == RecoverTransactionStatusResponse.RecoveryOutcome.RECOVERED) {
+                    if (response.action() == RecoverTransactionStatusResponse.RecoveryAction.RECONCILED_FROM_EXCHANGE) {
+                        ctx.note("Step 4: reconciled from exchange transactionId=" + tx.getId()
+                                + " status=" + response.statusAfter());
+                    } else if (response.action() == RecoverTransactionStatusResponse.RecoveryAction.MARKED_CANCELED
+                            || response.action() == RecoverTransactionStatusResponse.RecoveryAction.MARKED_EXPIRED) {
+                        String fallbackStatus = response.action() == RecoverTransactionStatusResponse.RecoveryAction.MARKED_CANCELED
+                                ? OrderDataDto.OrderStatus.CANCELED.name()
+                                : OrderDataDto.OrderStatus.EXPIRED.name();
+                        ctx.note("Step 4: exchange not found -> local " + fallbackStatus
+                                + " transactionId=" + tx.getId());
+                    }
                     continue;
                 }
 
-                OrderDataDto.OrderStatus fallbackStatus = tx.getStatus() == TransactionStatus.PARTIAL
-                        ? OrderDataDto.OrderStatus.CANCELED
-                        : OrderDataDto.OrderStatus.EXPIRED;
-                OrderDataDto synthetic = buildSyntheticTerminalOrder(
-                        tx, fallbackStatus, "BOOT_NOT_FOUND_ON_EXCHANGE");
-                conciliationOrderUpdate.execute(synthetic);
-                ctx.note("Step 4: exchange not found -> local " + fallbackStatus
-                        + " transactionId=" + tx.getId());
+                if (response.outcome() == RecoverTransactionStatusResponse.RecoveryOutcome.SKIPPED) {
+                    ctx.note("Step 4: skip transactionId=" + tx.getId()
+                            + " status=" + response.statusAfter()
+                            + " reason=" + response.message());
+                    continue;
+                }
 
-            } catch (UnsupportedOperationException e) {
-                ctx.error("Step 4 ERROR: exchange query unsupported exchange=" + ctx.exchangeId()
-                        + " transactionId=" + tx.getId());
-                log.warn("bootRecovery: order query unsupported exchange={} runnerId={} transactionId={}",
-                        ctx.exchangeId(), ctx.runnerId(), tx.getId());
-                break;
+                if (response.failureReason() == RecoverTransactionStatusResponse.FailureReason.ORDER_QUERY_UNSUPPORTED) {
+                    ctx.error("Step 4 ERROR: exchange query unsupported exchange=" + ctx.exchangeId()
+                            + " transactionId=" + tx.getId());
+                    log.warn("bootRecovery: order query unsupported exchange={} runnerId={} transactionId={}",
+                            ctx.exchangeId(), ctx.runnerId(), tx.getId());
+                    break;
+                }
+
+                ctx.error("Step 4 ERROR: transactionId=" + tx.getId() + " reason=" + response.message());
+                log.error("bootRecovery: failed to reconcile limbo transactionId={} runnerId={} reason={}",
+                        tx.getId(), ctx.runnerId(), response.message());
             } catch (Exception e) {
                 ctx.error("Step 4 ERROR: transactionId=" + tx.getId() + " reason=" + e.getMessage());
                 log.error("bootRecovery: failed to reconcile limbo transactionId={} runnerId={}",
@@ -397,6 +415,26 @@ public class RunnerBootRecoveryUseCase {
                 : bounded;
     }
 
+    private OrderDataDto buildSyntheticTerminalOrder(Transaction tx,
+                                                     OrderDataDto.OrderStatus status,
+                                                     String reason) {
+        return new OrderDataDto(
+                tx.getExchangeOrderId() != null ? tx.getExchangeOrderId() : "BOOT_" + tx.getId(),
+                tx.getClientOrderId(),
+                Symbol.of(tx.getSymbol()),
+                tx.isBuy() ? OrderDataDto.OrderSide.BUY : OrderDataDto.OrderSide.SELL,
+                OrderDataDto.OrderType.LIMIT,
+                tx.getQuantity(),
+                tx.getEffectiveExecutedQuantity(),
+                tx.getPrice(),
+                tx.getEffectiveExecutedPrice(),
+                BigDecimal.ZERO,
+                status,
+                reason,
+                Instant.now()
+        );
+    }
+
     private void step5ValidateRemainingInFlight(RecoveryContext ctx) {
         int remaining = strategyRunnerRepository
                 .findByRunnerIdAndStatuses(ctx.runnerId(), BOOT_RELEVANT_STATUSES)
@@ -436,62 +474,6 @@ public class RunnerBootRecoveryUseCase {
         }
 
         ctx.note("Step 6: reconciliation NOT completed due to previous errors.");
-    }
-
-    private OrderDataDto normalizeQueriedOrder(Transaction tx, OrderDataDto queried) {
-        Symbol symbol = queried.symbol() != null ? queried.symbol() : Symbol.of(tx.getSymbol());
-        OrderDataDto.OrderSide side = queried.side() != null
-                ? queried.side()
-                : (tx.isBuy() ? OrderDataDto.OrderSide.BUY : OrderDataDto.OrderSide.SELL);
-        OrderDataDto.OrderType type = queried.type() != null
-                ? queried.type()
-                : OrderDataDto.OrderType.LIMIT;
-
-        BigDecimal quantity = queried.quantity() != null ? queried.quantity() : tx.getQuantity();
-        BigDecimal executedQty = queried.executedQuantity() != null
-                ? queried.executedQuantity()
-                : tx.getEffectiveExecutedQuantity();
-        BigDecimal price = queried.price() != null ? queried.price() : tx.getPrice();
-        BigDecimal executedPrice = queried.executedPrice() != null
-                ? queried.executedPrice()
-                : tx.getEffectiveExecutedPrice();
-        BigDecimal fee = queried.fee() != null ? queried.fee() : BigDecimal.ZERO;
-
-        return new OrderDataDto(
-                queried.orderId() != null ? queried.orderId() : tx.getExchangeOrderId(),
-                queried.clientOrderId() != null ? queried.clientOrderId() : tx.getClientOrderId(),
-                symbol,
-                side,
-                type,
-                quantity,
-                executedQty,
-                price,
-                executedPrice,
-                fee,
-                queried.status(),
-                queried.rejectReason(),
-                queried.timestamp() != null ? queried.timestamp() : Instant.now()
-        );
-    }
-
-    private OrderDataDto buildSyntheticTerminalOrder(Transaction tx,
-                                                     OrderDataDto.OrderStatus status,
-                                                     String reason) {
-        return new OrderDataDto(
-                tx.getExchangeOrderId() != null ? tx.getExchangeOrderId() : "BOOT_" + tx.getId(),
-                tx.getClientOrderId(),
-                Symbol.of(tx.getSymbol()),
-                tx.isBuy() ? OrderDataDto.OrderSide.BUY : OrderDataDto.OrderSide.SELL,
-                OrderDataDto.OrderType.LIMIT,
-                tx.getQuantity(),
-                tx.getEffectiveExecutedQuantity(),
-                tx.getPrice(),
-                tx.getEffectiveExecutedPrice(),
-                BigDecimal.ZERO,
-                status,
-                reason,
-                Instant.now()
-        );
     }
 
     public record RecoverySummary(
