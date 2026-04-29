@@ -21,7 +21,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
-import java.util.Locale;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -413,20 +412,6 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
         }
         if (throwable instanceof ExchangeQueryException exchangeQueryException) {
             return exchangeQueryException.isRetryable();
-        }
-
-        String message = throwable.getMessage() != null
-                ? throwable.getMessage().toLowerCase(Locale.ROOT)
-                : "";
-
-        if (message.contains("timeout")
-                || message.contains("timed out")
-                || message.contains("connection reset")
-                || message.contains("temporarily")
-                || message.contains("rate limit")
-                || message.contains("429")
-                || message.contains("503")) {
-            return true;
         }
 
         Throwable cause = throwable.getCause();

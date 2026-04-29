@@ -2,6 +2,7 @@ package com.marmitt.application.spring.bootstrap;
 
 import com.marmitt.application.spring.CTradeApplication;
 import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
+import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
 import com.marmitt.core.domain.runner.ClientOrderId;
@@ -29,6 +30,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.mock.mockito.SpyBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
@@ -46,9 +48,11 @@ import java.util.Set;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.Mockito.doAnswer;
 
 @Testcontainers
 @SpringBootTest(
@@ -95,7 +99,7 @@ class RunnerTransactionRecoveryWatchdogIntegrationTest {
     @Autowired
     private RunnerTransactionRecoveryProperties properties;
 
-    @Autowired
+    @SpyBean
     private StrategyRunnerRepositoryPort strategyRunnerRepository;
 
     @Autowired
@@ -109,6 +113,9 @@ class RunnerTransactionRecoveryWatchdogIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private ConciliationOrderUpdateExecutor conciliationOrderUpdateExecutor;
 
     @BeforeEach
     void cleanDatabaseAndResetProperties() {
@@ -159,6 +166,95 @@ class RunnerTransactionRecoveryWatchdogIntegrationTest {
     }
 
     @Test
+    void watchdogShouldRecoverStalePartialOrderFoundAsFilled() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        BigDecimal quantity = new BigDecimal("0.00200000");
+        BigDecimal requestedPrice = new BigDecimal("50000.00000000");
+        BigDecimal reservedAmount = quantity.multiply(requestedPrice);
+        BigDecimal partialQuantity = new BigDecimal("0.00080000");
+        BigDecimal partialPrice = new BigDecimal("49950.00000000");
+        BigDecimal finalPrice = new BigDecimal("50020.00000000");
+
+        Transaction submittedBuy = newTransaction(
+                runner,
+                TransactionType.BUY,
+                quantity,
+                requestedPrice,
+                reservedAmount
+        );
+        submittedBuy.submit("EX_RUNTIME_PARTIAL_FILLED");
+        strategyRunnerRepository.saveTransaction(submittedBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+
+        conciliationOrderUpdateExecutor.execute(orderData(
+                submittedBuy,
+                OrderDataDto.OrderStatus.PARTIALLY_FILLED,
+                partialQuantity,
+                partialPrice,
+                BigDecimal.ZERO
+        ));
+        Transaction partial = awaitTransactionStatus(submittedBuy.getId(), TransactionStatus.PARTIAL, WAIT_TIMEOUT);
+        markTransactionStale(partial.getId(), Duration.ofHours(2));
+
+        getMockExchangeAdapter().seedQueriedOrderSnapshot(orderData(
+                partial,
+                OrderDataDto.OrderStatus.FILLED,
+                quantity,
+                finalPrice,
+                BigDecimal.ZERO
+        ));
+
+        RecoverStaleTransactionsResponse response = watchdog.runRecoveryCycle();
+
+        Transaction filled = awaitTransactionStatus(partial.getId(), TransactionStatus.FILLED, WAIT_TIMEOUT);
+        assertNotNull(filled);
+        assertEquals(1, response.scanned());
+        assertEquals(1, response.recovered());
+        assertEquals(0, response.routedToDlq());
+        assertEquals(0, response.failed());
+    }
+
+    @Test
+    void watchdogShouldRecoverStaleSubmittedOrderFoundAsCanceled() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        BigDecimal quantity = new BigDecimal("0.00150000");
+        BigDecimal requestedPrice = new BigDecimal("60000.00000000");
+        BigDecimal reservedAmount = quantity.multiply(requestedPrice);
+
+        Transaction submittedBuy = newTransaction(
+                runner,
+                TransactionType.BUY,
+                quantity,
+                requestedPrice,
+                reservedAmount
+        );
+        submittedBuy.submit("EX_RUNTIME_CANCELED");
+        strategyRunnerRepository.saveTransaction(submittedBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+        markTransactionStale(submittedBuy.getId(), Duration.ofHours(2));
+
+        getMockExchangeAdapter().seedQueriedOrderSnapshot(orderData(
+                submittedBuy,
+                OrderDataDto.OrderStatus.CANCELED,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO
+        ));
+
+        RecoverStaleTransactionsResponse response = watchdog.runRecoveryCycle();
+
+        Transaction canceled = awaitTransactionStatus(submittedBuy.getId(), TransactionStatus.CANCELED, WAIT_TIMEOUT);
+        assertNotNull(canceled);
+        assertEquals(1, response.scanned());
+        assertEquals(1, response.recovered());
+        assertEquals(0, response.routedToDlq());
+        assertEquals(0, response.failed());
+        assertTrue(deadLetterEntryRepository.findUnresolved(portfolioId, runner.getId(), 10).isEmpty());
+    }
+
+    @Test
     void watchdogShouldRouteMissingOrderToSingleDlqEntryAcrossRepeatedCycles() {
         UUID portfolioId = createPortfolio();
         StrategyRunner runner = createAndActivateRunner(portfolioId);
@@ -190,6 +286,36 @@ class RunnerTransactionRecoveryWatchdogIntegrationTest {
         assertEquals(1, second.routedToDlq());
         assertEquals(1, firstEntries.size());
         assertEquals(1, secondEntries.size());
+    }
+
+    @Test
+    void watchdogShouldSkipCandidateThatBecomesTerminalAfterSelection() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+
+        Transaction submitted = newSubmittedTransaction(runner, "EX_RUNTIME_SKIPPED");
+        strategyRunnerRepository.saveTransaction(submitted);
+        markTransactionStale(submitted.getId(), Duration.ofHours(2));
+
+        doAnswer(invocation -> {
+            @SuppressWarnings("unchecked")
+            List<Transaction> candidates = (List<Transaction>) invocation.callRealMethod();
+            Transaction reloaded = strategyRunnerRepository.findTransactionById(submitted.getId())
+                    .orElseThrow(() -> new IllegalStateException("Transaction not found before skip simulation"));
+            reloaded.expire();
+            strategyRunnerRepository.saveTransaction(reloaded);
+            return candidates;
+        }).when(strategyRunnerRepository).findByStatusesUpdatedBefore(any(), any(), anyInt());
+
+        RecoverStaleTransactionsResponse response = watchdog.runRecoveryCycle();
+
+        Transaction expired = awaitTransactionStatus(submitted.getId(), TransactionStatus.EXPIRED, WAIT_TIMEOUT);
+        assertNotNull(expired);
+        assertEquals(1, response.scanned());
+        assertEquals(0, response.recovered());
+        assertEquals(0, response.routedToDlq());
+        assertEquals(1, response.skipped());
+        assertEquals(0, response.failed());
     }
 
     @Test
