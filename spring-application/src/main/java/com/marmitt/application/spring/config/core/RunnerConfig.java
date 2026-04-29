@@ -159,11 +159,13 @@ public class RunnerConfig {
     public RecoverTransactionStatusUseCase recoverTransactionStatusUseCase(
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             ExchangeAdapterRepositoryPort exchangeAdapterRepository,
+            DeadLetterEntryRepositoryPort deadLetterEntryRepository,
             ConciliationOrderUpdateExecutor conciliationOrderUpdateExecutor
     ) {
         return new RecoverTransactionStatusUseCase(
                 strategyRunnerRepository,
                 exchangeAdapterRepository,
+                deadLetterEntryRepository,
                 conciliationOrderUpdateExecutor
         );
     }

@@ -2,15 +2,18 @@ package com.marmitt.core.application.usecase.runner;
 
 import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
 import com.marmitt.core.domain.Symbol;
+import com.marmitt.core.domain.portfolio.DeadLetterEntry;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.runner.request.RecoverTransactionStatusRequest;
 import com.marmitt.core.dto.runner.response.RecoverTransactionStatusResponse;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.exceptions.ExchangeQueryException;
 import com.marmitt.core.ports.inbound.runner.RecoverTransactionStatusPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
+import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
@@ -33,13 +36,16 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
+    private final DeadLetterEntryRepositoryPort deadLetterEntryRepository;
     private final ConciliationOrderUpdateExecutor conciliationOrderUpdateExecutor;
 
     public RecoverTransactionStatusUseCase(StrategyRunnerRepositoryPort strategyRunnerRepository,
                                            ExchangeAdapterRepositoryPort exchangeAdapterRepository,
+                                           DeadLetterEntryRepositoryPort deadLetterEntryRepository,
                                            ConciliationOrderUpdateExecutor conciliationOrderUpdateExecutor) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.exchangeAdapterRepository = exchangeAdapterRepository;
+        this.deadLetterEntryRepository = deadLetterEntryRepository;
         this.conciliationOrderUpdateExecutor = conciliationOrderUpdateExecutor;
     }
 
@@ -190,6 +196,15 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
             );
         }
 
+        return switch (request.missingOrderPolicy()) {
+            case APPLY_TERMINAL_FALLBACK -> applyTerminalFallback(transaction, exchangeId, statusBefore);
+            case REGISTER_DLQ -> routeMissingOrderToDlq(transaction, runner, exchangeId, statusBefore);
+        };
+    }
+
+    private RecoverTransactionStatusResponse applyTerminalFallback(Transaction transaction,
+                                                                   String exchangeId,
+                                                                   TransactionStatus statusBefore) {
         OrderDataDto.OrderStatus fallbackStatus = transaction.getStatus() == TransactionStatus.PARTIAL
                 ? OrderDataDto.OrderStatus.CANCELED
                 : OrderDataDto.OrderStatus.EXPIRED;
@@ -208,6 +223,56 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
                 transaction.getStatus(),
                 action,
                 "Exchange did not find order; applied local " + fallbackStatus + " fallback."
+        );
+    }
+
+    private RecoverTransactionStatusResponse routeMissingOrderToDlq(Transaction transaction,
+                                                                    StrategyRunner runner,
+                                                                    String exchangeId,
+                                                                    TransactionStatus statusBefore) {
+        boolean alreadyOpen;
+        try {
+            alreadyOpen = deadLetterEntryRepository.existsUnresolvedByIdentity(
+                    runner.getPortfolioId(),
+                    transaction.getRunnerId(),
+                    transaction.getClientOrderId(),
+                    transaction.getExchangeOrderId(),
+                    DlqReason.RECONCILIATION_CONFLICT
+            );
+
+            if (!alreadyOpen) {
+                deadLetterEntryRepository.save(new DeadLetterEntry(
+                        runner.getPortfolioId(),
+                        transaction.getRunnerId(),
+                        transaction.getClientOrderId(),
+                        transaction.getExchangeOrderId(),
+                        buildRuntimeNotFoundDlqPayload(transaction, exchangeId, statusBefore),
+                        DlqReason.RECONCILIATION_CONFLICT
+                ));
+            }
+        } catch (RuntimeException e) {
+            log.error("runtimeRecovery: failed to persist DLQ transactionId={} runnerId={} exchange={}",
+                    transaction.getId(), transaction.getRunnerId(), exchangeId, e);
+            return RecoverTransactionStatusResponse.failed(
+                    transaction.getId(),
+                    transaction.getRunnerId(),
+                    exchangeId,
+                    statusBefore,
+                    RecoverTransactionStatusResponse.FailureReason.DLQ_PERSISTENCE_FAILURE,
+                    "Failed to persist runtime recovery DLQ entry: " + e.getMessage()
+            );
+        }
+
+        return RecoverTransactionStatusResponse.recovered(
+                transaction.getId(),
+                transaction.getRunnerId(),
+                exchangeId,
+                statusBefore,
+                transaction.getStatus(),
+                RecoverTransactionStatusResponse.RecoveryAction.ROUTED_TO_DLQ,
+                alreadyOpen
+                        ? "Exchange did not find order; existing unresolved DLQ entry kept."
+                        : "Exchange did not find order; transaction routed to DLQ."
         );
     }
 
@@ -323,6 +388,20 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
                 reason,
                 Instant.now()
         );
+    }
+
+    private String buildRuntimeNotFoundDlqPayload(Transaction transaction,
+                                                  String exchangeId,
+                                                  TransactionStatus statusBefore) {
+        return "source=runner.recovery.transaction"
+                + ", exchange=" + exchangeId
+                + ", runnerId=" + transaction.getRunnerId()
+                + ", transactionId=" + transaction.getId()
+                + ", clientOrderId=" + transaction.getClientOrderId()
+                + ", exchangeOrderId=" + transaction.getExchangeOrderId()
+                + ", symbol=" + transaction.getSymbol()
+                + ", statusBefore=" + statusBefore
+                + ", outcome=ORDER_NOT_FOUND_ON_EXCHANGE";
     }
 
     private boolean isRetryableQueryFailure(Throwable throwable) {
