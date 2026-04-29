@@ -230,16 +230,17 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
                                                                     StrategyRunner runner,
                                                                     String exchangeId,
                                                                     TransactionStatus statusBefore) {
-        boolean alreadyOpen = deadLetterEntryRepository.existsUnresolvedByIdentity(
-                runner.getPortfolioId(),
-                transaction.getRunnerId(),
-                transaction.getClientOrderId(),
-                transaction.getExchangeOrderId(),
-                DlqReason.RECONCILIATION_CONFLICT
-        );
+        boolean alreadyOpen;
+        try {
+            alreadyOpen = deadLetterEntryRepository.existsUnresolvedByIdentity(
+                    runner.getPortfolioId(),
+                    transaction.getRunnerId(),
+                    transaction.getClientOrderId(),
+                    transaction.getExchangeOrderId(),
+                    DlqReason.RECONCILIATION_CONFLICT
+            );
 
-        if (!alreadyOpen) {
-            try {
+            if (!alreadyOpen) {
                 deadLetterEntryRepository.save(new DeadLetterEntry(
                         runner.getPortfolioId(),
                         transaction.getRunnerId(),
@@ -248,18 +249,18 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
                         buildRuntimeNotFoundDlqPayload(transaction, exchangeId, statusBefore),
                         DlqReason.RECONCILIATION_CONFLICT
                 ));
-            } catch (RuntimeException e) {
-                log.error("runtimeRecovery: failed to persist DLQ transactionId={} runnerId={} exchange={}",
-                        transaction.getId(), transaction.getRunnerId(), exchangeId, e);
-                return RecoverTransactionStatusResponse.failed(
-                        transaction.getId(),
-                        transaction.getRunnerId(),
-                        exchangeId,
-                        statusBefore,
-                        RecoverTransactionStatusResponse.FailureReason.DLQ_PERSISTENCE_FAILURE,
-                        "Failed to persist runtime recovery DLQ entry: " + e.getMessage()
-                );
             }
+        } catch (RuntimeException e) {
+            log.error("runtimeRecovery: failed to persist DLQ transactionId={} runnerId={} exchange={}",
+                    transaction.getId(), transaction.getRunnerId(), exchangeId, e);
+            return RecoverTransactionStatusResponse.failed(
+                    transaction.getId(),
+                    transaction.getRunnerId(),
+                    exchangeId,
+                    statusBefore,
+                    RecoverTransactionStatusResponse.FailureReason.DLQ_PERSISTENCE_FAILURE,
+                    "Failed to persist runtime recovery DLQ entry: " + e.getMessage()
+            );
         }
 
         return RecoverTransactionStatusResponse.recovered(
