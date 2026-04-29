@@ -235,6 +235,33 @@ class RecoverTransactionStatusUseCaseTest {
     }
 
     @Test
+    void executeTreatsGenericRuntimeQueryFailureAsTerminalEvenWhenMessageLooksTransient() {
+        StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
+        ExchangeAdapterRepositoryPort exchangeRepository = mock(ExchangeAdapterRepositoryPort.class);
+        ExchangeOrderQueryPort orderQueryPort = mock(ExchangeOrderQueryPort.class);
+
+        Transaction transaction = newBuyTransaction();
+        transaction.submit("EX_ORDER_LOCAL");
+        StrategyRunner runner = newRunner(transaction.getRunnerId(), "BINANCE");
+
+        when(repository.findTransactionById(transaction.getId())).thenReturn(Optional.of(transaction));
+        when(repository.findById(transaction.getRunnerId())).thenReturn(Optional.of(runner));
+        when(exchangeRepository.findOrderQueryByName("BINANCE")).thenReturn(Optional.of(orderQueryPort));
+        when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
+                .thenThrow(new RuntimeException("temporary upstream timeout"));
+
+        RecoverTransactionStatusUseCase useCase = newUseCase(repository, exchangeRepository);
+
+        RecoverTransactionStatusResponse response = useCase.execute(
+                new RecoverTransactionStatusRequest(transaction.getId()));
+
+        assertEquals(RecoverTransactionStatusResponse.RecoveryOutcome.FAILED, response.outcome());
+        assertEquals(RecoverTransactionStatusResponse.FailureReason.EXCHANGE_QUERY_TERMINAL_FAILURE,
+                response.failureReason());
+        assertEquals(TransactionStatus.SUBMITTED, transaction.getStatus());
+    }
+
+    @Test
     void executeReturnsInvalidExchangeResponseWhenClientOrderIdDoesNotMatchRequestedTransaction() {
         StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
         ExchangeAdapterRepositoryPort exchangeRepository = mock(ExchangeAdapterRepositoryPort.class);

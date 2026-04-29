@@ -20,7 +20,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.time.Instant;
-import java.util.Locale;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -367,20 +366,6 @@ public class RunnerBootRecoveryUseCase {
             return exchangeQueryException.isRetryable();
         }
         if (throwable instanceof BootQueryTimeoutException) {
-            return true;
-        }
-
-        String message = throwable.getMessage() != null
-                ? throwable.getMessage().toLowerCase(Locale.ROOT)
-                : "";
-
-        if (message.contains("timeout")
-                || message.contains("timed out")
-                || message.contains("connection reset")
-                || message.contains("temporarily")
-                || message.contains("rate limit")
-                || message.contains("429")
-                || message.contains("503")) {
             return true;
         }
 
