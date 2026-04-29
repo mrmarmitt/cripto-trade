@@ -90,7 +90,8 @@ public record RecoverTransactionStatusResponse(
         NONE,
         RECONCILED_FROM_EXCHANGE,
         MARKED_EXPIRED,
-        MARKED_CANCELED
+        MARKED_CANCELED,
+        ROUTED_TO_DLQ
     }
 
     public enum FailureReason {
@@ -101,6 +102,7 @@ public record RecoverTransactionStatusResponse(
         ORDER_QUERY_UNSUPPORTED,
         EXCHANGE_QUERY_RETRYABLE_FAILURE,
         EXCHANGE_QUERY_TERMINAL_FAILURE,
-        INVALID_EXCHANGE_RESPONSE
+        INVALID_EXCHANGE_RESPONSE,
+        DLQ_PERSISTENCE_FAILURE
     }
 }

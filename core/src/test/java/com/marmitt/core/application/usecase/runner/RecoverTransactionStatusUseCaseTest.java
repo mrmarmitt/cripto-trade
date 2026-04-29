@@ -10,6 +10,7 @@ import com.marmitt.core.dto.runner.request.RecoverTransactionStatusRequest;
 import com.marmitt.core.dto.runner.response.RecoverTransactionStatusResponse;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.AccountingPolicyType;
+import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.enums.ExecutionPolicy;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.enums.TransactionStatus;
@@ -17,6 +18,7 @@ import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.exceptions.ExchangeQueryException;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
+import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.junit.jupiter.api.Test;
@@ -63,11 +65,7 @@ class RecoverTransactionStatusUseCaseTest {
                         "EX_ORDER_REMOTE"
                 )));
 
-        RecoverTransactionStatusUseCase useCase = new RecoverTransactionStatusUseCase(
-                repository,
-                exchangeRepository,
-                newExecutor(repository)
-        );
+        RecoverTransactionStatusUseCase useCase = newUseCase(repository, exchangeRepository);
 
         RecoverTransactionStatusResponse response = useCase.execute(
                 new RecoverTransactionStatusRequest(transaction.getId()));
@@ -81,7 +79,7 @@ class RecoverTransactionStatusUseCaseTest {
     }
 
     @Test
-    void executeMarksSubmittedTransactionExpiredWhenExchangeDoesNotFindOrder() {
+    void executeMarksSubmittedTransactionExpiredWhenExchangeDoesNotFindOrderInBootMode() {
         StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
         ExchangeAdapterRepositoryPort exchangeRepository = mock(ExchangeAdapterRepositoryPort.class);
         ExchangeOrderQueryPort orderQueryPort = mock(ExchangeOrderQueryPort.class);
@@ -97,14 +95,10 @@ class RecoverTransactionStatusUseCaseTest {
         when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
                 .thenReturn(Optional.empty());
 
-        RecoverTransactionStatusUseCase useCase = new RecoverTransactionStatusUseCase(
-                repository,
-                exchangeRepository,
-                newExecutor(repository)
-        );
+        RecoverTransactionStatusUseCase useCase = newUseCase(repository, exchangeRepository);
 
         RecoverTransactionStatusResponse response = useCase.execute(
-                new RecoverTransactionStatusRequest(transaction.getId()));
+                RecoverTransactionStatusRequest.forBoot(transaction.getId()));
 
         assertEquals(RecoverTransactionStatusResponse.RecoveryOutcome.RECOVERED, response.outcome());
         assertEquals(RecoverTransactionStatusResponse.RecoveryAction.MARKED_EXPIRED, response.action());
@@ -113,7 +107,7 @@ class RecoverTransactionStatusUseCaseTest {
     }
 
     @Test
-    void executeMarksPartialTransactionCanceledWhenExchangeDoesNotFindOrder() {
+    void executeMarksPartialTransactionCanceledWhenExchangeDoesNotFindOrderInBootMode() {
         StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
         ExchangeAdapterRepositoryPort exchangeRepository = mock(ExchangeAdapterRepositoryPort.class);
         ExchangeOrderQueryPort orderQueryPort = mock(ExchangeOrderQueryPort.class);
@@ -130,19 +124,56 @@ class RecoverTransactionStatusUseCaseTest {
         when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
                 .thenReturn(Optional.empty());
 
-        RecoverTransactionStatusUseCase useCase = new RecoverTransactionStatusUseCase(
-                repository,
-                exchangeRepository,
-                newExecutor(repository)
-        );
+        RecoverTransactionStatusUseCase useCase = newUseCase(repository, exchangeRepository);
 
         RecoverTransactionStatusResponse response = useCase.execute(
-                new RecoverTransactionStatusRequest(transaction.getId()));
+                RecoverTransactionStatusRequest.forBoot(transaction.getId()));
 
         assertEquals(RecoverTransactionStatusResponse.RecoveryOutcome.RECOVERED, response.outcome());
         assertEquals(RecoverTransactionStatusResponse.RecoveryAction.MARKED_CANCELED, response.action());
         assertEquals(TransactionStatus.CANCELED, response.statusAfter());
         assertEquals(TransactionStatus.CANCELED, transaction.getStatus());
+    }
+
+    @Test
+    void executeRoutesSubmittedTransactionToDlqWhenExchangeDoesNotFindOrderInRuntimeMode() {
+        StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
+        ExchangeAdapterRepositoryPort exchangeRepository = mock(ExchangeAdapterRepositoryPort.class);
+        DeadLetterEntryRepositoryPort deadLetterRepository = mock(DeadLetterEntryRepositoryPort.class);
+        ExchangeOrderQueryPort orderQueryPort = mock(ExchangeOrderQueryPort.class);
+
+        Transaction transaction = newBuyTransaction();
+        transaction.submit("EX_ORDER_LOCAL");
+        StrategyRunner runner = newRunner(transaction.getRunnerId(), "BINANCE");
+
+        when(repository.findTransactionById(transaction.getId())).thenReturn(Optional.of(transaction));
+        when(repository.findById(transaction.getRunnerId())).thenReturn(Optional.of(runner));
+        when(exchangeRepository.findOrderQueryByName("BINANCE")).thenReturn(Optional.of(orderQueryPort));
+        when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
+                .thenReturn(Optional.empty());
+        when(deadLetterRepository.existsUnresolvedByIdentity(
+                runner.getPortfolioId(),
+                transaction.getRunnerId(),
+                transaction.getClientOrderId(),
+                transaction.getExchangeOrderId(),
+                DlqReason.RECONCILIATION_CONFLICT
+        )).thenReturn(false);
+
+        RecoverTransactionStatusUseCase useCase = new RecoverTransactionStatusUseCase(
+                repository,
+                exchangeRepository,
+                deadLetterRepository,
+                newExecutor(repository)
+        );
+
+        RecoverTransactionStatusResponse response = useCase.execute(
+                RecoverTransactionStatusRequest.forRuntimeWatchdog(transaction.getId()));
+
+        assertEquals(RecoverTransactionStatusResponse.RecoveryOutcome.RECOVERED, response.outcome());
+        assertEquals(RecoverTransactionStatusResponse.RecoveryAction.ROUTED_TO_DLQ, response.action());
+        assertEquals(TransactionStatus.SUBMITTED, response.statusAfter());
+        assertEquals(TransactionStatus.SUBMITTED, transaction.getStatus());
+        verify(deadLetterRepository).save(any());
     }
 
     @Test
@@ -161,11 +192,7 @@ class RecoverTransactionStatusUseCaseTest {
         when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
                 .thenThrow(new UnsupportedOperationException("not supported"));
 
-        RecoverTransactionStatusUseCase useCase = new RecoverTransactionStatusUseCase(
-                repository,
-                exchangeRepository,
-                newExecutor(repository)
-        );
+        RecoverTransactionStatusUseCase useCase = newUseCase(repository, exchangeRepository);
 
         RecoverTransactionStatusResponse response = useCase.execute(
                 new RecoverTransactionStatusRequest(transaction.getId()));
@@ -196,11 +223,7 @@ class RecoverTransactionStatusUseCaseTest {
                         "Temporary upstream timeout"
                 ));
 
-        RecoverTransactionStatusUseCase useCase = new RecoverTransactionStatusUseCase(
-                repository,
-                exchangeRepository,
-                newExecutor(repository)
-        );
+        RecoverTransactionStatusUseCase useCase = newUseCase(repository, exchangeRepository);
 
         RecoverTransactionStatusResponse response = useCase.execute(
                 new RecoverTransactionStatusRequest(transaction.getId()));
@@ -235,11 +258,7 @@ class RecoverTransactionStatusUseCaseTest {
                         null
                 )));
 
-        RecoverTransactionStatusUseCase useCase = new RecoverTransactionStatusUseCase(
-                repository,
-                exchangeRepository,
-                newExecutor(repository)
-        );
+        RecoverTransactionStatusUseCase useCase = newUseCase(repository, exchangeRepository);
 
         RecoverTransactionStatusResponse response = useCase.execute(
                 new RecoverTransactionStatusRequest(transaction.getId()));
@@ -274,11 +293,7 @@ class RecoverTransactionStatusUseCaseTest {
                         null
                 )));
 
-        RecoverTransactionStatusUseCase useCase = new RecoverTransactionStatusUseCase(
-                repository,
-                exchangeRepository,
-                newExecutor(repository)
-        );
+        RecoverTransactionStatusUseCase useCase = newUseCase(repository, exchangeRepository);
 
         RecoverTransactionStatusResponse response = useCase.execute(
                 new RecoverTransactionStatusRequest(transaction.getId()));
@@ -300,11 +315,7 @@ class RecoverTransactionStatusUseCaseTest {
 
         when(repository.findTransactionById(transaction.getId())).thenReturn(Optional.of(transaction));
 
-        RecoverTransactionStatusUseCase useCase = new RecoverTransactionStatusUseCase(
-                repository,
-                exchangeRepository,
-                newExecutor(repository)
-        );
+        RecoverTransactionStatusUseCase useCase = newUseCase(repository, exchangeRepository);
 
         RecoverTransactionStatusResponse response = useCase.execute(
                 new RecoverTransactionStatusRequest(transaction.getId()));
@@ -314,6 +325,16 @@ class RecoverTransactionStatusUseCaseTest {
         assertEquals(TransactionStatus.FILLED, response.statusBefore());
         assertEquals(TransactionStatus.FILLED, response.statusAfter());
         assertNull(response.exchangeId());
+    }
+
+    private static RecoverTransactionStatusUseCase newUseCase(StrategyRunnerRepositoryPort repository,
+                                                              ExchangeAdapterRepositoryPort exchangeRepository) {
+        return new RecoverTransactionStatusUseCase(
+                repository,
+                exchangeRepository,
+                mock(DeadLetterEntryRepositoryPort.class),
+                newExecutor(repository)
+        );
     }
 
     private static ConciliationOrderUpdateExecutor newExecutor(StrategyRunnerRepositoryPort repository) {

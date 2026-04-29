@@ -247,7 +247,7 @@ public class RunnerBootRecoveryUseCase {
         for (Transaction tx : ctx.limbo()) {
             try {
                 RecoverTransactionStatusResponse response = recoverTransactionStatusUseCase.execute(
-                        new RecoverTransactionStatusRequest(tx.getId()),
+                        RecoverTransactionStatusRequest.forBoot(tx.getId()),
                         (orderQuery, transaction, runner) -> queryOrderByClientOrderIdWithRetry(ctx, transaction)
                 );
 
