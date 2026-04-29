@@ -3,6 +3,7 @@ package com.marmitt.application.spring.config.exchange;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.application.spring.adapter.OkHttp3ListenerConverter;
 import com.marmitt.application.spring.adapter.OkHttp3WebSocketAdapter;
+import com.marmitt.binance.Configuration;
 import com.marmitt.binance.BinanceUrlBuilder;
 import com.marmitt.binance.processor.receive.BinanceReceivedMessageProcessor;
 import com.marmitt.binance.processor.send.BinanceSenderMessageProcessor;
@@ -45,12 +46,16 @@ public class BinanceExchangeAdapter implements
     private final ReceivedMessageProcessorPort receivedMessageProcessor;
     private final SenderMessageProcessorPort senderMessageProcessor;
     private final ExchangeUrlBuilderPort urlBuilder;
+    private final Configuration configuration;
 
-    public BinanceExchangeAdapter(ObjectMapper objectMapper, EventPublisherPort eventPublisher) {
+    public BinanceExchangeAdapter(ObjectMapper objectMapper,
+                                  EventPublisherPort eventPublisher,
+                                  Configuration configuration) {
         this.webSocketPort = new OkHttp3WebSocketAdapter(new OkHttp3ListenerConverter(eventPublisher));
         this.receivedMessageProcessor = new BinanceReceivedMessageProcessor(objectMapper);
         this.senderMessageProcessor = new BinanceSenderMessageProcessor(objectMapper);
-        this.urlBuilder = new BinanceUrlBuilder();
+        this.configuration = configuration;
+        this.urlBuilder = new BinanceUrlBuilder(configuration);
     }
 
     @Override
@@ -81,6 +86,10 @@ public class BinanceExchangeAdapter implements
     @Override
     public ExchangeUrlBuilderPort getUrlBuilder() {
         return urlBuilder;
+    }
+
+    public Configuration getConfiguration() {
+        return configuration;
     }
 
     @Override

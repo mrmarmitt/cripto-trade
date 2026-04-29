@@ -9,30 +9,39 @@ import java.util.stream.Collectors;
 
 public class BinanceUrlBuilder implements ExchangeUrlBuilderPort {
 
+    private final Configuration configuration;
+
+    public BinanceUrlBuilder(Configuration configuration) {
+        this.configuration = configuration;
+    }
+
     @Override
     public String buildConnectionUrl(StreamSubscriptionRequest parameters) {
         List<CurrencyPair> currencyPairs = parameters.getCurrencyPairs();
-        
         if (currencyPairs.isEmpty()) {
             throw new IllegalArgumentException("At least one currency pair is required");
         }
 
-        // Se é apenas um símbolo, usa single stream
         if (currencyPairs.size() == 1) {
             CurrencyPair pair = currencyPairs.getFirst();
             String binanceSymbol = buildStreamName(pair);
-//            String stream = binanceSymbol.toLowerCase() + "@ticker";
-            return Configuration.BASE_URL + Configuration.SINGLE_STREAM_PATH + "/" + binanceSymbol;
+            return configuration.getWebSocketBaseUrl() + Configuration.SINGLE_STREAM_PATH + "/" + binanceSymbol;
         }
 
-        // Para múltiplos símbolos, usa combined stream
         List<String> streams = currencyPairs.stream()
                 .map(this::buildStreamName)
-//                .map(currency -> currency.toLowerCase() + "@ticker")
                 .collect(Collectors.toList());
-        
+
         String streamQuery = String.join("/", streams);
-        return Configuration.BASE_URL + Configuration.COMBINED_STREAM_PATH + "?streams=" + streamQuery;
+        return configuration.getWebSocketBaseUrl() + Configuration.COMBINED_STREAM_PATH + "?streams=" + streamQuery;
+    }
+
+    public String getWebSocketBaseUrl() {
+        return configuration.getWebSocketBaseUrl();
+    }
+
+    public String getRestBaseUrl() {
+        return configuration.getRestBaseUrl();
     }
 
     private String buildStreamName(CurrencyPair currencyPair) {

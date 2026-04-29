@@ -1,29 +1,26 @@
 package com.marmitt.application.spring.repository;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.marmitt.application.spring.config.exchange.BinanceExchangeAdapter;
-import com.marmitt.application.spring.config.exchange.CoinbaseExchangeAdapter;
-import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
-import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
-import jakarta.annotation.PostConstruct;
-import lombok.extern.slf4j.Slf4j;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Repository;
 
+import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
-@Slf4j
 @Repository
 public class InMemoryExchangeAdapterRepository implements ExchangeAdapterRepositoryPort {
+
+    private static final Logger log = LoggerFactory.getLogger(InMemoryExchangeAdapterRepository.class);
 
     private final Map<String, ExchangeStreamingPort> streamingAdapters = new ConcurrentHashMap<>();
     private final Map<String, ExchangeOrderExecutionPort> orderExecutionAdapters = new ConcurrentHashMap<>();
@@ -32,19 +29,8 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
     private final Map<String, ExchangeBootReadinessPort> bootReadinessAdapters = new ConcurrentHashMap<>();
     private final Map<UUID, String> adapterByPortfolio = new ConcurrentHashMap<>();
 
-    private final EventPublisherPort eventPublisher;
-    private final ObjectMapper objectMapper;
-
-    public InMemoryExchangeAdapterRepository(EventPublisherPort eventPublisher, ObjectMapper objectMapper) {
-        this.eventPublisher = eventPublisher;
-        this.objectMapper = objectMapper;
-    }
-
-    @PostConstruct
-    public void initExchangeAdapters() {
-        registerAllCapabilities(new BinanceExchangeAdapter(objectMapper, eventPublisher));
-        registerAllCapabilities(new CoinbaseExchangeAdapter(objectMapper, eventPublisher));
-        registerAllCapabilities(new MockExchangeAdapter(objectMapper, eventPublisher));
+    public InMemoryExchangeAdapterRepository(List<ExchangeStreamingPort> adapters) {
+        adapters.forEach(this::registerAllCapabilities);
     }
 
     @Override
