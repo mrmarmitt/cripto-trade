@@ -1,3 +1,3 @@
 binance:
-  ws-base-url: ${BINANCE_WS_BASE_URL:wss://testnet.binance.vision}
-  rest-base-url: ${BINANCE_REST_BASE_URL:https://testnet.binance.vision}
+  ws-base-url: wss://testnet.binance.vision
+  rest-base-url: https://testnet.binance.vision
