@@ -29,8 +29,8 @@ logging:
     console: "%d{yyyy-MM-dd HH:mm:ss.SSS} [%thread] %-5level %logger{36} - %msg%n"
 
 binance:
-  ws-base-url: ${BINANCE_WS_BASE_URL:wss://stream.binance.com:9443}
-  rest-base-url: ${BINANCE_REST_BASE_URL:https://api.binance.com}
+  ws-base-url: wss://stream.binance.com:9443
+  rest-base-url: https://api.binance.com
   api-key: ${BINANCE_API_KEY:}
   api-secret: ${BINANCE_API_SECRET:}
 
