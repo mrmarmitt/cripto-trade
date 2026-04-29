@@ -51,6 +51,7 @@ public class RunnerTransactionEntity {
     private UUID targetLotId;
 
     private Instant requestedAt;
+    private Instant updatedAt;
     private Instant executedAt;
     private String rejectReason;
 

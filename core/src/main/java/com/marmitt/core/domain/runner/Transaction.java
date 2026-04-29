@@ -88,6 +88,7 @@ public class Transaction {
     private final UUID targetLotId;
 
     private final Instant requestedAt;
+    private Instant updatedAt;
     private Instant executedAt;
     private String rejectReason;
     private Long version;
@@ -120,6 +121,7 @@ public class Transaction {
         this.targetLotId = targetLotId;
         this.status = TransactionStatus.PENDING;
         this.requestedAt = Instant.now();
+        this.updatedAt = this.requestedAt;
         this.version = null;
     }
 
@@ -145,6 +147,7 @@ public class Transaction {
             String reasoning,
             UUID targetLotId,
             Instant requestedAt,
+            Instant updatedAt,
             Instant executedAt,
             String rejectReason,
             Long version
@@ -165,6 +168,7 @@ public class Transaction {
         this.reasoning = reasoning;
         this.targetLotId = targetLotId;
         this.requestedAt = Objects.requireNonNull(requestedAt, "requestedAt cannot be null");
+        this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt cannot be null");
         this.executedAt = executedAt;
         this.rejectReason = rejectReason;
         this.version = version;
@@ -182,6 +186,7 @@ public class Transaction {
         requireStatus(TransactionStatus.PENDING, "submit");
         this.exchangeOrderId = Objects.requireNonNull(exchangeOrderId, "exchangeOrderId cannot be null");
         this.status = TransactionStatus.SUBMITTED;
+        this.updatedAt = Instant.now();
     }
 
     /**
@@ -202,6 +207,7 @@ public class Transaction {
         this.executedQuantity = cumulativeQty;
         this.executedPrice = avgExecutedPrice;
         this.status = TransactionStatus.PARTIAL;
+        this.updatedAt = Instant.now();
     }
 
     /**
@@ -223,6 +229,7 @@ public class Transaction {
         this.executedPrice = avgExecutedPrice;
         this.executedAt = Instant.now();
         this.status = TransactionStatus.FILLED;
+        this.updatedAt = this.executedAt;
     }
 
     /**
@@ -235,6 +242,7 @@ public class Transaction {
                     "Cannot cancel from status: " + this.status);
         }
         this.status = TransactionStatus.CANCELED;
+        this.updatedAt = Instant.now();
     }
 
     /**
@@ -247,6 +255,7 @@ public class Transaction {
                     "Cannot expire from status: " + this.status);
         }
         this.status = TransactionStatus.EXPIRED;
+        this.updatedAt = Instant.now();
     }
 
     /**
@@ -262,6 +271,7 @@ public class Transaction {
         }
         this.rejectReason = Objects.requireNonNull(reason, "reason cannot be null");
         this.status = TransactionStatus.REJECTED;
+        this.updatedAt = Instant.now();
     }
 
     // ============================================================
@@ -298,6 +308,10 @@ public class Transaction {
             return BigDecimal.ZERO;
         }
         return executedQuantity.multiply(executedPrice).setScale(8, RoundingMode.HALF_UP);
+    }
+
+    public Instant getUpdatedAt() {
+        return updatedAt;
     }
 
     // ============================================================
