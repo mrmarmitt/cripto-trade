@@ -3,8 +3,8 @@ package com.marmitt.application.spring.config.exchange;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.application.spring.adapter.OkHttp3ListenerConverter;
 import com.marmitt.application.spring.adapter.OkHttp3WebSocketAdapter;
+import com.marmitt.binance.BinanceEndpointConfig;
 import com.marmitt.binance.BinanceUrlBuilder;
-import com.marmitt.binance.Configuration;
 import com.marmitt.binance.auth.BinanceCredentials;
 import com.marmitt.binance.auth.BinanceRequestSigner;
 import com.marmitt.binance.processor.receive.BinanceReceivedMessageProcessor;
@@ -23,7 +23,7 @@ public class BinanceAdapterConfiguration {
     public BinanceExchangeAdapter binanceExchangeAdapter(ObjectMapper objectMapper,
                                                          EventPublisherPort eventPublisher,
                                                          BinanceProperties properties) {
-        var config      = new Configuration(properties.getWsBaseUrl(), properties.getRestBaseUrl());
+        var config      = new BinanceEndpointConfig(properties.getWsBaseUrl(), properties.getRestBaseUrl());
         var credentials = new BinanceCredentials(properties.getApiKey(), properties.getApiSecret());
         var signer      = new BinanceRequestSigner(credentials);
         var urlBuilder  = new BinanceUrlBuilder(config);

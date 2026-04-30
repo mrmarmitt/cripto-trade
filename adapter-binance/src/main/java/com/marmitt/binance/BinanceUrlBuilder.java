@@ -9,10 +9,10 @@ import java.util.stream.Collectors;
 
 public class BinanceUrlBuilder implements ExchangeUrlBuilderPort {
 
-    private final Configuration configuration;
+    private final BinanceEndpointConfig config;
 
-    public BinanceUrlBuilder(Configuration configuration) {
-        this.configuration = configuration;
+    public BinanceUrlBuilder(BinanceEndpointConfig config) {
+        this.config = config;
     }
 
     @Override
@@ -23,34 +23,32 @@ public class BinanceUrlBuilder implements ExchangeUrlBuilderPort {
         }
 
         if (currencyPairs.size() == 1) {
-            CurrencyPair pair = currencyPairs.getFirst();
-            String binanceSymbol = buildStreamName(pair);
-            return configuration.getWebSocketBaseUrl() + Configuration.SINGLE_STREAM_PATH + "/" + binanceSymbol;
+            String streamName = buildStreamName(currencyPairs.getFirst());
+            return config.getWebSocketBaseUrl() + BinanceEndpointConfig.SINGLE_STREAM_PATH + "/" + streamName;
         }
 
-        List<String> streams = currencyPairs.stream()
+        String streamQuery = currencyPairs.stream()
                 .map(this::buildStreamName)
-                .collect(Collectors.toList());
+                .collect(Collectors.joining("/"));
 
-        String streamQuery = String.join("/", streams);
-        return configuration.getWebSocketBaseUrl() + Configuration.COMBINED_STREAM_PATH + "?streams=" + streamQuery;
+        return config.getWebSocketBaseUrl() + BinanceEndpointConfig.COMBINED_STREAM_PATH + "?streams=" + streamQuery;
     }
 
     public String getWebSocketBaseUrl() {
-        return configuration.getWebSocketBaseUrl();
+        return config.getWebSocketBaseUrl();
     }
 
     public String getRestBaseUrl() {
-        return configuration.getRestBaseUrl();
+        return config.getRestBaseUrl();
     }
 
     private String buildStreamName(CurrencyPair currencyPair) {
         String lowerSymbol = (currencyPair.baseCurrency() + currencyPair.quoteCurrency()).toLowerCase();
         return switch (currencyPair.streamType()) {
-            case TICKER -> lowerSymbol + "@ticker";
-            case TRADE -> lowerSymbol + "@trade";
+            case TICKER     -> lowerSymbol + "@ticker";
+            case TRADE      -> lowerSymbol + "@trade";
             case BOOK_TICKER -> lowerSymbol + "@bookTicker";
-            case DEPTH -> lowerSymbol + "@depth";
+            case DEPTH      -> lowerSymbol + "@depth";
         };
     }
 }
