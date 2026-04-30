@@ -31,8 +31,8 @@ public class OrderManagementMapper {
     public static SendCancelOrderRequest toSendCancelOrderRequest(OrderCancelRequest request) {
         return new SendCancelOrderRequest(
                 request.exchange(),
-                request.orderId(),
-                null // currency não é obrigatório no cancel request do controller
+                request.clientOrderId(),
+                request.symbol()
         );
     }
     

@@ -5,6 +5,8 @@ import com.marmitt.application.spring.adapter.OkHttp3ListenerConverter;
 import com.marmitt.application.spring.adapter.OkHttp3WebSocketAdapter;
 import com.marmitt.binance.Configuration;
 import com.marmitt.binance.BinanceUrlBuilder;
+import com.marmitt.binance.auth.BinanceCredentials;
+import com.marmitt.binance.auth.BinanceRequestSigner;
 import com.marmitt.binance.processor.receive.BinanceReceivedMessageProcessor;
 import com.marmitt.binance.processor.send.BinanceSenderMessageProcessor;
 import com.marmitt.core.dto.websocket.data.AccountDataDto;
@@ -50,10 +52,11 @@ public class BinanceExchangeAdapter implements
 
     public BinanceExchangeAdapter(ObjectMapper objectMapper,
                                   EventPublisherPort eventPublisher,
-                                  Configuration configuration) {
+                                  Configuration configuration,
+                                  BinanceCredentials credentials) {
         this.webSocketPort = new OkHttp3WebSocketAdapter(new OkHttp3ListenerConverter(eventPublisher));
         this.receivedMessageProcessor = new BinanceReceivedMessageProcessor(objectMapper);
-        this.senderMessageProcessor = new BinanceSenderMessageProcessor(objectMapper);
+        this.senderMessageProcessor = new BinanceSenderMessageProcessor(objectMapper, new BinanceRequestSigner(credentials));
         this.configuration = configuration;
         this.urlBuilder = new BinanceUrlBuilder(configuration);
     }

@@ -113,7 +113,8 @@ public class MockExchangeRuntime {
             return rejectedCancelSnapshot(request, "MOCK_LIFECYCLE_STOPPED");
         }
 
-        OrderDataDto current = latestEventByOrderId.get(request.getOrderId());
+        String exchangeOrderId = orderIdByClientOrderId.get(request.getClientOrderId());
+        OrderDataDto current = exchangeOrderId != null ? latestEventByOrderId.get(exchangeOrderId) : null;
         if (current == null) {
             return rejectedCancelSnapshot(request, "ORDER_NOT_FOUND");
         }
@@ -437,13 +438,10 @@ public class MockExchangeRuntime {
     }
 
     private static OrderDataDto rejectedCancelSnapshot(SendCancelOrderRequest request, String reason) {
-        String symbol = request.getSymbol() == null || request.getSymbol().isBlank()
-                ? "UNKNOWNUSDT"
-                : request.getSymbol();
         return new OrderDataDto(
-                request.getOrderId(),
+                request.getClientOrderId(),
                 null,
-                Symbol.of(symbol),
+                Symbol.of(request.getSymbol()),
                 OrderDataDto.OrderSide.SELL,
                 OrderDataDto.OrderType.LIMIT,
                 java.math.BigDecimal.ZERO,
