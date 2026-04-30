@@ -29,10 +29,10 @@ public class CancelOrderProcessor implements SenderSpecializedProcessorPort {
         try {
             Map<String, Object> params = new HashMap<>();
             params.put("symbol", cancelRequest.getSymbol().toUpperCase());
-            params.put("origClientOrderId", cancelRequest.getOrderId());
+            params.put("origClientOrderId", cancelRequest.getClientOrderId());
 
             Map<String, Object> message = new HashMap<>();
-            message.put("id", cancelRequest.getOrderId());
+            message.put("id", cancelRequest.getClientOrderId());
             message.put("method", "order.cancel");
             message.put("params", signer.signWebSocketParams(params));
 
