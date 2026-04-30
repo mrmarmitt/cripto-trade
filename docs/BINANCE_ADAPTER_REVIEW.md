@@ -18,7 +18,7 @@
 
 ## Problemas identificados
 
-### P1 — `BinanceExchangeAdapter` instancia colaboradores no construtor
+### ~~P1 — `BinanceExchangeAdapter` instancia colaboradores no construtor~~ ✅ Resolvido (PR #84)
 
 **Situação atual:**
 ```java
@@ -83,7 +83,7 @@ Hoje 4 desses ports têm `throw new UnsupportedOperationException`. Quando T4 e 
 
 ---
 
-### P3 — `TickerProcessor.canProcess()` vai colidir com T4 (User Data Stream)
+### ~~P3 — `TickerProcessor.canProcess()` vai colidir com T4 (User Data Stream)~~ ✅ Resolvido (PR #85)
 
 **Situação atual:**
 ```java
@@ -137,7 +137,7 @@ Este é um detalhe de implementação interno do adapter. O `core` não deveria 
 
 ---
 
-### P6 — `Configuration.java` tem nome genérico demais
+### ~~P6 — `Configuration.java` tem nome genérico demais~~ ✅ Resolvido (PR #84)
 
 No módulo `adapter-binance` o nome é OK, mas ao ser referenciado do Spring é necessário o nome qualificado:
 
@@ -164,7 +164,7 @@ Essas propriedades sempre têm defaults hardcoded em `application.yml` e só sã
 
 ---
 
-### P8 — `TickerProcessor` mistura regra de negócio com validação técnica
+### ~~P8 — `TickerProcessor` mistura regra de negócio com validação técnica~~ ✅ Resolvido (PR #85)
 
 ```java
 if (marketData.price().compareTo(new BigDecimal("10000000")) > 0) {
@@ -194,14 +194,14 @@ Erros de infraestrutura (`OutOfMemoryError` envolvido em `RuntimeException`) ser
 
 ## Prioridades
 
-| # | Item | Impacto direto | Quando |
-|---|------|---------------|--------|
-| P3 | `TickerProcessor.canProcess()` heurístico | Quebra T4 | Antes de T4 |
-| P1 | Construtor do adapter instancia colaboradores | Quebra testabilidade de T5 | Antes de T5 |
-| P2 | God class — 5 ports num bean | Acumula débito em T4+T5 | Ao iniciar T5 |
-| P4 | Duplicação de `buildStreamName` | Risco de divergência | T4 ou oportunístico |
-| P5 | `SenderSpecializedProcessorPort` no core | Arquitetura | Próximo refactor |
-| P6 | Rename de `Configuration` | Legibilidade | Oportunístico |
-| P7 | `@NotBlank` em URLs | Ruído | Oportunístico |
-| P8 | Regra de negócio em `isValidMarketData` | Manutenção | Oportunístico |
-| P9 | `catch (Exception)` genérico | Resiliência | Oportunístico |
+| # | Item | Impacto direto | Quando | Status |
+|---|------|---------------|--------|--------|
+| P1 | Construtor do adapter instancia colaboradores | Quebra testabilidade de T5 | Antes de T5 | ✅ PR #84 |
+| P3 | `TickerProcessor.canProcess()` heurístico | Quebra T4 | Antes de T4 | ✅ PR #85 |
+| P6 | Rename de `Configuration` | Legibilidade | Oportunístico | ✅ PR #84 |
+| P8 | Regra de negócio em `isValidMarketData` | Manutenção | Oportunístico | ✅ PR #85 |
+| P2 | God class — 5 ports num bean | Acumula débito em T4+T5 | Ao iniciar T5 | 🔲 Pendente |
+| P4 | Duplicação de `buildStreamName` | Risco de divergência | T4 ou oportunístico | 🔲 Pendente |
+| P5 | `SenderSpecializedProcessorPort` no core | Arquitetura | Próximo refactor | 🔲 Pendente |
+| P7 | `@NotBlank` em URLs | Ruído | Oportunístico | 🔲 Pendente |
+| P9 | `catch (Exception)` genérico | Resiliência | Oportunístico | 🔲 Pendente |
