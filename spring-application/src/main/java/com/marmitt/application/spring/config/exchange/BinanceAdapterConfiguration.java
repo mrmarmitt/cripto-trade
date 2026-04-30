@@ -1,6 +1,7 @@
 package com.marmitt.application.spring.config.exchange;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.marmitt.binance.auth.BinanceCredentials;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -20,6 +21,7 @@ public class BinanceAdapterConfiguration {
                 properties.getWsBaseUrl(),
                 properties.getRestBaseUrl()
         );
-        return new BinanceExchangeAdapter(objectMapper, eventPublisher, configuration);
+        BinanceCredentials credentials = new BinanceCredentials(properties.getApiKey(), properties.getApiSecret());
+        return new BinanceExchangeAdapter(objectMapper, eventPublisher, configuration, credentials);
     }
 }

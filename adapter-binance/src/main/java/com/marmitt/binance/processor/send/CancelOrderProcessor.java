@@ -1,8 +1,9 @@
 package com.marmitt.binance.processor.send;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
+import com.marmitt.binance.auth.BinanceRequestSigner;
 import com.marmitt.core.dto.websocket.request.MessageRequest;
+import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
 import com.marmitt.core.enums.MessageType;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderSpecializedProcessorPort;
 
@@ -12,9 +13,11 @@ import java.util.Map;
 public class CancelOrderProcessor implements SenderSpecializedProcessorPort {
 
     private final ObjectMapper objectMapper;
+    private final BinanceRequestSigner signer;
 
-    public CancelOrderProcessor(ObjectMapper objectMapper) {
+    public CancelOrderProcessor(ObjectMapper objectMapper, BinanceRequestSigner signer) {
         this.objectMapper = objectMapper;
+        this.signer = signer;
     }
 
     @Override
@@ -24,14 +27,18 @@ public class CancelOrderProcessor implements SenderSpecializedProcessorPort {
         }
 
         try {
-            Map<String, Object> cancelOrder = new HashMap<>();
-            cancelOrder.put("currency", cancelRequest.getSymbol().toUpperCase());
-            cancelOrder.put("orderId", cancelRequest.getOrderId());
-            cancelOrder.put("timestamp", System.currentTimeMillis());
+            Map<String, Object> params = new HashMap<>();
+            params.put("symbol", cancelRequest.getSymbol().toUpperCase());
+            params.put("origClientOrderId", cancelRequest.getOrderId());
 
-            return objectMapper.writeValueAsString(cancelOrder);
+            Map<String, Object> message = new HashMap<>();
+            message.put("id", cancelRequest.getOrderId());
+            message.put("method", "order.cancel");
+            message.put("params", signer.signWebSocketParams(params));
+
+            return objectMapper.writeValueAsString(message);
         } catch (Exception e) {
-            throw new RuntimeException("Failed to process cancel order errorMessage", e);
+            throw new RuntimeException("Failed to process cancel order request", e);
         }
     }
 

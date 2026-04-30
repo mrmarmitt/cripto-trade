@@ -32,10 +32,24 @@ Para WebSocket API (order.place, order.cancel, etc.):
 2. Calcular `signature = HMAC_SHA256(api_secret, canonical_string)` onde canonical string é construída a partir dos params em ordem alfabética.
 3. Inserir `signature` dentro de `params`.
 
+## Decisão de design — ponte Spring → adapter-binance
+
+O módulo `adapter-binance` é agnóstico ao Spring. As credenciais chegam do `BinanceProperties` (Spring) e precisam cruzar o boundary de módulo para chegar ao signer. A ponte é feita assim:
+
+- `BinanceCredentials` — classe value object no `adapter-binance`, sem dependência de Spring. Recebe `apiKey` e `apiSecret` no construtor; valida no construtor que ambos estão presentes.
+- `BinanceAdapterConfiguration` (Spring) cria um `BinanceCredentials` a partir do `BinanceProperties` e passa para o `BinanceExchangeAdapter`.
+- O adapter repassa ao `BinanceSenderMessageProcessor`, que repassa aos processors.
+
+Assim o signing permanece testável sem Spring, e a validação de credenciais continua centralizada no lado Spring (AC5 é garantido pelo `@NotBlank` do T2 antes de `BinanceCredentials` ser instanciado).
+
 **Arquivos a criar/modificar:**
-- `adapter-binance/src/main/java/com/marmitt/binance/auth/BinanceRequestSigner.java` — novo, responsável único pelo signing
-- `adapter-binance/src/main/java/com/marmitt/binance/processor/send/OrderProcessor.java` — usar o signer
-- `adapter-binance/src/main/java/com/marmitt/binance/processor/send/CancelOrderProcessor.java` — usar o signer
+- `adapter-binance/.../auth/BinanceCredentials.java` — novo, value object com apiKey + apiSecret
+- `adapter-binance/.../auth/BinanceRequestSigner.java` — novo, responsável único pelo signing
+- `adapter-binance/.../processor/send/BinanceSenderMessageProcessor.java` — receber o signer e repassar aos processors
+- `adapter-binance/.../processor/send/OrderProcessor.java` — usar o signer; remover TODO
+- `adapter-binance/.../processor/send/CancelOrderProcessor.java` — corrigir formato para WebSocket API + usar o signer
+- `spring-application/.../config/exchange/BinanceAdapterConfiguration.java` — criar `BinanceCredentials` e passar ao adapter
+- `spring-application/.../config/exchange/BinanceExchangeAdapter.java` — receber `BinanceCredentials`, criar signer, passar ao processor
 
 **Restrições de implementação:**
 - `BinanceRequestSigner` não deve ter estado mutável; recebe api_secret por construtor.
