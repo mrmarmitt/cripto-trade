@@ -81,17 +81,11 @@ O repositório passa a receber os adapters por injeção (`List<ExchangeStreamin
 
 **Variáveis de ambiente:**
 ```
-BINANCE_WS_BASE_URL       wss://stream.binance.com:9443   (padrão; sobrescrito pelo perfil testnet)
-BINANCE_REST_BASE_URL     https://api.binance.com          (padrão; sobrescrito pelo perfil testnet)
 BINANCE_API_KEY           (sem padrão; ausência = adapter não registrado)
 BINANCE_API_SECRET        (sem padrão; ausência = adapter não registrado)
 ```
 
-**Valores para testnet (`application-testnet.yml`):**
-```
-BINANCE_WS_BASE_URL       wss://testnet.binance.vision
-BINANCE_REST_BASE_URL     https://testnet.binance.vision
-```
+As URLs não são variáveis de ambiente — são gerenciadas via YAML. O `application.yml` define os defaults de produção e o `application-testnet.yml` sobrescreve com URLs da testnet ao ativar o perfil `testnet`. Expor URLs como env vars criaria um problema de precedência: env vars (rank 6) sobrescrevem profile YAMLs (rank 7), tornando o perfil testnet ineficaz.
 
 ---
 

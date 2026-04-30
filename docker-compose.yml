@@ -1,3 +1,7 @@
+x-application-env-example:
+  BINANCE_API_KEY: "your-binance-api-key"
+  BINANCE_API_SECRET: "your-binance-api-secret"
+
 services:
   postgres:
     image: postgres:16-alpine
