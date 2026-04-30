@@ -26,6 +26,6 @@ public class BinanceCredentials {
 
     @Override
     public String toString() {
-        return "BinanceCredentials{apiKey='" + apiKey + "', apiSecret=[REDACTED]}";
+        return "BinanceCredentials{apiKey=[REDACTED], apiSecret=[REDACTED]}";
     }
 }
