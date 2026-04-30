@@ -7,117 +7,52 @@ import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
 import com.marmitt.core.dto.websocket.data.MarketDataDto;
-import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedSpecializedProcessorPort;
+import com.marmitt.core.dto.websocket.data.ProcessorResponse;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.time.Instant;
 
 @Slf4j
-public class TickerProcessor implements ReceivedSpecializedProcessorPort<MarketDataDto> {
-    
+class TickerProcessor implements BinanceEventProcessor<MarketDataDto> {
+
     private final ObjectMapper objectMapper;
 
-    public TickerProcessor(ObjectMapper objectMapper) {
+    TickerProcessor(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
     @Override
-    public ProcessingResult<MarketDataDto> processMessage(String rawMessage, MessageContext context) {
-        String correlationId = context.correlationId().toString();
-        
-        try {
-            TickerEvent tickerEvent = objectMapper.readValue(rawMessage, TickerEvent.class);
-
-            // Parse campos específicos Binance ticker
-            MarketDataDto marketData = convertTickerEventToMarketData(tickerEvent, context);
-            
-            // Validações básicas
-            if (!isValidMarketData(marketData)) {
-                return ProcessingResult.warning(
-                        correlationId,
-                        rawMessage,
-                        marketData,
-                    "Binance ticker contains suspicious values: price=" + marketData.price());
-            }
-            
-            return ProcessingResult.success(correlationId, rawMessage, marketData);
-            
-        } catch (Exception e) {
-            log.error("Error processing Binance ticker: correlationId={}, error={}", 
-                     correlationId, e.getMessage(), e);
-            
-            return createErrorResult(correlationId, "Failed to parse Binance ticker: " + e.getMessage(), e);
-        }
+    public String eventType() {
+        return "24hrTicker";
     }
 
     @Override
-    public boolean canProcess(String rawMessage) {
+    public ProcessingResult<? extends ProcessorResponse> process(JsonNode data, MessageContext context) {
         try {
-            JsonNode json = objectMapper.readTree(rawMessage);
-            
-            // Binance ticker 24hr format: {"s":"BTCUSDT","c":"43250.00","o":"42100.00",...}
-            // Verifica se tem currency (s) e close price (c)
-            return json.has("s") && json.has("c") && 
-                   // Pode também ter event type "24hrTicker" ou outros campos típicos
-                   (json.has("e") || json.has("P") || json.has("v"));
-            
+            TickerEvent event = objectMapper.treeToValue(data, TickerEvent.class);
+            MarketDataDto marketData = toMarketData(event, context);
+            return ProcessingResult.success(context.correlationId().toString(), data.toString(), marketData);
         } catch (Exception e) {
-            log.trace("Cannot process as Binance ticker: {}", e.getMessage());
-            return false;
+            log.error("Failed to process 24hrTicker: correlationId={}", context.correlationId(), e);
+            return ProcessingResult.error(context.correlationId().toString(),
+                    "Failed to parse 24hrTicker: " + e.getMessage(), data.toString(), e);
         }
     }
-    
-    private MarketDataDto convertTickerEventToMarketData(TickerEvent tickerEvent, MessageContext context) {
-        Symbol symbol = Symbol.of(tickerEvent.s());
-        BigDecimal price = tickerEvent.getLastPriceAsDecimal();
 
-        // Campos opcionais com fallbacks
-        BigDecimal bidPrice = tickerEvent.b() != null ? tickerEvent.getBestBidPriceAsDecimal() : null;
-        BigDecimal askPrice = tickerEvent.a() != null ? tickerEvent.getBestAskPriceAsDecimal() : null;
-        BigDecimal volume = tickerEvent.v() != null ? new BigDecimal(tickerEvent.v()) : BigDecimal.ZERO;
-        BigDecimal high24h = tickerEvent.h() != null ? new BigDecimal(tickerEvent.h()) : null;
-        BigDecimal low24h = tickerEvent.l() != null ? new BigDecimal(tickerEvent.l()) : null;
-        BigDecimal priceChange24h = tickerEvent.p() != null ? new BigDecimal(tickerEvent.p()) : null;
-        BigDecimal priceChangePercent24h = tickerEvent.P() != null ? new BigDecimal(tickerEvent.P()) : null;
-
+    private MarketDataDto toMarketData(TickerEvent event, MessageContext context) {
         return new MarketDataDto(
-            context.exchangeName(),  // Exchange de origem
-            symbol, price, bidPrice, askPrice, volume,
-            high24h, low24h, priceChange24h, priceChangePercent24h,
-            Instant.now()
+                context.exchangeName(),
+                Symbol.of(event.s()),
+                new BigDecimal(event.c()),
+                event.b() != null ? new BigDecimal(event.b()) : null,
+                event.a() != null ? new BigDecimal(event.a()) : null,
+                event.v() != null ? new BigDecimal(event.v()) : BigDecimal.ZERO,
+                event.h() != null ? new BigDecimal(event.h()) : null,
+                event.l() != null ? new BigDecimal(event.l()) : null,
+                event.p() != null ? new BigDecimal(event.p()) : null,
+                event.P() != null ? new BigDecimal(event.P()) : null,
+                Instant.now()
         );
-    }
-    
-    private boolean isValidMarketData(MarketDataDto marketData) {
-        // Validações básicas de sanidade
-        if (marketData.price() == null || marketData.price().compareTo(BigDecimal.ZERO) <= 0) {
-            return false;
-        }
-        
-        // Preço muito alto para criptomoedas (possível erro)
-        if (marketData.price().compareTo(new BigDecimal("10000000")) > 0) {
-            return false;
-        }
-        
-        // Se tem bid/ask, verifica spread razoável
-        if (marketData.bidPrice() != null && marketData.askPrice() != null) {
-            BigDecimal spread = marketData.getSpread();
-            BigDecimal spreadPercent = spread.divide(marketData.price(), 4, BigDecimal.ROUND_HALF_UP)
-                                            .multiply(new BigDecimal("100"));
-            
-            // Spread > 10% é suspeito
-            if (spreadPercent.compareTo(new BigDecimal("10")) > 0) {
-                return false;
-            }
-        }
-        
-        return true;
-    }
-    
-    @SuppressWarnings({"unchecked", "rawtypes"})
-    private ProcessingResult<MarketDataDto> createErrorResult(String correlationId, String message, Exception e) {
-        ProcessingResult error = new ProcessingResult.Error(correlationId, message, null, e, java.time.Instant.now());
-        return (ProcessingResult<MarketDataDto>) error;
     }
 }
