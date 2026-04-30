@@ -1,45 +1,90 @@
 package com.marmitt.binance.processor.receive;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
 import com.marmitt.core.dto.websocket.data.ProcessorResponse;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
-import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedSpecializedProcessorPort;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
+import java.util.stream.Collectors;
 
 @Slf4j
 public class BinanceReceivedMessageProcessor implements ReceivedMessageProcessorPort {
 
-    private final List<ReceivedSpecializedProcessorPort<? extends ProcessorResponse>> specializedProcessors;
+    private final ObjectMapper objectMapper;
+    private final Map<String, BinanceEventProcessor<?>> processorsByEventType;
+    private final BookTickerProcessor bookTickerProcessor;
 
     public BinanceReceivedMessageProcessor(ObjectMapper objectMapper) {
-        this.specializedProcessors = List.of(
-                new TickerProcessor(objectMapper)
+        this.objectMapper = objectMapper;
+
+        List<BinanceEventProcessor<?>> processors = List.of(
+                new TickerProcessor(objectMapper),
+                new TradeProcessor(objectMapper)
         );
+
+        this.processorsByEventType = processors.stream()
+                .filter(p -> p.eventType() != null)
+                .collect(Collectors.toMap(BinanceEventProcessor::eventType, Function.identity()));
+
+        this.bookTickerProcessor = new BookTickerProcessor(objectMapper);
     }
 
     @Override
     public ProcessingResult<? extends ProcessorResponse> processMessage(String rawMessage, MessageContext context) {
-        for (ReceivedSpecializedProcessorPort<? extends ProcessorResponse> processor : specializedProcessors) {
-            if (processor.canProcess(rawMessage)) {
-                try {
-                    return processor.processMessage(rawMessage, context);
-                } catch (Exception e) {
-                    return ProcessingResult.error(
-                            context.correlationId().toString(),
-                            "Error in specialized processor " + processor.getClass().getSimpleName() + ", error=" + e.getMessage(),
-                            rawMessage,
-                            e);
-                }
-            }
-        }
+        String correlationId = context.correlationId().toString();
+        try {
+            JsonNode root = objectMapper.readTree(rawMessage);
+            JsonNode data = unwrapCombinedStream(root);
 
-        return ProcessingResult.error(context.correlationId().toString(),
-                "No specialized processor found for Binance errorMessage",
-                rawMessage
-                );
+            JsonNode eventTypeNode = data.get("e");
+
+            if (eventTypeNode == null) {
+                if (isBookTicker(data)) {
+                    return bookTickerProcessor.process(data, context);
+                }
+                log.debug("Unrecognized Binance message with no event type: correlationId={}", correlationId);
+                return ProcessingResult.error(correlationId, "Unrecognized message: no event type field", rawMessage);
+            }
+
+            String eventType = eventTypeNode.asText();
+            BinanceEventProcessor<?> processor = processorsByEventType.get(eventType);
+
+            if (processor == null) {
+                log.debug("No processor for Binance event type '{}': correlationId={}", eventType, correlationId);
+                return ProcessingResult.error(correlationId,
+                        "No processor registered for event type: " + eventType, rawMessage);
+            }
+
+            return processor.process(data, context);
+
+        } catch (Exception e) {
+            log.error("Failed to parse Binance message: correlationId={}", correlationId, e);
+            return ProcessingResult.error(correlationId, "Failed to parse message: " + e.getMessage(), rawMessage, e);
+        }
+    }
+
+    /**
+     * Combined stream events are wrapped as {"stream":"btcusdt@ticker","data":{...}}.
+     * Returns the inner "data" node when present, otherwise returns the root as-is.
+     */
+    private JsonNode unwrapCombinedStream(JsonNode root) {
+        if (root.has("stream") && root.has("data")) {
+            return root.get("data");
+        }
+        return root;
+    }
+
+    /**
+     * bookTicker events have no "e" field but always carry "u" (updateId),
+     * "s" (symbol), "b" (bid), and "a" (ask).
+     */
+    private boolean isBookTicker(JsonNode data) {
+        return data.has("u") && data.has("s") && data.has("b") && data.has("a");
     }
 }
