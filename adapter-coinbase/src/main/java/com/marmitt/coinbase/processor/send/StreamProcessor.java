@@ -6,7 +6,7 @@ import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 import com.marmitt.core.enums.MessageType;
 import com.marmitt.core.enums.StreamAction;
-import com.marmitt.core.ports.outbound.exchange.adapter.SenderSpecializedProcessorPort;
+
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashMap;
@@ -14,7 +14,7 @@ import java.util.List;
 import java.util.Map;
 
 @Slf4j
-public class StreamProcessor implements SenderSpecializedProcessorPort {
+public class StreamProcessor implements CoinbaseSenderProcessor {
 
     private final ObjectMapper objectMapper;
 
