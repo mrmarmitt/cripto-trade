@@ -1,6 +1,7 @@
 package com.marmitt.application.spring.adapter;
 
-import com.marmitt.application.spring.event.RawMessageReceivedEvent;
+import com.marmitt.application.spring.event.RawMarketMessageReceivedEvent;
+import com.marmitt.application.spring.event.RawUserDataMessageReceivedEvent;
 import com.marmitt.core.dto.events.WebSocketClosedEvent;
 import com.marmitt.core.dto.events.WebSocketClosingEvent;
 import com.marmitt.core.dto.events.WebSocketConnectedEvent;
@@ -13,25 +14,21 @@ import okhttp3.Response;
 import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
 import org.jetbrains.annotations.NotNull;
-import org.springframework.stereotype.Component;
 
 import java.util.UUID;
 
-@Component
 @Slf4j
 public class OkHttp3ListenerConverter {
 
     private final EventPublisherPort eventPublisher;
+    private final StreamChannel channel;
 
-    public OkHttp3ListenerConverter(EventPublisherPort eventPublisher) {
+    public OkHttp3ListenerConverter(EventPublisherPort eventPublisher, StreamChannel channel) {
         this.eventPublisher = eventPublisher;
+        this.channel = channel;
     }
 
     public WebSocketListener convert(String exchangeName, UUID connectionId) {
-        return convert(exchangeName, connectionId, StreamChannel.MARKET);
-    }
-
-    public WebSocketListener convert(String exchangeName, UUID connectionId, StreamChannel channel) {
         return new WebSocketListener() {
 
             @Override
@@ -45,11 +42,13 @@ public class OkHttp3ListenerConverter {
             public void onMessage(@NotNull WebSocket webSocket, @NotNull String text) {
                 log.debug("Message received - exchange={} channel={} length={}", exchangeName, channel, text.length());
 
-                MessageContext context = channel == StreamChannel.USER_DATA
-                        ? MessageContext.createUserData(exchangeName, connectionId)
-                        : MessageContext.create(exchangeName, connectionId);
-
-                eventPublisher.publishEvent(new RawMessageReceivedEvent(this, text, context));
+                if (channel == StreamChannel.USER_DATA) {
+                    MessageContext context = MessageContext.createUserData(exchangeName, connectionId);
+                    eventPublisher.publishEvent(new RawUserDataMessageReceivedEvent(this, text, context));
+                } else {
+                    MessageContext context = MessageContext.create(exchangeName, connectionId);
+                    eventPublisher.publishEvent(new RawMarketMessageReceivedEvent(this, text, context));
+                }
             }
 
             @Override

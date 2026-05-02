@@ -46,7 +46,7 @@ public class MockRawMessagePublisher {
 
     private Object createRawMessageReceivedEvent(String rawMessage, MessageContext context) {
         try {
-            Class<?> eventClass = Class.forName("com.marmitt.application.spring.event.RawMessageReceivedEvent");
+            Class<?> eventClass = Class.forName("com.marmitt.application.spring.event.RawMarketMessageReceivedEvent");
             return eventClass.getConstructor(Object.class, String.class, MessageContext.class)
                     .newInstance(this, rawMessage, context);
         } catch (Exception e) {

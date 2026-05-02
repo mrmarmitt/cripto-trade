@@ -1,8 +1,7 @@
 package com.marmitt.application.spring.handler;
 
-import com.marmitt.application.spring.event.RawMessageReceivedEvent;
+import com.marmitt.application.spring.event.RawUserDataMessageReceivedEvent;
 import com.marmitt.core.dto.processing.ProcessingResult;
-import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.inbound.handler.HandlerProcessUserMessagePort;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
@@ -22,18 +21,13 @@ public class ProcessUserMessageEventListener {
 
     @EventListener
     @Async("messageProcessingExecutor")
-    public void handleRawUserDataMessage(RawMessageReceivedEvent event) {
-        if (event.getContext().streamChannel() != StreamChannel.USER_DATA) return;
-
+    public void handleRawUserDataMessage(RawUserDataMessageReceivedEvent event) {
         MDC.put("correlationId", event.getContext().correlationId().toString());
         MDC.put("exchangeName", event.getContext().exchangeName());
         MDC.put("connectionId", event.getContext().connectionId().toString());
 
         try {
-            ProcessingResult<?> result = processUserMessagePort.execute(
-                    event.getRawMessage(),
-                    event.getContext()
-            );
+            ProcessingResult<?> result = processUserMessagePort.execute(event.getRawMessage(), event.getContext());
 
             if (result.isSuccess() && result.getData().isPresent()) {
                 log.debug("User data processing SUCCESS - type={}", result.getData().get().getClass().getSimpleName());
@@ -46,7 +40,6 @@ public class ProcessUserMessageEventListener {
                         result.getErrorMessage().orElse("unknown"),
                         result.getRawMessage().orElse("none"));
             }
-
         } catch (Exception e) {
             log.error("Error processing user data message: {}", e.getMessage(), e);
         } finally {
