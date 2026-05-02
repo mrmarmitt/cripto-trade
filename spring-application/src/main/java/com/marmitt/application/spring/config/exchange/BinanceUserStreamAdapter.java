@@ -5,16 +5,16 @@ import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessor
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.context.SmartLifecycle;
 
 import java.io.IOException;
 import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 @Slf4j
-public class BinanceUserStreamAdapter implements ExchangeUserStreamPort, SmartLifecycle {
+public class BinanceUserStreamAdapter implements ExchangeUserStreamPort {
 
     private static final long KEEPALIVE_INTERVAL_MINUTES = 30;
 
@@ -26,7 +26,7 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort, SmartLi
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(
             r -> new Thread(r, "binance-listenkey-keepalive"));
 
-    private volatile boolean running = false;
+    private ScheduledFuture<?> keepAliveTask;
 
     public BinanceUserStreamAdapter(WebSocketPort webSocketPort,
                                     ReceivedMessageProcessorPort receivedMessageProcessor,
@@ -54,41 +54,27 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort, SmartLi
     }
 
     @Override
-    public void start() {
-        try {
-            String listenKey = listenKeyPort.obtainListenKey();
-            String wsUrl = wsBaseUrl + "/ws/" + listenKey;
-            UUID connectionId = UUID.randomUUID();
-            webSocketPort.connect(wsUrl, "BINANCE", connectionId);
+    public void connect(UUID connectionId) throws IOException {
+        String listenKey = listenKeyPort.obtainListenKey();
+        String wsUrl = wsBaseUrl + "/ws/" + listenKey;
+        webSocketPort.connect(wsUrl, "BINANCE", connectionId);
 
-            scheduler.scheduleAtFixedRate(
-                    listenKeyPort::keepAlive,
-                    KEEPALIVE_INTERVAL_MINUTES,
-                    KEEPALIVE_INTERVAL_MINUTES,
-                    TimeUnit.MINUTES);
+        keepAliveTask = scheduler.scheduleAtFixedRate(
+                listenKeyPort::keepAlive,
+                KEEPALIVE_INTERVAL_MINUTES,
+                KEEPALIVE_INTERVAL_MINUTES,
+                TimeUnit.MINUTES);
 
-            running = true;
-            log.info("Binance user data stream started");
-        } catch (IOException e) {
-            log.error("Failed to start Binance user data stream", e);
+        log.info("Binance user data stream connected");
+    }
+
+    @Override
+    public void disconnect(UUID connectionId) {
+        if (keepAliveTask != null) {
+            keepAliveTask.cancel(false);
         }
-    }
-
-    @Override
-    public void stop() {
-        scheduler.shutdownNow();
         listenKeyPort.revoke();
-        running = false;
-        log.info("Binance user data stream stopped");
-    }
-
-    @Override
-    public boolean isRunning() {
-        return running;
-    }
-
-    @Override
-    public int getPhase() {
-        return Integer.MAX_VALUE - 100;
+        webSocketPort.disconnect("BINANCE", connectionId);
+        log.info("Binance user data stream disconnected");
     }
 }

@@ -8,12 +8,18 @@ import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.enums.ConnectionStatus;
 import com.marmitt.core.ports.inbound.websocket.ConnectWebSocketPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
+import java.io.IOException;
 import java.util.Optional;
 
 public class ConnectWebSocketUseCase implements ConnectWebSocketPort {
+
+    private static final Logger log = LoggerFactory.getLogger(ConnectWebSocketUseCase.class);
 
     private final WebSocketConnectionRepositoryPort connectionRepository;
     private final ExchangeAdapterRepositoryPort adapterRepository;
@@ -22,6 +28,14 @@ public class ConnectWebSocketUseCase implements ConnectWebSocketPort {
                                    ExchangeAdapterRepositoryPort adapterRepository) {
         this.connectionRepository = connectionRepository;
         this.adapterRepository = adapterRepository;
+    }
+
+    private void connectUserStream(ExchangeUserStreamPort userStream, java.util.UUID connectionId) {
+        try {
+            userStream.connect(connectionId);
+        } catch (IOException e) {
+            log.error("Failed to connect user data stream for exchange={}", userStream.getExchangeName(), e);
+        }
     }
 
     @Override
@@ -51,6 +65,9 @@ public class ConnectWebSocketUseCase implements ConnectWebSocketPort {
         ExchangeStreamingPort streaming = streamingOptional.get();
         String connectionUrl = streaming.getUrlBuilder().buildConnectionUrl(parameters);
         streaming.getWebSocketPort().connect(connectionUrl, exchangeName, manager.getConnectionId());
+
+        adapterRepository.findUserStreamByName(exchangeName).ifPresent(userStream ->
+                connectUserStream(userStream, manager.getConnectionId()));
 
         return ConnectionResultMapper.toResponse(manager.getConnectionResult(), exchangeName);
     }
