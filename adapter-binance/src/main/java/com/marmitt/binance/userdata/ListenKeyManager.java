@@ -2,7 +2,7 @@ package com.marmitt.binance.userdata;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.binance.auth.BinanceCredentials;
-import com.marmitt.binance.http.HttpClientPort;
+import com.marmitt.core.ports.outbound.http.HttpClientPort;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;

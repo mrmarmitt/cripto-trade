@@ -1,6 +1,6 @@
 package com.marmitt.application.spring.adapter.binance;
 
-import com.marmitt.binance.http.HttpClientPort;
+import com.marmitt.core.ports.outbound.http.HttpClientPort;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
 import okhttp3.Request;
