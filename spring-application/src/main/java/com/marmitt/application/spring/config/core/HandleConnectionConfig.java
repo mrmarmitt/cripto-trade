@@ -1,6 +1,7 @@
 package com.marmitt.application.spring.config.core;
 
 import com.marmitt.core.application.handler.ProcessMessageHandler;
+import com.marmitt.core.application.handler.ProcessUserMessageHandler;
 import com.marmitt.core.application.handler.connection.*;
 import com.marmitt.core.ports.inbound.handler.*;
 import com.marmitt.core.ports.inbound.websocket.ConnectWebSocketPort;
@@ -19,6 +20,12 @@ public class HandleConnectionConfig {
                                                     ExchangeAdapterRepositoryPort adapterRepository,
                                                     ListenerRepositoryPort listenerRepository) {
         return new ProcessMessageHandler(connectionManager, adapterRepository, listenerRepository);
+    }
+
+    @Bean
+    public HandlerProcessUserMessagePort processUserMessage(ExchangeAdapterRepositoryPort adapterRepository,
+                                                             ListenerRepositoryPort listenerRepository) {
+        return new ProcessUserMessageHandler(adapterRepository, listenerRepository);
     }
 
     @Bean

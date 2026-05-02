@@ -11,6 +11,7 @@ import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
+import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
@@ -47,7 +48,7 @@ public class CoinbaseExchangeAdapter implements
     private final ExchangeUrlBuilderPort urlBuilder;
 
     public CoinbaseExchangeAdapter(ObjectMapper objectMapper, EventPublisherPort eventPublisher) {
-        this.webSocketPort = new OkHttp3WebSocketAdapter(new OkHttp3ListenerConverter(eventPublisher));
+        this.webSocketPort = new OkHttp3WebSocketAdapter(new OkHttp3ListenerConverter(eventPublisher, StreamChannel.MARKET));
         this.receivedMessageProcessor = new CoinbaseReceivedMessageProcessor(objectMapper);
         this.senderMessageProcessor = new CoinbaseSenderMessageProcessor(objectMapper);
         this.urlBuilder = new CoinbaseUrlBuilder();

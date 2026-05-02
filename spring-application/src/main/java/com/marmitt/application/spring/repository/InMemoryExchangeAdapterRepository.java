@@ -5,6 +5,7 @@ import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -23,20 +24,29 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
     private static final Logger log = LoggerFactory.getLogger(InMemoryExchangeAdapterRepository.class);
 
     private final Map<String, ExchangeStreamingPort> streamingAdapters = new ConcurrentHashMap<>();
+    private final Map<String, ExchangeUserStreamPort> userStreamAdapters = new ConcurrentHashMap<>();
     private final Map<String, ExchangeOrderExecutionPort> orderExecutionAdapters = new ConcurrentHashMap<>();
     private final Map<String, ExchangeOrderQueryPort> orderQueryAdapters = new ConcurrentHashMap<>();
     private final Map<String, ExchangeAccountQueryPort> accountQueryAdapters = new ConcurrentHashMap<>();
     private final Map<String, ExchangeBootReadinessPort> bootReadinessAdapters = new ConcurrentHashMap<>();
     private final Map<UUID, String> adapterByPortfolio = new ConcurrentHashMap<>();
 
-    public InMemoryExchangeAdapterRepository(List<ExchangeStreamingPort> adapters) {
+    public InMemoryExchangeAdapterRepository(List<ExchangeStreamingPort> adapters,
+                                             List<ExchangeUserStreamPort> userStreamAdapters) {
         adapters.forEach(this::registerAllCapabilities);
+        userStreamAdapters.forEach(this::registerUserStreamAdapter);
     }
 
     @Override
     public void registerStreamingAdapter(ExchangeStreamingPort adapter) {
         String exchangeName = normalize(adapter.getExchangeName());
         streamingAdapters.put(exchangeName, adapter);
+    }
+
+    @Override
+    public void registerUserStreamAdapter(ExchangeUserStreamPort adapter) {
+        userStreamAdapters.put(normalize(adapter.getExchangeName()), adapter);
+        log.info("User stream adapter registered - exchange={}", normalize(adapter.getExchangeName()));
     }
 
     @Override
@@ -102,6 +112,11 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
     @Override
     public Optional<ExchangeBootReadinessPort> findBootReadinessByName(String exchangeName) {
         return Optional.ofNullable(bootReadinessAdapters.get(normalize(exchangeName)));
+    }
+
+    @Override
+    public Optional<ExchangeUserStreamPort> findUserStreamByName(String exchangeName) {
+        return Optional.ofNullable(userStreamAdapters.get(normalize(exchangeName)));
     }
 
     private void registerAllCapabilities(ExchangeStreamingPort streamingAdapter) {
