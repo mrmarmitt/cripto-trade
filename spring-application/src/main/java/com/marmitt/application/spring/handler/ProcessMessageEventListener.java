@@ -1,8 +1,9 @@
 package com.marmitt.application.spring.handler;
 
-import com.marmitt.core.dto.processing.ProcessingResult;
-import com.marmitt.core.ports.inbound.handler.HandlerProcessMessagePort;
 import com.marmitt.application.spring.event.RawMessageReceivedEvent;
+import com.marmitt.core.dto.processing.ProcessingResult;
+import com.marmitt.core.enums.StreamChannel;
+import com.marmitt.core.ports.inbound.handler.HandlerProcessMessagePort;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 import org.springframework.context.event.EventListener;
@@ -22,6 +23,8 @@ public class ProcessMessageEventListener {
     @EventListener
     @Async("messageProcessingExecutor")
     public void handleRawMessage(RawMessageReceivedEvent event) {
+        if (event.getContext().streamChannel() != StreamChannel.MARKET) return;
+
         // Adiciona informações de contexto no MDC para logs correlacionados
         MDC.put("correlationId", event.getContext().correlationId().toString());
         MDC.put("exchangeName", event.getContext().exchangeName());
