@@ -18,7 +18,7 @@ import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 import java.util.List;
 import java.util.Optional;
 
-public class BinanceExchangeAdapter implements
+public class BinanceMarketStreamAdapter implements
         ExchangeStreamingPort,
         ExchangeOrderExecutionPort,
         ExchangeOrderQueryPort,
@@ -30,10 +30,10 @@ public class BinanceExchangeAdapter implements
     private final SenderMessageProcessorPort senderMessageProcessor;
     private final ExchangeUrlBuilderPort urlBuilder;
 
-    public BinanceExchangeAdapter(WebSocketPort webSocketPort,
-                                  ReceivedMessageProcessorPort receivedMessageProcessor,
-                                  SenderMessageProcessorPort senderMessageProcessor,
-                                  ExchangeUrlBuilderPort urlBuilder) {
+    public BinanceMarketStreamAdapter(WebSocketPort webSocketPort,
+                                      ReceivedMessageProcessorPort receivedMessageProcessor,
+                                      SenderMessageProcessorPort senderMessageProcessor,
+                                      ExchangeUrlBuilderPort urlBuilder) {
         this.webSocketPort = webSocketPort;
         this.receivedMessageProcessor = receivedMessageProcessor;
         this.senderMessageProcessor = senderMessageProcessor;
@@ -107,7 +107,7 @@ public class BinanceExchangeAdapter implements
 
     @Override
     public ExchangeBootReadiness checkBootReadiness() {
-        return ExchangeBootReadiness.ready("BINANCE", "Binance adapter initialized for streaming.");
+        return ExchangeBootReadiness.ready("BINANCE", "Binance market stream adapter initialized.");
     }
 
     private UnsupportedOperationException restNotImplemented() {
