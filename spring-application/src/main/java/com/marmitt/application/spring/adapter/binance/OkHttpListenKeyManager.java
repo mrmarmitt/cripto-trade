@@ -3,6 +3,7 @@ package com.marmitt.application.spring.adapter.binance;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.binance.auth.BinanceCredentials;
+import com.marmitt.binance.userdata.ListenKeyPort;
 import lombok.extern.slf4j.Slf4j;
 import okhttp3.MediaType;
 import okhttp3.OkHttpClient;
@@ -13,7 +14,7 @@ import okhttp3.Response;
 import java.io.IOException;
 
 @Slf4j
-public class ListenKeyManager {
+public class OkHttpListenKeyManager implements ListenKeyPort {
 
     private static final String USER_DATA_STREAM_PATH = "/api/v3/userDataStream";
     private static final MediaType EMPTY_BODY = MediaType.parse("application/x-www-form-urlencoded");
@@ -25,16 +26,17 @@ public class ListenKeyManager {
 
     private volatile String listenKey;
 
-    public ListenKeyManager(String restBaseUrl,
-                            BinanceCredentials credentials,
-                            OkHttpClient httpClient,
-                            ObjectMapper objectMapper) {
+    public OkHttpListenKeyManager(String restBaseUrl,
+                                  BinanceCredentials credentials,
+                                  OkHttpClient httpClient,
+                                  ObjectMapper objectMapper) {
         this.restBaseUrl = restBaseUrl;
         this.credentials = credentials;
         this.httpClient = httpClient;
         this.objectMapper = objectMapper;
     }
 
+    @Override
     public String obtainListenKey() throws IOException {
         Request request = new Request.Builder()
                 .url(restBaseUrl + USER_DATA_STREAM_PATH)
@@ -54,6 +56,7 @@ public class ListenKeyManager {
         }
     }
 
+    @Override
     public void keepAlive() {
         if (listenKey == null) {
             log.warn("Cannot keepalive: no active listen key");
@@ -76,6 +79,7 @@ public class ListenKeyManager {
         }
     }
 
+    @Override
     public void revoke() {
         if (listenKey == null) {
             return;
@@ -99,6 +103,7 @@ public class ListenKeyManager {
         }
     }
 
+    @Override
     public String getListenKey() {
         return listenKey;
     }

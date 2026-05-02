@@ -1,6 +1,6 @@
 package com.marmitt.application.spring.config.exchange;
 
-import com.marmitt.application.spring.adapter.binance.ListenKeyManager;
+import com.marmitt.binance.userdata.ListenKeyPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
@@ -20,7 +20,7 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort, SmartLi
 
     private final WebSocketPort webSocketPort;
     private final ReceivedMessageProcessorPort receivedMessageProcessor;
-    private final ListenKeyManager listenKeyManager;
+    private final ListenKeyPort listenKeyPort;
     private final String wsBaseUrl;
 
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(
@@ -30,11 +30,11 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort, SmartLi
 
     public BinanceUserStreamAdapter(WebSocketPort webSocketPort,
                                     ReceivedMessageProcessorPort receivedMessageProcessor,
-                                    ListenKeyManager listenKeyManager,
+                                    ListenKeyPort listenKeyPort,
                                     String wsBaseUrl) {
         this.webSocketPort = webSocketPort;
         this.receivedMessageProcessor = receivedMessageProcessor;
-        this.listenKeyManager = listenKeyManager;
+        this.listenKeyPort = listenKeyPort;
         this.wsBaseUrl = wsBaseUrl;
     }
 
@@ -56,13 +56,13 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort, SmartLi
     @Override
     public void start() {
         try {
-            String listenKey = listenKeyManager.obtainListenKey();
+            String listenKey = listenKeyPort.obtainListenKey();
             String wsUrl = wsBaseUrl + "/ws/" + listenKey;
             UUID connectionId = UUID.randomUUID();
             webSocketPort.connect(wsUrl, "BINANCE", connectionId);
 
             scheduler.scheduleAtFixedRate(
-                    listenKeyManager::keepAlive,
+                    listenKeyPort::keepAlive,
                     KEEPALIVE_INTERVAL_MINUTES,
                     KEEPALIVE_INTERVAL_MINUTES,
                     TimeUnit.MINUTES);
@@ -77,7 +77,7 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort, SmartLi
     @Override
     public void stop() {
         scheduler.shutdownNow();
-        listenKeyManager.revoke();
+        listenKeyPort.revoke();
         running = false;
         log.info("Binance user data stream stopped");
     }
