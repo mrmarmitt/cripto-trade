@@ -35,7 +35,7 @@ public class OkHttp3ListenerConverter {
             public void onOpen(@NotNull WebSocket webSocket, @NotNull Response response) {
                 log.info("WebSocket opened - exchange={} channel={} connectionId={}", exchangeName, channel, connectionId);
                 eventPublisher.publishEvent(WebSocketConnectedEvent.of(
-                        exchangeName, "Connection established successfully", connectionId));
+                        exchangeName, "Connection established successfully", connectionId, channel));
             }
 
             @Override
@@ -54,20 +54,20 @@ public class OkHttp3ListenerConverter {
             @Override
             public void onClosing(@NotNull WebSocket webSocket, int code, @NotNull String reason) {
                 log.info("WebSocket closing - exchange={} channel={} code={} reason={}", exchangeName, channel, code, reason);
-                eventPublisher.publishEvent(WebSocketClosingEvent.of(exchangeName, code, reason, connectionId));
+                eventPublisher.publishEvent(WebSocketClosingEvent.of(exchangeName, code, reason, connectionId, channel));
             }
 
             @Override
             public void onClosed(@NotNull WebSocket webSocket, int code, @NotNull String reason) {
                 log.info("WebSocket closed - exchange={} channel={} code={} reason={}", exchangeName, channel, code, reason);
-                eventPublisher.publishEvent(WebSocketClosedEvent.of(exchangeName, code, reason, connectionId));
+                eventPublisher.publishEvent(WebSocketClosedEvent.of(exchangeName, code, reason, connectionId, channel));
             }
 
             @Override
             public void onFailure(@NotNull WebSocket webSocket, @NotNull Throwable throwable, Response response) {
                 log.error("WebSocket failure - exchange={} channel={} connectionId={}", exchangeName, channel, connectionId, throwable);
                 eventPublisher.publishEvent(WebSocketFailedEvent.of(
-                        exchangeName, "Connection failed: " + throwable.getMessage(), connectionId, throwable));
+                        exchangeName, "Connection failed: " + throwable.getMessage(), connectionId, throwable, channel));
             }
         };
     }

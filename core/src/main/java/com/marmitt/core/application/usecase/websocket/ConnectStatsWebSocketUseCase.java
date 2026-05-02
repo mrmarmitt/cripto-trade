@@ -1,5 +1,6 @@
 package com.marmitt.core.application.usecase.websocket;
 
+import com.marmitt.core.dto.connection.ConnectionKey;
 import com.marmitt.core.dto.websocket.mapper.ConnectionStatsMapper;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.dto.websocket.response.WebSocketStatsResponse;
@@ -20,36 +21,25 @@ public class ConnectStatsWebSocketUseCase implements ConnectStatsWebSocketPort {
 
     @Override
     public WebSocketStatsResponse getStats(final String exchangeName) {
-        WebSocketConnectionManager manager = webSocketConnectionRepository.getConnection(exchangeName);
+        WebSocketConnectionManager manager = webSocketConnectionRepository.getConnection(ConnectionKey.market(exchangeName));
         if (manager == null) {
             throw new IllegalArgumentException("Exchange not found: " + exchangeName);
         }
-
-        return ConnectionStatsMapper.toResponse(
-                manager.getConnectionStats(),
-                manager.getExchangeName()
-        );
+        return ConnectionStatsMapper.toResponse(manager.getConnectionStats(), manager.getExchangeName());
     }
 
     @Override
     public Map<String, WebSocketStatsResponse> getAllStats() {
         return webSocketConnectionRepository.getAllConnections().entrySet().stream()
                 .collect(Collectors.toMap(
-                        Map.Entry::getKey,
-                        entry -> {
-                            String exchangeName = entry.getKey();
-                            WebSocketConnectionManager manager = entry.getValue();
-                            return ConnectionStatsMapper.toResponse(
-                                    manager.getConnectionStats(),
-                                    exchangeName
-                            );
-                        }
+                        e -> e.getKey().exchangeName() + ":" + e.getKey().channel().name(),
+                        e -> ConnectionStatsMapper.toResponse(e.getValue().getConnectionStats(), e.getValue().getExchangeName())
                 ));
     }
 
     @Override
     public boolean hasExchange(String exchange) {
-        WebSocketConnectionManager manager = webSocketConnectionRepository.getConnection(exchange);
+        WebSocketConnectionManager manager = webSocketConnectionRepository.getConnection(ConnectionKey.market(exchange));
         return manager != null && manager.getConnectionStats() != null;
     }
 

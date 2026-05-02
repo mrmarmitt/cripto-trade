@@ -1,5 +1,6 @@
 package com.marmitt.core.application.usecase.websocket;
 
+import com.marmitt.core.dto.connection.ConnectionKey;
 import com.marmitt.core.dto.connection.ConnectionResultDto;
 import com.marmitt.core.dto.websocket.mapper.ConnectionResultMapper;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
@@ -21,35 +22,27 @@ public class ConnectStatusWebSocketUseCase implements ConnectStatusWebSocketPort
 
     @Override
     public WebSocketConnectionResponse getStatus(final String exchangeName) {
-        WebSocketConnectionManager manager = webSocketConnectionRepository.getConnection(exchangeName);
+        WebSocketConnectionManager manager = webSocketConnectionRepository.getConnection(ConnectionKey.market(exchangeName));
         if (manager == null) {
             return ConnectionResultMapper.toResponse(
                     ConnectionResultDto.failure(this.getClass().getSimpleName(), "Exchange not found: " + exchangeName),
-                    exchangeName
-            );
+                    exchangeName);
         }
-
-        ConnectionResultDto result = manager.getConnectionResult();
-        return ConnectionResultMapper.toResponse(result, manager.getExchangeName());
+        return ConnectionResultMapper.toResponse(manager.getConnectionResult(), manager.getExchangeName());
     }
 
     @Override
     public Map<String, WebSocketConnectionResponse> getAllStatus() {
         return webSocketConnectionRepository.getAllConnections().entrySet().stream()
                 .collect(Collectors.toMap(
-                        Map.Entry::getKey,
-                        entry -> {
-                            String exchangeName = entry.getKey();
-                            WebSocketConnectionManager manager = entry.getValue();
-                            ConnectionResultDto result = manager.getConnectionResult();
-                            return ConnectionResultMapper.toResponse(result, exchangeName);
-                        }
+                        e -> e.getKey().exchangeName() + ":" + e.getKey().channel().name(),
+                        e -> ConnectionResultMapper.toResponse(e.getValue().getConnectionResult(), e.getValue().getExchangeName())
                 ));
     }
 
     @Override
     public boolean hasExchange(String exchange) {
-        return webSocketConnectionRepository.hasConnection(exchange);
+        return webSocketConnectionRepository.hasConnection(ConnectionKey.market(exchange));
     }
 
     @Override

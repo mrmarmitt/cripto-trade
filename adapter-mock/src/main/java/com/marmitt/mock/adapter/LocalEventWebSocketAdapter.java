@@ -2,6 +2,7 @@ package com.marmitt.mock.adapter;
 
 import com.marmitt.core.dto.events.WebSocketConnectedEvent;
 import com.marmitt.core.dto.events.WebSocketDisconnectedEvent;
+import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 import lombok.extern.slf4j.Slf4j;
@@ -33,7 +34,8 @@ public class LocalEventWebSocketAdapter implements WebSocketPort {
         eventPublisher.publishEvent(WebSocketConnectedEvent.of(
                 exchangeName,
                 "Mock local connection established",
-                connectionId
+                connectionId,
+                StreamChannel.MARKET
         ));
     }
 
@@ -45,7 +47,8 @@ public class LocalEventWebSocketAdapter implements WebSocketPort {
         eventPublisher.publishEvent(WebSocketDisconnectedEvent.manual(
                 exchangeName,
                 "Mock local disconnect",
-                currentConnectionId
+                currentConnectionId,
+                StreamChannel.MARKET
         ));
     }
 

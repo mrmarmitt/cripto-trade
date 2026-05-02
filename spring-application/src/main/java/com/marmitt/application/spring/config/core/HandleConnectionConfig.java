@@ -56,7 +56,8 @@ public class HandleConnectionConfig {
 
     @Bean
     public ConnectionFailedPort handleConnectionFailed(WebSocketConnectionRepositoryPort connectionManager,
-                                                       ConnectWebSocketPort connectWebSocketPort) {
-        return new ConnectionFailedHandler(connectionManager, connectWebSocketPort);
+                                                       ConnectWebSocketPort connectWebSocketPort,
+                                                       ExchangeAdapterRepositoryPort adapterRepository) {
+        return new ConnectionFailedHandler(connectionManager, connectWebSocketPort, adapterRepository);
     }
 }

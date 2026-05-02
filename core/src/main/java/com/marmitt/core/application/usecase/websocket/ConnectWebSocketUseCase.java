@@ -1,5 +1,6 @@
 package com.marmitt.core.application.usecase.websocket;
 
+import com.marmitt.core.dto.connection.ConnectionKey;
 import com.marmitt.core.dto.connection.ConnectionResultDto;
 import com.marmitt.core.dto.websocket.mapper.ConnectionResultMapper;
 import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
@@ -30,18 +31,11 @@ public class ConnectWebSocketUseCase implements ConnectWebSocketPort {
         this.adapterRepository = adapterRepository;
     }
 
-    private void connectUserStream(ExchangeUserStreamPort userStream, java.util.UUID connectionId) {
-        try {
-            userStream.connect(connectionId);
-        } catch (IOException e) {
-            log.error("Failed to connect user data stream for exchange={}", userStream.getExchangeName(), e);
-        }
-    }
-
     @Override
     public WebSocketConnectionResponse execute(final String exchangeName, final StreamSubscriptionRequest parameters) {
-        connectionRepository.registerConnection(exchangeName);
-        WebSocketConnectionManager manager = connectionRepository.getConnection(exchangeName);
+        ConnectionKey marketKey = ConnectionKey.market(exchangeName);
+        connectionRepository.registerConnection(marketKey);
+        WebSocketConnectionManager manager = connectionRepository.getConnection(marketKey);
 
         Optional<ExchangeStreamingPort> streamingOptional = adapterRepository.findStreamingByName(exchangeName);
         if (streamingOptional.isEmpty()) {
@@ -51,15 +45,10 @@ public class ConnectWebSocketUseCase implements ConnectWebSocketPort {
         }
 
         ConnectionStatus currentStatus = manager.getConnectionResult().status();
-        boolean isReconnect = currentStatus == ConnectionStatus.ERROR
-                           || currentStatus == ConnectionStatus.CLOSED;
-
-        if (isReconnect) {
-            manager.setConnectionResult(ConnectionResultDto.reconnecting(1, 1));
-        } else {
-            manager.setConnectionResult(ConnectionResultDto.connecting());
-        }
-
+        boolean isReconnect = currentStatus == ConnectionStatus.ERROR || currentStatus == ConnectionStatus.CLOSED;
+        manager.setConnectionResult(isReconnect
+                ? ConnectionResultDto.reconnecting(1, 1)
+                : ConnectionResultDto.connecting());
         manager.addRequestToHistory(parameters);
 
         ExchangeStreamingPort streaming = streamingOptional.get();
@@ -67,9 +56,21 @@ public class ConnectWebSocketUseCase implements ConnectWebSocketPort {
         streaming.getWebSocketPort().connect(connectionUrl, exchangeName, manager.getConnectionId());
 
         adapterRepository.findUserStreamByName(exchangeName).ifPresent(userStream ->
-                connectUserStream(userStream, manager.getConnectionId()));
+                connectUserStream(userStream, exchangeName));
 
         return ConnectionResultMapper.toResponse(manager.getConnectionResult(), exchangeName);
     }
-}
 
+    private void connectUserStream(ExchangeUserStreamPort userStream, String exchangeName) {
+        ConnectionKey userKey = ConnectionKey.userStream(exchangeName);
+        connectionRepository.registerConnection(userKey);
+        WebSocketConnectionManager userManager = connectionRepository.getConnection(userKey);
+        userManager.setConnectionResult(ConnectionResultDto.connecting());
+        try {
+            userStream.connect(userManager.getConnectionId());
+        } catch (IOException e) {
+            log.error("Failed to connect user data stream - exchange={}", exchangeName, e);
+            userManager.setConnectionResult(ConnectionResultDto.failure("connect", "Failed: " + e.getMessage()));
+        }
+    }
+}

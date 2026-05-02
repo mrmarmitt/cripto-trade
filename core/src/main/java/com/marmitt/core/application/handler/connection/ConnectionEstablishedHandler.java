@@ -1,5 +1,6 @@
 package com.marmitt.core.application.handler.connection;
 
+import com.marmitt.core.dto.connection.ConnectionKey;
 import com.marmitt.core.dto.connection.ConnectionResultDto;
 import com.marmitt.core.dto.events.WebSocketConnectedEvent;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
@@ -7,14 +8,6 @@ import com.marmitt.core.ports.inbound.handler.ConnectionEstablishedPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
-/**
- * Use case para processar eventos de conexão WebSocket estabelecida.
- * <p>
- * Responsável por:
- * - Atualizar o estado da conexão para CONNECTED
- * - Validar a transição de estado
- * - Logging de eventos de conexão
- */
 @Slf4j
 public class ConnectionEstablishedHandler implements ConnectionEstablishedPort {
 
@@ -26,20 +19,13 @@ public class ConnectionEstablishedHandler implements ConnectionEstablishedPort {
 
     @Override
     public void execute(final WebSocketConnectedEvent event) {
-        log.info("Processing connection established event for exchange: {}", event.exchange());
-
+        log.info("WebSocket connected - exchange={} channel={} connectionId={}", event.exchange(), event.channel(), event.connectionId());
         try {
-            WebSocketConnectionManager manager = connectionManagerPort.getConnection(event.exchange());
-            manager.setConnectionResult(ConnectionResultDto.connected(
-                            event.message(),
-                            event.connectionId()
-                    )
-            );
-
-            log.info("Successfully updated connection state to CONNECTED for exchange: {}", event.exchange());
-
+            ConnectionKey key = new ConnectionKey(event.exchange(), event.channel());
+            WebSocketConnectionManager manager = connectionManagerPort.getConnection(key);
+            manager.setConnectionResult(ConnectionResultDto.connected(event.message(), event.connectionId()));
         } catch (Exception e) {
-            log.error("Failed to process connection established event for exchange: {}", event.exchange(), e);
+            log.error("Failed to process connection established event - exchange={} channel={}", event.exchange(), event.channel(), e);
             throw new RuntimeException("Error processing connection established event", e);
         }
     }
