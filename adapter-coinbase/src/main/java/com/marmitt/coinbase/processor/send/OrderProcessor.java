@@ -4,9 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.enums.MessageType;
-import com.marmitt.core.ports.outbound.exchange.adapter.SenderSpecializedProcessorPort;
 
-public class OrderProcessor implements SenderSpecializedProcessorPort {
+
+public class OrderProcessor implements CoinbaseSenderProcessor {
 
     private final ObjectMapper objectMapper;
 

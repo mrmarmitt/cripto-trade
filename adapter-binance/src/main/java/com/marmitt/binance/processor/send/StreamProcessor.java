@@ -7,13 +7,13 @@ import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 import com.marmitt.core.enums.MessageType;
 import com.marmitt.core.enums.StreamAction;
-import com.marmitt.core.ports.outbound.exchange.adapter.SenderSpecializedProcessorPort;
+
 
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
-public class StreamProcessor implements SenderSpecializedProcessorPort {
+public class StreamProcessor implements BinanceSenderProcessor {
 
     private final ObjectMapper objectMapper;
     private final BinanceUrlBuilder urlBuilder;

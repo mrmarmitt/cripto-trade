@@ -7,12 +7,12 @@ import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.enums.MessageType;
 import com.marmitt.core.enums.OrderSide;
 import com.marmitt.core.enums.OrderType;
-import com.marmitt.core.ports.outbound.exchange.adapter.SenderSpecializedProcessorPort;
+
 
 import java.util.HashMap;
 import java.util.Map;
 
-public class OrderProcessor implements SenderSpecializedProcessorPort {
+public class OrderProcessor implements BinanceSenderProcessor {
 
     private final ObjectMapper objectMapper;
     private final BinanceRequestSigner signer;

@@ -5,12 +5,12 @@ import com.marmitt.binance.auth.BinanceRequestSigner;
 import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
 import com.marmitt.core.enums.MessageType;
-import com.marmitt.core.ports.outbound.exchange.adapter.SenderSpecializedProcessorPort;
+
 
 import java.util.HashMap;
 import java.util.Map;
 
-public class CancelOrderProcessor implements SenderSpecializedProcessorPort {
+public class CancelOrderProcessor implements BinanceSenderProcessor {
 
     private final ObjectMapper objectMapper;
     private final BinanceRequestSigner signer;
