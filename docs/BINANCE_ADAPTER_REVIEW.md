@@ -201,7 +201,7 @@ Erros de infraestrutura (`OutOfMemoryError` envolvido em `RuntimeException`) ser
 | P6 | Rename de `Configuration` | Legibilidade | Oportunístico | ✅ PR #84 |
 | P8 | Regra de negócio em `isValidMarketData` | Manutenção | Oportunístico | ✅ PR #85 |
 | P2 | God class — 5 ports num bean | Acumula débito em T4+T5 | Ao iniciar T5 | 🔲 Pendente |
-| P4 | Duplicação de `buildStreamName` | Risco de divergência | T4 ou oportunístico | 🔲 Pendente |
+| P4 | Duplicação de `buildStreamName` | Risco de divergência | T4 ou oportunístico | ✅ PR #86 |
 | P5 | `SenderSpecializedProcessorPort` no core | Arquitetura | Próximo refactor | 🔲 Pendente |
 | P7 | `@NotBlank` em URLs | Ruído | Oportunístico | 🔲 Pendente |
 | P9 | `catch (Exception)` genérico | Resiliência | Oportunístico | 🔲 Pendente |
