@@ -10,7 +10,8 @@ import com.marmitt.binance.auth.BinanceRequestSigner;
 import com.marmitt.binance.processor.receive.BinanceReceivedMessageProcessor;
 import com.marmitt.binance.processor.receive.BinanceUserDataProcessor;
 import com.marmitt.binance.processor.send.BinanceSenderMessageProcessor;
-import com.marmitt.application.spring.adapter.binance.OkHttpListenKeyManager;
+import com.marmitt.application.spring.adapter.binance.OkHttpClientAdapter;
+import com.marmitt.binance.userdata.ListenKeyManager;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import okhttp3.OkHttpClient;
@@ -56,7 +57,8 @@ public class BinanceAdapterConfiguration {
                                                               BinanceProperties properties) {
         var config       = new BinanceEndpointConfig(properties.getWsBaseUrl(), properties.getRestBaseUrl());
         var credentials  = new BinanceCredentials(properties.getApiKey(), properties.getApiSecret());
-        var listenKeyMgr = new OkHttpListenKeyManager(config.getRestBaseUrl(), credentials, binanceHttpClient, objectMapper);
+        var httpClient   = new OkHttpClientAdapter(binanceHttpClient);
+        var listenKeyMgr = new ListenKeyManager(config.getRestBaseUrl(), credentials, httpClient, objectMapper);
         var receiver     = new BinanceUserDataProcessor(objectMapper);
         var ws           = new OkHttp3WebSocketAdapter(binanceHttpClient,
                 new OkHttp3ListenerConverter(eventPublisher, StreamChannel.USER_DATA));
