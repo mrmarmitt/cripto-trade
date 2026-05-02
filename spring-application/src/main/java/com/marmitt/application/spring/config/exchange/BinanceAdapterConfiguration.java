@@ -27,7 +27,7 @@ public class BinanceAdapterConfiguration {
         var credentials = new BinanceCredentials(properties.getApiKey(), properties.getApiSecret());
         var signer      = new BinanceRequestSigner(credentials);
         var urlBuilder  = new BinanceUrlBuilder(config);
-        var sender      = new BinanceSenderMessageProcessor(objectMapper, signer);
+        var sender      = new BinanceSenderMessageProcessor(objectMapper, signer, urlBuilder);
         var receiver    = new BinanceReceivedMessageProcessor(objectMapper);
         var ws          = new OkHttp3WebSocketAdapter(new OkHttp3ListenerConverter(eventPublisher));
         return new BinanceExchangeAdapter(ws, receiver, sender, urlBuilder);

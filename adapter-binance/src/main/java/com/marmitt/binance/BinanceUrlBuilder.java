@@ -42,7 +42,7 @@ public class BinanceUrlBuilder implements ExchangeUrlBuilderPort {
         return config.getRestBaseUrl();
     }
 
-    private String buildStreamName(CurrencyPair currencyPair) {
+    public String buildStreamName(CurrencyPair currencyPair) {
         String lowerSymbol = (currencyPair.baseCurrency() + currencyPair.quoteCurrency()).toLowerCase();
         return switch (currencyPair.streamType()) {
             case TICKER     -> lowerSymbol + "@ticker";

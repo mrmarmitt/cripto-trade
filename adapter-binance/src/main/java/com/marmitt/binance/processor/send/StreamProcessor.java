@@ -1,6 +1,7 @@
 package com.marmitt.binance.processor.send;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.marmitt.binance.BinanceUrlBuilder;
 import com.marmitt.core.dto.common.CurrencyPair;
 import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
@@ -15,9 +16,11 @@ import java.util.Map;
 public class StreamProcessor implements SenderSpecializedProcessorPort {
 
     private final ObjectMapper objectMapper;
+    private final BinanceUrlBuilder urlBuilder;
 
-    public StreamProcessor(ObjectMapper objectMapper) {
+    public StreamProcessor(ObjectMapper objectMapper, BinanceUrlBuilder urlBuilder) {
         this.objectMapper = objectMapper;
+        this.urlBuilder = urlBuilder;
     }
 
     @Override
@@ -38,7 +41,7 @@ public class StreamProcessor implements SenderSpecializedProcessorPort {
 
         try {
             List<String> streams = streamRequest.getCurrencyPairs().stream()
-                    .map(this::buildStreamName)
+                    .map(urlBuilder::buildStreamName)
                     .toList();
 
             Map<String, Object> message = new HashMap<>();
@@ -51,16 +54,5 @@ public class StreamProcessor implements SenderSpecializedProcessorPort {
             throw new RuntimeException("Failed to process stream subscription errorMessage", e);
         }
     }
-
-    private String buildStreamName(CurrencyPair currencyPair) {
-        String lowerSymbol = (currencyPair.baseCurrency() + currencyPair.quoteCurrency()).toLowerCase();
-        return switch (currencyPair.streamType()) {
-            case TICKER -> lowerSymbol + "@ticker";
-            case TRADE -> lowerSymbol + "@trade";
-            case BOOK_TICKER -> lowerSymbol + "@bookTicker";
-            case DEPTH -> lowerSymbol + "@depth";
-        };
-    }
-
 
 }
