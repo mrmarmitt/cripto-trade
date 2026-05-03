@@ -34,7 +34,7 @@ public class ExchangeWebSocketQueryService {
         this.statsQueryUseCase = statsQueryUseCase;
     }
 
-    public WebSocketConnectionResponse getStatus(String exchange) {
+    public Map<String, WebSocketConnectionResponse> getStatus(String exchange) {
         return statusQueryUseCase.getStatus(exchange);
     }
 

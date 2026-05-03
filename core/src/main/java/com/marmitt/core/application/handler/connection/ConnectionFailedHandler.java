@@ -97,7 +97,8 @@ public class ConnectionFailedHandler implements ConnectionFailedPort {
 
     private void reconnectUserStream(String exchangeName, int attempt) {
         log.info("Reconnecting user data stream - exchange={} attempt={}", exchangeName, attempt);
-        WebSocketConnectionResponse response = connectUserStreamPort.execute(exchangeName);
+        WebSocketConnectionResponse response = connectUserStreamPort.execute(exchangeName)
+                .orElseThrow(() -> new RuntimeException("No user stream adapter for exchange: " + exchangeName));
         if (response.isFailed()) {
             throw new RuntimeException("User stream reconnect failed: " + response.message());
         }

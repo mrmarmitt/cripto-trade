@@ -32,11 +32,10 @@ public class ExchangeConnectService {
         StreamSubscriptionRequest connectionParams = buildStreamSubscriptionRequest(request);
 
         WebSocketConnectionResponse marketResponse = connectMarketStream.execute(exchange, connectionParams);
-        WebSocketConnectionResponse userStreamResponse = connectUserStream.execute(exchange);
 
         Map<String, WebSocketConnectionResponse> result = new LinkedHashMap<>();
         result.put("market", marketResponse);
-        result.put("userStream", userStreamResponse);
+        connectUserStream.execute(exchange).ifPresent(r -> result.put("userStream", r));
         return result;
     }
 

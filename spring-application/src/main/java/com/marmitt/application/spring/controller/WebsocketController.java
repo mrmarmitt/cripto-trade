@@ -49,8 +49,8 @@ public class WebsocketController {
     }
 
     @GetMapping()
-    public ResponseEntity<WebSocketConnectionResponse> getConnectionResult(@RequestParam String exchange) {
-        WebSocketConnectionResponse response = webSocketQueryService.getStatus(exchange);
+    public ResponseEntity<Map<String, WebSocketConnectionResponse>> getConnectionResult(@RequestParam String exchange) {
+        Map<String, WebSocketConnectionResponse> response = webSocketQueryService.getStatus(exchange);
         return ResponseEntity.ok(response);
     }
 

@@ -5,9 +5,11 @@ import com.marmitt.core.dto.connection.ConnectionResultDto;
 import com.marmitt.core.dto.websocket.mapper.ConnectionResultMapper;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
+import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.inbound.websocket.ConnectStatusWebSocketPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -21,14 +23,20 @@ public class ConnectStatusWebSocketUseCase implements ConnectStatusWebSocketPort
     }
 
     @Override
-    public WebSocketConnectionResponse getStatus(final String exchangeName) {
-        WebSocketConnectionManager manager = webSocketConnectionRepository.getConnection(ConnectionKey.market(exchangeName));
-        if (manager == null) {
-            return ConnectionResultMapper.toResponse(
-                    ConnectionResultDto.failure(this.getClass().getSimpleName(), "Exchange not found: " + exchangeName),
-                    exchangeName);
+    public Map<String, WebSocketConnectionResponse> getStatus(final String exchangeName) {
+        Map<String, WebSocketConnectionResponse> result = new LinkedHashMap<>();
+        for (StreamChannel channel : StreamChannel.values()) {
+            WebSocketConnectionManager manager = webSocketConnectionRepository.getConnection(new ConnectionKey(exchangeName, channel));
+            if (manager != null) {
+                result.put(channel.name(), ConnectionResultMapper.toResponse(manager.getConnectionResult(), manager.getExchangeName()));
+            }
         }
-        return ConnectionResultMapper.toResponse(manager.getConnectionResult(), manager.getExchangeName());
+        if (result.isEmpty()) {
+            result.put(StreamChannel.MARKET.name(), ConnectionResultMapper.toResponse(
+                    ConnectionResultDto.failure(this.getClass().getSimpleName(), "Exchange not found: " + exchangeName),
+                    exchangeName));
+        }
+        return result;
     }
 
     @Override

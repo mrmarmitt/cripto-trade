@@ -30,12 +30,10 @@ public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
     }
 
     @Override
-    public WebSocketConnectionResponse execute(String exchangeName) {
+    public Optional<WebSocketConnectionResponse> execute(String exchangeName) {
         Optional<ExchangeUserStreamPort> userStreamOpt = adapterRepository.findUserStreamByName(exchangeName);
         if (userStreamOpt.isEmpty()) {
-            return ConnectionResultMapper.toResponse(
-                    ConnectionResultDto.failure(this.getClass().getSimpleName(), "No user stream adapter for: " + exchangeName),
-                    exchangeName);
+            return Optional.empty();
         }
 
         ConnectionKey userKey = ConnectionKey.userStream(exchangeName);
@@ -46,7 +44,7 @@ public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
         if (status == ConnectionStatus.CONNECTED || status == ConnectionStatus.CONNECTING
                 || status == ConnectionStatus.RECONNECTING) {
             log.debug("User stream already {} - skipping connect - exchange={}", status, exchangeName);
-            return ConnectionResultMapper.toResponse(manager.getConnectionResult(), exchangeName);
+            return Optional.of(ConnectionResultMapper.toResponse(manager.getConnectionResult(), exchangeName));
         }
 
         boolean isReconnect = status == ConnectionStatus.ERROR || status == ConnectionStatus.CLOSED;
@@ -61,6 +59,6 @@ public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
             manager.setConnectionResult(ConnectionResultDto.failure("connect", "Failed: " + e.getMessage()));
         }
 
-        return ConnectionResultMapper.toResponse(manager.getConnectionResult(), exchangeName);
+        return Optional.of(ConnectionResultMapper.toResponse(manager.getConnectionResult(), exchangeName));
     }
 }
