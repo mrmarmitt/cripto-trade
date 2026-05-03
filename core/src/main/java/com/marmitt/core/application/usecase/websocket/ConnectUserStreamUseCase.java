@@ -43,7 +43,8 @@ public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
         WebSocketConnectionManager manager = connectionRepository.getConnection(userKey);
 
         ConnectionStatus status = manager.getConnectionResult().status();
-        if (status == ConnectionStatus.CONNECTED || status == ConnectionStatus.CONNECTING) {
+        if (status == ConnectionStatus.CONNECTED || status == ConnectionStatus.CONNECTING
+                || status == ConnectionStatus.RECONNECTING) {
             log.debug("User stream already {} - skipping connect - exchange={}", status, exchangeName);
             return ConnectionResultMapper.toResponse(manager.getConnectionResult(), exchangeName);
         }

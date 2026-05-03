@@ -72,8 +72,9 @@ class ExecutionReportProcessor implements BinanceEventProcessor<OrderDataDto> {
 
     private OrderDataDto.OrderSide mapSide(String raw) {
         return switch (raw.toUpperCase()) {
+            case "BUY"  -> OrderDataDto.OrderSide.BUY;
             case "SELL" -> OrderDataDto.OrderSide.SELL;
-            default     -> OrderDataDto.OrderSide.BUY;
+            default     -> throw new IllegalArgumentException("Unknown Binance order side: " + raw);
         };
     }
 
