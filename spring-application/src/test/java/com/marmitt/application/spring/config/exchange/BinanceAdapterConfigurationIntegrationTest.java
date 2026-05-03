@@ -38,22 +38,26 @@ class BinanceAdapterConfigurationIntegrationTest {
     }
 
     @Test
-    void shouldFailStartupWhenApiKeyIsPresentWithoutApiSecret() {
+    void shouldStartWithoutBinanceAdapterWhenApiKeyIsPresentWithoutApiSecret() {
         contextRunner
                 .withPropertyValues("binance.api-key=test-key")
                 .run(context -> {
-                    assertThat(context).hasFailed();
-                    assertThat(context.getStartupFailure()).hasStackTraceContaining("binance.api-secret");
+                    assertThat(context).hasNotFailed();
+
+                    ExchangeAdapterRepositoryPort repository = context.getBean(ExchangeAdapterRepositoryPort.class);
+                    assertThat(repository.hasAdapter("BINANCE")).isFalse();
                 });
     }
 
     @Test
-    void shouldFailStartupWhenApiSecretIsPresentWithoutApiKey() {
+    void shouldStartWithoutBinanceAdapterWhenApiSecretIsPresentWithoutApiKey() {
         contextRunner
                 .withPropertyValues("binance.api-secret=test-secret")
                 .run(context -> {
-                    assertThat(context).hasFailed();
-                    assertThat(context.getStartupFailure()).hasStackTraceContaining("binance.api-key");
+                    assertThat(context).hasNotFailed();
+
+                    ExchangeAdapterRepositoryPort repository = context.getBean(ExchangeAdapterRepositoryPort.class);
+                    assertThat(repository.hasAdapter("BINANCE")).isFalse();
                 });
     }
 
