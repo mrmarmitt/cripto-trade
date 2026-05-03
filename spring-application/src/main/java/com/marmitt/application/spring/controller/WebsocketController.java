@@ -36,9 +36,9 @@ public class WebsocketController {
     }
 
     @PostMapping("/connect")
-    public ResponseEntity<WebSocketConnectionResponse> connect(
+    public ResponseEntity<Map<String, WebSocketConnectionResponse>> connect(
             @RequestBody WebSocketConnectRequest request) {
-        WebSocketConnectionResponse response = exchangeConnectionService.connect(request);
+        Map<String, WebSocketConnectionResponse> response = exchangeConnectionService.connect(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 

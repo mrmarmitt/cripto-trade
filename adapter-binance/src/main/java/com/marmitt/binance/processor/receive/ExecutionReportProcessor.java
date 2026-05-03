@@ -88,12 +88,13 @@ class ExecutionReportProcessor implements BinanceEventProcessor<OrderDataDto> {
 
     private OrderDataDto.OrderStatus mapStatus(String raw) {
         return switch (raw.toUpperCase()) {
+            case "NEW"              -> OrderDataDto.OrderStatus.NEW;
             case "PARTIALLY_FILLED" -> OrderDataDto.OrderStatus.PARTIALLY_FILLED;
             case "FILLED"           -> OrderDataDto.OrderStatus.FILLED;
             case "CANCELED"         -> OrderDataDto.OrderStatus.CANCELED;
             case "REJECTED"         -> OrderDataDto.OrderStatus.REJECTED;
             case "EXPIRED"          -> OrderDataDto.OrderStatus.EXPIRED;
-            default                 -> OrderDataDto.OrderStatus.NEW;
+            default                 -> throw new IllegalArgumentException("Unknown Binance order status: " + raw);
         };
     }
 }

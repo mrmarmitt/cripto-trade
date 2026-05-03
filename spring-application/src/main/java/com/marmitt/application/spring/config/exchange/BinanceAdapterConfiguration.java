@@ -23,11 +23,11 @@ import java.time.Duration;
 
 @org.springframework.context.annotation.Configuration
 @EnableConfigurationProperties(BinanceProperties.class)
-@ConditionalOnExpression("!'${binance.api-key:}'.isBlank() || !'${binance.api-secret:}'.isBlank()")
+@ConditionalOnExpression("!'${binance.api-key:}'.isBlank() && !'${binance.api-secret:}'.isBlank()")
 public class BinanceAdapterConfiguration {
 
     @Bean
-    public OkHttpClient binanceHttpClient() {
+    public OkHttpClient binanceWebSocketClient() {
         return new OkHttpClient.Builder()
                 .readTimeout(Duration.ZERO)
                 .pingInterval(Duration.ofSeconds(20))
@@ -35,9 +35,18 @@ public class BinanceAdapterConfiguration {
     }
 
     @Bean
+    public OkHttpClient binanceRestClient() {
+        return new OkHttpClient.Builder()
+                .connectTimeout(Duration.ofSeconds(10))
+                .readTimeout(Duration.ofSeconds(30))
+                .writeTimeout(Duration.ofSeconds(10))
+                .build();
+    }
+
+    @Bean
     public BinanceMarketStreamAdapter binanceMarketStreamAdapter(ObjectMapper objectMapper,
                                                                   EventPublisherPort eventPublisher,
-                                                                  OkHttpClient binanceHttpClient,
+                                                                  OkHttpClient binanceWebSocketClient,
                                                                   BinanceProperties properties) {
         var config      = new BinanceEndpointConfig(properties.getWsBaseUrl(), properties.getRestBaseUrl());
         var credentials = new BinanceCredentials(properties.getApiKey(), properties.getApiSecret());
@@ -45,7 +54,7 @@ public class BinanceAdapterConfiguration {
         var urlBuilder  = new BinanceUrlBuilder(config);
         var sender      = new BinanceSenderMessageProcessor(objectMapper, signer, urlBuilder);
         var receiver    = new BinanceReceivedMessageProcessor(objectMapper);
-        var ws          = new OkHttp3WebSocketAdapter(binanceHttpClient,
+        var ws          = new OkHttp3WebSocketAdapter(binanceWebSocketClient,
                 new OkHttp3ListenerConverter(eventPublisher, StreamChannel.MARKET));
         return new BinanceMarketStreamAdapter(ws, receiver, sender, urlBuilder);
     }
@@ -53,14 +62,15 @@ public class BinanceAdapterConfiguration {
     @Bean
     public BinanceUserStreamAdapter binanceUserStreamAdapter(ObjectMapper objectMapper,
                                                               EventPublisherPort eventPublisher,
-                                                              OkHttpClient binanceHttpClient,
+                                                              OkHttpClient binanceWebSocketClient,
+                                                              OkHttpClient binanceRestClient,
                                                               BinanceProperties properties) {
         var config       = new BinanceEndpointConfig(properties.getWsBaseUrl(), properties.getRestBaseUrl());
         var credentials  = new BinanceCredentials(properties.getApiKey(), properties.getApiSecret());
-        var httpClient   = new OkHttpClientAdapter(binanceHttpClient);
+        var httpClient   = new OkHttpClientAdapter(binanceRestClient);
         var listenKeyMgr = new ListenKeyManager(config.getRestBaseUrl(), credentials, httpClient, objectMapper);
         var receiver     = new BinanceUserDataProcessor(objectMapper);
-        var ws           = new OkHttp3WebSocketAdapter(binanceHttpClient,
+        var ws           = new OkHttp3WebSocketAdapter(binanceWebSocketClient,
                 new OkHttp3ListenerConverter(eventPublisher, StreamChannel.USER_DATA));
         return new BinanceUserStreamAdapter(ws, receiver, listenKeyMgr, config.getWebSocketBaseUrl());
     }

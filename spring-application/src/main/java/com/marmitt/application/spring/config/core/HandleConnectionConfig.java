@@ -4,7 +4,8 @@ import com.marmitt.core.application.handler.ProcessMessageHandler;
 import com.marmitt.core.application.handler.ProcessUserMessageHandler;
 import com.marmitt.core.application.handler.connection.*;
 import com.marmitt.core.ports.inbound.handler.*;
-import com.marmitt.core.ports.inbound.websocket.ConnectWebSocketPort;
+import com.marmitt.core.ports.inbound.websocket.ConnectMarketStreamPort;
+import com.marmitt.core.ports.inbound.websocket.ConnectUserStreamPort;
 import com.marmitt.core.ports.inbound.websocket.PostConnectionEstablishedPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
@@ -56,8 +57,8 @@ public class HandleConnectionConfig {
 
     @Bean
     public ConnectionFailedPort handleConnectionFailed(WebSocketConnectionRepositoryPort connectionManager,
-                                                       ConnectWebSocketPort connectWebSocketPort,
-                                                       ExchangeAdapterRepositoryPort adapterRepository) {
-        return new ConnectionFailedHandler(connectionManager, connectWebSocketPort, adapterRepository);
+                                                       ConnectMarketStreamPort connectMarketStreamPort,
+                                                       ConnectUserStreamPort connectUserStreamPort) {
+        return new ConnectionFailedHandler(connectionManager, connectMarketStreamPort, connectUserStreamPort);
     }
 }

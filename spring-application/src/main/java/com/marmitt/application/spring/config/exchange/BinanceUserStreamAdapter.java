@@ -55,6 +55,10 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort {
 
     @Override
     public void connect(UUID connectionId) throws IOException {
+        if (keepAliveTask != null && !keepAliveTask.isDone()) {
+            keepAliveTask.cancel(false);
+        }
+
         String listenKey = listenKeyPort.obtainListenKey();
         String wsUrl = wsBaseUrl + "/ws/" + listenKey;
         webSocketPort.connect(wsUrl, "BINANCE", connectionId);
