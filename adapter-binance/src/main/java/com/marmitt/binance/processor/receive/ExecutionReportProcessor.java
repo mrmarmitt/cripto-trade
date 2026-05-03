@@ -36,11 +36,12 @@ class ExecutionReportProcessor implements BinanceEventProcessor<OrderDataDto> {
             String sideRaw       = data.path("S").asText();
             String typeRaw       = data.path("o").asText();
             String statusRaw     = data.path("X").asText();
-            BigDecimal quantity  = new BigDecimal(data.path("q").asText("0"));
-            BigDecimal executedQty  = new BigDecimal(data.path("z").asText("0"));
-            BigDecimal price        = new BigDecimal(data.path("p").asText("0"));
-            BigDecimal executedPrice = new BigDecimal(data.path("L").asText("0"));
-            BigDecimal fee          = new BigDecimal(data.path("n").asText("0"));
+            BigDecimal quantity          = new BigDecimal(data.path("q").asText("0"));
+            BigDecimal executedQty       = new BigDecimal(data.path("z").asText("0"));
+            BigDecimal cumulativeQuoteQty = new BigDecimal(data.path("Z").asText("0"));
+            BigDecimal price             = new BigDecimal(data.path("p").asText("0"));
+            BigDecimal executedPrice     = computeWap(executedQty, cumulativeQuoteQty);
+            BigDecimal fee               = new BigDecimal(data.path("n").asText("0"));
             String rejectReason  = data.path("r").asText(null);
             long transactionTime = data.path("T").asLong(0);
 
@@ -68,6 +69,13 @@ class ExecutionReportProcessor implements BinanceEventProcessor<OrderDataDto> {
             log.error("Failed to parse executionReport: correlationId={}", correlationId, e);
             return ProcessingResult.error(correlationId, "Failed to parse executionReport: " + e.getMessage(), e);
         }
+    }
+
+    private BigDecimal computeWap(BigDecimal executedQty, BigDecimal cumulativeQuoteQty) {
+        if (executedQty.compareTo(BigDecimal.ZERO) == 0) {
+            return BigDecimal.ZERO;
+        }
+        return cumulativeQuoteQty.divide(executedQty, 8, java.math.RoundingMode.HALF_UP);
     }
 
     private OrderDataDto.OrderSide mapSide(String raw) {
