@@ -8,6 +8,7 @@ import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.inbound.handler.ConnectionFailedPort;
+import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
 import com.marmitt.core.ports.inbound.websocket.ConnectMarketStreamPort;
 import com.marmitt.core.ports.inbound.websocket.ConnectUserStreamPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
@@ -96,6 +97,9 @@ public class ConnectionFailedHandler implements ConnectionFailedPort {
 
     private void reconnectUserStream(String exchangeName, int attempt) {
         log.info("Reconnecting user data stream - exchange={} attempt={}", exchangeName, attempt);
-        connectUserStreamPort.execute(exchangeName);
+        WebSocketConnectionResponse response = connectUserStreamPort.execute(exchangeName);
+        if (response.isFailed()) {
+            throw new RuntimeException("User stream reconnect failed: " + response.message());
+        }
     }
 }

@@ -23,8 +23,11 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort {
     private final ListenKeyManager listenKeyManager;
     private final String wsBaseUrl;
 
-    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(
-            r -> new Thread(r, "binance-listenkey-keepalive"));
+    private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "binance-listenkey-keepalive");
+        t.setDaemon(true);
+        return t;
+    });
 
     private ScheduledFuture<?> keepAliveTask;
 
