@@ -61,6 +61,9 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort {
         if (keepAliveTask != null && !keepAliveTask.isDone()) {
             keepAliveTask.cancel(false);
         }
+        if (listenKeyManager.getListenKey() != null) {
+            listenKeyManager.revoke();
+        }
 
         String listenKey = listenKeyManager.obtainListenKey();
         String wsUrl = wsBaseUrl + "/ws/" + listenKey;

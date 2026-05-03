@@ -79,10 +79,11 @@ class ExecutionReportProcessor implements BinanceEventProcessor<OrderDataDto> {
 
     private OrderDataDto.OrderType mapType(String raw) {
         return switch (raw.toUpperCase()) {
-            case "LIMIT"       -> OrderDataDto.OrderType.LIMIT;
-            case "STOP"        -> OrderDataDto.OrderType.STOP;
+            case "MARKET"                        -> OrderDataDto.OrderType.MARKET;
+            case "LIMIT", "LIMIT_MAKER"          -> OrderDataDto.OrderType.LIMIT;
+            case "STOP_LOSS", "TAKE_PROFIT"      -> OrderDataDto.OrderType.STOP;
             case "STOP_LOSS_LIMIT", "TAKE_PROFIT_LIMIT" -> OrderDataDto.OrderType.STOP_LIMIT;
-            default            -> OrderDataDto.OrderType.MARKET;
+            default -> throw new IllegalArgumentException("Unknown Binance order type: " + raw);
         };
     }
 
