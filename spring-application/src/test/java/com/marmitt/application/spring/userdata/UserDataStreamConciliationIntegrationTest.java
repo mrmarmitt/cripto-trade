@@ -109,7 +109,7 @@ class UserDataStreamConciliationIntegrationTest {
     }
 
     @Test
-    void partiallyFilledBuyOrder_shouldUpdateExecutedQuantityWithoutCreatingPosition() {
+    void partiallyFilledBuyOrder_shouldUpdateExecutedQuantityAndOpenPartialPosition() {
         UUID portfolioId = createPortfolio();
         StrategyRunner runner = createAndActivateRunner(portfolioId);
         String clientOrderId = ClientOrderId.generate(runner.getShortCode(), TransactionType.BUY);
@@ -123,12 +123,23 @@ class UserDataStreamConciliationIntegrationTest {
                 executionReport(clientOrderId, "PARTIALLY_FILLED", "BUY", QUANTITY, partialQty, partialQuote, null),
                 MessageContext.createUserData(EXCHANGE, UUID.randomUUID()));
 
-        awaitCondition(TIMEOUT, 100,
+        Transaction updated = awaitCondition(TIMEOUT, 100,
                 () -> strategyRunnerRepository.findTransactionById(tx.getId()).orElse(null),
-                t -> t != null && partialQty.compareTo(t.getEffectiveExecutedQuantity()) == 0,
+                t -> t != null
+                        && t.getStatus() == TransactionStatus.PARTIAL
+                        && partialQty.compareTo(t.getEffectiveExecutedQuantity()) == 0,
                 "executed_qty must equal the cumulative partial qty " + partialQty);
-        assertEquals(0, countOpenPositions(tx.getId()),
-                "PARTIALLY_FILLED BUY must not open a position before full fill");
+
+        assertEquals(TransactionStatus.PARTIAL, updated.getStatus(),
+                "PARTIALLY_FILLED BUY must transition to PARTIAL");
+        assertEquals(1, countOpenPositions(tx.getId()),
+                "PARTIALLY_FILLED BUY must open exactly one partial position");
+        assertEquals(0, partialQty.compareTo(readOpenPositionQuantity(tx.getId())),
+                "partial BUY must update the open position quantity by the executed delta");
+        awaitCondition(TIMEOUT, 100,
+                () -> readReservedBalance(portfolioId),
+                reserved -> reserved.compareTo(BigDecimal.ZERO) > 0,
+                "capital reservation must remain locked after PARTIALLY_FILLED");
     }
 
     @Test
@@ -301,6 +312,13 @@ class UserDataStreamConciliationIntegrationTest {
         BigDecimal v = jdbcTemplate.queryForObject(
                 "SELECT reserved_balance FROM global_balances WHERE portfolio_id = ?",
                 BigDecimal.class, portfolioId);
+        return v == null ? BigDecimal.ZERO : v;
+    }
+
+    private BigDecimal readOpenPositionQuantity(UUID openedByTransactionId) {
+        BigDecimal v = jdbcTemplate.queryForObject(
+                "SELECT quantity FROM positions WHERE opened_by_transaction_id = ? AND status = 'OPEN'",
+                BigDecimal.class, openedByTransactionId);
         return v == null ? BigDecimal.ZERO : v;
     }
 
