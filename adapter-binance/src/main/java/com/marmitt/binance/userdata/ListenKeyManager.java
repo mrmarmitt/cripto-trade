@@ -9,7 +9,7 @@ import java.io.IOException;
 import java.util.Map;
 
 @Slf4j
-public class ListenKeyManager implements ListenKeyPort {
+public class ListenKeyManager {
 
     private static final String USER_DATA_STREAM_PATH = "/api/v3/userDataStream";
 
@@ -30,7 +30,6 @@ public class ListenKeyManager implements ListenKeyPort {
         this.objectMapper = objectMapper;
     }
 
-    @Override
     public String obtainListenKey() throws IOException {
         Map<String, String> headers = Map.of("X-MBX-APIKEY", credentials.getApiKey());
         HttpClientPort.HttpResponse response = httpClient.post(restBaseUrl + USER_DATA_STREAM_PATH, headers);
@@ -44,7 +43,6 @@ public class ListenKeyManager implements ListenKeyPort {
         return listenKey;
     }
 
-    @Override
     public void keepAlive() {
         if (listenKey == null) {
             log.warn("Cannot keepalive: no active listen key");
@@ -65,7 +63,6 @@ public class ListenKeyManager implements ListenKeyPort {
         }
     }
 
-    @Override
     public void revoke() {
         if (listenKey == null) {
             return;
@@ -87,7 +84,6 @@ public class ListenKeyManager implements ListenKeyPort {
         }
     }
 
-    @Override
     public String getListenKey() {
         return listenKey;
     }
