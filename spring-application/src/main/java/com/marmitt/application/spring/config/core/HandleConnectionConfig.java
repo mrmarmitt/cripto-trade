@@ -24,9 +24,10 @@ public class HandleConnectionConfig {
     }
 
     @Bean
-    public HandlerProcessUserMessagePort processUserMessage(ExchangeAdapterRepositoryPort adapterRepository,
+    public HandlerProcessUserMessagePort processUserMessage(WebSocketConnectionRepositoryPort connectionManager,
+                                                             ExchangeAdapterRepositoryPort adapterRepository,
                                                              ListenerRepositoryPort listenerRepository) {
-        return new ProcessUserMessageHandler(adapterRepository, listenerRepository);
+        return new ProcessUserMessageHandler(connectionManager, adapterRepository, listenerRepository);
     }
 
     @Bean
