@@ -4,9 +4,11 @@ import com.marmitt.core.dto.connection.ConnectionKey;
 import com.marmitt.core.dto.websocket.mapper.ConnectionStatsMapper;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.dto.websocket.response.WebSocketStatsResponse;
+import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.inbound.websocket.ConnectStatsWebSocketPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -20,12 +22,20 @@ public class ConnectStatsWebSocketUseCase implements ConnectStatsWebSocketPort {
     }
 
     @Override
-    public WebSocketStatsResponse getStats(final String exchangeName) {
-        WebSocketConnectionManager manager = webSocketConnectionRepository.getConnection(ConnectionKey.market(exchangeName));
-        if (manager == null) {
+    public Map<String, WebSocketStatsResponse> getStats(final String exchangeName) {
+        Map<String, WebSocketStatsResponse> result = new LinkedHashMap<>();
+        for (StreamChannel channel : StreamChannel.values()) {
+            WebSocketConnectionManager manager = webSocketConnectionRepository
+                    .getConnection(new ConnectionKey(exchangeName, channel));
+            if (manager != null) {
+                result.put(channel.name(), ConnectionStatsMapper.toResponse(
+                        manager.getConnectionStats(), manager.getExchangeName()));
+            }
+        }
+        if (result.isEmpty()) {
             throw new IllegalArgumentException("Exchange not found: " + exchangeName);
         }
-        return ConnectionStatsMapper.toResponse(manager.getConnectionStats(), manager.getExchangeName());
+        return result;
     }
 
     @Override

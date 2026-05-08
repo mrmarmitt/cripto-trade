@@ -42,7 +42,8 @@ public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
 
         ConnectionStatus status = manager.getConnectionResult().status();
         if (status == ConnectionStatus.CONNECTED || status == ConnectionStatus.CONNECTING
-                || status == ConnectionStatus.RECONNECTING) {
+                || status == ConnectionStatus.RECONNECTING
+                || status == ConnectionStatus.DISCONNECTING || status == ConnectionStatus.CLOSING) {
             log.debug("User stream already {} - skipping connect - exchange={}", status, exchangeName);
             return Optional.of(ConnectionResultMapper.toResponse(manager.getConnectionResult(), exchangeName));
         }

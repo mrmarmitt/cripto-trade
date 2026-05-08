@@ -51,7 +51,7 @@ public class ExchangeWebSocketQueryService {
     }
 
 
-    public WebSocketStatsResponse getStats(String exchange) {
+    public Map<String, WebSocketStatsResponse> getStats(String exchange) {
         return statsQueryUseCase.getStats(exchange);
     }
 

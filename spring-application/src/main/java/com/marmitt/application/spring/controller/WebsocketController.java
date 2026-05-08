@@ -61,8 +61,8 @@ public class WebsocketController {
     }
 
     @GetMapping("/stats")
-    public ResponseEntity<WebSocketStatsResponse> getConnectionStats(@RequestParam String exchange) {
-        WebSocketStatsResponse response = webSocketQueryService.getStats(exchange);
+    public ResponseEntity<Map<String, WebSocketStatsResponse>> getConnectionStats(@RequestParam String exchange) {
+        Map<String, WebSocketStatsResponse> response = webSocketQueryService.getStats(exchange);
         return ResponseEntity.ok(response);
     }
 

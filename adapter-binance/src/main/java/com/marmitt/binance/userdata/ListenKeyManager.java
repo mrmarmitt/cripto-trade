@@ -39,6 +39,9 @@ public class ListenKeyManager {
         }
 
         listenKey = objectMapper.readTree(response.body()).path("listenKey").asText();
+        if (listenKey == null || listenKey.isBlank()) {
+            throw new IOException("Binance returned blank listen key — malformed response body");
+        }
         log.info("Listen key obtained for Binance user data stream");
         return listenKey;
     }
