@@ -5,7 +5,6 @@ import com.marmitt.core.dto.connection.ConnectionKey;
 import com.marmitt.core.enums.ConnectionStatus;
 import com.marmitt.core.ports.inbound.websocket.ConnectUserStreamPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
-import okhttp3.Response;
 import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
 import okhttp3.mockwebserver.MockResponse;
@@ -85,9 +84,9 @@ class BinanceListenKeyReconnectIntegrationTest {
     void userDataStream_shouldReconnectAndObtainNewListenKey_afterWebSocketFailure() throws Exception {
         // POST inicial → listen key 1
         MOCK_SERVER.enqueue(listenKeyResponse("test-key-1"));
-        // WS inicial → cancela abruptamente, dispara onFailure no cliente
-        MOCK_SERVER.enqueue(wsUpgradeThenCancel());
-        // DELETE → revogar listen key 1 no início do reconnect (BinanceUserStreamAdapter.connect)
+        // WS inicial → resposta 500 garante onFailure no cliente (cancel() pode disparar onClosed)
+        MOCK_SERVER.enqueue(new MockResponse().setResponseCode(500));
+        // DELETE → revogar listen key 1 no início do reconnect
         MOCK_SERVER.enqueue(new MockResponse().setBody("{}").setHeader("Content-Type", "application/json"));
         // POST reconexão → listen key 2
         MOCK_SERVER.enqueue(listenKeyResponse("test-key-2"));
@@ -96,33 +95,36 @@ class BinanceListenKeyReconnectIntegrationTest {
 
         connectUserStreamPort.execute("BINANCE");
 
-        // ConnectionFailedHandler agenda reconnect com delay de 5s; aguarda CONNECTED
+        // Verifica a sequência de requisições usando takeRequest com timeouts generosos.
+        // A primeira falha (500) dispara reconnect com 5s de delay; os timeouts abaixo
+        // cobrem toda a sequência sem depender de polling de estado.
+        RecordedRequest req1 = MOCK_SERVER.takeRequest(10, TimeUnit.SECONDS);
+        assertNotNull(req1, "expected initial POST /api/v3/userDataStream");
+        assertEquals("POST", req1.getMethod());
+        assertEquals("/api/v3/userDataStream", req1.getPath());
+
+        RecordedRequest req2 = MOCK_SERVER.takeRequest(5, TimeUnit.SECONDS);
+        assertNotNull(req2, "expected initial WS upgrade request (returns 500)");
+
+        // ConnectionFailedHandler agenda reconnect com 5s de delay
+        RecordedRequest req3 = MOCK_SERVER.takeRequest(15, TimeUnit.SECONDS);
+        assertNotNull(req3, "expected DELETE to revoke listen key before reconnect");
+        assertEquals("DELETE", req3.getMethod());
+
+        RecordedRequest req4 = MOCK_SERVER.takeRequest(5, TimeUnit.SECONDS);
+        assertNotNull(req4, "expected POST for new listen key on reconnect");
+        assertEquals("POST", req4.getMethod());
+        assertEquals("/api/v3/userDataStream", req4.getPath());
+
+        // Após reconexão bem-sucedida, o status deve ser CONNECTED
         ConnectionKey userKey = ConnectionKey.userStream("BINANCE");
-        awaitCondition(Duration.ofSeconds(15), 500,
+        awaitCondition(Duration.ofSeconds(10), 200,
                 () -> {
                     var mgr = connectionRepository.getConnection(userKey);
                     return mgr != null ? mgr.getConnectionResult().status() : null;
                 },
                 s -> s == ConnectionStatus.CONNECTED,
                 "user data stream must reach CONNECTED after automatic reconnect");
-
-        // Verifica a sequência de requisições ao MockWebServer
-        RecordedRequest req1 = MOCK_SERVER.takeRequest(2, TimeUnit.SECONDS);
-        assertNotNull(req1, "expected initial POST /api/v3/userDataStream");
-        assertEquals("POST", req1.getMethod());
-        assertEquals("/api/v3/userDataStream", req1.getPath());
-
-        RecordedRequest req2 = MOCK_SERVER.takeRequest(2, TimeUnit.SECONDS); // WS upgrade inicial
-        assertNotNull(req2, "expected initial WS upgrade request");
-
-        RecordedRequest req3 = MOCK_SERVER.takeRequest(2, TimeUnit.SECONDS);
-        assertNotNull(req3, "expected DELETE to revoke listen key before reconnect");
-        assertEquals("DELETE", req3.getMethod());
-
-        RecordedRequest req4 = MOCK_SERVER.takeRequest(2, TimeUnit.SECONDS);
-        assertNotNull(req4, "expected POST for new listen key on reconnect");
-        assertEquals("POST", req4.getMethod());
-        assertEquals("/api/v3/userDataStream", req4.getPath());
     }
 
     // ─── suporte ─────────────────────────────────────────────────────────
@@ -131,16 +133,6 @@ class BinanceListenKeyReconnectIntegrationTest {
         return new MockResponse()
                 .setBody("{\"listenKey\":\"" + listenKey + "\"}")
                 .setHeader("Content-Type", "application/json");
-    }
-
-    private static MockResponse wsUpgradeThenCancel() {
-        return new MockResponse().withWebSocketUpgrade(new WebSocketListener() {
-            @Override
-            public void onOpen(WebSocket webSocket, Response response) {
-                // Encerra a conexão abruptamente → cliente recebe onFailure → WebSocketFailedEvent
-                webSocket.cancel();
-            }
-        });
     }
 
     private static MockResponse wsUpgradeAndKeepOpen() {
