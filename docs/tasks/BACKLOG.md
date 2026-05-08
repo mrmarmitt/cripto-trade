@@ -9,7 +9,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T1  | Transaction Recovery            | Alta         | Mateus      | Concluído     |
 | T2  | Configuração de perfil testnet  | Média        | Codex       | Concluído     |
 | T3  | HMAC-SHA256 Signing             | Alta         | Claude      | Concluído     |
-| T4  | User Data Stream                | Alta         | Claude      | Pendente      |
+| T4  | User Data Stream                | Alta         | Claude      | Concluído     |
 | T5  | REST API Binance                | Alta         | Claude      | Pendente      |
 | T6  | Exchange Symbol Filters         | Média        | Codex       | Pendente      |
 | T7  | Boot Readiness real             | Média        | Codex       | Pendente      |
