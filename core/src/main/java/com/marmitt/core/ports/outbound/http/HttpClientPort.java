@@ -5,7 +5,11 @@ import java.util.Map;
 
 public interface HttpClientPort {
 
+    HttpResponse get(String url, Map<String, String> headers) throws IOException;
+
     HttpResponse post(String url, Map<String, String> headers) throws IOException;
+
+    HttpResponse postForm(String url, Map<String, String> headers, String body) throws IOException;
 
     HttpResponse put(String url, Map<String, String> headers) throws IOException;
 

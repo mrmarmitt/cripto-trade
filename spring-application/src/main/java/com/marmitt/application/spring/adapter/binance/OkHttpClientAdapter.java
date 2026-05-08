@@ -21,10 +21,26 @@ public class OkHttpClientAdapter implements HttpClientPort {
     }
 
     @Override
+    public HttpResponse get(String url, Map<String, String> headers) throws IOException {
+        Request.Builder builder = new Request.Builder().url(url).get();
+        headers.forEach(builder::addHeader);
+        return execute(builder.build());
+    }
+
+    @Override
     public HttpResponse post(String url, Map<String, String> headers) throws IOException {
         Request.Builder builder = new Request.Builder()
                 .url(url)
                 .post(RequestBody.create("", EMPTY_BODY));
+        headers.forEach(builder::addHeader);
+        return execute(builder.build());
+    }
+
+    @Override
+    public HttpResponse postForm(String url, Map<String, String> headers, String body) throws IOException {
+        Request.Builder builder = new Request.Builder()
+                .url(url)
+                .post(RequestBody.create(body, EMPTY_BODY));
         headers.forEach(builder::addHeader);
         return execute(builder.build());
     }
