@@ -36,9 +36,9 @@ public class WebsocketController {
     }
 
     @PostMapping("/connect")
-    public ResponseEntity<WebSocketConnectionResponse> connect(
+    public ResponseEntity<Map<String, WebSocketConnectionResponse>> connect(
             @RequestBody WebSocketConnectRequest request) {
-        WebSocketConnectionResponse response = exchangeConnectionService.connect(request);
+        Map<String, WebSocketConnectionResponse> response = exchangeConnectionService.connect(request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
@@ -49,8 +49,8 @@ public class WebsocketController {
     }
 
     @GetMapping()
-    public ResponseEntity<WebSocketConnectionResponse> getConnectionResult(@RequestParam String exchange) {
-        WebSocketConnectionResponse response = webSocketQueryService.getStatus(exchange);
+    public ResponseEntity<Map<String, WebSocketConnectionResponse>> getConnectionResult(@RequestParam String exchange) {
+        Map<String, WebSocketConnectionResponse> response = webSocketQueryService.getStatus(exchange);
         return ResponseEntity.ok(response);
     }
 
@@ -61,8 +61,8 @@ public class WebsocketController {
     }
 
     @GetMapping("/stats")
-    public ResponseEntity<WebSocketStatsResponse> getConnectionStats(@RequestParam String exchange) {
-        WebSocketStatsResponse response = webSocketQueryService.getStats(exchange);
+    public ResponseEntity<Map<String, WebSocketStatsResponse>> getConnectionStats(@RequestParam String exchange) {
+        Map<String, WebSocketStatsResponse> response = webSocketQueryService.getStats(exchange);
         return ResponseEntity.ok(response);
     }
 

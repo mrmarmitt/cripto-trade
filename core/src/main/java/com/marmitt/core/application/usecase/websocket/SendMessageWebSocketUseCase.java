@@ -7,6 +7,7 @@ import com.marmitt.core.ports.inbound.websocket.SendMessageWebSocketPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
+import com.marmitt.core.dto.connection.ConnectionKey;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 
 import java.util.Optional;
@@ -24,7 +25,7 @@ public class SendMessageWebSocketUseCase implements SendMessageWebSocketPort {
 
     @Override
     public SendWebSocketResponse execute(MessageRequest request) {
-        WebSocketConnectionManager manager = connectionRepository.getConnection(request.getExchangeName());
+        WebSocketConnectionManager manager = connectionRepository.getConnection(ConnectionKey.market(request.getExchangeName()));
 
         Optional<ExchangeStreamingPort> streamingOptional = adapterRepository.findStreamingByName(request.getExchangeName());
         if (streamingOptional.isEmpty()) {

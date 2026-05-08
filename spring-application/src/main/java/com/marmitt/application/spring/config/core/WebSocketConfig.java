@@ -14,9 +14,15 @@ import org.springframework.context.annotation.Configuration;
 public class WebSocketConfig {
 
     @Bean
-    public ConnectWebSocketPort connectWebSocket(WebSocketConnectionRepositoryPort connectionRepository,
-                                                 ExchangeAdapterRepositoryPort adapterRepository) {
-        return new ConnectWebSocketUseCase(connectionRepository, adapterRepository);
+    public ConnectMarketStreamPort connectMarketStream(WebSocketConnectionRepositoryPort connectionRepository,
+                                                       ExchangeAdapterRepositoryPort adapterRepository) {
+        return new ConnectMarketStreamUseCase(connectionRepository, adapterRepository);
+    }
+
+    @Bean
+    public ConnectUserStreamPort connectUserStream(WebSocketConnectionRepositoryPort connectionRepository,
+                                                   ExchangeAdapterRepositoryPort adapterRepository) {
+        return new ConnectUserStreamUseCase(connectionRepository, adapterRepository);
     }
 
     @Bean

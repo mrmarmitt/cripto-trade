@@ -19,6 +19,11 @@ if (-not (Test-Path $gradleUserHome)) {
 
 $env:GRADLE_USER_HOME = $gradleUserHome
 
+$effectiveGradleArgs = @($GradleArgs)
+if (-not ($effectiveGradleArgs -contains "--daemon") -and -not ($effectiveGradleArgs -contains "--no-daemon")) {
+    $effectiveGradleArgs = @("--no-daemon") + $effectiveGradleArgs
+}
+
 $maxAttempts = 5
 $retryDelaySeconds = 5
 $lockPatterns = @(
@@ -35,7 +40,7 @@ for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
     $stderrFile = New-TemporaryFile
     $process = Start-Process `
         -FilePath $gradleWrapper `
-        -ArgumentList $GradleArgs `
+        -ArgumentList $effectiveGradleArgs `
         -NoNewWindow `
         -Wait `
         -PassThru `

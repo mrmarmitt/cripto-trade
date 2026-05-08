@@ -1,5 +1,6 @@
 package com.marmitt.core.application.handler;
 
+import com.marmitt.core.dto.connection.ConnectionKey;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
 import com.marmitt.core.dto.websocket.data.MarketDataDto;
@@ -42,7 +43,7 @@ public class ProcessMessageHandler implements HandlerProcessMessagePort {
             throw new IllegalArgumentException("Message context cannot be null");
         }
 
-        WebSocketConnectionManager manager = connectionRepository.getConnection(context.exchangeName());
+        WebSocketConnectionManager manager = connectionRepository.getConnection(ConnectionKey.market(context.exchangeName()));
         if (manager != null) {
             manager.onMessageReceived();
         }

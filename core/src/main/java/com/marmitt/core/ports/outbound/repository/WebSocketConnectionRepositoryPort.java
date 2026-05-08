@@ -1,5 +1,6 @@
 package com.marmitt.core.ports.outbound.repository;
 
+import com.marmitt.core.dto.connection.ConnectionKey;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 
 import java.util.Map;
@@ -7,13 +8,13 @@ import java.util.Set;
 
 public interface WebSocketConnectionRepositoryPort {
 
-    void registerConnection(String exchangeName);
+    void registerConnection(ConnectionKey key);
 
-    WebSocketConnectionManager getConnection(String exchangeName);
+    WebSocketConnectionManager getConnection(ConnectionKey key);
 
-    boolean hasConnection(String exchangeName);
+    boolean hasConnection(ConnectionKey key);
 
     Set<String> getAllExchangeNames();
 
-    Map<String, WebSocketConnectionManager> getAllConnections();
+    Map<ConnectionKey, WebSocketConnectionManager> getAllConnections();
 }

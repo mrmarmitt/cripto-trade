@@ -6,7 +6,7 @@ import java.util.Map;
 import java.util.Set;
 
 public interface ConnectStatusWebSocketPort {
-    WebSocketConnectionResponse getStatus(String exchange);
+    Map<String, WebSocketConnectionResponse> getStatus(String exchange);
     Map<String,WebSocketConnectionResponse> getAllStatus();
     boolean hasExchange(String exchange);
     Set<String> getAllExchangeNames();

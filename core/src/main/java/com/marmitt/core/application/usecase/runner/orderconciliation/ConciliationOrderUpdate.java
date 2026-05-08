@@ -61,7 +61,7 @@ public class ConciliationOrderUpdate {
         String clientOrderId = orderData.clientOrderId();
 
         if (!ClientOrderId.isValid(clientOrderId)) {
-            log.trace("orderConciliation: clientOrderId={} not in v1 format - skipping", clientOrderId);
+            log.warn("orderConciliation: clientOrderId={} not in v1 format - skipping", clientOrderId);
             return;
         }
 
@@ -70,7 +70,7 @@ public class ConciliationOrderUpdate {
                 .orElse(null);
 
         if (transaction == null) {
-            log.debug("orderConciliation: transaction not found for clientOrderId={} - skipping", clientOrderId);
+            log.warn("orderConciliation: transaction not found for clientOrderId={} - skipping", clientOrderId);
             return;
         }
 

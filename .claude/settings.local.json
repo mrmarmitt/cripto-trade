@@ -51,7 +51,8 @@
       "Bash(git fetch:*)",
       "Bash(git -C \"C:/Users/mrmar/Documents/projetos/cripto-trade\" status --short core/src/main/java/com/marmitt/core/application/listener/)",
       "Bash(git -C \"C:/Users/mrmar/Documents/projetos/cripto-trade\" status --short core/src/main/java/com/marmitt/core/application/)",
-      "Bash(gh pr:*)"
+      "Bash(gh pr:*)",
+      "Bash(git branch *)"
     ],
     "defaultMode": "acceptEdits"
   }

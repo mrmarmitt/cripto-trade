@@ -30,11 +30,11 @@ class BinanceTestnetProfileIntegrationTest {
     private ExchangeAdapterRepositoryPort exchangeAdapterRepository;
 
     @Autowired
-    private BinanceExchangeAdapter binanceExchangeAdapter;
+    private BinanceMarketStreamAdapter binanceMarketStreamAdapter;
 
     @Test
     void shouldUseTestnetUrlsWhenTestnetProfileIsActive() {
-        BinanceUrlBuilder urlBuilder = (BinanceUrlBuilder) binanceExchangeAdapter.getUrlBuilder();
+        BinanceUrlBuilder urlBuilder = (BinanceUrlBuilder) binanceMarketStreamAdapter.getUrlBuilder();
 
         assertThat(exchangeAdapterRepository.hasAdapter("BINANCE")).isTrue();
         assertThat(exchangeAdapterRepository.hasAdapter("MOCK")).isTrue();
