@@ -85,10 +85,21 @@ class BinanceRestAdapterIntegrationTest {
     }
 
     @Test
-    void queryOrderByClientOrderId_shouldReturnEmpty_whenOrderNotFound() throws Exception {
+    void queryOrderByClientOrderId_shouldReturnEmpty_whenHttp404() throws Exception {
         mockServer.enqueue(new MockResponse().setResponseCode(404).setBody("{\"code\":-2013,\"msg\":\"Order does not exist.\"}"));
 
         Optional<OrderDataDto> result = adapter.queryOrderByClientOrderId("BTCUSDT", "unknown-order");
+
+        assertFalse(result.isPresent());
+    }
+
+    @Test
+    void queryOrderByClientOrderId_shouldReturnEmpty_whenHttp400WithCode2013() throws Exception {
+        // Binance returns 400 + code -2013 for missing/archived orders in some scenarios
+        mockServer.enqueue(new MockResponse().setResponseCode(400)
+                .setBody("{\"code\":-2013,\"msg\":\"Order does not exist.\"}"));
+
+        Optional<OrderDataDto> result = adapter.queryOrderByClientOrderId("BTCUSDT", "archived-order");
 
         assertFalse(result.isPresent());
     }

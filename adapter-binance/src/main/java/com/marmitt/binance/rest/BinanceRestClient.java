@@ -96,6 +96,11 @@ public class BinanceRestClient {
             if (response.statusCode() == 404) {
                 return null;
             }
+            // Binance returns 400 with code -2013 for missing/archived orders
+            if (response.statusCode() == 400 && isBinanceOrderNotFound(response.body())) {
+                log.debug("Binance order not found (-2013) on GET {}", path);
+                return null;
+            }
             return handleResponse(response, "GET", path);
         } catch (ExchangeQueryException e) {
             throw e;
@@ -103,6 +108,11 @@ public class BinanceRestClient {
             throw new ExchangeQueryException(EXCHANGE_ID, ExchangeQueryException.ErrorType.TEMPORARY,
                     "Network error on GET " + path + ": " + e.getMessage(), e);
         }
+    }
+
+    private boolean isBinanceOrderNotFound(String body) {
+        // Fast path: check for the literal error code without JSON parsing
+        return body != null && body.contains("-2013");
     }
 
     private String handleResponse(HttpClientPort.HttpResponse response, String method, String path) {
