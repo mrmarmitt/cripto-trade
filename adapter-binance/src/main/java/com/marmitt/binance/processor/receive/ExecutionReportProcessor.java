@@ -103,7 +103,8 @@ class ExecutionReportProcessor implements BinanceEventProcessor<OrderDataDto> {
             case "FILLED"           -> OrderDataDto.OrderStatus.FILLED;
             case "CANCELED"         -> OrderDataDto.OrderStatus.CANCELED;
             case "REJECTED"         -> OrderDataDto.OrderStatus.REJECTED;
-            case "EXPIRED"          -> OrderDataDto.OrderStatus.EXPIRED;
+            case "EXPIRED",
+                 "EXPIRED_IN_MATCH" -> OrderDataDto.OrderStatus.EXPIRED;
             default                 -> throw new IllegalArgumentException("Unknown Binance order status: " + raw);
         };
     }
