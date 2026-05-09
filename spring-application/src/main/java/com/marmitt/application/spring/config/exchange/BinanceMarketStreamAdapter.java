@@ -112,7 +112,7 @@ public class BinanceMarketStreamAdapter implements
 
     private UnsupportedOperationException restNotImplemented() {
         return new UnsupportedOperationException(
-                "BINANCE REST capability is not implemented yet. Use streaming path for now."
+                "BINANCE REST not yet wired — pending use case implementation."
         );
     }
 }

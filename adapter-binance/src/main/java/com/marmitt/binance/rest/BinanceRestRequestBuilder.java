@@ -1,0 +1,110 @@
+package com.marmitt.binance.rest;
+
+import com.marmitt.binance.auth.BinanceRequestSigner;
+import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
+import com.marmitt.core.dto.websocket.request.SendOrderRequest;
+import com.marmitt.core.enums.OrderType;
+
+import java.math.BigDecimal;
+import java.util.LinkedHashMap;
+import java.util.Map;
+import java.util.StringJoiner;
+
+public class BinanceRestRequestBuilder {
+
+    private static final String ORDER_PATH       = "/api/v3/order";
+    private static final String OPEN_ORDERS_PATH = "/api/v3/openOrders";
+    private static final String ACCOUNT_PATH     = "/api/v3/account";
+
+    private final String restBaseUrl;
+    private final BinanceRequestSigner signer;
+
+    public BinanceRestRequestBuilder(String restBaseUrl, BinanceRequestSigner signer) {
+        this.restBaseUrl = restBaseUrl;
+        this.signer = signer;
+    }
+
+    public RestRequest buildQueryOrderByClientOrderId(String symbol, String clientOrderId) {
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("symbol", symbol);
+        params.put("origClientOrderId", clientOrderId);
+        return get(ORDER_PATH, params);
+    }
+
+    public RestRequest buildQueryOrderByExchangeOrderId(String symbol, String exchangeOrderId) {
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("symbol", symbol);
+        params.put("orderId", exchangeOrderId);
+        return get(ORDER_PATH, params);
+    }
+
+    public RestRequest buildSubmitOrder(SendOrderRequest request) {
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("symbol", request.getSymbol());
+        params.put("side", request.getOrderSide().name());
+        params.put("type", toRestOrderType(request.getOrderType()));
+        params.put("quantity", request.getQuantity().toPlainString());
+        params.put("newClientOrderId", request.getClientOrderId());
+        if (request.getPrice() != null && request.getPrice().compareTo(BigDecimal.ZERO) > 0) {
+            params.put("price", request.getPrice().toPlainString());
+            params.put("timeInForce", "GTC");
+        }
+        return post(ORDER_PATH, params);
+    }
+
+    public RestRequest buildCancelOrder(SendCancelOrderRequest request) {
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("symbol", request.getSymbol());
+        params.put("origClientOrderId", request.getClientOrderId());
+        return delete(ORDER_PATH, params);
+    }
+
+    public RestRequest buildListOpenOrdersBySymbol(String symbol) {
+        return get(OPEN_ORDERS_PATH, Map.of("symbol", symbol));
+    }
+
+    public RestRequest buildListAllOpenOrders() {
+        return get(OPEN_ORDERS_PATH, Map.of());
+    }
+
+    public RestRequest buildAccountSnapshot() {
+        return get(ACCOUNT_PATH, Map.of());
+    }
+
+    private RestRequest get(String path, Map<String, String> params) {
+        String query = buildSignedQuery(params);
+        return new RestRequest("GET", restBaseUrl + path + "?" + query, apiKeyHeader(), null);
+    }
+
+    private RestRequest post(String path, Map<String, String> params) {
+        String body = buildSignedQuery(params);
+        return new RestRequest("POST", restBaseUrl + path, apiKeyHeader(), body);
+    }
+
+    private RestRequest delete(String path, Map<String, String> params) {
+        String query = buildSignedQuery(params);
+        return new RestRequest("DELETE", restBaseUrl + path + "?" + query, apiKeyHeader(), null);
+    }
+
+    private String buildSignedQuery(Map<String, String> params) {
+        StringJoiner sj = new StringJoiner("&");
+        params.forEach((k, v) -> sj.add(k + "=" + v));
+        sj.add("timestamp=" + System.currentTimeMillis());
+        return signer.signQueryString(sj.toString());
+    }
+
+    private Map<String, String> apiKeyHeader() {
+        return Map.of("X-MBX-APIKEY", signer.getApiKey());
+    }
+
+    private String toRestOrderType(OrderType orderType) {
+        return switch (orderType) {
+            case MARKET            -> "MARKET";
+            case LIMIT             -> "LIMIT";
+            case STOP_LOSS         -> "STOP_LOSS";
+            case STOP_LOSS_LIMIT   -> "STOP_LOSS_LIMIT";
+            case TAKE_PROFIT       -> "TAKE_PROFIT";
+            case TAKE_PROFIT_LIMIT -> "TAKE_PROFIT_LIMIT";
+        };
+    }
+}
