@@ -1,6 +1,5 @@
 package com.marmitt.application.spring.config.exchange;
 
-import com.marmitt.binance.rest.BinanceRestAdapter;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
 import com.marmitt.core.dto.websocket.data.AccountDataDto;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
@@ -30,18 +29,15 @@ public class BinanceMarketStreamAdapter implements
     private final ReceivedMessageProcessorPort receivedMessageProcessor;
     private final SenderMessageProcessorPort senderMessageProcessor;
     private final ExchangeUrlBuilderPort urlBuilder;
-    private final BinanceRestAdapter restAdapter;
 
     public BinanceMarketStreamAdapter(WebSocketPort webSocketPort,
                                       ReceivedMessageProcessorPort receivedMessageProcessor,
                                       SenderMessageProcessorPort senderMessageProcessor,
-                                      ExchangeUrlBuilderPort urlBuilder,
-                                      BinanceRestAdapter restAdapter) {
+                                      ExchangeUrlBuilderPort urlBuilder) {
         this.webSocketPort = webSocketPort;
         this.receivedMessageProcessor = receivedMessageProcessor;
         this.senderMessageProcessor = senderMessageProcessor;
         this.urlBuilder = urlBuilder;
-        this.restAdapter = restAdapter;
     }
 
     @Override
@@ -76,41 +72,47 @@ public class BinanceMarketStreamAdapter implements
 
     @Override
     public OrderDataDto submitOrder(SendOrderRequest request) {
-        return restAdapter.submitOrder(request);
+        throw restNotImplemented();
     }
 
     @Override
     public OrderDataDto cancelOrder(SendCancelOrderRequest request) {
-        return restAdapter.cancelOrder(request);
+        throw restNotImplemented();
     }
 
     @Override
     public Optional<OrderDataDto> queryOrderByClientOrderId(String symbol, String clientOrderId) {
-        return restAdapter.queryOrderByClientOrderId(symbol, clientOrderId);
+        throw restNotImplemented();
     }
 
     @Override
     public Optional<OrderDataDto> queryOrderByExchangeOrderId(String symbol, String exchangeOrderId) {
-        return restAdapter.queryOrderByExchangeOrderId(symbol, exchangeOrderId);
+        throw restNotImplemented();
     }
 
     @Override
     public List<OrderDataDto> listOpenOrdersBySymbol(String symbol) {
-        return restAdapter.listOpenOrdersBySymbol(symbol);
+        throw restNotImplemented();
     }
 
     @Override
     public List<OrderDataDto> listAllOpenOrders() {
-        return restAdapter.listAllOpenOrders();
+        throw restNotImplemented();
     }
 
     @Override
     public AccountDataDto queryAccountSnapshot() {
-        return restAdapter.queryAccountSnapshot();
+        throw restNotImplemented();
     }
 
     @Override
     public ExchangeBootReadiness checkBootReadiness() {
         return ExchangeBootReadiness.ready("BINANCE", "Binance market stream adapter initialized.");
+    }
+
+    private UnsupportedOperationException restNotImplemented() {
+        return new UnsupportedOperationException(
+                "BINANCE REST not yet wired — pending use case implementation."
+        );
     }
 }

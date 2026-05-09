@@ -52,7 +52,12 @@
       "Bash(git -C \"C:/Users/mrmar/Documents/projetos/cripto-trade\" status --short core/src/main/java/com/marmitt/core/application/listener/)",
       "Bash(git -C \"C:/Users/mrmar/Documents/projetos/cripto-trade\" status --short core/src/main/java/com/marmitt/core/application/)",
       "Bash(gh pr:*)",
-      "Bash(git branch *)"
+      "Bash(git branch *)",
+      "Bash(cat)",
+      "PowerShell(gh api *)",
+      "Bash(Get-ChildItem *)",
+      "PowerShell(git add *)",
+      "PowerShell(git push *)"
     ],
     "defaultMode": "acceptEdits"
   }

@@ -11,7 +11,6 @@ import com.marmitt.binance.auth.BinanceRequestSigner;
 import com.marmitt.binance.processor.receive.BinanceReceivedMessageProcessor;
 import com.marmitt.binance.processor.receive.BinanceUserDataProcessor;
 import com.marmitt.binance.processor.send.BinanceSenderMessageProcessor;
-import com.marmitt.binance.rest.BinanceRestAdapter;
 import com.marmitt.binance.userdata.ListenKeyManager;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
@@ -48,19 +47,16 @@ public class BinanceAdapterConfiguration {
     public BinanceMarketStreamAdapter binanceMarketStreamAdapter(ObjectMapper objectMapper,
                                                                   EventPublisherPort eventPublisher,
                                                                   OkHttpClient binanceWebSocketClient,
-                                                                  OkHttpClient binanceRestClient,
                                                                   BinanceProperties properties) {
-        var config      = new BinanceEndpointConfig(properties.getWsBaseUrl(), properties.getRestBaseUrl());
+        var config     = new BinanceEndpointConfig(properties.getWsBaseUrl(), properties.getRestBaseUrl());
         var credentials = new BinanceCredentials(properties.getApiKey(), properties.getApiSecret());
-        var signer      = new BinanceRequestSigner(credentials);
-        var urlBuilder  = new BinanceUrlBuilder(config);
-        var sender      = new BinanceSenderMessageProcessor(objectMapper, signer, urlBuilder);
-        var receiver    = new BinanceReceivedMessageProcessor(objectMapper);
-        var ws          = new OkHttp3WebSocketAdapter(binanceWebSocketClient,
+        var signer     = new BinanceRequestSigner(credentials);
+        var urlBuilder = new BinanceUrlBuilder(config);
+        var sender     = new BinanceSenderMessageProcessor(objectMapper, signer, urlBuilder);
+        var receiver   = new BinanceReceivedMessageProcessor(objectMapper);
+        var ws         = new OkHttp3WebSocketAdapter(binanceWebSocketClient,
                 new OkHttp3ListenerConverter(eventPublisher, StreamChannel.MARKET));
-        var httpClient  = new OkHttpClientAdapter(binanceRestClient);
-        var restAdapter = new BinanceRestAdapter(config.getRestBaseUrl(), signer, httpClient, objectMapper);
-        return new BinanceMarketStreamAdapter(ws, receiver, sender, urlBuilder, restAdapter);
+        return new BinanceMarketStreamAdapter(ws, receiver, sender, urlBuilder);
     }
 
     @Bean
