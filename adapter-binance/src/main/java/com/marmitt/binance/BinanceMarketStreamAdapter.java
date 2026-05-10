@@ -1,4 +1,4 @@
-package com.marmitt.application.spring.config.exchange;
+package com.marmitt.binance;
 
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
 import com.marmitt.core.dto.websocket.data.AccountDataDto;

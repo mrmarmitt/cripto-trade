@@ -5,6 +5,7 @@ import com.marmitt.application.spring.adapter.OkHttp3ListenerConverter;
 import com.marmitt.application.spring.adapter.OkHttp3WebSocketAdapter;
 import com.marmitt.application.spring.adapter.binance.OkHttpClientAdapter;
 import com.marmitt.binance.BinanceApiConfig;
+import com.marmitt.binance.BinanceUserStreamAdapter;
 import com.marmitt.binance.auth.BinanceCredentials;
 import com.marmitt.binance.processor.receive.BinanceUserDataProcessor;
 import com.marmitt.binance.userdata.ListenKeyManager;

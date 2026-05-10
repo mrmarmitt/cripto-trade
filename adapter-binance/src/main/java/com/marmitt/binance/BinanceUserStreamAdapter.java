@@ -1,4 +1,4 @@
-package com.marmitt.application.spring.config.exchange;
+package com.marmitt.binance;
 
 import com.marmitt.binance.userdata.ListenKeyManager;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;

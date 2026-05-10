@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.application.spring.adapter.OkHttp3ListenerConverter;
 import com.marmitt.application.spring.adapter.OkHttp3WebSocketAdapter;
 import com.marmitt.binance.BinanceApiConfig;
+import com.marmitt.binance.BinanceMarketStreamAdapter;
 import com.marmitt.binance.BinanceUrlBuilder;
 import com.marmitt.binance.auth.BinanceCredentials;
 import com.marmitt.binance.auth.BinanceRequestSigner;

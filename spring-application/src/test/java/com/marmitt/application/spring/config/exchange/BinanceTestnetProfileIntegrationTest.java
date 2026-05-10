@@ -2,6 +2,7 @@ package com.marmitt.application.spring.config.exchange;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.application.spring.repository.InMemoryExchangeAdapterRepository;
+import com.marmitt.binance.BinanceMarketStreamAdapter;
 import com.marmitt.binance.BinanceUrlBuilder;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
