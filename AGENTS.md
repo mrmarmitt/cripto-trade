@@ -1,5 +1,23 @@
 # AGENTS.md
 
+## Diretriz Obrigatoria para Agentes
+
+Antes de qualquer implementacao, review, refactor ou sugestao arquitetural, consulte `/.ai/README.md`.
+
+O diretorio `/.ai` e a fonte canonica para:
+
+- fronteiras arquiteturais
+- padroes de implementacao
+- heuristicas de review
+- validacao minima
+- atualizacao de documentacao
+
+Leituras adicionais obrigatorias por contexto:
+
+- review: `/.ai/review.md`
+- mudanca de responsabilidade entre modulos: `/.ai/change-safety.md`
+- atualizacao de documentacao: `/.ai/docs.md`
+
 ## Objetivo
 
 Este repositorio utiliza o Codex principalmente como agente de implementacao e de review. Em tarefas de review, priorize correcao, limites arquiteturais, regressao e falta de validacao acima de comentarios apenas de estilo.

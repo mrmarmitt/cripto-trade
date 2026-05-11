@@ -1,5 +1,10 @@
-package com.marmitt.application.spring.config.exchange;
+package com.marmitt.binance;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.marmitt.binance.auth.BinanceCredentials;
+import com.marmitt.binance.auth.BinanceRequestSigner;
+import com.marmitt.binance.processor.receive.BinanceReceivedMessageProcessor;
+import com.marmitt.binance.processor.send.BinanceSenderMessageProcessor;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
 import com.marmitt.core.dto.websocket.data.AccountDataDto;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
@@ -31,13 +36,16 @@ public class BinanceMarketStreamAdapter implements
     private final ExchangeUrlBuilderPort urlBuilder;
 
     public BinanceMarketStreamAdapter(WebSocketPort webSocketPort,
-                                      ReceivedMessageProcessorPort receivedMessageProcessor,
-                                      SenderMessageProcessorPort senderMessageProcessor,
-                                      ExchangeUrlBuilderPort urlBuilder) {
-        this.webSocketPort = webSocketPort;
-        this.receivedMessageProcessor = receivedMessageProcessor;
-        this.senderMessageProcessor = senderMessageProcessor;
-        this.urlBuilder = urlBuilder;
+                                      ObjectMapper objectMapper,
+                                      BinanceConnectionConfig config) {
+        var apiConfig        = new BinanceApiConfig(config.wsBaseUrl(), config.restBaseUrl());
+        var credentials      = new BinanceCredentials(config.apiKey(), config.apiSecret());
+        var signer           = new BinanceRequestSigner(credentials);
+        var binanceUrlBuilder = new BinanceUrlBuilder(apiConfig);
+        this.urlBuilder               = binanceUrlBuilder;
+        this.senderMessageProcessor   = new BinanceSenderMessageProcessor(objectMapper, signer, binanceUrlBuilder);
+        this.receivedMessageProcessor = new BinanceReceivedMessageProcessor(objectMapper);
+        this.webSocketPort            = webSocketPort;
     }
 
     @Override

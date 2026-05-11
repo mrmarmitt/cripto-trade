@@ -9,9 +9,9 @@ import java.util.stream.Collectors;
 
 public class BinanceUrlBuilder implements ExchangeUrlBuilderPort {
 
-    private final BinanceEndpointConfig config;
+    private final BinanceApiConfig config;
 
-    public BinanceUrlBuilder(BinanceEndpointConfig config) {
+    public BinanceUrlBuilder(BinanceApiConfig config) {
         this.config = config;
     }
 
@@ -24,14 +24,14 @@ public class BinanceUrlBuilder implements ExchangeUrlBuilderPort {
 
         if (currencyPairs.size() == 1) {
             String streamName = buildStreamName(currencyPairs.getFirst());
-            return config.getWebSocketBaseUrl() + BinanceEndpointConfig.SINGLE_STREAM_PATH + "/" + streamName;
+            return config.getWebSocketBaseUrl() + BinanceApiConfig.SINGLE_STREAM_PATH + "/" + streamName;
         }
 
         String streamQuery = currencyPairs.stream()
                 .map(this::buildStreamName)
                 .collect(Collectors.joining("/"));
 
-        return config.getWebSocketBaseUrl() + BinanceEndpointConfig.COMBINED_STREAM_PATH + "?streams=" + streamQuery;
+        return config.getWebSocketBaseUrl() + BinanceApiConfig.COMBINED_STREAM_PATH + "?streams=" + streamQuery;
     }
 
     public String getWebSocketBaseUrl() {

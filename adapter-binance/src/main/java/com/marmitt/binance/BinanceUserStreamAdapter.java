@@ -1,8 +1,12 @@
-package com.marmitt.application.spring.config.exchange;
+package com.marmitt.binance;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.marmitt.binance.auth.BinanceCredentials;
+import com.marmitt.binance.processor.receive.BinanceUserDataProcessor;
 import com.marmitt.binance.userdata.ListenKeyManager;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
+import com.marmitt.core.ports.outbound.http.HttpClientPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 import lombok.extern.slf4j.Slf4j;
 
@@ -32,13 +36,14 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort {
     private ScheduledFuture<?> keepAliveTask;
 
     public BinanceUserStreamAdapter(WebSocketPort webSocketPort,
-                                    ReceivedMessageProcessorPort receivedMessageProcessor,
-                                    ListenKeyManager listenKeyManager,
-                                    String wsBaseUrl) {
-        this.webSocketPort = webSocketPort;
-        this.receivedMessageProcessor = receivedMessageProcessor;
-        this.listenKeyManager = listenKeyManager;
-        this.wsBaseUrl = wsBaseUrl;
+                                    HttpClientPort httpClient,
+                                    ObjectMapper objectMapper,
+                                    BinanceConnectionConfig config) {
+        var credentials = new BinanceCredentials(config.apiKey(), config.apiSecret());
+        this.webSocketPort            = webSocketPort;
+        this.receivedMessageProcessor = new BinanceUserDataProcessor(objectMapper);
+        this.listenKeyManager         = new ListenKeyManager(config.restBaseUrl(), credentials, httpClient, objectMapper);
+        this.wsBaseUrl                = config.wsBaseUrl();
     }
 
     @Override
