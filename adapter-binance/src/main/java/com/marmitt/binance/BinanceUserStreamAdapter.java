@@ -4,7 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.binance.auth.BinanceCredentials;
 import com.marmitt.binance.processor.receive.BinanceUserDataProcessor;
 import com.marmitt.binance.userdata.ListenKeyManager;
-import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
+import com.marmitt.core.dto.processing.ProcessingResult;
+import com.marmitt.core.dto.websocket.MessageContext;
+import com.marmitt.core.dto.websocket.data.ProcessorResponse;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
 import com.marmitt.core.ports.outbound.http.HttpClientPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
@@ -23,7 +25,7 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort {
     private static final long KEEPALIVE_INTERVAL_MINUTES = 30;
 
     private final WebSocketPort webSocketPort;
-    private final ReceivedMessageProcessorPort receivedMessageProcessor;
+    private final BinanceUserDataProcessor receivedMessageProcessor;
     private final ListenKeyManager listenKeyManager;
     private final String wsBaseUrl;
 
@@ -49,16 +51,6 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort {
     @Override
     public String getExchangeName() {
         return "BINANCE";
-    }
-
-    @Override
-    public WebSocketPort getWebSocketPort() {
-        return webSocketPort;
-    }
-
-    @Override
-    public ReceivedMessageProcessorPort getReceivedMessageProcessor() {
-        return receivedMessageProcessor;
     }
 
     @Override
@@ -91,5 +83,10 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort {
         listenKeyManager.revoke();
         webSocketPort.disconnect("BINANCE", connectionId);
         log.info("Binance user data stream disconnected");
+    }
+
+    @Override
+    public ProcessingResult<? extends ProcessorResponse> processMessage(String rawMessage, MessageContext context) {
+        return receivedMessageProcessor.processMessage(rawMessage, context);
     }
 }

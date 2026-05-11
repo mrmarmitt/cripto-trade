@@ -72,8 +72,7 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
                 .orElseThrow(() -> new IllegalStateException(
                         "No streaming capability found for exchangeId: " + exchangeId));
 
-        String json = streamingPort.getSenderMessageProcessor().execute(request);
-        streamingPort.getWebSocketPort().sendMessage(json);
+        streamingPort.sendMessage(request);
     }
 
     private SendOrderRequest toSendOrderRequest(OrderDispatchCommand command, String exchangeName) {

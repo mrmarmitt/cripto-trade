@@ -35,7 +35,8 @@ public class ConnectMarketStreamUseCase implements ConnectMarketStreamPort {
         }
 
         WebSocketConnectionManager manager = prepareMarketManager(exchangeName, parameters);
-        connectMarketStream(streamingOptional.get(), exchangeName, manager, parameters);
+        ExchangeStreamingPort streaming = streamingOptional.get();
+        streaming.connect(parameters, exchangeName, manager.getConnectionId());
 
         return ConnectionResultMapper.toResponse(manager.getConnectionResult(), exchangeName);
     }
@@ -53,11 +54,5 @@ public class ConnectMarketStreamUseCase implements ConnectMarketStreamPort {
         manager.addRequestToHistory(parameters);
 
         return manager;
-    }
-
-    private void connectMarketStream(ExchangeStreamingPort streaming, String exchangeName,
-                                     WebSocketConnectionManager manager, StreamSubscriptionRequest parameters) {
-        String connectionUrl = streaming.getUrlBuilder().buildConnectionUrl(parameters);
-        streaming.getWebSocketPort().connect(connectionUrl, exchangeName, manager.getConnectionId());
     }
 }

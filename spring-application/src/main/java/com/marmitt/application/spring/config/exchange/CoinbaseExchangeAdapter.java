@@ -12,6 +12,11 @@ import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
 import com.marmitt.core.enums.StreamChannel;
+import com.marmitt.core.dto.processing.ProcessingResult;
+import com.marmitt.core.dto.websocket.MessageContext;
+import com.marmitt.core.dto.websocket.data.ProcessorResponse;
+import com.marmitt.core.dto.websocket.request.MessageRequest;
+import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
@@ -22,6 +27,8 @@ import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
+
+import java.util.UUID;
 
 import java.util.List;
 import java.util.Optional;
@@ -65,23 +72,25 @@ public class CoinbaseExchangeAdapter implements
     }
 
     @Override
-    public WebSocketPort getWebSocketPort() {
-        return webSocketPort;
+    public void connect(StreamSubscriptionRequest parameters, String exchangeName, UUID connectionId) {
+        String url = urlBuilder.buildConnectionUrl(parameters);
+        webSocketPort.connect(url, exchangeName, connectionId);
     }
 
     @Override
-    public ReceivedMessageProcessorPort getReceivedMessageProcessor() {
-        return receivedMessageProcessor;
+    public void disconnect(String exchangeName, UUID connectionId) {
+        webSocketPort.disconnect(exchangeName, connectionId);
     }
 
     @Override
-    public SenderMessageProcessorPort getSenderMessageProcessor() {
-        return senderMessageProcessor;
+    public void sendMessage(MessageRequest request) {
+        String message = senderMessageProcessor.execute(request);
+        webSocketPort.sendMessage(message);
     }
 
     @Override
-    public ExchangeUrlBuilderPort getUrlBuilder() {
-        return urlBuilder;
+    public ProcessingResult<? extends ProcessorResponse> processMessage(String rawMessage, MessageContext context) {
+        return receivedMessageProcessor.processMessage(rawMessage, context);
     }
 
     @Override

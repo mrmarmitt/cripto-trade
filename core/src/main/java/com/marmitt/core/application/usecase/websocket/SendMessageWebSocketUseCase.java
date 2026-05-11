@@ -1,13 +1,12 @@
 package com.marmitt.core.application.usecase.websocket;
 
+import com.marmitt.core.dto.connection.ConnectionKey;
 import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.dto.websocket.response.SendWebSocketResponse;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.ports.inbound.websocket.SendMessageWebSocketPort;
-import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
-import com.marmitt.core.dto.connection.ConnectionKey;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 
 import java.util.Optional;
@@ -33,13 +32,8 @@ public class SendMessageWebSocketUseCase implements SendMessageWebSocketPort {
         }
 
         manager.addRequestToHistory(request);
-
-        ExchangeStreamingPort streaming = streamingOptional.get();
-        SenderMessageProcessorPort senderMessageProcessor = streaming.getSenderMessageProcessor();
-        String processedMessage = senderMessageProcessor.execute(request);
-        streaming.getWebSocketPort().sendMessage(processedMessage);
+        streamingOptional.get().sendMessage(request);
 
         return SendWebSocketResponse.success(request.getExchangeName());
     }
 }
-

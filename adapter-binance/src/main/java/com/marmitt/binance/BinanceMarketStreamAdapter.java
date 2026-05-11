@@ -6,13 +6,15 @@ import com.marmitt.binance.auth.BinanceRequestSigner;
 import com.marmitt.binance.processor.receive.BinanceReceivedMessageProcessor;
 import com.marmitt.binance.processor.send.BinanceSenderMessageProcessor;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
+import com.marmitt.core.dto.processing.ProcessingResult;
+import com.marmitt.core.dto.websocket.MessageContext;
 import com.marmitt.core.dto.websocket.data.AccountDataDto;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.dto.websocket.data.ProcessorResponse;
+import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
-import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
-import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
-import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
+import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
@@ -22,6 +24,7 @@ import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 public class BinanceMarketStreamAdapter implements
         ExchangeStreamingPort,
@@ -31,16 +34,16 @@ public class BinanceMarketStreamAdapter implements
         ExchangeBootReadinessPort {
 
     private final WebSocketPort webSocketPort;
-    private final ReceivedMessageProcessorPort receivedMessageProcessor;
-    private final SenderMessageProcessorPort senderMessageProcessor;
-    private final ExchangeUrlBuilderPort urlBuilder;
+    private final BinanceReceivedMessageProcessor receivedMessageProcessor;
+    private final BinanceSenderMessageProcessor senderMessageProcessor;
+    private final BinanceUrlBuilder urlBuilder;
 
     public BinanceMarketStreamAdapter(WebSocketPort webSocketPort,
                                       ObjectMapper objectMapper,
                                       BinanceConnectionConfig config) {
-        var apiConfig        = new BinanceApiConfig(config.wsBaseUrl(), config.restBaseUrl());
-        var credentials      = new BinanceCredentials(config.apiKey(), config.apiSecret());
-        var signer           = new BinanceRequestSigner(credentials);
+        var apiConfig         = new BinanceApiConfig(config.wsBaseUrl(), config.restBaseUrl());
+        var credentials       = new BinanceCredentials(config.apiKey(), config.apiSecret());
+        var signer            = new BinanceRequestSigner(credentials);
         var binanceUrlBuilder = new BinanceUrlBuilder(apiConfig);
         this.urlBuilder               = binanceUrlBuilder;
         this.senderMessageProcessor   = new BinanceSenderMessageProcessor(objectMapper, signer, binanceUrlBuilder);
@@ -59,23 +62,25 @@ public class BinanceMarketStreamAdapter implements
     }
 
     @Override
-    public WebSocketPort getWebSocketPort() {
-        return webSocketPort;
+    public void connect(StreamSubscriptionRequest parameters, String exchangeName, UUID connectionId) {
+        String url = urlBuilder.buildConnectionUrl(parameters);
+        webSocketPort.connect(url, exchangeName, connectionId);
     }
 
     @Override
-    public ReceivedMessageProcessorPort getReceivedMessageProcessor() {
-        return receivedMessageProcessor;
+    public void disconnect(String exchangeName, UUID connectionId) {
+        webSocketPort.disconnect(exchangeName, connectionId);
     }
 
     @Override
-    public SenderMessageProcessorPort getSenderMessageProcessor() {
-        return senderMessageProcessor;
+    public void sendMessage(MessageRequest request) {
+        String message = senderMessageProcessor.execute(request);
+        webSocketPort.sendMessage(message);
     }
 
     @Override
-    public ExchangeUrlBuilderPort getUrlBuilder() {
-        return urlBuilder;
+    public ProcessingResult<? extends ProcessorResponse> processMessage(String rawMessage, MessageContext context) {
+        return receivedMessageProcessor.processMessage(rawMessage, context);
     }
 
     @Override

@@ -3,11 +3,9 @@ package com.marmitt.core.application.handler.connection;
 import com.marmitt.core.dto.connection.ConnectionKey;
 import com.marmitt.core.dto.events.WebSocketConnectedEvent;
 import com.marmitt.core.dto.exchange.command.PostConnectionCommandResult;
-import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.inbound.websocket.PostConnectionEstablishedPort;
-import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
@@ -45,13 +43,10 @@ public class PostConnectionEstablishHandler implements PostConnectionEstablished
 
         ConnectionKey key = ConnectionKey.market(event.exchange());
         WebSocketConnectionManager manager = connectionRepository.getConnection(key);
-        SenderMessageProcessorPort senderMessageProcessor = streaming.getSenderMessageProcessor();
-        MessageRequest lastRequestHistory = manager.getLastRequestHistory();
 
         try {
-            String sentMessage = senderMessageProcessor.execute(lastRequestHistory);
-            streaming.getWebSocketPort().sendMessage(sentMessage);
-            return PostConnectionCommandResult.success(event.exchange(), "Post-connection message sent: " + sentMessage);
+            streaming.sendMessage(manager.getLastRequestHistory());
+            return PostConnectionCommandResult.success(event.exchange(), "Post-connection message sent.");
         } catch (Exception e) {
             log.error("Error during post-connection operations for exchange={}", event.exchange(), e);
             return PostConnectionCommandResult.failure(event.exchange(), e.getMessage());
