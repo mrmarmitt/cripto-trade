@@ -2,6 +2,24 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Mandatory Project Guidance
+
+Before any implementation, review, refactor, or architectural suggestion, consult `/.ai/README.md`.
+
+The `/.ai` directory is the canonical source for:
+
+- architecture boundaries
+- implementation standards
+- review heuristics
+- minimum validation workflow
+- documentation update rules
+
+Additional required guides by task type:
+
+- Review task: `/.ai/review.md`
+- Responsibility or module-boundary change: `/.ai/change-safety.md`
+- Documentation update: `/.ai/docs.md`
+
 ## Repository Overview
 
 This is a cryptocurrency trading application built with Spring Boot using hexagonal architecture. The project follows a modular design with clear separation between domain, application, and infrastructure layers.

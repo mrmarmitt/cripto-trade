@@ -30,14 +30,17 @@ public class BinanceMarketStreamConfiguration {
 
     @Bean
     public BinanceMarketStreamAdapter binanceMarketStreamAdapter(ObjectMapper objectMapper,
-                                                                  EventPublisherPort eventPublisher,
-                                                                  OkHttpClient binanceWebSocketClient,
-                                                                  BinanceProperties properties) {
-        var ws = new OkHttp3WebSocketAdapter(binanceWebSocketClient,
-                new OkHttp3ListenerConverter(eventPublisher, StreamChannel.MARKET));
-        var config = new BinanceConnectionConfig(
-                properties.getApiKey(), properties.getApiSecret(),
-                properties.getWsBaseUrl(), properties.getRestBaseUrl());
+                                                                 EventPublisherPort eventPublisher,
+                                                                 OkHttpClient binanceWebSocketClient,
+                                                                 BinanceProperties properties) {
+
+        OkHttp3ListenerConverter okHttp3ListenerConverter = new OkHttp3ListenerConverter(eventPublisher, StreamChannel.MARKET);
+        OkHttp3WebSocketAdapter ws = new OkHttp3WebSocketAdapter(binanceWebSocketClient, okHttp3ListenerConverter);
+        BinanceConnectionConfig config = new BinanceConnectionConfig(
+                properties.getApiKey(),
+                properties.getApiSecret(),
+                properties.getWsBaseUrl(),
+                properties.getRestBaseUrl());
         return new BinanceMarketStreamAdapter(ws, objectMapper, config);
     }
 }

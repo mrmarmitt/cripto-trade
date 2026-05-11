@@ -1,5 +1,19 @@
 # CTrace - Cryptocurrency Trading Application
 
+## Praticas de Desenvolvimento para Agentes
+
+As praticas de desenvolvimento e review do projeto estao centralizadas no diretorio `/.ai`.
+
+Arquivos principais:
+
+- `/.ai/README.md`: guia principal e ordem de leitura
+- `/.ai/architecture.md`: fronteiras e responsabilidades por modulo
+- `/.ai/coding-standards.md`: padroes de implementacao
+- `/.ai/review.md`: heuristicas de review
+- `/.ai/validation.md`: comandos e estrategia de validacao
+
+Os arquivos `AGENTS.md` e `CLAUDE.md` devem apontar para `/.ai` como fonte canonica dessas regras.
+
 Sistema modular de trading com arquitetura hexagonal para conexão WebSocket com múltiplas exchanges.
 
 ## Tecnologias
