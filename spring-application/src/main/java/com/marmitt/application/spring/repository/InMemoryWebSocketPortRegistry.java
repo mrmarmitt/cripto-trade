@@ -1,0 +1,25 @@
+package com.marmitt.application.spring.repository;
+
+import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
+import org.springframework.stereotype.Repository;
+
+import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+
+@Repository
+public class InMemoryWebSocketPortRegistry implements WebSocketPortRegistryPort {
+
+    private final Map<String, WebSocketPort> ports = new ConcurrentHashMap<>();
+
+    @Override
+    public void register(String exchangeName, WebSocketPort port) {
+        ports.put(exchangeName.toUpperCase(), port);
+    }
+
+    @Override
+    public Optional<WebSocketPort> findByExchangeName(String exchangeName) {
+        return Optional.ofNullable(ports.get(exchangeName.toUpperCase()));
+    }
+}

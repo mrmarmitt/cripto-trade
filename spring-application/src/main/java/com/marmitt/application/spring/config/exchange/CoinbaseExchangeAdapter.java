@@ -1,8 +1,6 @@
 package com.marmitt.application.spring.config.exchange;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.marmitt.application.spring.adapter.OkHttp3ListenerConverter;
-import com.marmitt.application.spring.adapter.OkHttp3WebSocketAdapter;
 import com.marmitt.coinbase.CoinbaseUrlBuilder;
 import com.marmitt.coinbase.processor.receive.CoinbaseReceivedMessageProcessor;
 import com.marmitt.coinbase.processor.send.CoinbaseSenderMessageProcessor;
@@ -11,9 +9,11 @@ import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
-import com.marmitt.core.enums.StreamChannel;
-import com.marmitt.core.ports.outbound.events.EventPublisherPort;
-import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
+import com.marmitt.core.dto.processing.ProcessingResult;
+import com.marmitt.core.dto.websocket.MessageContext;
+import com.marmitt.core.dto.websocket.data.ProcessorResponse;
+import com.marmitt.core.dto.websocket.request.MessageRequest;
+import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
@@ -21,7 +21,6 @@ import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
-import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 
 import java.util.List;
 import java.util.Optional;
@@ -42,13 +41,11 @@ public class CoinbaseExchangeAdapter implements
         ExchangeAccountQueryPort,
         ExchangeBootReadinessPort {
 
-    private final WebSocketPort webSocketPort;
     private final ReceivedMessageProcessorPort receivedMessageProcessor;
     private final SenderMessageProcessorPort senderMessageProcessor;
-    private final ExchangeUrlBuilderPort urlBuilder;
+    private final CoinbaseUrlBuilder urlBuilder;
 
-    public CoinbaseExchangeAdapter(ObjectMapper objectMapper, EventPublisherPort eventPublisher) {
-        this.webSocketPort = new OkHttp3WebSocketAdapter(new OkHttp3ListenerConverter(eventPublisher, StreamChannel.MARKET));
+    public CoinbaseExchangeAdapter(ObjectMapper objectMapper) {
         this.receivedMessageProcessor = new CoinbaseReceivedMessageProcessor(objectMapper);
         this.senderMessageProcessor = new CoinbaseSenderMessageProcessor(objectMapper);
         this.urlBuilder = new CoinbaseUrlBuilder();
@@ -65,23 +62,18 @@ public class CoinbaseExchangeAdapter implements
     }
 
     @Override
-    public WebSocketPort getWebSocketPort() {
-        return webSocketPort;
+    public String buildConnectionUrl(StreamSubscriptionRequest parameters, String exchangeName) {
+        return urlBuilder.buildConnectionUrl(parameters);
     }
 
     @Override
-    public ReceivedMessageProcessorPort getReceivedMessageProcessor() {
-        return receivedMessageProcessor;
+    public String formatMessage(MessageRequest request) {
+        return senderMessageProcessor.execute(request);
     }
 
     @Override
-    public SenderMessageProcessorPort getSenderMessageProcessor() {
-        return senderMessageProcessor;
-    }
-
-    @Override
-    public ExchangeUrlBuilderPort getUrlBuilder() {
-        return urlBuilder;
+    public ProcessingResult<? extends ProcessorResponse> processMessage(String rawMessage, MessageContext context) {
+        return receivedMessageProcessor.processMessage(rawMessage, context);
     }
 
     @Override
@@ -121,9 +113,6 @@ public class CoinbaseExchangeAdapter implements
 
     @Override
     public ExchangeBootReadiness checkBootReadiness() {
-        if (webSocketPort == null || receivedMessageProcessor == null || senderMessageProcessor == null || urlBuilder == null) {
-            return ExchangeBootReadiness.notReady("COINBASE", "MISSING_COMPONENT", "Coinbase adapter components are not initialized.");
-        }
         return ExchangeBootReadiness.ready("COINBASE", "Coinbase adapter initialized for streaming.");
     }
 

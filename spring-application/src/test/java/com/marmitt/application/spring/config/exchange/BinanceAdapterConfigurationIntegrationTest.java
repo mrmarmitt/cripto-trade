@@ -2,6 +2,7 @@ package com.marmitt.application.spring.config.exchange;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.application.spring.repository.InMemoryExchangeAdapterRepository;
+import com.marmitt.application.spring.repository.InMemoryWebSocketPortRegistry;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import org.junit.jupiter.api.Test;
@@ -75,6 +76,7 @@ class BinanceAdapterConfigurationIntegrationTest {
     @SpringBootConfiguration
     @Import({
             InMemoryExchangeAdapterRepository.class,
+            InMemoryWebSocketPortRegistry.class,
             MockAdapterConfiguration.class,
             CoinbaseAdapterConfiguration.class,
             BinanceMarketStreamConfiguration.class,

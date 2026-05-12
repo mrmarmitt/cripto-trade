@@ -353,10 +353,11 @@ class UserDataStreamConciliationIntegrationTest {
             BinanceUserDataProcessor processor = new BinanceUserDataProcessor(objectMapper);
             return new ExchangeUserStreamPort() {
                 @Override public String getExchangeName() { return "MOCK"; }
-                @Override public WebSocketPort getWebSocketPort() { return null; }
-                @Override public ReceivedMessageProcessorPort getReceivedMessageProcessor() { return processor; }
                 @Override public void connect(UUID connectionId) {}
                 @Override public void disconnect(UUID connectionId) {}
+                @Override public com.marmitt.core.dto.processing.ProcessingResult<? extends com.marmitt.core.dto.websocket.data.ProcessorResponse> processMessage(String rawMessage, MessageContext context) {
+                    return processor.processMessage(rawMessage, context);
+                }
             };
         }
     }

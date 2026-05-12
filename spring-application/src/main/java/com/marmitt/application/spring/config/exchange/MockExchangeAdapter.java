@@ -8,8 +8,11 @@ import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
 import com.marmitt.core.exceptions.ExchangeQueryException.ErrorType;
+import com.marmitt.core.dto.processing.ProcessingResult;
+import com.marmitt.core.dto.websocket.MessageContext;
+import com.marmitt.core.dto.websocket.data.ProcessorResponse;
+import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
-import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
@@ -17,8 +20,6 @@ import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
-import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
-import com.marmitt.mock.adapter.LocalEventWebSocketAdapter;
 import com.marmitt.mock.config.MockBootReadinessConfig;
 import com.marmitt.mock.config.MockOrderScenarioOverride;
 import com.marmitt.mock.config.MockMarketDataFeedConfig;
@@ -47,15 +48,12 @@ public class MockExchangeAdapter implements ExchangeStreamingPort,
         ExchangeAccountQueryPort,
         ExchangeBootReadinessPort {
 
-    private final WebSocketPort webSocketPort;
     private final ReceivedMessageProcessorPort receivedMessageProcessor;
     private final SenderMessageProcessorPort senderMessageProcessor;
-    private final ExchangeUrlBuilderPort urlBuilder;
     private final MockExchangeRuntime runtime;
     private final MockBootReadinessConfig bootReadinessConfig;
 
     public MockExchangeAdapter(ObjectMapper objectMapper, EventPublisherPort eventPublisher) {
-        this.webSocketPort = new LocalEventWebSocketAdapter(eventPublisher);
         this.receivedMessageProcessor = new MockReceivedMessageProcessor(objectMapper);
 
         MockOrderExecutionSimulator simulator = new MockOrderExecutionSimulator();
@@ -76,7 +74,6 @@ public class MockExchangeAdapter implements ExchangeStreamingPort,
                 feedEngine
         );
         this.senderMessageProcessor = new MockSenderMessageProcessor(runtime);
-        this.urlBuilder = new NoOpUrlBuilder();
     }
 
     @Override
@@ -90,23 +87,18 @@ public class MockExchangeAdapter implements ExchangeStreamingPort,
     }
 
     @Override
-    public WebSocketPort getWebSocketPort() {
-        return webSocketPort;
+    public String buildConnectionUrl(StreamSubscriptionRequest parameters, String exchangeName) {
+        return "mock://localhost";
     }
 
     @Override
-    public ReceivedMessageProcessorPort getReceivedMessageProcessor() {
-        return receivedMessageProcessor;
+    public String formatMessage(MessageRequest request) {
+        return senderMessageProcessor.execute(request);
     }
 
     @Override
-    public SenderMessageProcessorPort getSenderMessageProcessor() {
-        return senderMessageProcessor;
-    }
-
-    @Override
-    public ExchangeUrlBuilderPort getUrlBuilder() {
-        return urlBuilder;
+    public ProcessingResult<? extends ProcessorResponse> processMessage(String rawMessage, MessageContext context) {
+        return receivedMessageProcessor.processMessage(rawMessage, context);
     }
 
     @Override
@@ -210,13 +202,6 @@ public class MockExchangeAdapter implements ExchangeStreamingPort,
             Thread.sleep(delayMs);
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-        }
-    }
-
-    private static class NoOpUrlBuilder implements ExchangeUrlBuilderPort {
-        @Override
-        public String buildConnectionUrl(StreamSubscriptionRequest parameters) {
-            return "mock://localhost";
         }
     }
 }

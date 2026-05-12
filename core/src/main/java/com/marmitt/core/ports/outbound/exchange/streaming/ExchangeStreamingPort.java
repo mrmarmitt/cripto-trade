@@ -1,27 +1,20 @@
 package com.marmitt.core.ports.outbound.exchange.streaming;
 
-import com.marmitt.core.ports.outbound.exchange.adapter.ExchangeUrlBuilderPort;
-import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
-import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
-import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
+import com.marmitt.core.dto.processing.ProcessingResult;
+import com.marmitt.core.dto.websocket.MessageContext;
+import com.marmitt.core.dto.websocket.data.ProcessorResponse;
+import com.marmitt.core.dto.websocket.request.MessageRequest;
+import com.marmitt.core.dto.websocket.request.StreamSubscriptionRequest;
 
-/**
- * Capacidade de streaming de mercado/ordens via WebSocket.
- *
- * <p>Esta porta concentra apenas contratos de conectividade e serializacao
- * ligados ao canal streaming.
- */
 public interface ExchangeStreamingPort {
 
     String getExchangeName();
 
     boolean requiresPostConnection();
 
-    WebSocketPort getWebSocketPort();
+    String buildConnectionUrl(StreamSubscriptionRequest parameters, String exchangeName);
 
-    ReceivedMessageProcessorPort getReceivedMessageProcessor();
+    String formatMessage(MessageRequest request);
 
-    SenderMessageProcessorPort getSenderMessageProcessor();
-
-    ExchangeUrlBuilderPort getUrlBuilder();
+    ProcessingResult<? extends ProcessorResponse> processMessage(String rawMessage, MessageContext context);
 }

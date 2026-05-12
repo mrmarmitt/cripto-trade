@@ -8,7 +8,6 @@ import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.websocket.data.ProcessorResponse;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.ports.inbound.handler.HandlerProcessMessagePort;
-import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
 import com.marmitt.core.ports.outbound.listener.PriceUpdateListener;
@@ -56,14 +55,8 @@ public class ProcessMessageHandler implements HandlerProcessMessagePort {
                         "Exchange does not exist. ExchangeName: " + context.exchangeName());
             }
 
-            ReceivedMessageProcessorPort messageProcessor = streamingOptional.get().getReceivedMessageProcessor();
-            if (messageProcessor == null) {
-                return ProcessingResult.error(context.correlationId().toString(),
-                        "No processor found for exchange: " + context.exchangeName());
-            }
-
             ProcessingResult<? extends ProcessorResponse> result =
-                    messageProcessor.processMessage(rawMessage, context);
+                    streamingOptional.get().processMessage(rawMessage, context);
 
             if (isMessageProcessable(result)) {
                 result.getData().ifPresent(this::notifyListeners);
@@ -132,4 +125,3 @@ public class ProcessMessageHandler implements HandlerProcessMessagePort {
         }
     }
 }
-

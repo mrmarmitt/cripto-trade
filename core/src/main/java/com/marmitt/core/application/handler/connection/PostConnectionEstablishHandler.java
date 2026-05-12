@@ -3,14 +3,14 @@ package com.marmitt.core.application.handler.connection;
 import com.marmitt.core.dto.connection.ConnectionKey;
 import com.marmitt.core.dto.events.WebSocketConnectedEvent;
 import com.marmitt.core.dto.exchange.command.PostConnectionCommandResult;
-import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.inbound.websocket.PostConnectionEstablishedPort;
-import com.marmitt.core.ports.outbound.exchange.adapter.SenderMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Optional;
@@ -20,11 +20,14 @@ public class PostConnectionEstablishHandler implements PostConnectionEstablished
 
     private final WebSocketConnectionRepositoryPort connectionRepository;
     private final ExchangeAdapterRepositoryPort adapterRepository;
+    private final WebSocketPortRegistryPort webSocketRegistry;
 
     public PostConnectionEstablishHandler(WebSocketConnectionRepositoryPort connectionRepository,
-                                          ExchangeAdapterRepositoryPort adapterRepository) {
+                                          ExchangeAdapterRepositoryPort adapterRepository,
+                                          WebSocketPortRegistryPort webSocketRegistry) {
         this.connectionRepository = connectionRepository;
         this.adapterRepository = adapterRepository;
+        this.webSocketRegistry = webSocketRegistry;
     }
 
     @Override
@@ -45,13 +48,13 @@ public class PostConnectionEstablishHandler implements PostConnectionEstablished
 
         ConnectionKey key = ConnectionKey.market(event.exchange());
         WebSocketConnectionManager manager = connectionRepository.getConnection(key);
-        SenderMessageProcessorPort senderMessageProcessor = streaming.getSenderMessageProcessor();
-        MessageRequest lastRequestHistory = manager.getLastRequestHistory();
 
         try {
-            String sentMessage = senderMessageProcessor.execute(lastRequestHistory);
-            streaming.getWebSocketPort().sendMessage(sentMessage);
-            return PostConnectionCommandResult.success(event.exchange(), "Post-connection message sent: " + sentMessage);
+            String message = streaming.formatMessage(manager.getLastRequestHistory());
+            WebSocketPort webSocket = webSocketRegistry.findByExchangeName(event.exchange())
+                    .orElseThrow(() -> new IllegalStateException("No WebSocket registered for exchange: " + event.exchange()));
+            webSocket.sendMessage(message);
+            return PostConnectionCommandResult.success(event.exchange(), "Post-connection message sent.");
         } catch (Exception e) {
             log.error("Error during post-connection operations for exchange={}", event.exchange(), e);
             return PostConnectionCommandResult.failure(event.exchange(), e.getMessage());

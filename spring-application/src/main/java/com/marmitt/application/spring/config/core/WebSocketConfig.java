@@ -7,6 +7,7 @@ import com.marmitt.core.ports.inbound.websocket.*;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -15,8 +16,9 @@ public class WebSocketConfig {
 
     @Bean
     public ConnectMarketStreamPort connectMarketStream(WebSocketConnectionRepositoryPort connectionRepository,
-                                                       ExchangeAdapterRepositoryPort adapterRepository) {
-        return new ConnectMarketStreamUseCase(connectionRepository, adapterRepository);
+                                                       ExchangeAdapterRepositoryPort adapterRepository,
+                                                       WebSocketPortRegistryPort webSocketRegistry) {
+        return new ConnectMarketStreamUseCase(connectionRepository, adapterRepository, webSocketRegistry);
     }
 
     @Bean
@@ -27,14 +29,16 @@ public class WebSocketConfig {
 
     @Bean
     public DisconnectWebSocketPort disconnectWebSocket(WebSocketConnectionRepositoryPort connectionRepository,
-                                                       ExchangeAdapterRepositoryPort adapterRepository) {
-        return new DisconnectWebSocketUseCase(connectionRepository, adapterRepository);
+                                                       ExchangeAdapterRepositoryPort adapterRepository,
+                                                       WebSocketPortRegistryPort webSocketRegistry) {
+        return new DisconnectWebSocketUseCase(connectionRepository, adapterRepository, webSocketRegistry);
     }
 
     @Bean
     public SendMessageWebSocketPort sendMessageWebSocket(WebSocketConnectionRepositoryPort connectionRepository,
-                                                         ExchangeAdapterRepositoryPort adapterRepository){
-        return new SendMessageWebSocketUseCase(connectionRepository, adapterRepository);
+                                                         ExchangeAdapterRepositoryPort adapterRepository,
+                                                         WebSocketPortRegistryPort webSocketRegistry) {
+        return new SendMessageWebSocketUseCase(connectionRepository, adapterRepository, webSocketRegistry);
     }
     
     @Bean

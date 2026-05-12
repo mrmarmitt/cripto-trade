@@ -11,6 +11,8 @@ import com.marmitt.core.ports.inbound.websocket.ConnectMarketStreamPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
 
 import java.util.Optional;
 
@@ -18,11 +20,14 @@ public class ConnectMarketStreamUseCase implements ConnectMarketStreamPort {
 
     private final WebSocketConnectionRepositoryPort connectionRepository;
     private final ExchangeAdapterRepositoryPort adapterRepository;
+    private final WebSocketPortRegistryPort webSocketRegistry;
 
     public ConnectMarketStreamUseCase(WebSocketConnectionRepositoryPort connectionRepository,
-                                      ExchangeAdapterRepositoryPort adapterRepository) {
+                                      ExchangeAdapterRepositoryPort adapterRepository,
+                                      WebSocketPortRegistryPort webSocketRegistry) {
         this.connectionRepository = connectionRepository;
         this.adapterRepository = adapterRepository;
+        this.webSocketRegistry = webSocketRegistry;
     }
 
     @Override
@@ -35,7 +40,11 @@ public class ConnectMarketStreamUseCase implements ConnectMarketStreamPort {
         }
 
         WebSocketConnectionManager manager = prepareMarketManager(exchangeName, parameters);
-        connectMarketStream(streamingOptional.get(), exchangeName, manager, parameters);
+        ExchangeStreamingPort streaming = streamingOptional.get();
+        String url = streaming.buildConnectionUrl(parameters, exchangeName);
+        WebSocketPort webSocket = webSocketRegistry.findByExchangeName(exchangeName)
+                .orElseThrow(() -> new IllegalStateException("No WebSocket registered for exchange: " + exchangeName));
+        webSocket.connect(url, exchangeName, manager.getConnectionId());
 
         return ConnectionResultMapper.toResponse(manager.getConnectionResult(), exchangeName);
     }
@@ -53,11 +62,5 @@ public class ConnectMarketStreamUseCase implements ConnectMarketStreamPort {
         manager.addRequestToHistory(parameters);
 
         return manager;
-    }
-
-    private void connectMarketStream(ExchangeStreamingPort streaming, String exchangeName,
-                                     WebSocketConnectionManager manager, StreamSubscriptionRequest parameters) {
-        String connectionUrl = streaming.getUrlBuilder().buildConnectionUrl(parameters);
-        streaming.getWebSocketPort().connect(connectionUrl, exchangeName, manager.getConnectionId());
     }
 }

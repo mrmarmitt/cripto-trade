@@ -11,6 +11,8 @@ import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -20,11 +22,14 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
 
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
     private final OrderConciliationPort orderConciliation;
+    private final WebSocketPortRegistryPort webSocketRegistry;
 
     public OrderDispatchAdapter(ExchangeAdapterRepositoryPort exchangeAdapterRepository,
-                                OrderConciliationPort orderConciliation) {
+                                OrderConciliationPort orderConciliation,
+                                WebSocketPortRegistryPort webSocketRegistry) {
         this.exchangeAdapterRepository = exchangeAdapterRepository;
         this.orderConciliation = orderConciliation;
+        this.webSocketRegistry = webSocketRegistry;
     }
 
     @Override
@@ -72,8 +77,11 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
                 .orElseThrow(() -> new IllegalStateException(
                         "No streaming capability found for exchangeId: " + exchangeId));
 
-        String json = streamingPort.getSenderMessageProcessor().execute(request);
-        streamingPort.getWebSocketPort().sendMessage(json);
+        String message = streamingPort.formatMessage(request);
+        WebSocketPort webSocket = webSocketRegistry.findByExchangeName(exchangeId)
+                .orElseThrow(() -> new IllegalStateException(
+                        "No WebSocket registered for exchangeId: " + exchangeId));
+        webSocket.sendMessage(message);
     }
 
     private SendOrderRequest toSendOrderRequest(OrderDispatchCommand command, String exchangeName) {

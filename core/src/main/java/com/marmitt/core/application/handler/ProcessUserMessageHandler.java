@@ -7,7 +7,6 @@ import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.websocket.data.ProcessorResponse;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.ports.inbound.handler.HandlerProcessUserMessagePort;
-import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
@@ -54,8 +53,7 @@ public class ProcessUserMessageHandler implements HandlerProcessUserMessagePort 
                         "No user stream adapter found for exchange: " + context.exchangeName());
             }
 
-            ReceivedMessageProcessorPort processor = userStream.getReceivedMessageProcessor();
-            ProcessingResult<? extends ProcessorResponse> result = processor.processMessage(rawMessage, context);
+            ProcessingResult<? extends ProcessorResponse> result = userStream.processMessage(rawMessage, context);
 
             if (isProcessable(result)) {
                 result.getData().ifPresent(this::notifyOrderUpdate);
