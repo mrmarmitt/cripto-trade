@@ -10,6 +10,7 @@ import com.marmitt.core.ports.inbound.websocket.PostConnectionEstablishedPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -37,8 +38,9 @@ public class HandleConnectionConfig {
 
     @Bean
     public PostConnectionEstablishedPort handlePostConnectionEstablished(WebSocketConnectionRepositoryPort connectionManager,
-                                                                         ExchangeAdapterRepositoryPort adapterRepository) {
-        return new PostConnectionEstablishHandler(connectionManager, adapterRepository);
+                                                                         ExchangeAdapterRepositoryPort adapterRepository,
+                                                                         WebSocketPortRegistryPort webSocketRegistry) {
+        return new PostConnectionEstablishHandler(connectionManager, adapterRepository, webSocketRegistry);
     }
 
     @Bean

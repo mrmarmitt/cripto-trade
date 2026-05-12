@@ -7,6 +7,7 @@ import com.marmitt.binance.BinanceConnectionConfig;
 import com.marmitt.binance.BinanceMarketStreamAdapter;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
 import okhttp3.OkHttpClient;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -29,18 +30,23 @@ public class BinanceMarketStreamConfiguration {
     }
 
     @Bean
-    public BinanceMarketStreamAdapter binanceMarketStreamAdapter(ObjectMapper objectMapper,
-                                                                 EventPublisherPort eventPublisher,
-                                                                 OkHttpClient binanceWebSocketClient,
-                                                                 BinanceProperties properties) {
+    public OkHttp3WebSocketAdapter binanceMarketWebSocketPort(OkHttpClient binanceWebSocketClient,
+                                                               EventPublisherPort eventPublisher,
+                                                               WebSocketPortRegistryPort webSocketRegistry) {
+        OkHttp3WebSocketAdapter ws = new OkHttp3WebSocketAdapter(binanceWebSocketClient,
+                new OkHttp3ListenerConverter(eventPublisher, StreamChannel.MARKET));
+        webSocketRegistry.register("BINANCE", ws);
+        return ws;
+    }
 
-        OkHttp3ListenerConverter okHttp3ListenerConverter = new OkHttp3ListenerConverter(eventPublisher, StreamChannel.MARKET);
-        OkHttp3WebSocketAdapter ws = new OkHttp3WebSocketAdapter(binanceWebSocketClient, okHttp3ListenerConverter);
+    @Bean
+    public BinanceMarketStreamAdapter binanceMarketStreamAdapter(ObjectMapper objectMapper,
+                                                                 BinanceProperties properties) {
         BinanceConnectionConfig config = new BinanceConnectionConfig(
                 properties.getApiKey(),
                 properties.getApiSecret(),
                 properties.getWsBaseUrl(),
                 properties.getRestBaseUrl());
-        return new BinanceMarketStreamAdapter(ws, objectMapper, config);
+        return new BinanceMarketStreamAdapter(objectMapper, config);
     }
 }

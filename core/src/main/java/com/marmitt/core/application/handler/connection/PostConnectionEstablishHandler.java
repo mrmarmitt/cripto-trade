@@ -9,6 +9,8 @@ import com.marmitt.core.ports.inbound.websocket.PostConnectionEstablishedPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Optional;
@@ -18,11 +20,14 @@ public class PostConnectionEstablishHandler implements PostConnectionEstablished
 
     private final WebSocketConnectionRepositoryPort connectionRepository;
     private final ExchangeAdapterRepositoryPort adapterRepository;
+    private final WebSocketPortRegistryPort webSocketRegistry;
 
     public PostConnectionEstablishHandler(WebSocketConnectionRepositoryPort connectionRepository,
-                                          ExchangeAdapterRepositoryPort adapterRepository) {
+                                          ExchangeAdapterRepositoryPort adapterRepository,
+                                          WebSocketPortRegistryPort webSocketRegistry) {
         this.connectionRepository = connectionRepository;
         this.adapterRepository = adapterRepository;
+        this.webSocketRegistry = webSocketRegistry;
     }
 
     @Override
@@ -45,7 +50,10 @@ public class PostConnectionEstablishHandler implements PostConnectionEstablished
         WebSocketConnectionManager manager = connectionRepository.getConnection(key);
 
         try {
-            streaming.sendMessage(manager.getLastRequestHistory());
+            String message = streaming.formatMessage(manager.getLastRequestHistory());
+            WebSocketPort webSocket = webSocketRegistry.findByExchangeName(event.exchange())
+                    .orElseThrow(() -> new IllegalStateException("No WebSocket registered for exchange: " + event.exchange()));
+            webSocket.sendMessage(message);
             return PostConnectionCommandResult.success(event.exchange(), "Post-connection message sent.");
         } catch (Exception e) {
             log.error("Error during post-connection operations for exchange={}", event.exchange(), e);

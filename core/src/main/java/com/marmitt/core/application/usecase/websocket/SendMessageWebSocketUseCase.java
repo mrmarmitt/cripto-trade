@@ -8,6 +8,8 @@ import com.marmitt.core.ports.inbound.websocket.SendMessageWebSocketPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
 
 import java.util.Optional;
 
@@ -15,11 +17,14 @@ public class SendMessageWebSocketUseCase implements SendMessageWebSocketPort {
 
     private final WebSocketConnectionRepositoryPort connectionRepository;
     private final ExchangeAdapterRepositoryPort adapterRepository;
+    private final WebSocketPortRegistryPort webSocketRegistry;
 
     public SendMessageWebSocketUseCase(WebSocketConnectionRepositoryPort connectionRepository,
-                                       ExchangeAdapterRepositoryPort adapterRepository) {
+                                       ExchangeAdapterRepositoryPort adapterRepository,
+                                       WebSocketPortRegistryPort webSocketRegistry) {
         this.connectionRepository = connectionRepository;
         this.adapterRepository = adapterRepository;
+        this.webSocketRegistry = webSocketRegistry;
     }
 
     @Override
@@ -32,7 +37,10 @@ public class SendMessageWebSocketUseCase implements SendMessageWebSocketPort {
         }
 
         manager.addRequestToHistory(request);
-        streamingOptional.get().sendMessage(request);
+        String message = streamingOptional.get().formatMessage(request);
+        WebSocketPort webSocket = webSocketRegistry.findByExchangeName(request.getExchangeName())
+                .orElseThrow(() -> new IllegalStateException("No WebSocket registered for exchange: " + request.getExchangeName()));
+        webSocket.sendMessage(message);
 
         return SendWebSocketResponse.success(request.getExchangeName());
     }

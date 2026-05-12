@@ -20,11 +20,9 @@ import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
-import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 
 import java.util.List;
 import java.util.Optional;
-import java.util.UUID;
 
 public class BinanceMarketStreamAdapter implements
         ExchangeStreamingPort,
@@ -33,13 +31,11 @@ public class BinanceMarketStreamAdapter implements
         ExchangeAccountQueryPort,
         ExchangeBootReadinessPort {
 
-    private final WebSocketPort webSocketPort;
     private final BinanceReceivedMessageProcessor receivedMessageProcessor;
     private final BinanceSenderMessageProcessor senderMessageProcessor;
     private final BinanceUrlBuilder urlBuilder;
 
-    public BinanceMarketStreamAdapter(WebSocketPort webSocketPort,
-                                      ObjectMapper objectMapper,
+    public BinanceMarketStreamAdapter(ObjectMapper objectMapper,
                                       BinanceConnectionConfig config) {
         var apiConfig         = new BinanceApiConfig(config.wsBaseUrl(), config.restBaseUrl());
         var credentials       = new BinanceCredentials(config.apiKey(), config.apiSecret());
@@ -48,7 +44,6 @@ public class BinanceMarketStreamAdapter implements
         this.urlBuilder               = binanceUrlBuilder;
         this.senderMessageProcessor   = new BinanceSenderMessageProcessor(objectMapper, signer, binanceUrlBuilder);
         this.receivedMessageProcessor = new BinanceReceivedMessageProcessor(objectMapper);
-        this.webSocketPort            = webSocketPort;
     }
 
     @Override
@@ -62,20 +57,13 @@ public class BinanceMarketStreamAdapter implements
     }
 
     @Override
-    public void connect(StreamSubscriptionRequest parameters, String exchangeName, UUID connectionId) {
-        String url = urlBuilder.buildConnectionUrl(parameters);
-        webSocketPort.connect(url, exchangeName, connectionId);
+    public String buildConnectionUrl(StreamSubscriptionRequest parameters, String exchangeName) {
+        return urlBuilder.buildConnectionUrl(parameters);
     }
 
     @Override
-    public void disconnect(String exchangeName, UUID connectionId) {
-        webSocketPort.disconnect(exchangeName, connectionId);
-    }
-
-    @Override
-    public void sendMessage(MessageRequest request) {
-        String message = senderMessageProcessor.execute(request);
-        webSocketPort.sendMessage(message);
+    public String formatMessage(MessageRequest request) {
+        return senderMessageProcessor.execute(request);
     }
 
     @Override

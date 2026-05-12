@@ -9,6 +9,8 @@ import com.marmitt.core.ports.inbound.websocket.DisconnectWebSocketPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -17,11 +19,14 @@ public class DisconnectWebSocketUseCase implements DisconnectWebSocketPort {
 
     private final WebSocketConnectionRepositoryPort connectionRepository;
     private final ExchangeAdapterRepositoryPort adapterRepository;
+    private final WebSocketPortRegistryPort webSocketRegistry;
 
     public DisconnectWebSocketUseCase(WebSocketConnectionRepositoryPort connectionRepository,
-                                      ExchangeAdapterRepositoryPort adapterRepository) {
+                                      ExchangeAdapterRepositoryPort adapterRepository,
+                                      WebSocketPortRegistryPort webSocketRegistry) {
         this.connectionRepository = connectionRepository;
         this.adapterRepository = adapterRepository;
+        this.webSocketRegistry = webSocketRegistry;
     }
 
     @Override
@@ -37,7 +42,9 @@ public class DisconnectWebSocketUseCase implements DisconnectWebSocketPort {
 
         UUID connectionId = manager.getConnectionId();
         manager.setConnectionResult(ConnectionResultDto.disconnecting("Manual disconnection requested", connectionId));
-        streamingOptional.get().disconnect(exchangeName, connectionId);
+        WebSocketPort webSocket = webSocketRegistry.findByExchangeName(exchangeName)
+                .orElseThrow(() -> new IllegalStateException("No WebSocket registered for exchange: " + exchangeName));
+        webSocket.disconnect(exchangeName, connectionId);
 
         adapterRepository.findUserStreamByName(exchangeName).ifPresent(userStream -> {
             WebSocketConnectionManager userManager = connectionRepository.getConnection(ConnectionKey.userStream(exchangeName));
