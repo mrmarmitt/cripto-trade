@@ -10,6 +10,8 @@ import com.marmitt.core.ports.inbound.websocket.ConnectUserStreamPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -22,11 +24,14 @@ public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
 
     private final WebSocketConnectionRepositoryPort connectionRepository;
     private final ExchangeAdapterRepositoryPort adapterRepository;
+    private final WebSocketPortRegistryPort webSocketRegistry;
 
     public ConnectUserStreamUseCase(WebSocketConnectionRepositoryPort connectionRepository,
-                                    ExchangeAdapterRepositoryPort adapterRepository) {
+                                    ExchangeAdapterRepositoryPort adapterRepository,
+                                    WebSocketPortRegistryPort webSocketRegistry) {
         this.connectionRepository = connectionRepository;
         this.adapterRepository = adapterRepository;
+        this.webSocketRegistry = webSocketRegistry;
     }
 
     @Override
@@ -54,7 +59,11 @@ public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
                 : ConnectionResultDto.connecting());
 
         try {
-            userStreamOpt.get().connect(manager.getConnectionId());
+            ExchangeUserStreamPort userStream = userStreamOpt.get();
+            String url = userStream.prepareConnection(manager.getConnectionId());
+            WebSocketPort webSocket = webSocketRegistry.findUserStreamByExchangeName(exchangeName)
+                    .orElseThrow(() -> new IllegalStateException("No user stream WebSocket registered for exchange: " + exchangeName));
+            webSocket.connect(url, exchangeName, manager.getConnectionId());
         } catch (IOException e) {
             log.error("Failed to connect user data stream - exchange={}", exchangeName, e);
             manager.setConnectionResult(ConnectionResultDto.failure("connect", "Failed: " + e.getMessage()));

@@ -11,9 +11,17 @@ public interface ExchangeUserStreamPort {
 
     String getExchangeName();
 
-    void connect(UUID connectionId) throws IOException;
+    /**
+     * Prepares the connection: obtains credentials/session tokens, starts keep-alive,
+     * and returns the WebSocket URL for core to connect.
+     */
+    String prepareConnection(UUID connectionId) throws IOException;
 
-    void disconnect(UUID connectionId);
+    /**
+     * Releases exchange-side resources: revokes session tokens, stops keep-alive.
+     * Core disconnects the WebSocket separately.
+     */
+    void onDisconnect(UUID connectionId);
 
     ProcessingResult<? extends ProcessorResponse> processMessage(String rawMessage, MessageContext context);
 }

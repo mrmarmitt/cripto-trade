@@ -9,7 +9,6 @@ import com.marmitt.core.dto.websocket.MessageContext;
 import com.marmitt.core.dto.websocket.data.ProcessorResponse;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
 import com.marmitt.core.ports.outbound.http.HttpClientPort;
-import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;
@@ -24,7 +23,6 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort {
 
     private static final long KEEPALIVE_INTERVAL_MINUTES = 30;
 
-    private final WebSocketPort webSocketPort;
     private final BinanceUserDataProcessor receivedMessageProcessor;
     private final ListenKeyManager listenKeyManager;
     private final String wsBaseUrl;
@@ -37,12 +35,10 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort {
 
     private ScheduledFuture<?> keepAliveTask;
 
-    public BinanceUserStreamAdapter(WebSocketPort webSocketPort,
-                                    HttpClientPort httpClient,
+    public BinanceUserStreamAdapter(HttpClientPort httpClient,
                                     ObjectMapper objectMapper,
                                     BinanceConnectionConfig config) {
         var credentials = new BinanceCredentials(config.apiKey(), config.apiSecret());
-        this.webSocketPort            = webSocketPort;
         this.receivedMessageProcessor = new BinanceUserDataProcessor(objectMapper);
         this.listenKeyManager         = new ListenKeyManager(config.restBaseUrl(), credentials, httpClient, objectMapper);
         this.wsBaseUrl                = config.wsBaseUrl();
@@ -54,7 +50,7 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort {
     }
 
     @Override
-    public void connect(UUID connectionId) throws IOException {
+    public String prepareConnection(UUID connectionId) throws IOException {
         if (keepAliveTask != null && !keepAliveTask.isDone()) {
             keepAliveTask.cancel(false);
         }
@@ -63,8 +59,6 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort {
         }
 
         String listenKey = listenKeyManager.obtainListenKey();
-        String wsUrl = wsBaseUrl + "/ws/" + listenKey;
-        webSocketPort.connect(wsUrl, "BINANCE", connectionId);
 
         keepAliveTask = scheduler.scheduleAtFixedRate(
                 listenKeyManager::keepAlive,
@@ -72,17 +66,17 @@ public class BinanceUserStreamAdapter implements ExchangeUserStreamPort {
                 KEEPALIVE_INTERVAL_MINUTES,
                 TimeUnit.MINUTES);
 
-        log.info("Binance user data stream connected");
+        log.info("Binance user data stream prepared - connectionId={}", connectionId);
+        return wsBaseUrl + "/ws/" + listenKey;
     }
 
     @Override
-    public void disconnect(UUID connectionId) {
+    public void onDisconnect(UUID connectionId) {
         if (keepAliveTask != null) {
             keepAliveTask.cancel(false);
         }
         listenKeyManager.revoke();
-        webSocketPort.disconnect("BINANCE", connectionId);
-        log.info("Binance user data stream disconnected");
+        log.info("Binance user data stream resources released - connectionId={}", connectionId);
     }
 
     @Override

@@ -51,7 +51,9 @@ public class DisconnectWebSocketUseCase implements DisconnectWebSocketPort {
             if (userManager != null) {
                 UUID userConnectionId = userManager.getConnectionId();
                 userManager.setConnectionResult(ConnectionResultDto.disconnecting("Manual disconnection requested", userConnectionId));
-                userStream.disconnect(userConnectionId);
+                userStream.onDisconnect(userConnectionId);
+                webSocketRegistry.findUserStreamByExchangeName(exchangeName)
+                        .ifPresent(ws -> ws.disconnect(exchangeName, userConnectionId));
             }
         });
 

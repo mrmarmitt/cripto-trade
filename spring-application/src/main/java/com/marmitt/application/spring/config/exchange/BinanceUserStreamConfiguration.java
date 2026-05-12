@@ -8,6 +8,7 @@ import com.marmitt.binance.BinanceConnectionConfig;
 import com.marmitt.binance.BinanceUserStreamAdapter;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
 import okhttp3.OkHttpClient;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -31,17 +32,23 @@ public class BinanceUserStreamConfiguration {
     }
 
     @Bean
+    public OkHttp3WebSocketAdapter binanceUserStreamWebSocketPort(OkHttpClient binanceWebSocketClient,
+                                                                   EventPublisherPort eventPublisher,
+                                                                   WebSocketPortRegistryPort webSocketRegistry) {
+        OkHttp3WebSocketAdapter ws = new OkHttp3WebSocketAdapter(binanceWebSocketClient,
+                new OkHttp3ListenerConverter(eventPublisher, StreamChannel.USER_DATA));
+        webSocketRegistry.registerUserStream("BINANCE", ws);
+        return ws;
+    }
+
+    @Bean
     public BinanceUserStreamAdapter binanceUserStreamAdapter(ObjectMapper objectMapper,
-                                                              EventPublisherPort eventPublisher,
-                                                              OkHttpClient binanceWebSocketClient,
                                                               OkHttpClient binanceRestClient,
                                                               BinanceProperties properties) {
-        var ws = new OkHttp3WebSocketAdapter(binanceWebSocketClient,
-                new OkHttp3ListenerConverter(eventPublisher, StreamChannel.USER_DATA));
         var httpClient = new OkHttpClientAdapter(binanceRestClient);
         var config = new BinanceConnectionConfig(
                 properties.getApiKey(), properties.getApiSecret(),
                 properties.getWsBaseUrl(), properties.getRestBaseUrl());
-        return new BinanceUserStreamAdapter(ws, httpClient, objectMapper, config);
+        return new BinanceUserStreamAdapter(httpClient, objectMapper, config);
     }
 }

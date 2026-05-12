@@ -23,8 +23,9 @@ public class WebSocketConfig {
 
     @Bean
     public ConnectUserStreamPort connectUserStream(WebSocketConnectionRepositoryPort connectionRepository,
-                                                   ExchangeAdapterRepositoryPort adapterRepository) {
-        return new ConnectUserStreamUseCase(connectionRepository, adapterRepository);
+                                                   ExchangeAdapterRepositoryPort adapterRepository,
+                                                   WebSocketPortRegistryPort webSocketRegistry) {
+        return new ConnectUserStreamUseCase(connectionRepository, adapterRepository, webSocketRegistry);
     }
 
     @Bean
