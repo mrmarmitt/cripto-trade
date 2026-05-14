@@ -7,7 +7,7 @@ import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.enums.ConnectionStatus;
 import com.marmitt.core.ports.inbound.websocket.ConnectUserStreamPort;
-import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSessionPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
@@ -17,6 +17,7 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Optional;
+import java.util.UUID;
 
 public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
 
@@ -36,8 +37,7 @@ public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
 
     @Override
     public Optional<WebSocketConnectionResponse> execute(String exchangeName) {
-        Optional<ExchangeUserStreamPort> userStreamOpt = adapterRepository.findUserStreamByName(exchangeName);
-        if (userStreamOpt.isEmpty()) {
+        if (adapterRepository.findUserStreamSessionByName(exchangeName).isEmpty()) {
             return Optional.empty();
         }
 
@@ -59,12 +59,13 @@ public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
                 : ConnectionResultDto.connecting());
 
         try {
-            ExchangeUserStreamPort userStream = userStreamOpt.get();
-            String url = userStream.prepareConnection(manager.getConnectionId());
+            UserStreamSessionPort session = adapterRepository.findUserStreamSessionByName(exchangeName)
+                    .orElseThrow(() -> new IllegalStateException("No user stream session registered for exchange: " + exchangeName));
+            String url = session.openSession(manager.getConnectionId());
             WebSocketPort webSocket = webSocketRegistry.findUserStreamByExchangeName(exchangeName)
                     .orElseThrow(() -> new IllegalStateException("No user stream WebSocket registered for exchange: " + exchangeName));
             webSocket.connect(url, exchangeName, manager.getConnectionId());
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
             log.error("Failed to connect user data stream - exchange={}", exchangeName, e);
             manager.setConnectionResult(ConnectionResultDto.failure("connect", "Failed: " + e.getMessage()));
         }

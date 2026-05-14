@@ -6,6 +6,7 @@ import com.marmitt.application.spring.adapter.OkHttp3WebSocketAdapter;
 import com.marmitt.application.spring.adapter.binance.OkHttpClientAdapter;
 import com.marmitt.binance.BinanceConnectionConfig;
 import com.marmitt.binance.BinanceUserStreamAdapter;
+import com.marmitt.binance.BinanceUserStreamSessionAdapter;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
@@ -42,13 +43,18 @@ public class BinanceUserStreamConfiguration {
     }
 
     @Bean
-    public BinanceUserStreamAdapter binanceUserStreamAdapter(ObjectMapper objectMapper,
-                                                              OkHttpClient binanceRestClient,
-                                                              BinanceProperties properties) {
+    public BinanceUserStreamSessionAdapter binanceUserStreamSessionAdapter(OkHttpClient binanceRestClient,
+                                                                            ObjectMapper objectMapper,
+                                                                            BinanceProperties properties) {
         var httpClient = new OkHttpClientAdapter(binanceRestClient);
         var config = new BinanceConnectionConfig(
                 properties.getApiKey(), properties.getApiSecret(),
                 properties.getWsBaseUrl(), properties.getRestBaseUrl());
-        return new BinanceUserStreamAdapter(httpClient, objectMapper, config);
+        return new BinanceUserStreamSessionAdapter(httpClient, objectMapper, config);
+    }
+
+    @Bean
+    public BinanceUserStreamAdapter binanceUserStreamAdapter(ObjectMapper objectMapper) {
+        return new BinanceUserStreamAdapter(objectMapper);
     }
 }

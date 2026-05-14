@@ -18,6 +18,7 @@ import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSessionPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
@@ -353,11 +354,18 @@ class UserDataStreamConciliationIntegrationTest {
             BinanceUserDataProcessor processor = new BinanceUserDataProcessor(objectMapper);
             return new ExchangeUserStreamPort() {
                 @Override public String getExchangeName() { return "MOCK"; }
-                @Override public String prepareConnection(UUID connectionId) { return "mock://localhost"; }
-                @Override public void onDisconnect(UUID connectionId) {}
                 @Override public com.marmitt.core.dto.processing.ProcessingResult<? extends com.marmitt.core.dto.websocket.data.ProcessorResponse> processMessage(String rawMessage, MessageContext context) {
                     return processor.processMessage(rawMessage, context);
                 }
+            };
+        }
+
+        @Bean
+        UserStreamSessionPort mockUserStreamSession() {
+            return new UserStreamSessionPort() {
+                @Override public String getExchangeName() { return "MOCK"; }
+                @Override public String openSession(UUID connectionId) { return "mock://localhost"; }
+                @Override public void closeSession(UUID connectionId) {}
             };
         }
     }
