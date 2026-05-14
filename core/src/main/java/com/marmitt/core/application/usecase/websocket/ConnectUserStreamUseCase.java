@@ -37,7 +37,8 @@ public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
 
     @Override
     public Optional<WebSocketConnectionResponse> execute(String exchangeName) {
-        if (adapterRepository.findUserStreamSessionByName(exchangeName).isEmpty()) {
+        if (adapterRepository.findUserStreamSessionByName(exchangeName).isEmpty()
+                || adapterRepository.findUserStreamByName(exchangeName).isEmpty()) {
             return Optional.empty();
         }
 
@@ -58,15 +59,15 @@ public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
                 ? ConnectionResultDto.reconnecting(1, 1)
                 : ConnectionResultDto.connecting());
 
+        UserStreamSessionPort session = adapterRepository.findUserStreamSessionByName(exchangeName).orElseThrow();
         try {
-            UserStreamSessionPort session = adapterRepository.findUserStreamSessionByName(exchangeName)
-                    .orElseThrow(() -> new IllegalStateException("No user stream session registered for exchange: " + exchangeName));
             String url = session.openSession(manager.getConnectionId());
             WebSocketPort webSocket = webSocketRegistry.findUserStreamByExchangeName(exchangeName)
                     .orElseThrow(() -> new IllegalStateException("No user stream WebSocket registered for exchange: " + exchangeName));
             webSocket.connect(url, exchangeName, manager.getConnectionId());
         } catch (IOException | RuntimeException e) {
             log.error("Failed to connect user data stream - exchange={}", exchangeName, e);
+            session.closeSession(manager.getConnectionId());
             manager.setConnectionResult(ConnectionResultDto.failure("connect", "Failed: " + e.getMessage()));
         }
 
