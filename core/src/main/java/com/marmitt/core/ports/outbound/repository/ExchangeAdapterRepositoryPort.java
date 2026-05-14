@@ -6,6 +6,7 @@ import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSessionPort;
 
 import java.util.Optional;
 import java.util.Set;
@@ -16,6 +17,8 @@ public interface ExchangeAdapterRepositoryPort {
     void registerStreamingAdapter(ExchangeStreamingPort adapter);
 
     void registerUserStreamAdapter(ExchangeUserStreamPort adapter);
+
+    void registerUserStreamSession(UserStreamSessionPort session);
 
     void registerOrderExecutionAdapter(String exchangeName, ExchangeOrderExecutionPort adapter);
 
@@ -44,4 +47,6 @@ public interface ExchangeAdapterRepositoryPort {
     Optional<ExchangeBootReadinessPort> findBootReadinessByName(String exchangeName);
 
     Optional<ExchangeUserStreamPort> findUserStreamByName(String exchangeName);
+
+    Optional<UserStreamSessionPort> findUserStreamSessionByName(String exchangeName);
 }

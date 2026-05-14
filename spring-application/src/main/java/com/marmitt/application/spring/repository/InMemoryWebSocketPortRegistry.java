@@ -11,15 +11,26 @@ import java.util.concurrent.ConcurrentHashMap;
 @Repository
 public class InMemoryWebSocketPortRegistry implements WebSocketPortRegistryPort {
 
-    private final Map<String, WebSocketPort> ports = new ConcurrentHashMap<>();
+    private final Map<String, WebSocketPort> marketPorts = new ConcurrentHashMap<>();
+    private final Map<String, WebSocketPort> userStreamPorts = new ConcurrentHashMap<>();
 
     @Override
     public void register(String exchangeName, WebSocketPort port) {
-        ports.put(exchangeName.toUpperCase(), port);
+        marketPorts.put(exchangeName.toUpperCase(), port);
     }
 
     @Override
     public Optional<WebSocketPort> findByExchangeName(String exchangeName) {
-        return Optional.ofNullable(ports.get(exchangeName.toUpperCase()));
+        return Optional.ofNullable(marketPorts.get(exchangeName.toUpperCase()));
+    }
+
+    @Override
+    public void registerUserStream(String exchangeName, WebSocketPort port) {
+        userStreamPorts.put(exchangeName.toUpperCase(), port);
+    }
+
+    @Override
+    public Optional<WebSocketPort> findUserStreamByExchangeName(String exchangeName) {
+        return Optional.ofNullable(userStreamPorts.get(exchangeName.toUpperCase()));
     }
 }
