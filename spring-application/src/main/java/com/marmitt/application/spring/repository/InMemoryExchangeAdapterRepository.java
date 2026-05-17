@@ -6,6 +6,7 @@ import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamCredentialPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSessionPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import org.slf4j.Logger;
@@ -27,6 +28,7 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
     private final Map<String, ExchangeStreamingPort> streamingAdapters = new ConcurrentHashMap<>();
     private final Map<String, ExchangeUserStreamPort> userStreamAdapters = new ConcurrentHashMap<>();
     private final Map<String, UserStreamSessionPort> userStreamSessionAdapters = new ConcurrentHashMap<>();
+    private final Map<String, UserStreamCredentialPort> userStreamCredentialAdapters = new ConcurrentHashMap<>();
     private final Map<String, ExchangeOrderExecutionPort> orderExecutionAdapters = new ConcurrentHashMap<>();
     private final Map<String, ExchangeOrderQueryPort> orderQueryAdapters = new ConcurrentHashMap<>();
     private final Map<String, ExchangeAccountQueryPort> accountQueryAdapters = new ConcurrentHashMap<>();
@@ -35,10 +37,12 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
 
     public InMemoryExchangeAdapterRepository(List<ExchangeStreamingPort> adapters,
                                              List<ExchangeUserStreamPort> userStreamAdapters,
-                                             List<UserStreamSessionPort> userStreamSessions) {
+                                             List<UserStreamSessionPort> userStreamSessions,
+                                             List<UserStreamCredentialPort> userStreamCredentials) {
         adapters.forEach(this::registerAllCapabilities);
         userStreamAdapters.forEach(this::registerUserStreamAdapter);
         userStreamSessions.forEach(this::registerUserStreamSession);
+        userStreamCredentials.forEach(this::registerUserStreamCredential);
     }
 
     @Override
@@ -57,6 +61,12 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
     public void registerUserStreamSession(UserStreamSessionPort session) {
         userStreamSessionAdapters.put(normalize(session.getExchangeName()), session);
         log.info("User stream session registered - exchange={}", normalize(session.getExchangeName()));
+    }
+
+    @Override
+    public void registerUserStreamCredential(UserStreamCredentialPort credential) {
+        userStreamCredentialAdapters.put(normalize(credential.getExchangeName()), credential);
+        log.info("User stream credential registered - exchange={}", normalize(credential.getExchangeName()));
     }
 
     @Override
@@ -132,6 +142,11 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
     @Override
     public Optional<UserStreamSessionPort> findUserStreamSessionByName(String exchangeName) {
         return Optional.ofNullable(userStreamSessionAdapters.get(normalize(exchangeName)));
+    }
+
+    @Override
+    public Optional<UserStreamCredentialPort> findUserStreamCredentialByName(String exchangeName) {
+        return Optional.ofNullable(userStreamCredentialAdapters.get(normalize(exchangeName)));
     }
 
     private void registerAllCapabilities(ExchangeStreamingPort streamingAdapter) {
