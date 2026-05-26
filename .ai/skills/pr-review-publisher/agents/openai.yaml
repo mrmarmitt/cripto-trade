@@ -1,0 +1,4 @@
+interface:
+  display_name: "PR Review Publisher"
+  short_description: "Publica comentarios de review em PRs"
+  default_prompt: "Use $pr-review-publisher to publish these finalized review findings into the target GitHub pull request."

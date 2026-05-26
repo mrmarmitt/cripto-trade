@@ -14,9 +14,15 @@ O diretorio `/.ai` e a fonte canonica para:
 
 Leituras adicionais obrigatorias por contexto:
 
-- review: `/.ai/review.md`
+- review: `/.ai/review.md` e `/.ai/agents/code-review-agent.md`
 - mudanca de responsabilidade entre modulos: `/.ai/change-safety.md`
 - atualizacao de documentacao: `/.ai/docs.md`
+
+## Agente Compartilhado de Review
+
+Para tarefas de review, use `/.ai/agents/code-review-agent.md` como guia operacional compartilhado entre ferramentas. `AGENTS.md` continua sendo apenas a ponte para a politica canonica em `/.ai`.
+
+Para publicar findings em PR, use a skill `/.ai/skills/pr-review-publisher/`.
 
 ## Objetivo
 

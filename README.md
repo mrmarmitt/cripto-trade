@@ -10,6 +10,8 @@ Arquivos principais:
 - `/.ai/architecture.md`: fronteiras e responsabilidades por modulo
 - `/.ai/coding-standards.md`: padroes de implementacao
 - `/.ai/review.md`: heuristicas de review
+- `/.ai/agents/code-review-agent.md`: agente compartilhado de review para Codex e Claude
+- `/.ai/skills/pr-review-publisher/`: skill compartilhada para publicar findings em PR
 - `/.ai/validation.md`: comandos e estrategia de validacao
 
 Os arquivos `AGENTS.md` e `CLAUDE.md` devem apontar para `/.ai` como fonte canonica dessas regras.
