@@ -364,8 +364,7 @@ class UserDataStreamConciliationIntegrationTest {
         UserStreamSessionPort mockUserStreamSession() {
             return new UserStreamSessionPort() {
                 @Override public String getExchangeName() { return "MOCK"; }
-                @Override public String openSession(UUID connectionId) { return "mock://localhost"; }
-                @Override public void closeSession(UUID connectionId) {}
+                @Override public String buildConnectionUrl(String credential) { return "mock://localhost"; }
             };
         }
     }

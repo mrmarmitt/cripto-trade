@@ -46,16 +46,17 @@ public class DisconnectWebSocketUseCase implements DisconnectWebSocketPort {
                 .orElseThrow(() -> new IllegalStateException("No WebSocket registered for exchange: " + exchangeName));
         webSocket.disconnect(exchangeName, connectionId);
 
-        adapterRepository.findUserStreamSessionByName(exchangeName).ifPresent(session -> {
+        if (adapterRepository.findUserStreamSessionByName(exchangeName).isPresent()) {
             WebSocketConnectionManager userManager = connectionRepository.getConnection(ConnectionKey.userStream(exchangeName));
             if (userManager != null) {
                 UUID userConnectionId = userManager.getConnectionId();
                 userManager.setConnectionResult(ConnectionResultDto.disconnecting("Manual disconnection requested", userConnectionId));
-                session.closeSession(userConnectionId);
+                adapterRepository.findUserStreamCredentialByName(exchangeName)
+                        .ifPresent(c -> c.revoke(userConnectionId));
                 webSocketRegistry.findUserStreamByExchangeName(exchangeName)
                         .ifPresent(ws -> ws.disconnect(exchangeName, userConnectionId));
             }
-        });
+        }
 
         return ConnectionResultMapper.toResponse(manager.getConnectionResult(), exchangeName);
     }

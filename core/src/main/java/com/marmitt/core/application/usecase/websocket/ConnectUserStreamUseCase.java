@@ -7,6 +7,7 @@ import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.enums.ConnectionStatus;
 import com.marmitt.core.ports.inbound.websocket.ConnectUserStreamPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamCredentialPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSessionPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
@@ -17,7 +18,6 @@ import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.util.Optional;
-import java.util.UUID;
 
 public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
 
@@ -60,14 +60,20 @@ public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
                 : ConnectionResultDto.connecting());
 
         UserStreamSessionPort session = adapterRepository.findUserStreamSessionByName(exchangeName).orElseThrow();
+        Optional<UserStreamCredentialPort> credentialOpt = adapterRepository.findUserStreamCredentialByName(exchangeName);
+
         try {
-            String url = session.openSession(manager.getConnectionId());
+            String credential = "";
+            if (credentialOpt.isPresent()) {
+                credential = credentialOpt.get().obtain(manager.getConnectionId());
+            }
+            String url = session.buildConnectionUrl(credential);
             WebSocketPort webSocket = webSocketRegistry.findUserStreamByExchangeName(exchangeName)
                     .orElseThrow(() -> new IllegalStateException("No user stream WebSocket registered for exchange: " + exchangeName));
             webSocket.connect(url, exchangeName, manager.getConnectionId());
         } catch (IOException | RuntimeException e) {
             log.error("Failed to connect user data stream - exchange={}", exchangeName, e);
-            session.closeSession(manager.getConnectionId());
+            credentialOpt.ifPresent(c -> c.revoke(manager.getConnectionId()));
             manager.setConnectionResult(ConnectionResultDto.failure("connect", "Failed: " + e.getMessage()));
         }
 
