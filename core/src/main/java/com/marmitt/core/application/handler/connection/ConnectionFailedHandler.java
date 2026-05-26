@@ -11,9 +11,11 @@ import com.marmitt.core.ports.inbound.handler.ConnectionFailedPort;
 import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
 import com.marmitt.core.ports.inbound.websocket.ConnectMarketStreamPort;
 import com.marmitt.core.ports.inbound.websocket.ConnectUserStreamPort;
+import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.UUID;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -25,14 +27,17 @@ public class ConnectionFailedHandler implements ConnectionFailedPort {
     private static final int MAX_RECONNECT_ATTEMPTS = 10;
 
     private final WebSocketConnectionRepositoryPort connectionRepository;
+    private final ExchangeAdapterRepositoryPort adapterRepository;
     private final ConnectMarketStreamPort connectMarketStreamPort;
     private final ConnectUserStreamPort connectUserStreamPort;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
     public ConnectionFailedHandler(WebSocketConnectionRepositoryPort connectionRepository,
+                                   ExchangeAdapterRepositoryPort adapterRepository,
                                    ConnectMarketStreamPort connectMarketStreamPort,
                                    ConnectUserStreamPort connectUserStreamPort) {
         this.connectionRepository = connectionRepository;
+        this.adapterRepository = adapterRepository;
         this.connectMarketStreamPort = connectMarketStreamPort;
         this.connectUserStreamPort = connectUserStreamPort;
     }
@@ -72,7 +77,7 @@ public class ConnectionFailedHandler implements ConnectionFailedPort {
                 if (channel == StreamChannel.MARKET) {
                     reconnectMarketStream(exchangeName, manager, attempt);
                 } else {
-                    reconnectUserStream(exchangeName, attempt);
+                    reconnectUserStream(exchangeName, manager, attempt);
                 }
             } catch (Exception e) {
                 log.error("Reconnect attempt {} failed - exchange={} channel={}: {}", attempt, exchangeName, channel, e.getMessage());
@@ -95,7 +100,14 @@ public class ConnectionFailedHandler implements ConnectionFailedPort {
         connectMarketStreamPort.execute(exchangeName, subscriptionRequest);
     }
 
-    private void reconnectUserStream(String exchangeName, int attempt) {
+    private void reconnectUserStream(String exchangeName, WebSocketConnectionManager manager, int attempt) {
+        UUID oldConnectionId = manager.getConnectionId();
+        if (oldConnectionId != null) {
+            adapterRepository.findActiveSession(oldConnectionId).ifPresent(s -> {
+                s.close();
+                adapterRepository.removeActiveSession(oldConnectionId);
+            });
+        }
         log.info("Reconnecting user data stream - exchange={} attempt={}", exchangeName, attempt);
         WebSocketConnectionResponse response = connectUserStreamPort.execute(exchangeName)
                 .orElseThrow(() -> new RuntimeException("No user stream adapter for exchange: " + exchangeName));

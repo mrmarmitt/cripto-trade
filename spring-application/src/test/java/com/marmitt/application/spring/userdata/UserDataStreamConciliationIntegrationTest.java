@@ -364,7 +364,12 @@ class UserDataStreamConciliationIntegrationTest {
         UserStreamSessionPort mockUserStreamSession() {
             return new UserStreamSessionPort() {
                 @Override public String getExchangeName() { return "MOCK"; }
-                @Override public String buildConnectionUrl(String credential) { return "mock://localhost"; }
+                @Override public com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSession createSession(java.util.UUID connectionId) {
+                    return new com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSession() {
+                        @Override public String open() { return "mock://localhost"; }
+                        @Override public void close() {}
+                    };
+                }
             };
         }
     }
