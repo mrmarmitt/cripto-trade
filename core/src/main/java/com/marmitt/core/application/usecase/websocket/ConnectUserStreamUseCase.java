@@ -7,7 +7,7 @@ import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.enums.ConnectionStatus;
 import com.marmitt.core.ports.inbound.websocket.ConnectUserStreamPort;
-import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamCredentialPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSession;
 import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSessionPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
@@ -59,21 +59,18 @@ public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
                 ? ConnectionResultDto.reconnecting(1, 1)
                 : ConnectionResultDto.connecting());
 
-        UserStreamSessionPort session = adapterRepository.findUserStreamSessionByName(exchangeName).orElseThrow();
-        Optional<UserStreamCredentialPort> credentialOpt = adapterRepository.findUserStreamCredentialByName(exchangeName);
+        UserStreamSessionPort factory = adapterRepository.findUserStreamSessionByName(exchangeName).orElseThrow();
+        UserStreamSession session = factory.createSession(manager.getConnectionId());
 
         try {
-            String credential = "";
-            if (credentialOpt.isPresent()) {
-                credential = credentialOpt.get().obtain(manager.getConnectionId());
-            }
-            String url = session.buildConnectionUrl(credential);
+            String url = session.open();
             WebSocketPort webSocket = webSocketRegistry.findUserStreamByExchangeName(exchangeName)
                     .orElseThrow(() -> new IllegalStateException("No user stream WebSocket registered for exchange: " + exchangeName));
             webSocket.connect(url, exchangeName, manager.getConnectionId());
+            adapterRepository.storeActiveSession(manager.getConnectionId(), session);
         } catch (IOException | RuntimeException e) {
             log.error("Failed to connect user data stream - exchange={}", exchangeName, e);
-            credentialOpt.ifPresent(c -> c.revoke(manager.getConnectionId()));
+            session.close();
             manager.setConnectionResult(ConnectionResultDto.failure("connect", "Failed: " + e.getMessage()));
         }
 

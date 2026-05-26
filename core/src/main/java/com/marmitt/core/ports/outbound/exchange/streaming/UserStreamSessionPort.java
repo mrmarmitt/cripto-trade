@@ -1,8 +1,10 @@
 package com.marmitt.core.ports.outbound.exchange.streaming;
 
+import java.util.UUID;
+
 public interface UserStreamSessionPort {
 
     String getExchangeName();
 
-    String buildConnectionUrl(String credential);
+    UserStreamSession createSession(UUID connectionId);
 }

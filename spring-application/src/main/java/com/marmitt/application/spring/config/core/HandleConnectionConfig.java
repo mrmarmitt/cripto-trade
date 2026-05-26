@@ -49,8 +49,9 @@ public class HandleConnectionConfig {
     }
 
     @Bean
-    public ConnectionClosedPort handleConnectionClosed(WebSocketConnectionRepositoryPort connectionManager) {
-        return new ConnectionClosedHandler(connectionManager);
+    public ConnectionClosedPort handleConnectionClosed(WebSocketConnectionRepositoryPort connectionManager,
+                                                       ExchangeAdapterRepositoryPort adapterRepository) {
+        return new ConnectionClosedHandler(connectionManager, adapterRepository);
     }
 
     @Bean
@@ -60,8 +61,9 @@ public class HandleConnectionConfig {
 
     @Bean
     public ConnectionFailedPort handleConnectionFailed(WebSocketConnectionRepositoryPort connectionManager,
+                                                       ExchangeAdapterRepositoryPort adapterRepository,
                                                        ConnectMarketStreamPort connectMarketStreamPort,
                                                        ConnectUserStreamPort connectUserStreamPort) {
-        return new ConnectionFailedHandler(connectionManager, connectMarketStreamPort, connectUserStreamPort);
+        return new ConnectionFailedHandler(connectionManager, adapterRepository, connectMarketStreamPort, connectUserStreamPort);
     }
 }

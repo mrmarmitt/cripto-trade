@@ -5,6 +5,7 @@ import com.marmitt.core.dto.connection.ConnectionResultDto;
 import com.marmitt.core.dto.events.WebSocketClosedEvent;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.ports.inbound.handler.ConnectionClosedPort;
+import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
@@ -12,9 +13,12 @@ import lombok.extern.slf4j.Slf4j;
 public class ConnectionClosedHandler implements ConnectionClosedPort {
 
     private final WebSocketConnectionRepositoryPort connectionManagerPort;
+    private final ExchangeAdapterRepositoryPort adapterRepository;
 
-    public ConnectionClosedHandler(WebSocketConnectionRepositoryPort connectionManagerPort) {
+    public ConnectionClosedHandler(WebSocketConnectionRepositoryPort connectionManagerPort,
+                                   ExchangeAdapterRepositoryPort adapterRepository) {
         this.connectionManagerPort = connectionManagerPort;
+        this.adapterRepository = adapterRepository;
     }
 
     @Override
@@ -27,6 +31,10 @@ public class ConnectionClosedHandler implements ConnectionClosedPort {
                 manager.setConnectionResult(ConnectionResultDto.disconnected(
                         manager.getConnectionResult().message(), event.connectionId()));
             } else {
+                adapterRepository.findActiveSession(event.connectionId()).ifPresent(s -> {
+                    s.close();
+                    adapterRepository.removeActiveSession(event.connectionId());
+                });
                 manager.setConnectionResult(ConnectionResultDto.closed(event.code(), event.reason(), event.connectionId()));
             }
         } catch (Exception e) {

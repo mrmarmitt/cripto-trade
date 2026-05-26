@@ -5,7 +5,6 @@ import com.marmitt.application.spring.adapter.OkHttp3ListenerConverter;
 import com.marmitt.application.spring.adapter.OkHttp3WebSocketAdapter;
 import com.marmitt.application.spring.adapter.binance.OkHttpClientAdapter;
 import com.marmitt.binance.BinanceConnectionConfig;
-import com.marmitt.binance.BinanceCredentialAdapter;
 import com.marmitt.binance.BinanceUserStreamAdapter;
 import com.marmitt.binance.BinanceUserStreamSessionAdapter;
 import com.marmitt.core.enums.StreamChannel;
@@ -44,22 +43,14 @@ public class BinanceUserStreamConfiguration {
     }
 
     @Bean
-    public BinanceUserStreamSessionAdapter binanceUserStreamSessionAdapter(BinanceProperties properties) {
-        var config = new BinanceConnectionConfig(
-                properties.getApiKey(), properties.getApiSecret(),
-                properties.getWsBaseUrl(), properties.getRestBaseUrl());
-        return new BinanceUserStreamSessionAdapter(config);
-    }
-
-    @Bean
-    public BinanceCredentialAdapter binanceCredentialAdapter(OkHttpClient binanceRestClient,
-                                                              ObjectMapper objectMapper,
-                                                              BinanceProperties properties) {
+    public BinanceUserStreamSessionAdapter binanceUserStreamSessionAdapter(OkHttpClient binanceRestClient,
+                                                                            ObjectMapper objectMapper,
+                                                                            BinanceProperties properties) {
         var httpClient = new OkHttpClientAdapter(binanceRestClient);
         var config = new BinanceConnectionConfig(
                 properties.getApiKey(), properties.getApiSecret(),
                 properties.getWsBaseUrl(), properties.getRestBaseUrl());
-        return new BinanceCredentialAdapter(httpClient, objectMapper, config);
+        return new BinanceUserStreamSessionAdapter(config, httpClient, objectMapper);
     }
 
     @Bean

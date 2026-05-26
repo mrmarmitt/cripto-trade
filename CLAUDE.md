@@ -16,9 +16,15 @@ The `/.ai` directory is the canonical source for:
 
 Additional required guides by task type:
 
-- Review task: `/.ai/review.md`
+- Review task: `/.ai/review.md` and `/.ai/agents/code-review-agent.md`
 - Responsibility or module-boundary change: `/.ai/change-safety.md`
 - Documentation update: `/.ai/docs.md`
+
+## Shared Review Agent
+
+For review tasks, prefer the shared agent policy in `/.ai/agents/code-review-agent.md`. Tool-specific files in `.claude/agents/` should adapt Claude's format while keeping `/.ai` as the single source of truth.
+
+For publishing review findings back to a PR, use the shared skill at `/.ai/skills/pr-review-publisher/`.
 
 ## Repository Overview
 

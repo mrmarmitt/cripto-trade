@@ -8,7 +8,7 @@
 4. Ausencia de validacao ou teste
 5. Clareza de contrato e nomes
 6. Estilo, quando afetar manutencao
-
+   
 ## O que procurar primeiro
 
 - Regra de negocio fora do modulo dono
