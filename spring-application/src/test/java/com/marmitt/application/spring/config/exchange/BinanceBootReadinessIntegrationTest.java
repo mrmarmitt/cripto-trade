@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.config.exchange;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.application.spring.adapter.binance.OkHttpClientAdapter;
 import com.marmitt.binance.auth.BinanceCredentials;
 import com.marmitt.binance.auth.BinanceRequestSigner;
@@ -33,11 +34,10 @@ class BinanceBootReadinessIntegrationTest {
         var signer = new BinanceRequestSigner(credentials);
         var requestBuilder = new BinanceRestRequestBuilder(baseUrl, signer);
         var httpClient = new OkHttpClientAdapter(new OkHttpClient.Builder()
-                .connectTimeout(Duration.ofSeconds(10))
-                .readTimeout(Duration.ofSeconds(10))
+                .callTimeout(Duration.ofSeconds(10))
                 .build());
 
-        checker = new BinanceBootReadinessChecker(baseUrl, requestBuilder, httpClient);
+        checker = new BinanceBootReadinessChecker(baseUrl, requestBuilder, httpClient, new ObjectMapper());
     }
 
     @AfterEach
@@ -48,13 +48,24 @@ class BinanceBootReadinessIntegrationTest {
     @Test
     void shouldReturnReadyWhenConnectivityAndApiKeyAreValid() {
         server.enqueue(new MockResponse().setResponseCode(200).setBody("{}"));
-        server.enqueue(new MockResponse().setResponseCode(200).setBody("{\"balances\":[]}"));
+        server.enqueue(new MockResponse().setResponseCode(200).setBody("{\"canTrade\":true,\"balances\":[]}"));
 
         ExchangeBootReadiness result = checker.check();
 
         assertThat(result.ready()).isTrue();
         assertThat(result.code()).isEqualTo("READY");
         assertThat(result.exchangeName()).isEqualTo("BINANCE");
+    }
+
+    @Test
+    void shouldReturnInsufficientPermissionsWhenCanTradeIsFalse() {
+        server.enqueue(new MockResponse().setResponseCode(200).setBody("{}"));
+        server.enqueue(new MockResponse().setResponseCode(200).setBody("{\"canTrade\":false,\"balances\":[]}"));
+
+        ExchangeBootReadiness result = checker.check();
+
+        assertThat(result.ready()).isFalse();
+        assertThat(result.code()).isEqualTo("INSUFFICIENT_PERMISSIONS");
     }
 
     @Test

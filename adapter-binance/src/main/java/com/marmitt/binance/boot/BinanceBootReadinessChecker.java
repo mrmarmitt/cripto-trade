@@ -1,5 +1,7 @@
 package com.marmitt.binance.boot;
 
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.binance.rest.BinanceRestRequestBuilder;
 import com.marmitt.binance.rest.RestRequest;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
@@ -17,13 +19,16 @@ public class BinanceBootReadinessChecker {
     private final String restBaseUrl;
     private final BinanceRestRequestBuilder requestBuilder;
     private final HttpClientPort httpClient;
+    private final ObjectMapper objectMapper;
 
     public BinanceBootReadinessChecker(String restBaseUrl,
                                        BinanceRestRequestBuilder requestBuilder,
-                                       HttpClientPort httpClient) {
+                                       HttpClientPort httpClient,
+                                       ObjectMapper objectMapper) {
         this.restBaseUrl = restBaseUrl;
         this.requestBuilder = requestBuilder;
         this.httpClient = httpClient;
+        this.objectMapper = objectMapper;
     }
 
     public ExchangeBootReadiness check() {
@@ -58,7 +63,7 @@ public class BinanceBootReadinessChecker {
             RestRequest req = requestBuilder.buildAccountSnapshot();
             HttpClientPort.HttpResponse response = httpClient.get(req.url(), req.headers());
             if (response.isSuccessful()) {
-                return ExchangeBootReadiness.ready("BINANCE", "Connectivity and API key verified.");
+                return checkCanTrade(response.body());
             }
             return switch (response.statusCode()) {
                 case 401 -> ExchangeBootReadiness.notReady("BINANCE", "INVALID_API_KEY",
@@ -73,5 +78,19 @@ public class BinanceBootReadinessChecker {
             return ExchangeBootReadiness.notReady("BINANCE", "CONNECTIVITY_FAILURE",
                     "Account check failed: " + e.getMessage());
         }
+    }
+
+    private ExchangeBootReadiness checkCanTrade(String body) {
+        try {
+            JsonNode node = objectMapper.readTree(body);
+            JsonNode canTrade = node.path("canTrade");
+            if (!canTrade.isMissingNode() && !canTrade.asBoolean(true)) {
+                return ExchangeBootReadiness.notReady("BINANCE", "INSUFFICIENT_PERMISSIONS",
+                        "API key cannot trade (canTrade=false)");
+            }
+        } catch (Exception e) {
+            log.warn("Could not parse canTrade from account response: {}", e.getMessage());
+        }
+        return ExchangeBootReadiness.ready("BINANCE", "Connectivity and API key verified.");
     }
 }

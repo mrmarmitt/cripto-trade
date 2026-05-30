@@ -49,6 +49,11 @@ public class BinanceMarketStreamConfiguration {
                 properties.getApiSecret(),
                 properties.getWsBaseUrl(),
                 properties.getRestBaseUrl());
-        return new BinanceMarketStreamAdapter(objectMapper, config, new OkHttpClientAdapter(binanceRestClient));
+        // Derived client shares binanceRestClient's connection pool; callTimeout caps the full
+        // boot readiness check to 10s instead of the shared client's 30s read timeout.
+        OkHttpClient bootReadinessClient = binanceRestClient.newBuilder()
+                .callTimeout(Duration.ofSeconds(10))
+                .build();
+        return new BinanceMarketStreamAdapter(objectMapper, config, new OkHttpClientAdapter(bootReadinessClient));
     }
 }

@@ -52,7 +52,8 @@ public class BinanceMarketStreamAdapter implements
         this.bootReadinessChecker     = new BinanceBootReadinessChecker(
                 config.restBaseUrl(),
                 new BinanceRestRequestBuilder(config.restBaseUrl(), signer),
-                httpClient);
+                httpClient,
+                objectMapper);
     }
 
     @Override
