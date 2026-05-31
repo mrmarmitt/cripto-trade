@@ -120,4 +120,15 @@ class BinanceBootReadinessIntegrationTest {
         assertThat(result.ready()).isFalse();
         assertThat(result.code()).isEqualTo("UNKNOWN_ERROR");
     }
+
+    @Test
+    void shouldReturnUnknownErrorWhenAccountResponseLacksCanTradeField() {
+        server.enqueue(new MockResponse().setResponseCode(200).setBody("{}"));
+        server.enqueue(new MockResponse().setResponseCode(200).setBody("{\"balances\":[]}"));
+
+        ExchangeBootReadiness result = checker.check();
+
+        assertThat(result.ready()).isFalse();
+        assertThat(result.code()).isEqualTo("UNKNOWN_ERROR");
+    }
 }

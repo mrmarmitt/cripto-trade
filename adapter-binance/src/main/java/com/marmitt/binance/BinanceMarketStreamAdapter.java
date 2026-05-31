@@ -26,6 +26,10 @@ import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class BinanceMarketStreamAdapter implements
         ExchangeStreamingPort,
@@ -118,7 +122,20 @@ public class BinanceMarketStreamAdapter implements
 
     @Override
     public ExchangeBootReadiness checkBootReadiness() {
-        return bootReadinessChecker.check();
+        try {
+            return CompletableFuture.supplyAsync(bootReadinessChecker::check)
+                    .get(10, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            return ExchangeBootReadiness.notReady("BINANCE", "CONNECTIVITY_FAILURE",
+                    "Boot readiness check timed out after 10s");
+        } catch (ExecutionException e) {
+            return ExchangeBootReadiness.notReady("BINANCE", "UNKNOWN_ERROR",
+                    "Boot readiness check failed: " + e.getCause().getMessage());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return ExchangeBootReadiness.notReady("BINANCE", "UNKNOWN_ERROR",
+                    "Boot readiness check interrupted");
+        }
     }
 
     private UnsupportedOperationException restNotImplemented() {

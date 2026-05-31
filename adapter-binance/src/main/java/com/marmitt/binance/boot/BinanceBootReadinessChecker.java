@@ -84,12 +84,17 @@ public class BinanceBootReadinessChecker {
         try {
             JsonNode node = objectMapper.readTree(body);
             JsonNode canTrade = node.path("canTrade");
-            if (!canTrade.isMissingNode() && !canTrade.asBoolean(true)) {
+            if (canTrade.isMissingNode()) {
+                return ExchangeBootReadiness.notReady("BINANCE", "UNKNOWN_ERROR",
+                        "Account response did not include canTrade field — unexpected payload");
+            }
+            if (!canTrade.asBoolean()) {
                 return ExchangeBootReadiness.notReady("BINANCE", "INSUFFICIENT_PERMISSIONS",
                         "API key cannot trade (canTrade=false)");
             }
         } catch (Exception e) {
-            log.warn("Could not parse canTrade from account response: {}", e.getMessage());
+            return ExchangeBootReadiness.notReady("BINANCE", "UNKNOWN_ERROR",
+                    "Could not parse account response: " + e.getMessage());
         }
         return ExchangeBootReadiness.ready("BINANCE", "Connectivity and API key verified.");
     }
