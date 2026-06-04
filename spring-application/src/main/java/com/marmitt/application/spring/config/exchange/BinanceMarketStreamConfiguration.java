@@ -3,6 +3,7 @@ package com.marmitt.application.spring.config.exchange;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.application.spring.adapter.OkHttp3ListenerConverter;
 import com.marmitt.application.spring.adapter.OkHttp3WebSocketAdapter;
+import com.marmitt.application.spring.adapter.binance.OkHttpClientAdapter;
 import com.marmitt.binance.BinanceConnectionConfig;
 import com.marmitt.binance.BinanceMarketStreamAdapter;
 import com.marmitt.core.enums.StreamChannel;
@@ -41,12 +42,18 @@ public class BinanceMarketStreamConfiguration {
 
     @Bean
     public BinanceMarketStreamAdapter binanceMarketStreamAdapter(ObjectMapper objectMapper,
-                                                                 BinanceProperties properties) {
+                                                                 BinanceProperties properties,
+                                                                 OkHttpClient binanceRestClient) {
         BinanceConnectionConfig config = new BinanceConnectionConfig(
                 properties.getApiKey(),
                 properties.getApiSecret(),
                 properties.getWsBaseUrl(),
                 properties.getRestBaseUrl());
-        return new BinanceMarketStreamAdapter(objectMapper, config);
+        // Derived client shares binanceRestClient's connection pool; callTimeout caps the full
+        // boot readiness check to 10s instead of the shared client's 30s read timeout.
+        OkHttpClient bootReadinessClient = binanceRestClient.newBuilder()
+                .callTimeout(Duration.ofSeconds(10))
+                .build();
+        return new BinanceMarketStreamAdapter(objectMapper, config, new OkHttpClientAdapter(bootReadinessClient));
     }
 }

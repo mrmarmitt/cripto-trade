@@ -3,9 +3,12 @@ package com.marmitt.binance;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.binance.auth.BinanceCredentials;
 import com.marmitt.binance.auth.BinanceRequestSigner;
+import com.marmitt.binance.boot.BinanceBootReadinessChecker;
 import com.marmitt.binance.processor.receive.BinanceReceivedMessageProcessor;
 import com.marmitt.binance.processor.send.BinanceSenderMessageProcessor;
+import com.marmitt.binance.rest.BinanceRestRequestBuilder;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
+import com.marmitt.core.ports.outbound.http.HttpClientPort;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
 import com.marmitt.core.dto.websocket.data.AccountDataDto;
@@ -23,6 +26,10 @@ import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ExecutionException;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
 
 public class BinanceMarketStreamAdapter implements
         ExchangeStreamingPort,
@@ -34,9 +41,11 @@ public class BinanceMarketStreamAdapter implements
     private final BinanceReceivedMessageProcessor receivedMessageProcessor;
     private final BinanceSenderMessageProcessor senderMessageProcessor;
     private final BinanceUrlBuilder urlBuilder;
+    private final BinanceBootReadinessChecker bootReadinessChecker;
 
     public BinanceMarketStreamAdapter(ObjectMapper objectMapper,
-                                      BinanceConnectionConfig config) {
+                                      BinanceConnectionConfig config,
+                                      HttpClientPort httpClient) {
         var apiConfig         = new BinanceApiConfig(config.wsBaseUrl(), config.restBaseUrl());
         var credentials       = new BinanceCredentials(config.apiKey(), config.apiSecret());
         var signer            = new BinanceRequestSigner(credentials);
@@ -44,6 +53,11 @@ public class BinanceMarketStreamAdapter implements
         this.urlBuilder               = binanceUrlBuilder;
         this.senderMessageProcessor   = new BinanceSenderMessageProcessor(objectMapper, signer, binanceUrlBuilder);
         this.receivedMessageProcessor = new BinanceReceivedMessageProcessor(objectMapper);
+        this.bootReadinessChecker     = new BinanceBootReadinessChecker(
+                config.restBaseUrl(),
+                new BinanceRestRequestBuilder(config.restBaseUrl(), signer),
+                httpClient,
+                objectMapper);
     }
 
     @Override
@@ -108,7 +122,20 @@ public class BinanceMarketStreamAdapter implements
 
     @Override
     public ExchangeBootReadiness checkBootReadiness() {
-        return ExchangeBootReadiness.ready("BINANCE", "Binance market stream adapter initialized.");
+        try {
+            return CompletableFuture.supplyAsync(bootReadinessChecker::check)
+                    .get(10, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            return ExchangeBootReadiness.notReady("BINANCE", "CONNECTIVITY_FAILURE",
+                    "Boot readiness check timed out after 10s");
+        } catch (ExecutionException e) {
+            return ExchangeBootReadiness.notReady("BINANCE", "UNKNOWN_ERROR",
+                    "Boot readiness check failed: " + e.getCause().getMessage());
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            return ExchangeBootReadiness.notReady("BINANCE", "UNKNOWN_ERROR",
+                    "Boot readiness check interrupted");
+        }
     }
 
     private UnsupportedOperationException restNotImplemented() {
