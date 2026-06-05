@@ -1,6 +1,7 @@
 package com.marmitt.application.spring.infrastructure.exchange;
 
 import com.marmitt.binance.filters.OrderFilterViolationException;
+import com.marmitt.binance.filters.SymbolFilterLoadException;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.dto.runner.OrderDispatchCommand;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
@@ -45,7 +46,7 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
             if (!tryDispatchViaRest(request, command.exchangeId())) {
                 dispatchViaStreaming(request, command.exchangeId());
             }
-        } catch (OrderFilterViolationException ex) {
+        } catch (OrderFilterViolationException | SymbolFilterLoadException ex) {
             log.warn("dispatch: order rejected by local filter - clientOrderId={} exchange={} reason={}",
                     command.clientOrderId(), command.exchangeId(), ex.getMessage());
             orderConciliation.execute(toRejectedOrder(command, ex.getMessage()));
