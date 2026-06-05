@@ -71,6 +71,7 @@ Invariantes de alto nivel:
 - Padroes de implementacao: `/.ai/coding-standards.md`.
 - Validacao minima: `/.ai/validation.md`.
 - Git workflow: `/.ai/git-workflow.md`.
+- Flow maps: `/.ai/flows/README.md`.
 - Seguranca de refactor/mudanca de responsabilidade: `/.ai/change-safety.md`.
 - Heuristicas de review: `/.ai/review.md` e `/.ai/agents/code-review-agent.md`.
 - Resolver comentarios de PR: `/.ai/skills/pr-comment-resolver/SKILL.md`.
@@ -100,7 +101,8 @@ Invariantes de alto nivel:
 ## Como Comecar uma Tarefa
 
 - Implementacao: leia `/.ai/README.md`, este arquivo, `architecture.md`,
-  `coding-standards.md`, `validation.md` e depois o doc profundo do fluxo afetado.
+  `coding-standards.md`, `validation.md`, o flow map aplicavel em `flows/` e
+  depois o doc profundo do fluxo afetado.
 - Review: leia `review.md`, `agents/code-review-agent.md`, o diff e os docs do
   fluxo tocado; publique achados priorizando bug, regressao e fronteira
   arquitetural.

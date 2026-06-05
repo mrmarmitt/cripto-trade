@@ -27,6 +27,9 @@ Add Binance symbol filter validation
 ## Validation
 - `<command>`: passed
 
+## Documentation
+- <updated docs, or no documentation impact>
+
 ## Notes
 - <optional: unrelated files left out, residual risk, skipped validation, or follow-up>
 ```
@@ -36,6 +39,9 @@ Add Binance symbol filter validation
 ```md
 ## Validation
 - Docs-only change; inspected the updated Markdown files.
+
+## Documentation
+- Updated base documentation.
 ```
 
 ## Failed or Skipped Validation

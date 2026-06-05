@@ -54,6 +54,9 @@ For refactors or responsibility moves, also read `/.ai/change-safety.md`.
    - If scope is ambiguous, ask before staging.
    - Use `git diff` and targeted file reads to understand related changes before
      writing the commit message or PR body.
+   - For code changes, evaluate documentation impact using `/.ai/docs.md`.
+     Update the applicable base documentation, or record that there is no
+     documentation impact.
 3. Validate.
    - Use the narrowest meaningful `./scripts/gradle-run.ps1` command from
      `/.ai/validation.md`.
@@ -83,6 +86,7 @@ For refactors or responsibility moves, also read `/.ai/change-safety.md`.
    - Include branch, base, commit hash if available.
    - Include files staged/committed.
    - Include validation command and result.
+   - Include documentation impact: updated docs, or "no documentation impact".
    - Include unrelated changes left out.
 
 ## PR Body Requirements
@@ -91,6 +95,7 @@ The PR body should include:
 
 - Summary: 2-4 bullets describing what changed.
 - Validation: exact commands run and outcome, or docs-only inspection.
+- Documentation: files updated, or explicit "no documentation impact".
 - Scope notes: related files included and unrelated files intentionally left out
   when relevant.
 - Risk notes: only if there is residual risk, skipped validation, or a known
