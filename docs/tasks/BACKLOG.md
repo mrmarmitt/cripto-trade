@@ -11,8 +11,8 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T3  | HMAC-SHA256 Signing             | Alta         | Claude      | Concluído     |
 | T4  | User Data Stream                | Alta         | Claude      | Concluído     |
 | T5  | REST API Binance                | Alta         | Claude      | Concluído     |
-| T6  | Exchange Symbol Filters         | Média        | Codex       | Pendente      |
-| T7  | Boot Readiness real             | Média        | Codex       | Pendente      |
+| T6  | Exchange Symbol Filters         | Média        | Codex       | Concluído     |
+| T7  | Boot Readiness real             | Média        | Codex       | Concluído     |
 | T8  | Kill Switch                     | Média        | Codex       | Pendente      |
 | T9  | Observabilidade Docker Compose  | Média        | Codex       | Pendente      |
 | T10 | Otimização da suíte de integração | Média      | Codex       | Pendente      |

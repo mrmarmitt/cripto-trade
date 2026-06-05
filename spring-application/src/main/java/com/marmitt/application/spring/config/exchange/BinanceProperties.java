@@ -4,6 +4,9 @@ import jakarta.validation.constraints.NotBlank;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.validation.annotation.Validated;
 
+import java.util.ArrayList;
+import java.util.List;
+
 @Validated
 @ConfigurationProperties(prefix = "binance")
 public class BinanceProperties {
@@ -19,6 +22,8 @@ public class BinanceProperties {
 
     @NotBlank(message = "binance.api-secret is required when binance.api-key is defined")
     private String apiSecret;
+
+    private List<String> symbols = new ArrayList<>();
 
     public String getWsBaseUrl() {
         return wsBaseUrl;
@@ -50,5 +55,13 @@ public class BinanceProperties {
 
     public void setApiSecret(String apiSecret) {
         this.apiSecret = apiSecret;
+    }
+
+    public List<String> getSymbols() {
+        return symbols;
+    }
+
+    public void setSymbols(List<String> symbols) {
+        this.symbols = symbols;
     }
 }
