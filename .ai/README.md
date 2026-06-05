@@ -13,22 +13,30 @@ Todo agente deve consultar este material antes de implementar, revisar, refatora
 
 ## Leitura base para tarefas de codigo
 
-1. `architecture.md`
-2. `coding-standards.md`
-3. `validation.md`
+1. `project-context.md`
+2. `architecture.md`
+3. `coding-standards.md`
+4. `validation.md`
+5. `git-workflow.md`
 
 ## Contexto minimo por tarefa
 
-- Implementacao: `architecture.md`, `coding-standards.md`, `validation.md`
-- Review de PR ou diff: `architecture.md`, `coding-standards.md`, `validation.md`, `review.md`, `agents/code-review-agent.md`
-- Refactor ou mudanca de responsabilidade entre modulos: `architecture.md`, `coding-standards.md`, `validation.md`, `change-safety.md`
-- Sugestao arquitetural: `architecture.md`, `coding-standards.md`, `change-safety.md`
+- Implementacao: `project-context.md`, `architecture.md`, `coding-standards.md`, `validation.md`
+- Review de PR ou diff: `project-context.md`, `architecture.md`, `coding-standards.md`, `validation.md`, `review.md`, `agents/code-review-agent.md`
+- Resolver comentarios de PR: `project-context.md`, `architecture.md`, `coding-standards.md`, `validation.md`, `review.md`, `agents/code-review-agent.md`, `skills/pr-comment-resolver/SKILL.md`
+- Criacao de PR: `project-context.md`, `architecture.md`, `coding-standards.md`, `validation.md`, `git-workflow.md`, `skills/pr-creator/SKILL.md`
+- Refactor ou mudanca de responsabilidade entre modulos: `project-context.md`, `architecture.md`, `coding-standards.md`, `validation.md`, `change-safety.md`
+- Sugestao arquitetural: `project-context.md`, `architecture.md`, `coding-standards.md`, `change-safety.md`
 - Atualizacao de documentacao: `docs.md`
 - Publicacao de findings em PR: `skills/pr-review-publisher/SKILL.md`
 
 ## Guias adicionais por tipo de tarefa
 
+- Uso de agentes e skills: consultar `agents/usage.md` para exemplos de comandos e efeitos esperados
+- Git workflow: consultar `git-workflow.md` para branch, commit e base de PR
 - Review de PR ou diff: ler tambem `review.md`
+- Resolver comentarios de PR: ler tambem `skills/pr-comment-resolver/SKILL.md`
+- Criacao de PR: ler tambem `skills/pr-creator/SKILL.md`
 - Refactor ou mudanca de responsabilidade entre modulos: ler tambem `change-safety.md`
 - Atualizacao de documentacao: ler tambem `docs.md`
 
