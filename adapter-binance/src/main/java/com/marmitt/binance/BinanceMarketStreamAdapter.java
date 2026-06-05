@@ -8,6 +8,7 @@ import com.marmitt.binance.filters.OrderFilterValidator;
 import com.marmitt.binance.filters.SymbolFilterCache;
 import com.marmitt.binance.processor.receive.BinanceReceivedMessageProcessor;
 import com.marmitt.binance.processor.send.BinanceSenderMessageProcessor;
+import com.marmitt.binance.rest.BinanceAccountMapper;
 import com.marmitt.binance.rest.BinanceOrderMapper;
 import com.marmitt.binance.rest.BinanceRestRequestBuilder;
 import com.marmitt.binance.rest.RestRequest;
@@ -50,6 +51,7 @@ public class BinanceMarketStreamAdapter implements
     private final BinanceBootReadinessChecker bootReadinessChecker;
     private final BinanceRestRequestBuilder requestBuilder;
     private final BinanceOrderMapper orderMapper;
+    private final BinanceAccountMapper accountMapper;
     private final HttpClientPort httpClient;
     private final OrderFilterValidator filterValidator;
 
@@ -57,10 +59,10 @@ public class BinanceMarketStreamAdapter implements
                                       BinanceConnectionConfig config,
                                       HttpClientPort httpClient,
                                       SymbolFilterCache filterCache) {
-        var apiConfig         = new BinanceApiConfig(config.wsBaseUrl(), config.restBaseUrl());
-        var credentials       = new BinanceCredentials(config.apiKey(), config.apiSecret());
-        var signer            = new BinanceRequestSigner(credentials);
-        var binanceUrlBuilder = new BinanceUrlBuilder(apiConfig);
+        var apiConfig          = new BinanceApiConfig(config.wsBaseUrl(), config.restBaseUrl());
+        var credentials        = new BinanceCredentials(config.apiKey(), config.apiSecret());
+        var signer             = new BinanceRequestSigner(credentials);
+        var binanceUrlBuilder  = new BinanceUrlBuilder(apiConfig);
         var restRequestBuilder = new BinanceRestRequestBuilder(config.restBaseUrl(), signer);
         this.urlBuilder               = binanceUrlBuilder;
         this.senderMessageProcessor   = new BinanceSenderMessageProcessor(objectMapper, signer, binanceUrlBuilder);
@@ -68,6 +70,7 @@ public class BinanceMarketStreamAdapter implements
         this.requestBuilder           = restRequestBuilder;
         this.httpClient               = httpClient;
         this.orderMapper              = new BinanceOrderMapper(objectMapper);
+        this.accountMapper            = new BinanceAccountMapper(objectMapper);
         this.filterValidator          = new OrderFilterValidator(filterCache);
         this.bootReadinessChecker     = new BinanceBootReadinessChecker(
                 config.restBaseUrl(), restRequestBuilder, httpClient, objectMapper);
@@ -90,6 +93,10 @@ public class BinanceMarketStreamAdapter implements
 
     @Override
     public String formatMessage(MessageRequest request) {
+        // P2 fix: apply symbol filters for WebSocket order placement before formatting
+        if (request instanceof SendOrderRequest orderRequest) {
+            request = filterValidator.validate(orderRequest);
+        }
         return senderMessageProcessor.execute(request);
     }
 
@@ -97,6 +104,8 @@ public class BinanceMarketStreamAdapter implements
     public ProcessingResult<? extends ProcessorResponse> processMessage(String rawMessage, MessageContext context) {
         return receivedMessageProcessor.processMessage(rawMessage, context);
     }
+
+    // --- ExchangeOrderExecutionPort ---
 
     @Override
     public OrderDataDto submitOrder(SendOrderRequest request) {
@@ -107,14 +116,7 @@ public class BinanceMarketStreamAdapter implements
             if (response.isSuccessful()) {
                 return orderMapper.fromJson(response.body());
             }
-            ExchangeQueryException.ErrorType errorType = switch (response.statusCode()) {
-                case 400 -> ExchangeQueryException.ErrorType.INVALID_REQUEST;
-                case 401, 403 -> ExchangeQueryException.ErrorType.AUTH;
-                case 429 -> ExchangeQueryException.ErrorType.RATE_LIMIT;
-                default -> ExchangeQueryException.ErrorType.TEMPORARY;
-            };
-            throw new ExchangeQueryException("BINANCE", errorType,
-                    "Order submission failed HTTP " + response.statusCode() + ": " + response.body());
+            throw queryException(response, "Order submission");
         } catch (IOException e) {
             throw new ExchangeQueryException("BINANCE", ExchangeQueryException.ErrorType.TEMPORARY,
                     "Order submission failed: " + e.getMessage(), e);
@@ -129,44 +131,57 @@ public class BinanceMarketStreamAdapter implements
             if (response.isSuccessful()) {
                 return orderMapper.fromJson(response.body());
             }
-            ExchangeQueryException.ErrorType errorType = switch (response.statusCode()) {
-                case 400 -> ExchangeQueryException.ErrorType.INVALID_REQUEST;
-                case 401, 403 -> ExchangeQueryException.ErrorType.AUTH;
-                case 429 -> ExchangeQueryException.ErrorType.RATE_LIMIT;
-                default -> ExchangeQueryException.ErrorType.TEMPORARY;
-            };
-            throw new ExchangeQueryException("BINANCE", errorType,
-                    "Order cancellation failed HTTP " + response.statusCode() + ": " + response.body());
+            throw queryException(response, "Order cancellation");
         } catch (IOException e) {
             throw new ExchangeQueryException("BINANCE", ExchangeQueryException.ErrorType.TEMPORARY,
                     "Order cancellation failed: " + e.getMessage(), e);
         }
     }
 
+    // --- ExchangeOrderQueryPort ---
+
     @Override
     public Optional<OrderDataDto> queryOrderByClientOrderId(String symbol, String clientOrderId) {
-        throw restNotImplemented();
+        RestRequest req = requestBuilder.buildQueryOrderByClientOrderId(symbol, clientOrderId);
+        return querySingleOrder(req);
     }
 
     @Override
     public Optional<OrderDataDto> queryOrderByExchangeOrderId(String symbol, String exchangeOrderId) {
-        throw restNotImplemented();
+        RestRequest req = requestBuilder.buildQueryOrderByExchangeOrderId(symbol, exchangeOrderId);
+        return querySingleOrder(req);
     }
 
     @Override
     public List<OrderDataDto> listOpenOrdersBySymbol(String symbol) {
-        throw restNotImplemented();
+        RestRequest req = requestBuilder.buildListOpenOrdersBySymbol(symbol);
+        return queryOrderList(req);
     }
 
     @Override
     public List<OrderDataDto> listAllOpenOrders() {
-        throw restNotImplemented();
+        RestRequest req = requestBuilder.buildListAllOpenOrders();
+        return queryOrderList(req);
     }
+
+    // --- ExchangeAccountQueryPort ---
 
     @Override
     public AccountDataDto queryAccountSnapshot() {
-        throw restNotImplemented();
+        RestRequest req = requestBuilder.buildAccountSnapshot();
+        try {
+            HttpClientPort.HttpResponse response = httpClient.get(req.url(), req.headers());
+            if (response.isSuccessful()) {
+                return accountMapper.fromJson(response.body());
+            }
+            throw queryException(response, "Account snapshot");
+        } catch (IOException e) {
+            throw new ExchangeQueryException("BINANCE", ExchangeQueryException.ErrorType.TEMPORARY,
+                    "Account snapshot failed: " + e.getMessage(), e);
+        }
     }
+
+    // --- ExchangeBootReadinessPort ---
 
     @Override
     public ExchangeBootReadiness checkBootReadiness() {
@@ -186,9 +201,45 @@ public class BinanceMarketStreamAdapter implements
         }
     }
 
-    private UnsupportedOperationException restNotImplemented() {
-        return new UnsupportedOperationException(
-                "BINANCE REST not yet wired — pending use case implementation."
-        );
+    // --- helpers ---
+
+    private Optional<OrderDataDto> querySingleOrder(RestRequest req) {
+        try {
+            HttpClientPort.HttpResponse response = httpClient.get(req.url(), req.headers());
+            if (response.isSuccessful()) {
+                return Optional.of(orderMapper.fromJson(response.body()));
+            }
+            if (response.statusCode() == 400) {
+                return Optional.empty();
+            }
+            throw queryException(response, "Order query");
+        } catch (IOException e) {
+            throw new ExchangeQueryException("BINANCE", ExchangeQueryException.ErrorType.TEMPORARY,
+                    "Order query failed: " + e.getMessage(), e);
+        }
+    }
+
+    private List<OrderDataDto> queryOrderList(RestRequest req) {
+        try {
+            HttpClientPort.HttpResponse response = httpClient.get(req.url(), req.headers());
+            if (response.isSuccessful()) {
+                return orderMapper.listFromJson(response.body());
+            }
+            throw queryException(response, "Open orders query");
+        } catch (IOException e) {
+            throw new ExchangeQueryException("BINANCE", ExchangeQueryException.ErrorType.TEMPORARY,
+                    "Open orders query failed: " + e.getMessage(), e);
+        }
+    }
+
+    private ExchangeQueryException queryException(HttpClientPort.HttpResponse response, String operation) {
+        ExchangeQueryException.ErrorType errorType = switch (response.statusCode()) {
+            case 400 -> ExchangeQueryException.ErrorType.INVALID_REQUEST;
+            case 401, 403 -> ExchangeQueryException.ErrorType.AUTH;
+            case 429 -> ExchangeQueryException.ErrorType.RATE_LIMIT;
+            default -> ExchangeQueryException.ErrorType.TEMPORARY;
+        };
+        return new ExchangeQueryException("BINANCE", errorType,
+                operation + " failed HTTP " + response.statusCode() + ": " + response.body());
     }
 }

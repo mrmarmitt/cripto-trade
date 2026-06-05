@@ -63,7 +63,7 @@ public class BinanceOrderMapper {
         }
     }
 
-    List<OrderDataDto> listFromJson(String json) {
+    public List<OrderDataDto> listFromJson(String json) {
         try {
             JsonNode root = objectMapper.readTree(json);
             List<OrderDataDto> result = new ArrayList<>();

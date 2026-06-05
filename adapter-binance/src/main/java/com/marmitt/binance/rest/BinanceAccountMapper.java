@@ -10,15 +10,15 @@ import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
-class BinanceAccountMapper {
+public class BinanceAccountMapper {
 
     private final ObjectMapper objectMapper;
 
-    BinanceAccountMapper(ObjectMapper objectMapper) {
+    public BinanceAccountMapper(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
-    AccountDataDto fromJson(String json) {
+    public AccountDataDto fromJson(String json) {
         try {
             JsonNode root = objectMapper.readTree(json);
             Map<String, BigDecimal> balances = new LinkedHashMap<>();
