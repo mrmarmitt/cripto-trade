@@ -45,6 +45,8 @@ public class BinanceMarketStreamAdapter implements
         ExchangeAccountQueryPort,
         ExchangeBootReadinessPort {
 
+    private static final int BINANCE_ORDER_NOT_FOUND = -2013;
+
     private final BinanceReceivedMessageProcessor receivedMessageProcessor;
     private final BinanceSenderMessageProcessor senderMessageProcessor;
     private final BinanceUrlBuilder urlBuilder;
@@ -54,6 +56,7 @@ public class BinanceMarketStreamAdapter implements
     private final BinanceAccountMapper accountMapper;
     private final HttpClientPort httpClient;
     private final OrderFilterValidator filterValidator;
+    private final ObjectMapper objectMapper;
 
     public BinanceMarketStreamAdapter(ObjectMapper objectMapper,
                                       BinanceConnectionConfig config,
@@ -72,6 +75,7 @@ public class BinanceMarketStreamAdapter implements
         this.orderMapper              = new BinanceOrderMapper(objectMapper);
         this.accountMapper            = new BinanceAccountMapper(objectMapper);
         this.filterValidator          = new OrderFilterValidator(filterCache);
+        this.objectMapper             = objectMapper;
         this.bootReadinessChecker     = new BinanceBootReadinessChecker(
                 config.restBaseUrl(), restRequestBuilder, httpClient, objectMapper);
     }
@@ -209,13 +213,21 @@ public class BinanceMarketStreamAdapter implements
             if (response.isSuccessful()) {
                 return Optional.of(orderMapper.fromJson(response.body()));
             }
-            if (response.statusCode() == 400) {
+            if (response.statusCode() == 400 && isBinanceOrderNotFound(response.body())) {
                 return Optional.empty();
             }
             throw queryException(response, "Order query");
         } catch (IOException e) {
             throw new ExchangeQueryException("BINANCE", ExchangeQueryException.ErrorType.TEMPORARY,
                     "Order query failed: " + e.getMessage(), e);
+        }
+    }
+
+    private boolean isBinanceOrderNotFound(String body) {
+        try {
+            return objectMapper.readTree(body).path("code").asInt(0) == BINANCE_ORDER_NOT_FOUND;
+        } catch (Exception e) {
+            return false;
         }
     }
 
