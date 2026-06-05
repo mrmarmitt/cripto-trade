@@ -1,0 +1,4 @@
+interface:
+  display_name: "PR Creator"
+  short_description: "Validate, commit, push, and open draft PRs"
+  default_prompt: "Create a draft pull request for the current scoped changes: inspect status, validate, commit only related files, push the branch, open the PR, and report the URL and validation."

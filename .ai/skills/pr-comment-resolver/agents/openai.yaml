@@ -1,0 +1,4 @@
+interface:
+  display_name: "PR Comment Resolver"
+  short_description: "Resolve PR review comments end to end"
+  default_prompt: "Address the review comments on the current pull request, implement the selected fixes, validate the changes, and draft or publish replies as requested."
