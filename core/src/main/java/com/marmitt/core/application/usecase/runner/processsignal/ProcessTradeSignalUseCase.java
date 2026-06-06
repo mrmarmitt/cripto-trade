@@ -16,6 +16,7 @@ import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import com.marmitt.core.exceptions.ConcurrentPositionLockException;
+import com.marmitt.core.exceptions.RunnerHaltedException;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
@@ -116,6 +117,14 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
      * mas antes do ACK da exchange, o sistema pode recuperar o estado pelo clientOrderId.
      */
     protected void persistBuyAndReserve(BuyExecutionContext context) {
+        // Re-read runner inside the transaction to close the race with the kill switch.
+        // PostgreSQL READ COMMITTED ensures this sees any HALTED status committed since the signal was loaded.
+        StrategyRunner current = strategyRunnerRepository.findById(context.runner().getId())
+                .orElseThrow(() -> new IllegalStateException("Runner disappeared mid-signal: " + context.runner().getId()));
+        if (!current.canAcceptSignals()) {
+            throw new RunnerHaltedException(context.runner().getId());
+        }
+
         strategyRunnerRepository.saveTransaction(context.transaction());
         capitalReservationPolicy.validateAndReserve(
                 context.capitalRequest(), context.runner(), context.precomputedExposure());
@@ -128,6 +137,12 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     }
 
     protected void persistSellAndLockPosition(Transaction transaction, Position targetPosition) {
+        StrategyRunner current = strategyRunnerRepository.findById(transaction.getRunnerId())
+                .orElseThrow(() -> new IllegalStateException("Runner disappeared mid-signal: " + transaction.getRunnerId()));
+        if (!current.canAcceptSignals()) {
+            throw new RunnerHaltedException(transaction.getRunnerId());
+        }
+
         strategyRunnerRepository.saveTransaction(transaction);
         boolean locked = strategyRunnerRepository.tryLockPositionForSell(
                 targetPosition.getId(),
@@ -163,6 +178,9 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
 
             try {
                 processRunner(runner, strategyInput, marketData.price());
+            } catch (RunnerHaltedException e) {
+                log.warn("priceUpdate: signal discarded - runner halted mid-flight runnerId={} symbol={}",
+                        runner.getId(), symbol);
             } catch (ConcurrentPositionLockException e) {
                 log.warn("priceUpdate: concurrent SELL conflict for runner={} symbol={} - tick discarded (position already locked by another thread)",
                         runner.getId(), symbol);
