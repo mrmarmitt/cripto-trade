@@ -144,6 +144,25 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                 context.runner().getPortfolioId());
     }
 
+    private void expirePendingSell(Transaction tx) {
+        OrderDataDto rejected = new OrderDataDto(
+                null,
+                tx.getClientOrderId(),
+                Symbol.of(tx.getSymbol()),
+                OrderDataDto.OrderSide.SELL,
+                OrderDataDto.OrderType.LIMIT,
+                tx.getQuantity(),
+                BigDecimal.ZERO,
+                tx.getPrice(),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.REJECTED,
+                "Runner halted mid-flight — signal expired before dispatch",
+                Instant.now()
+        );
+        orderConciliation.execute(rejected);
+    }
+
     private void expirePendingBuy(BuyExecutionContext context) {
         Transaction tx = context.transaction();
         OrderDataDto rejected = new OrderDataDto(
@@ -268,7 +287,8 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                     this::checkRunnerNotHalted, this::expirePendingBuy);
         } else {
             sellSignalHandler.handle(runner, signal, transaction,
-                    this::transactionalPersistSellAndLockPosition, this::checkRunnerNotHalted);
+                    this::transactionalPersistSellAndLockPosition, this::checkRunnerNotHalted,
+                    this::expirePendingSell);
         }
     }
 
