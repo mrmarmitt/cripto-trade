@@ -39,6 +39,7 @@ public class StrategyRunnerEntityMapper {
                 .dedicatedBudget(domain.getDedicatedBudget())
                 .isReconciling(domain.isReconciling())
                 .createdAt(domain.getCreatedAt())
+                .statusChangedAt(domain.getStatusChangedAt())
                 .lastReconciliationAt(domain.getLastReconciliationAt())
                 .archivedAt(domain.getArchivedAt())
                 .version(domain.getVersion())
@@ -64,6 +65,7 @@ public class StrategyRunnerEntityMapper {
                 entity.getDedicatedBudget(),
                 entity.isReconciling(),
                 entity.getCreatedAt(),
+                entity.getStatusChangedAt(),
                 entity.getLastReconciliationAt(),
                 entity.getArchivedAt(),
                 entity.getVersion()

@@ -8,6 +8,9 @@ import com.marmitt.core.dto.strategy.StrategyContextDto;
 import com.marmitt.core.dto.strategy.StrategyInputDto;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.dto.websocket.data.MarketDataDto;
+import com.marmitt.core.domain.Symbol;
+import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.strategy.TradingStrategy;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
@@ -16,11 +19,14 @@ import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import com.marmitt.core.exceptions.ConcurrentPositionLockException;
+import com.marmitt.core.exceptions.RunnerHaltedException;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Orquestrador principal do fluxo market data → decisao de trade → ordem na exchange.
@@ -60,6 +66,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     private static final BigDecimal MINIMUM_OPERATION_AMOUNT = BigDecimal.valueOf(10);
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
+    private final OrderConciliationPort orderConciliation;
 
     private final RunnerSignalPolicy signalPolicy;
     private final StrategySignalEvaluator signalEvaluator;
@@ -74,8 +81,10 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                                         StrategyRepositoryPort strategyRepository,
                                         GlobalBalanceRepositoryPort globalBalanceRepository,
                                         PortfolioRepositoryPort portfolioRepository,
-                                        OrderDispatchPort orderDispatch) {
+                                        OrderDispatchPort orderDispatch,
+                                        OrderConciliationPort orderConciliation) {
         this.strategyRunnerRepository = strategyRunnerRepository;
+        this.orderConciliation = orderConciliation;
 
         this.signalPolicy = new RunnerSignalPolicy();
         this.signalEvaluator = new StrategySignalEvaluator(strategyRepository);
@@ -116,6 +125,14 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
      * mas antes do ACK da exchange, o sistema pode recuperar o estado pelo clientOrderId.
      */
     protected void persistBuyAndReserve(BuyExecutionContext context) {
+        // Re-read runner inside the transaction to close the race with the kill switch.
+        // PostgreSQL READ COMMITTED ensures this sees any HALTED status committed since the signal was loaded.
+        StrategyRunner current = strategyRunnerRepository.findById(context.runner().getId())
+                .orElseThrow(() -> new IllegalStateException("Runner disappeared mid-signal: " + context.runner().getId()));
+        if (!current.canAcceptSignals()) {
+            throw new RunnerHaltedException(context.runner().getId());
+        }
+
         strategyRunnerRepository.saveTransaction(context.transaction());
         capitalReservationPolicy.validateAndReserve(
                 context.capitalRequest(), context.runner(), context.precomputedExposure());
@@ -127,7 +144,60 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                 context.runner().getPortfolioId());
     }
 
+    private void expirePendingSell(Transaction tx) {
+        OrderDataDto rejected = new OrderDataDto(
+                null,
+                tx.getClientOrderId(),
+                Symbol.of(tx.getSymbol()),
+                OrderDataDto.OrderSide.SELL,
+                OrderDataDto.OrderType.LIMIT,
+                tx.getQuantity(),
+                BigDecimal.ZERO,
+                tx.getPrice(),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.REJECTED,
+                "Runner halted mid-flight — signal expired before dispatch",
+                Instant.now()
+        );
+        orderConciliation.execute(rejected);
+    }
+
+    private void expirePendingBuy(BuyExecutionContext context) {
+        Transaction tx = context.transaction();
+        OrderDataDto rejected = new OrderDataDto(
+                null,
+                tx.getClientOrderId(),
+                Symbol.of(tx.getSymbol()),
+                OrderDataDto.OrderSide.BUY,
+                OrderDataDto.OrderType.LIMIT,
+                tx.getQuantity(),
+                BigDecimal.ZERO,
+                tx.getPrice(),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.REJECTED,
+                "Runner halted mid-flight — signal expired before dispatch",
+                Instant.now()
+        );
+        orderConciliation.execute(rejected);
+    }
+
+    private void checkRunnerNotHalted(UUID runnerId) {
+        StrategyRunner current = strategyRunnerRepository.findById(runnerId)
+                .orElseThrow(() -> new IllegalStateException("Runner disappeared mid-signal: " + runnerId));
+        if (!current.canAcceptSignals()) {
+            throw new RunnerHaltedException(runnerId);
+        }
+    }
+
     protected void persistSellAndLockPosition(Transaction transaction, Position targetPosition) {
+        StrategyRunner current = strategyRunnerRepository.findById(transaction.getRunnerId())
+                .orElseThrow(() -> new IllegalStateException("Runner disappeared mid-signal: " + transaction.getRunnerId()));
+        if (!current.canAcceptSignals()) {
+            throw new RunnerHaltedException(transaction.getRunnerId());
+        }
+
         strategyRunnerRepository.saveTransaction(transaction);
         boolean locked = strategyRunnerRepository.tryLockPositionForSell(
                 targetPosition.getId(),
@@ -163,6 +233,9 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
 
             try {
                 processRunner(runner, strategyInput, marketData.price());
+            } catch (RunnerHaltedException e) {
+                log.warn("priceUpdate: signal discarded - runner halted mid-flight runnerId={} symbol={}",
+                        runner.getId(), symbol);
             } catch (ConcurrentPositionLockException e) {
                 log.warn("priceUpdate: concurrent SELL conflict for runner={} symbol={} - tick discarded (position already locked by another thread)",
                         runner.getId(), symbol);
@@ -210,9 +283,12 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                     : null;
             BuyExecutionContext buyContext = tradeIntentFactory
                     .buildBuyExecutionContext(runner, transaction, precomputedExposure);
-            buySignalHandler.handle(buyContext, this::transactionalPersistBuyAndReserve);
+            buySignalHandler.handle(buyContext, this::transactionalPersistBuyAndReserve,
+                    this::checkRunnerNotHalted, this::expirePendingBuy);
         } else {
-            sellSignalHandler.handle(runner, signal, transaction, this::transactionalPersistSellAndLockPosition);
+            sellSignalHandler.handle(runner, signal, transaction,
+                    this::transactionalPersistSellAndLockPosition, this::checkRunnerNotHalted,
+                    this::expirePendingSell);
         }
     }
 

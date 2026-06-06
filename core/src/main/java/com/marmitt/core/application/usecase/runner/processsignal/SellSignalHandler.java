@@ -4,11 +4,13 @@ import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
+import com.marmitt.core.exceptions.RunnerHaltedException;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Executa o ramo SELL do pipeline de sinais: resolucao do lote alvo, lock transacional
@@ -49,7 +51,9 @@ class SellSignalHandler {
     public void handle(StrategyRunner runner,
                        StrategyOutputDto signal,
                        Transaction transaction,
-                       SellPersistenceAction persistenceAction) {
+                       SellPersistenceAction persistenceAction,
+                       BuySignalHandler.PreDispatchGuard preDispatchGuard,
+                       OnHaltAction onHaltAction) {
         Optional<Position> targetPosition = findTargetPosition(runner, signal);
         if (targetPosition.isEmpty()) {
             log.warn("processSellSignal: SELL signal discarded - no open position for runner={} symbol={}",
@@ -58,6 +62,17 @@ class SellSignalHandler {
         }
 
         persistenceAction.persist(transaction, targetPosition.get());
+
+        try {
+            preDispatchGuard.check(runner.getId());
+        } catch (RunnerHaltedException ex) {
+            // Persist already committed — expire the SELL transaction so the position
+            // lock is released immediately via TerminationHandler.findAndUnlockPosition().
+            log.warn("processSellSignal: runner halted after persist - expiring transaction clientOrderId={}",
+                    transaction.getClientOrderId());
+            onHaltAction.expire(transaction);
+            throw ex;
+        }
 
         orderDispatch.dispatch(intentFactory.buildDispatchCommand(runner, transaction));
         log.debug("dispatch: order sent - clientOrderId={} stays PENDING until exchange confirms",
@@ -79,5 +94,10 @@ class SellSignalHandler {
     @FunctionalInterface
     public interface SellPersistenceAction {
         void persist(Transaction transaction, Position targetPosition);
+    }
+
+    @FunctionalInterface
+    public interface OnHaltAction {
+        void expire(Transaction transaction);
     }
 }

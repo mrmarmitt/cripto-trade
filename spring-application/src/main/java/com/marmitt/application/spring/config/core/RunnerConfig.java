@@ -3,6 +3,7 @@ package com.marmitt.application.spring.config.core;
 import com.marmitt.application.spring.bootstrap.PortfolioReservationTtlProperties;
 import com.marmitt.application.spring.bootstrap.RunnerBootPhase3Properties;
 import com.marmitt.core.application.usecase.runner.CreateRunnerUseCase;
+import com.marmitt.core.application.usecase.runner.HaltRunnerUseCase;
 import com.marmitt.core.application.usecase.runner.RecoverStaleTransactionsUseCase;
 import com.marmitt.core.application.usecase.runner.RecoverTransactionStatusUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
@@ -16,6 +17,8 @@ import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.capital.BuyExecutionContext;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
+import com.marmitt.core.ports.inbound.runner.HaltRunnerPort;
+import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
 import com.marmitt.core.ports.inbound.runner.RecoverStaleTransactionsPort;
 import com.marmitt.core.ports.inbound.runner.QueryRunnerPort;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
@@ -114,14 +117,16 @@ public class RunnerConfig {
             StrategyRepositoryPort strategyRepository,
             GlobalBalanceRepositoryPort globalBalanceRepository,
             PortfolioRepositoryPort portfolioRepository,
-            OrderDispatchPort orderDispatch) {
+            OrderDispatchPort orderDispatch,
+            OrderConciliationPort orderConciliation) {
 
         return new ProcessTradeSignalUseCase(
                 strategyRunnerRepository,
                 strategyRepository,
                 globalBalanceRepository,
                 portfolioRepository,
-                orderDispatch) {
+                orderDispatch,
+                orderConciliation) {
 
             @Override
             public void transactionalPersistBuyAndReserve(BuyExecutionContext context) {
@@ -155,6 +160,13 @@ public class RunnerConfig {
             StrategyRunnerRepositoryPort strategyRunnerRepository
     ) {
         return new QueryRunnerUseCase(strategyRunnerRepository);
+    }
+
+    @Bean
+    public HaltRunnerPort haltRunner(
+            StrategyRunnerRepositoryPort strategyRunnerRepository
+    ) {
+        return new HaltRunnerUseCase(strategyRunnerRepository);
     }
 
     @Bean

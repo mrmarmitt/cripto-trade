@@ -250,6 +250,7 @@ class CapitalDeadLetterReprocessingAdapterTest {
                 null,
                 false,
                 Instant.now(),
+                Instant.now(),
                 null,
                 null,
                 0L

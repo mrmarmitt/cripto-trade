@@ -70,6 +70,7 @@ public class StrategyRunner {
     private boolean isReconciling;
 
     private final Instant createdAt;
+    private Instant statusChangedAt;
     private Instant lastReconciliationAt;
 
     /**
@@ -119,6 +120,7 @@ public class StrategyRunner {
         this.status = RunnerStatus.CREATED;
         this.isReconciling = false;
         this.createdAt = Instant.now();
+        this.statusChangedAt = this.createdAt;
         this.lastReconciliationAt = null;
         this.archivedAt = null;
         this.version = null;
@@ -145,6 +147,7 @@ public class StrategyRunner {
             BigDecimal dedicatedBudget,
             boolean isReconciling,
             Instant createdAt,
+            Instant statusChangedAt,
             Instant lastReconciliationAt,
             Instant archivedAt,
             Long version
@@ -168,6 +171,7 @@ public class StrategyRunner {
         this.dedicatedBudget = dedicatedBudget;
         this.isReconciling = isReconciling;
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt cannot be null");
+        this.statusChangedAt = statusChangedAt != null ? statusChangedAt : createdAt;
         this.lastReconciliationAt = lastReconciliationAt;
         this.archivedAt = archivedAt;
         this.version = version;
@@ -184,6 +188,7 @@ public class StrategyRunner {
     public void startInitializing() {
         requireStatus(RunnerStatus.CREATED);
         this.status = RunnerStatus.INITIALIZING;
+        this.statusChangedAt = Instant.now();
         this.isReconciling = true;
     }
 
@@ -194,6 +199,7 @@ public class StrategyRunner {
     public void activate() {
         requireStatus(RunnerStatus.INITIALIZING);
         this.status = RunnerStatus.ACTIVE;
+        this.statusChangedAt = Instant.now();
         this.isReconciling = false;
         this.lastReconciliationAt = Instant.now();
     }
@@ -205,6 +211,7 @@ public class StrategyRunner {
     public void halt() {
         requireStatus(RunnerStatus.ACTIVE);
         this.status = RunnerStatus.HALTED;
+        this.statusChangedAt = Instant.now();
     }
 
     /**
@@ -214,6 +221,7 @@ public class StrategyRunner {
     public void resume() {
         requireStatus(RunnerStatus.HALTED);
         this.status = RunnerStatus.ACTIVE;
+        this.statusChangedAt = Instant.now();
     }
 
     /**
@@ -226,6 +234,7 @@ public class StrategyRunner {
                     "Cannot start terminating from status: " + this.status);
         }
         this.status = RunnerStatus.TERMINATING;
+        this.statusChangedAt = Instant.now();
     }
 
     /**
@@ -235,6 +244,7 @@ public class StrategyRunner {
     public void archive() {
         requireStatus(RunnerStatus.TERMINATING);
         this.status = RunnerStatus.ARCHIVED;
+        this.statusChangedAt = Instant.now();
         this.archivedAt = Instant.now();
     }
 
