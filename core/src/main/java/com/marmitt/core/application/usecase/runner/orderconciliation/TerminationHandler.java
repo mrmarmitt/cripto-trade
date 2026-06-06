@@ -92,7 +92,10 @@ class TerminationHandler {
     private Optional<Position> resolvePosition(Transaction transaction) {
         return Optional.ofNullable(transaction.getTargetLotId())
                 .flatMap(strategyRunnerRepository::findPositionById)
-                .or(() -> strategyRunnerRepository.findOpenPositionByRunnerIdAndSymbol(
+                // Fallback uses findActive (OPEN or CLOSING) so that positions already
+                // locked to CLOSING by this SELL — but not yet dispatched or confirmed —
+                // can still be found and unlocked when the transaction is terminated.
+                .or(() -> strategyRunnerRepository.findActivePositionByRunnerIdAndSymbol(
                         transaction.getRunnerId(), transaction.getSymbol()));
     }
 
