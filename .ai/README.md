@@ -33,6 +33,8 @@ Todo agente deve consultar este material antes de implementar, revisar, refatora
 ## Guias adicionais por tipo de tarefa
 
 - Uso de agentes e skills: consultar `agents/usage.md` para exemplos de comandos e efeitos esperados
+- Entrega de feature ou bug: usar `agents/feature-delivery-agent.md` como agente
+  orientador quando a tarefa pedir implementacao/correcao end-to-end
 - Flow maps: consultar `flows/README.md` para entender fluxos implementados antes de alterar feature ou bug
 - Impacto documental: toda alteracao de codigo deve avaliar se `/.ai`, `/.ai/flows` ou `docs/` precisam ser atualizados; quando nao houver impacto, declarar isso no fechamento da tarefa ou PR
 - Git workflow: consultar `git-workflow.md` para branch, commit e base de PR
@@ -45,6 +47,9 @@ Todo agente deve consultar este material antes de implementar, revisar, refatora
 ## Agentes compartilhados
 
 - Os prompts especializados compartilhados entre ferramentas devem ficar em `/.ai/agents/`
+- Entrega de feature ou bug deve usar `/.ai/agents/feature-delivery-agent.md`
+  quando a tarefa pedir conduzir implementacao, correcao ou investigacao com
+  mudanca de codigo
 - Review de codigo deve usar `/.ai/agents/code-review-agent.md` como complemento operacional de `review.md`
 - `AGENTS.md` e `CLAUDE.md` devem apenas apontar para esses arquivos, sem duplicar regra detalhada
 
