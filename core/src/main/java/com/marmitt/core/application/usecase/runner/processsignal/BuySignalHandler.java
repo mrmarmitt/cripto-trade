@@ -5,6 +5,8 @@ import com.marmitt.core.dto.capital.BuyExecutionContext;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.UUID;
+
 /**
  * Executa o ramo BUY do pipeline de sinais: persistencia transacional seguida de dispatch.
  *
@@ -37,7 +39,8 @@ class BuySignalHandler {
      * Se a reserva de capital for rejeitada, o metodo retorna sem dispatch — o sinal e
      * descartado sem propagacao de excecao para o chamador.
      */
-    public void handle(BuyExecutionContext context, BuyPersistenceAction persistenceAction) {
+    public void handle(BuyExecutionContext context, BuyPersistenceAction persistenceAction,
+                       PreDispatchGuard preDispatchGuard) {
         try {
             persistenceAction.persist(context);
         } catch (CapitalReservationRejectedException ex) {
@@ -46,18 +49,22 @@ class BuySignalHandler {
             return;
         }
 
+        // Re-check runner status after the persist transaction commits to close the
+        // race window between persist-commit and dispatch.
+        preDispatchGuard.check(context.runner().getId());
+
         orderDispatch.dispatch(intentFactory.buildDispatchCommand(context.runner(), context.transaction()));
         log.debug("dispatch: order sent - clientOrderId={} stays PENDING until exchange confirms",
                 context.transaction().getClientOrderId());
     }
 
-    /**
-     * Seam de persistencia transacional do ramo BUY.
-     * Implementado pela camada de composicao (Spring) para executar
-     * {@link ProcessTradeSignalUseCase#persistBuyAndReserve} dentro de uma transacao.
-     */
     @FunctionalInterface
     public interface BuyPersistenceAction {
         void persist(BuyExecutionContext context);
+    }
+
+    @FunctionalInterface
+    public interface PreDispatchGuard {
+        void check(UUID runnerId);
     }
 }

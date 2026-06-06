@@ -22,6 +22,7 @@ import lombok.extern.slf4j.Slf4j;
 import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 
 /**
  * Orquestrador principal do fluxo market data → decisao de trade → ordem na exchange.
@@ -136,6 +137,14 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                 context.runner().getPortfolioId());
     }
 
+    private void checkRunnerNotHalted(UUID runnerId) {
+        StrategyRunner current = strategyRunnerRepository.findById(runnerId)
+                .orElseThrow(() -> new IllegalStateException("Runner disappeared mid-signal: " + runnerId));
+        if (!current.canAcceptSignals()) {
+            throw new RunnerHaltedException(runnerId);
+        }
+    }
+
     protected void persistSellAndLockPosition(Transaction transaction, Position targetPosition) {
         StrategyRunner current = strategyRunnerRepository.findById(transaction.getRunnerId())
                 .orElseThrow(() -> new IllegalStateException("Runner disappeared mid-signal: " + transaction.getRunnerId()));
@@ -228,9 +237,11 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                     : null;
             BuyExecutionContext buyContext = tradeIntentFactory
                     .buildBuyExecutionContext(runner, transaction, precomputedExposure);
-            buySignalHandler.handle(buyContext, this::transactionalPersistBuyAndReserve);
+            buySignalHandler.handle(buyContext, this::transactionalPersistBuyAndReserve,
+                    this::checkRunnerNotHalted);
         } else {
-            sellSignalHandler.handle(runner, signal, transaction, this::transactionalPersistSellAndLockPosition);
+            sellSignalHandler.handle(runner, signal, transaction,
+                    this::transactionalPersistSellAndLockPosition, this::checkRunnerNotHalted);
         }
     }
 

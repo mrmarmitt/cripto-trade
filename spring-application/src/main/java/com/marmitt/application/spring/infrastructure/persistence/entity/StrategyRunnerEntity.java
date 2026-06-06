@@ -66,6 +66,7 @@ public class StrategyRunnerEntity {
     private boolean isReconciling;
 
     private Instant createdAt;
+    private Instant statusChangedAt;
     private Instant lastReconciliationAt;
     private Instant archivedAt;
 

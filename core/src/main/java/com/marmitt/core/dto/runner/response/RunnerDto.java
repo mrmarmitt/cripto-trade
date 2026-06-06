@@ -18,6 +18,7 @@ public record RunnerDto(
         String exchangeId,
         Set<String> allowedMarketDataSources,
         RunnerStatus status,
+        Instant statusChangedAt,
         Instant createdAt
 ) {
     public static RunnerDto fromDomain(StrategyRunner runner) {
@@ -30,6 +31,7 @@ public record RunnerDto(
                 .exchangeId(runner.getExchangeId())
                 .allowedMarketDataSources(runner.getAllowedMarketDataSources())
                 .status(runner.getStatus())
+                .statusChangedAt(runner.getStatusChangedAt())
                 .createdAt(runner.getCreatedAt())
                 .build();
     }

@@ -8,6 +8,8 @@ import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.UUID;
+
 import java.util.Optional;
 
 /**
@@ -49,7 +51,8 @@ class SellSignalHandler {
     public void handle(StrategyRunner runner,
                        StrategyOutputDto signal,
                        Transaction transaction,
-                       SellPersistenceAction persistenceAction) {
+                       SellPersistenceAction persistenceAction,
+                       BuySignalHandler.PreDispatchGuard preDispatchGuard) {
         Optional<Position> targetPosition = findTargetPosition(runner, signal);
         if (targetPosition.isEmpty()) {
             log.warn("processSellSignal: SELL signal discarded - no open position for runner={} symbol={}",
@@ -58,6 +61,8 @@ class SellSignalHandler {
         }
 
         persistenceAction.persist(transaction, targetPosition.get());
+
+        preDispatchGuard.check(runner.getId());
 
         orderDispatch.dispatch(intentFactory.buildDispatchCommand(runner, transaction));
         log.debug("dispatch: order sent - clientOrderId={} stays PENDING until exchange confirms",
