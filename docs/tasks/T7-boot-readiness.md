@@ -3,7 +3,7 @@
 **Complexidade:** Média  
 **Responsável:** Codex  
 **Dependências:** T2, T5  
-**Status:** Pendente
+**Status:** Concluído
 
 ---
 

@@ -12,11 +12,11 @@ import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 
-class BinanceOrderMapper {
+public class BinanceOrderMapper {
 
     private final ObjectMapper objectMapper;
 
-    BinanceOrderMapper(ObjectMapper objectMapper) {
+    public BinanceOrderMapper(ObjectMapper objectMapper) {
         this.objectMapper = objectMapper;
     }
 
@@ -54,7 +54,7 @@ class BinanceOrderMapper {
         );
     }
 
-    OrderDataDto fromJson(String json) {
+    public OrderDataDto fromJson(String json) {
         try {
             return fromNode(objectMapper.readTree(json));
         } catch (Exception e) {
@@ -63,7 +63,7 @@ class BinanceOrderMapper {
         }
     }
 
-    List<OrderDataDto> listFromJson(String json) {
+    public List<OrderDataDto> listFromJson(String json) {
         try {
             JsonNode root = objectMapper.readTree(json);
             List<OrderDataDto> result = new ArrayList<>();

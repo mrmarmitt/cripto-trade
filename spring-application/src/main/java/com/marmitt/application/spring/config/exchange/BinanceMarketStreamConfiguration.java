@@ -6,6 +6,7 @@ import com.marmitt.application.spring.adapter.OkHttp3WebSocketAdapter;
 import com.marmitt.application.spring.adapter.binance.OkHttpClientAdapter;
 import com.marmitt.binance.BinanceConnectionConfig;
 import com.marmitt.binance.BinanceMarketStreamAdapter;
+import com.marmitt.binance.filters.SymbolFilterCache;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
@@ -41,9 +42,23 @@ public class BinanceMarketStreamConfiguration {
     }
 
     @Bean
+    public SymbolFilterCache binanceSymbolFilterCache(ObjectMapper objectMapper,
+                                                      BinanceProperties properties,
+                                                      OkHttpClient binanceRestClient) {
+        SymbolFilterCache cache = new SymbolFilterCache(
+                properties.getRestBaseUrl(),
+                new OkHttpClientAdapter(binanceRestClient),
+                objectMapper);
+        // Eager-load configured symbols at startup; SymbolFilterLoadException propagates and aborts boot
+        properties.getSymbols().forEach(cache::loadAndCache);
+        return cache;
+    }
+
+    @Bean
     public BinanceMarketStreamAdapter binanceMarketStreamAdapter(ObjectMapper objectMapper,
                                                                  BinanceProperties properties,
-                                                                 OkHttpClient binanceRestClient) {
+                                                                 OkHttpClient binanceRestClient,
+                                                                 SymbolFilterCache binanceSymbolFilterCache) {
         BinanceConnectionConfig config = new BinanceConnectionConfig(
                 properties.getApiKey(),
                 properties.getApiSecret(),
@@ -54,6 +69,7 @@ public class BinanceMarketStreamConfiguration {
         OkHttpClient bootReadinessClient = binanceRestClient.newBuilder()
                 .callTimeout(Duration.ofSeconds(10))
                 .build();
-        return new BinanceMarketStreamAdapter(objectMapper, config, new OkHttpClientAdapter(bootReadinessClient));
+        return new BinanceMarketStreamAdapter(objectMapper, config,
+                new OkHttpClientAdapter(bootReadinessClient), binanceSymbolFilterCache);
     }
 }

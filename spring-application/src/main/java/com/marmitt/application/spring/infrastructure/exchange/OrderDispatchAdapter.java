@@ -1,5 +1,8 @@
 package com.marmitt.application.spring.infrastructure.exchange;
 
+import com.marmitt.binance.filters.OrderFilterViolationException;
+import com.marmitt.binance.filters.SymbolFilterLoadException;
+import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.dto.runner.OrderDispatchCommand;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
@@ -13,6 +16,9 @@ import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
+
+import java.math.BigDecimal;
+import java.time.Instant;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -36,8 +42,15 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
     public void dispatch(OrderDispatchCommand command) {
         SendOrderRequest request = toSendOrderRequest(command, command.exchangeId());
 
-        if (!tryDispatchViaRest(request, command.exchangeId())) {
-            dispatchViaStreaming(request, command.exchangeId());
+        try {
+            if (!tryDispatchViaRest(request, command.exchangeId())) {
+                dispatchViaStreaming(request, command.exchangeId());
+            }
+        } catch (OrderFilterViolationException | SymbolFilterLoadException ex) {
+            log.warn("dispatch: order rejected by local filter - clientOrderId={} exchange={} reason={}",
+                    command.clientOrderId(), command.exchangeId(), ex.getMessage());
+            orderConciliation.execute(toRejectedOrder(command, ex.getMessage()));
+            return;
         }
 
         log.debug("dispatch: order sent - clientOrderId={} exchange={} symbol={} type={}",
@@ -94,6 +107,26 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
                 OrderType.LIMIT,
                 side,
                 command.clientOrderId()
+        );
+    }
+
+    private OrderDataDto toRejectedOrder(OrderDispatchCommand command, String rejectReason) {
+        OrderDataDto.OrderSide side = command.type() == TransactionType.BUY
+                ? OrderDataDto.OrderSide.BUY : OrderDataDto.OrderSide.SELL;
+        return new OrderDataDto(
+                null,
+                command.clientOrderId(),
+                Symbol.of(command.symbol()),
+                side,
+                OrderDataDto.OrderType.LIMIT,
+                command.quantity(),
+                BigDecimal.ZERO,
+                command.price(),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.REJECTED,
+                rejectReason,
+                Instant.now()
         );
     }
 
