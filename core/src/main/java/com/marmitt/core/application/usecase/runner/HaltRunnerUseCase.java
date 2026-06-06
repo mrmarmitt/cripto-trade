@@ -21,7 +21,10 @@ public class HaltRunnerUseCase implements HaltRunnerPort {
 
     @Override
     public List<RunnerHaltResult> haltAll() {
+        // Use canAcceptSignals() as eligibility: excludes isReconciling=true runners so that
+        // boot recovery in progress is not interrupted by a concurrent halt-all.
         List<RunnerHaltResult> affected = runnerRepository.findAllByStatus(RunnerStatus.ACTIVE).stream()
+                .filter(runner -> runner.canAcceptSignals())
                 .map(runner -> {
                     runner.halt();
                     runnerRepository.save(runner);
