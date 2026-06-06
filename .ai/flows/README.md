@@ -32,6 +32,9 @@ O plano de expansao e status dos mapas fica em `ROADMAP.md`.
 | `order-conciliation.md` | Atualizacoes de ordens vindas da exchange, fills, finalizacao, idempotencia e conciliacao via boot. |
 | `portfolio-capital.md` | Portfolio, GlobalBalance, reserva de capital, confirmacao financeira, liberacao de margem e DLQ de capital. |
 | `boot-recovery.md` | Sequencia de boot, readiness, sanity check, deteccao de zombies, TTL de reserva e recuperacao de runners. |
+| `binance-user-data-stream.md` | Listen key, User Data Stream, `executionReport`, reconexao e entrada de updates Binance na conciliacao. |
+| `websocket-event-routing.md` | Entrada WebSocket, eventos raw, handlers de mensagem e notificacao de listeners de preco/ordem. |
+| `mock-exchange-runtime.md` | Runtime mock, feed simulado, ordem mock, slippage/fees, overrides e publicacao no pipeline raw. |
 
 ## Regras de Manutencao
 
@@ -46,8 +49,5 @@ O plano de expansao e status dos mapas fica em `ROADMAP.md`.
 
 ## Proximos Mapas Candidatos
 
-- Integracao Binance e user data stream.
-- Adapter mock e feed simulado.
-- WebSocket inbound e roteamento de eventos.
 - Dead letter operacional e replay.
 - Persistencia/JPA dos agregados principais.

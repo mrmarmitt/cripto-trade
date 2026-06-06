@@ -13,7 +13,7 @@ conectar comportamento implementado, codigo principal, invariantes e validacao.
 | Estrutura base de `/.ai/flows` | Completo | Indice, template e regra de manutencao dos flow maps. |
 | Mapas dos fluxos centrais | Completo | Cobertura dos fluxos mais criticos de sinal, ordem, capital e boot. |
 | Regra de impacto documental | Completo | Toda alteracao de codigo deve avaliar se a documentacao base precisa mudar. |
-| Mapas de integracao e eventos externos | Pendente | Cobertura de Binance, WebSocket e adapter mock. |
+| Mapas de integracao e eventos externos | Completo | Cobertura de Binance, WebSocket e adapter mock. |
 | Mapas operacionais e persistencia | Pendente | Cobertura de DLQ/replay e persistencia dos agregados principais. |
 
 ## Entrega 1: Base E Fluxos Centrais
@@ -35,7 +35,7 @@ Arquivos entregues:
 
 ## Entrega 2: Integracao E Eventos Externos
 
-Status: Pendente.
+Status: Completo.
 
 Ordem recomendada:
 
@@ -50,6 +50,15 @@ Ordem recomendada:
 3. `mock-exchange-runtime.md`
    - Feed simulado, execucao mock, slippage, fees e cenarios de desenvolvimento.
    - Deve explicar como o mock sustenta testes e desenvolvimento local.
+
+Arquivos entregues:
+
+- `binance-user-data-stream.md`: listen key, User Data Stream, `executionReport`,
+  reconexao e entrada na conciliacao.
+- `websocket-event-routing.md`: canais `MARKET`/`USER_DATA`, eventos raw,
+  handlers, listeners e estado de conexao.
+- `mock-exchange-runtime.md`: runtime mock, feed, ordens, slippage/fees,
+  overrides, snapshots e publicacao no pipeline raw.
 
 ## Entrega 3: Operacao E Persistencia
 
