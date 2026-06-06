@@ -10,6 +10,7 @@ import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.domain.runner.TransactionMatch;
 import com.marmitt.core.enums.PositionStatus;
+import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.exceptions.ConcurrentPositionLockException;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
@@ -25,6 +26,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.stream.StreamSupport;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 
@@ -93,6 +95,26 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         Optional<StrategyRunner> result = runnerRepo.findByShortCodeAndPortfolioId(shortCode, portfolioId)
                 .map(StrategyRunnerEntityMapper::toDomain);
         log.trace("[REPO] runner.findByShortCode({}, {}) - {}ms", shortCode, portfolioId, RepoTiming.elapsedMs(start));
+        return result;
+    }
+
+    @Override
+    public List<StrategyRunner> findAll() {
+        long start = System.nanoTime();
+        List<StrategyRunner> result = StreamSupport.stream(runnerRepo.findAll().spliterator(), false)
+                .map(StrategyRunnerEntityMapper::toDomain)
+                .toList();
+        log.trace("[REPO] runner.findAll() - {}ms - {} results", RepoTiming.elapsedMs(start), result.size());
+        return result;
+    }
+
+    @Override
+    public List<StrategyRunner> findAllByStatus(RunnerStatus status) {
+        long start = System.nanoTime();
+        List<StrategyRunner> result = runnerRepo.findAllByStatus(status.name()).stream()
+                .map(StrategyRunnerEntityMapper::toDomain)
+                .toList();
+        log.trace("[REPO] runner.findAllByStatus({}) - {}ms - {} results", status, RepoTiming.elapsedMs(start), result.size());
         return result;
     }
 

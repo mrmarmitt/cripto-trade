@@ -13,7 +13,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T5  | REST API Binance                | Alta         | Claude      | Concluído     |
 | T6  | Exchange Symbol Filters         | Média        | Codex       | Concluído     |
 | T7  | Boot Readiness real             | Média        | Codex       | Concluído     |
-| T8  | Kill Switch                     | Média        | Codex       | Pendente      |
+| T8  | Kill Switch                     | Média        | Codex       | Concluído     |
 | T9  | Observabilidade Docker Compose  | Média        | Codex       | Concluído     |
 | T10 | Otimização da suíte de integração | Média      | Codex       | Pendente      |
 | T11 | Order Quantity Normalization Before Persist | Média | Codex  | Pendente      |

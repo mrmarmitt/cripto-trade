@@ -31,6 +31,13 @@ public class QueryRunnerUseCase implements QueryRunnerPort {
     }
 
     @Override
+    public List<RunnerDto> findAll() {
+        return strategyRunnerRepository.findAll().stream()
+                .map(RunnerDto::fromDomain)
+                .toList();
+    }
+
+    @Override
     public List<RunnerDto> findByPortfolioId(UUID portfolioId) {
         log.debug("Querying runners by portfolioId: {}", portfolioId);
         return strategyRunnerRepository.findByPortfolioId(portfolioId).stream()

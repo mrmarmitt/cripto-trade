@@ -4,6 +4,7 @@ import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.domain.runner.TransactionMatch;
+import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.enums.TransactionStatus;
 
 import java.util.Collection;
@@ -34,6 +35,12 @@ public interface StrategyRunnerRepositoryPort {
      * Usa optimistic locking via campo {@code version}.
      */
     void save(StrategyRunner runner);
+
+    /** Busca todos os Runners (independente de status). */
+    List<StrategyRunner> findAll();
+
+    /** Busca todos os Runners com o status especificado. */
+    List<StrategyRunner> findAllByStatus(RunnerStatus status);
 
     /** Busca Runner por PK. */
     Optional<StrategyRunner> findById(UUID runnerId);

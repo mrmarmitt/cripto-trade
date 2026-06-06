@@ -57,4 +57,7 @@ public interface StrategyRunnerJdbcRepository extends CrudRepository<StrategyRun
             @Param("shortCode") String shortCode,
             @Param("portfolioId") UUID portfolioId
     );
+
+    @Query("SELECT * FROM strategy_runners WHERE status = :status")
+    List<StrategyRunnerEntity> findAllByStatus(@Param("status") String status);
 }

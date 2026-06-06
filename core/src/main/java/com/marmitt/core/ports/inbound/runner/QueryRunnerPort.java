@@ -8,6 +8,8 @@ import java.util.UUID;
 
 public interface QueryRunnerPort {
 
+    List<RunnerDto> findAll();
+
     List<RunnerDto> findByPortfolioId(UUID portfolioId);
 
     List<TransactionDto> findTransactionsByRunnerId(UUID runnerId);
