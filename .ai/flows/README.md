@@ -22,6 +22,8 @@ mapas de entrada para uma nova sessao entender rapidamente:
 4. Atualize o mapa quando a mudanca alterar uma decisao, transicao, contrato,
    regra de idempotencia ou validacao importante.
 
+O plano de expansao e status dos mapas fica em `ROADMAP.md`.
+
 ## Fluxos Mapeados
 
 | Fluxo | Quando consultar |
