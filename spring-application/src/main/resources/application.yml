@@ -49,6 +49,24 @@ margin:
     multiplier: 2.0
 
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+    distribution:
+      percentiles-histogram:
+        boot.phase.duration: true
+        http.server.requests: true
+        jvm.gc.pause: true
+
 runner:
   boot:
     orchestrator-enabled: true
