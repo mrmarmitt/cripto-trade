@@ -18,6 +18,7 @@ import com.marmitt.core.dto.capital.BuyExecutionContext;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
 import com.marmitt.core.ports.inbound.runner.HaltRunnerPort;
+import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
 import com.marmitt.core.ports.inbound.runner.RecoverStaleTransactionsPort;
 import com.marmitt.core.ports.inbound.runner.QueryRunnerPort;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
@@ -116,14 +117,16 @@ public class RunnerConfig {
             StrategyRepositoryPort strategyRepository,
             GlobalBalanceRepositoryPort globalBalanceRepository,
             PortfolioRepositoryPort portfolioRepository,
-            OrderDispatchPort orderDispatch) {
+            OrderDispatchPort orderDispatch,
+            OrderConciliationPort orderConciliation) {
 
         return new ProcessTradeSignalUseCase(
                 strategyRunnerRepository,
                 strategyRepository,
                 globalBalanceRepository,
                 portfolioRepository,
-                orderDispatch) {
+                orderDispatch,
+                orderConciliation) {
 
             @Override
             public void transactionalPersistBuyAndReserve(BuyExecutionContext context) {

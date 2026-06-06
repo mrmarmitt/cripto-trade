@@ -8,6 +8,9 @@ import com.marmitt.core.dto.strategy.StrategyContextDto;
 import com.marmitt.core.dto.strategy.StrategyInputDto;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.dto.websocket.data.MarketDataDto;
+import com.marmitt.core.domain.Symbol;
+import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.strategy.TradingStrategy;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
@@ -20,6 +23,7 @@ import com.marmitt.core.exceptions.RunnerHaltedException;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -62,6 +66,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     private static final BigDecimal MINIMUM_OPERATION_AMOUNT = BigDecimal.valueOf(10);
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
+    private final OrderConciliationPort orderConciliation;
 
     private final RunnerSignalPolicy signalPolicy;
     private final StrategySignalEvaluator signalEvaluator;
@@ -76,8 +81,10 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                                         StrategyRepositoryPort strategyRepository,
                                         GlobalBalanceRepositoryPort globalBalanceRepository,
                                         PortfolioRepositoryPort portfolioRepository,
-                                        OrderDispatchPort orderDispatch) {
+                                        OrderDispatchPort orderDispatch,
+                                        OrderConciliationPort orderConciliation) {
         this.strategyRunnerRepository = strategyRunnerRepository;
+        this.orderConciliation = orderConciliation;
 
         this.signalPolicy = new RunnerSignalPolicy();
         this.signalEvaluator = new StrategySignalEvaluator(strategyRepository);
@@ -135,6 +142,26 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                 context.runner().getId(),
                 context.capitalRequest().amount(),
                 context.runner().getPortfolioId());
+    }
+
+    private void expirePendingBuy(BuyExecutionContext context) {
+        Transaction tx = context.transaction();
+        OrderDataDto rejected = new OrderDataDto(
+                null,
+                tx.getClientOrderId(),
+                Symbol.of(tx.getSymbol()),
+                OrderDataDto.OrderSide.BUY,
+                OrderDataDto.OrderType.LIMIT,
+                tx.getQuantity(),
+                BigDecimal.ZERO,
+                tx.getPrice(),
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.REJECTED,
+                "Runner halted mid-flight — signal expired before dispatch",
+                Instant.now()
+        );
+        orderConciliation.execute(rejected);
     }
 
     private void checkRunnerNotHalted(UUID runnerId) {
@@ -238,7 +265,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
             BuyExecutionContext buyContext = tradeIntentFactory
                     .buildBuyExecutionContext(runner, transaction, precomputedExposure);
             buySignalHandler.handle(buyContext, this::transactionalPersistBuyAndReserve,
-                    this::checkRunnerNotHalted);
+                    this::checkRunnerNotHalted, this::expirePendingBuy);
         } else {
             sellSignalHandler.handle(runner, signal, transaction,
                     this::transactionalPersistSellAndLockPosition, this::checkRunnerNotHalted);
