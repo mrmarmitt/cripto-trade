@@ -49,6 +49,19 @@ margin:
     multiplier: 2.0
 
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus,metrics
+  endpoint:
+    prometheus:
+      enabled: true
+  metrics:
+    export:
+      prometheus:
+        enabled: true
+
 runner:
   boot:
     orchestrator-enabled: true

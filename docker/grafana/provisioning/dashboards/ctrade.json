@@ -1,0 +1,180 @@
+{
+  "uid": "ctrade-staging",
+  "title": "CTrade — Staging",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-1h", "to": "now" },
+  "timezone": "browser",
+  "tags": ["ctrade"],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Boot runs — total por status",
+      "description": "Contagem acumulada de execuções de boot por status (SUCCESS / FAIL_FAST / WARN_ONLY).",
+      "gridPos": { "x": 0, "y": 0, "w": 8, "h": 4 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (status) (boot_run_total)",
+          "legendFormat": "{{status}}"
+        }
+      ],
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Boot fail-fast — total por fase",
+      "description": "Contador de eventos fail-fast por fase de boot.",
+      "gridPos": { "x": 8, "y": 0, "w": 8, "h": 4 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (phase, code) (boot_failfast_total)",
+          "legendFormat": "{{phase}} / {{code}}"
+        }
+      ],
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } },
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "JVM — heap usado",
+      "gridPos": { "x": 16, "y": 0, "w": 8, "h": 4 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "jvm_memory_used_bytes{area=\"heap\"}",
+          "legendFormat": "heap"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "bytes",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 314572800 },
+              { "color": "red", "value": 524288000 }
+            ]
+          }
+        }
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Boot phase duration — p95 (segundos)",
+      "description": "Percentil 95 da duração de cada fase de boot. Picos indicam lentidão em conciliação ou queries de exchange.",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (phase, le) (rate(boot_phase_duration_seconds_bucket[5m])))",
+          "legendFormat": "p95 — {{phase}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Boot phases — taxa de execução",
+      "description": "Fases de boot executadas por minuto, por status.",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (phase, status) (rate(boot_phase_total[1m]))",
+          "legendFormat": "{{phase}} / {{status}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "HTTP — taxa de requests por endpoint",
+      "description": "Requests por segundo por URI e status HTTP.",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (uri, status) (rate(http_server_requests_seconds_count[1m]))",
+          "legendFormat": "{{uri}} {{status}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "HTTP — latência p95 por endpoint",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (uri, le) (rate(http_server_requests_seconds_bucket[5m])))",
+          "legendFormat": "p95 — {{uri}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "JVM — threads ativas",
+      "gridPos": { "x": 0, "y": 20, "w": 8, "h": 6 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "jvm_threads_live_threads",
+          "legendFormat": "live"
+        },
+        {
+          "expr": "jvm_threads_daemon_threads",
+          "legendFormat": "daemon"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "JVM — GC pause (p95)",
+      "gridPos": { "x": 8, "y": 20, "w": 8, "h": 6 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum by (gc, le) (rate(jvm_gc_pause_seconds_bucket[5m])))",
+          "legendFormat": "p95 — {{gc}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 10,
+      "type": "text",
+      "title": "Métricas a implementar (placeholders)",
+      "gridPos": { "x": 16, "y": 20, "w": 8, "h": 6 },
+      "options": {
+        "mode": "markdown",
+        "content": "**Painéis pendentes (métricas ainda não emitidas):**\n\n- `transactions_by_status{status=\"PENDING\"}` — volume acumulado de PENDING\n- `dead_letter_entries` — DLQ aberto por runner\n- `conciliation.duration` — latência de conciliação order update\n- `runners_by_status` — runners ACTIVE / HALTED / INITIALIZING\n\nQuando as métricas forem adicionadas ao `BootMetricsRecorder` ou em novos recorders, substituir este painel pelos respectivos time series."
+      }
+    }
+  ]
+}
