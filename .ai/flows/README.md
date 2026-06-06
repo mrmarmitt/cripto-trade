@@ -35,6 +35,8 @@ O plano de expansao e status dos mapas fica em `ROADMAP.md`.
 | `binance-user-data-stream.md` | Listen key, User Data Stream, `executionReport`, reconexao e entrada de updates Binance na conciliacao. |
 | `websocket-event-routing.md` | Entrada WebSocket, eventos raw, handlers de mensagem e notificacao de listeners de preco/ordem. |
 | `mock-exchange-runtime.md` | Runtime mock, feed simulado, ordem mock, slippage/fees, overrides e publicacao no pipeline raw. |
+| `dead-letter-replay.md` | DLQ operacional, DLQ de capital, replay automatico, resolucao manual e impacto no boot/recovery. |
+| `persistence-adapters.md` | Persistencia JDBC dos agregados principais, mappers, migrations, locks, operacoes atomicas e idempotencia. |
 
 ## Regras de Manutencao
 
@@ -49,5 +51,5 @@ O plano de expansao e status dos mapas fica em `ROADMAP.md`.
 
 ## Proximos Mapas Candidatos
 
-- Dead letter operacional e replay.
-- Persistencia/JPA dos agregados principais.
+Sem candidatos definidos no momento. Adicione novos candidatos aqui quando um
+fluxo implementado ainda nao tiver mapa em `/.ai/flows`.

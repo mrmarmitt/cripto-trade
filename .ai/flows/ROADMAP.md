@@ -14,7 +14,7 @@ conectar comportamento implementado, codigo principal, invariantes e validacao.
 | Mapas dos fluxos centrais | Completo | Cobertura dos fluxos mais criticos de sinal, ordem, capital e boot. |
 | Regra de impacto documental | Completo | Toda alteracao de codigo deve avaliar se a documentacao base precisa mudar. |
 | Mapas de integracao e eventos externos | Completo | Cobertura de Binance, WebSocket e adapter mock. |
-| Mapas operacionais e persistencia | Pendente | Cobertura de DLQ/replay e persistencia dos agregados principais. |
+| Mapas operacionais e persistencia | Completo | Cobertura de DLQ/replay e persistencia dos agregados principais. |
 
 ## Entrega 1: Base E Fluxos Centrais
 
@@ -62,18 +62,15 @@ Arquivos entregues:
 
 ## Entrega 3: Operacao E Persistencia
 
-Status: Pendente.
+Status: Completo.
 
-Ordem recomendada:
+Arquivos entregues:
 
-1. `dead-letter-replay.md`
-   - DLQ operacional, payloads, replay, resolucao manual e falhas persistentes.
-   - Deve cobrir tanto o caminho de capital quanto o uso operacional em boot.
-2. `persistence-adapters.md`
-   - Repositorios, mapeamento de agregados principais, fronteiras de persistencia
-     e pontos de risco em migracoes/estado.
-   - Deve orientar bugs de estado sem transformar o mapa em referencia completa
-     de schema.
+- `dead-letter-replay.md`: DLQ operacional, payloads, replay, resolucao manual,
+  falhas persistentes, caminho de capital e uso operacional em boot/recovery.
+- `persistence-adapters.md`: repositorios, mapeamento de agregados principais,
+  fronteiras de persistencia, migrations, locks, idempotencia e pontos de risco
+  em estado duravel.
 
 ## Criterios Para Marcar Um Mapa Como Completo
 
