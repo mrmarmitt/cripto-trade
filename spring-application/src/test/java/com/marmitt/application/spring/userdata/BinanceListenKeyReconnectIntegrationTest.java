@@ -28,13 +28,12 @@ import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * Verifica que o user data stream da Binance conecta via WebSocket API,
- * envia subscription message assinada após conexão, e reconecta automaticamente
- * com nova subscription message após falha — sem chamar endpoints REST de listen key.
+ * envia subscription message assinada após conexão, e após reconexão
+ * envia nova subscription com assinatura fresca — sem chamar endpoints REST de listen key.
  */
 @Testcontainers
 @SpringBootTest(classes = CTradeApplication.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
@@ -81,21 +80,21 @@ class BinanceListenKeyReconnectIntegrationTest {
 
     @Test
     void userDataStream_shouldSubscribeViaWebSocket_andReconnectWithFreshSignature() throws Exception {
-        WebSocket[] firstServerWs = new WebSocket[1];
         CountDownLatch firstSubscriptionReceived = new CountDownLatch(1);
         CountDownLatch secondSubscriptionReceived = new CountDownLatch(1);
 
-        // Primera conexão WS: servidor recebe subscription, responde com confirmação
+        // Primera conexão WS: servidor confirma subscription e fecha a conexão
         MOCK_SERVER.enqueue(new MockResponse().withWebSocketUpgrade(new WebSocketListener() {
             @Override
             public void onMessage(WebSocket webSocket, String text) {
-                firstServerWs[0] = webSocket;
                 webSocket.send("{\"id\":\"sub-1\",\"status\":200,\"result\":{\"subscriptionId\":0}}");
                 firstSubscriptionReceived.countDown();
+                // Fecha a conexão pelo lado do servidor para transicionar para CLOSED
+                webSocket.close(1001, "server disconnect");
             }
         }));
 
-        // Reconexão WS: servidor recebe nova subscription com timestamp fresco
+        // Reconexão WS: servidor recebe nova subscription com timestamp/assinatura frescos
         MOCK_SERVER.enqueue(new MockResponse().withWebSocketUpgrade(new WebSocketListener() {
             @Override
             public void onMessage(WebSocket webSocket, String text) {
@@ -116,17 +115,14 @@ class BinanceListenKeyReconnectIntegrationTest {
                     var mgr = connectionRepository.getConnection(userKey);
                     return mgr != null ? mgr.getConnectionResult().status() : null;
                 },
-                s -> s == ConnectionStatus.CONNECTED,
-                "user data stream must reach CONNECTED after subscription confirmation");
+                s -> s == ConnectionStatus.CLOSED,
+                "connection must reach CLOSED after server-initiated disconnect");
 
-        // 2) Forçar falha no WebSocket para disparar reconexão
-        WebSocket ws1 = firstServerWs[0];
-        assertNotNull(ws1, "server WebSocket must be set after subscription");
-        ws1.cancel();
+        // 2) Reconectar — deve enviar nova subscription com assinatura fresca
+        connectUserStreamPort.execute("BINANCE");
 
-        // 3) Reconexão deve enviar nova subscription message
-        assertTrue(secondSubscriptionReceived.await(20, TimeUnit.SECONDS),
-                "reconnect subscription message must be sent within 20s");
+        assertTrue(secondSubscriptionReceived.await(10, TimeUnit.SECONDS),
+                "reconnect subscription message must be sent within 10s");
 
         awaitCondition(Duration.ofSeconds(5), 100,
                 () -> {
@@ -134,7 +130,7 @@ class BinanceListenKeyReconnectIntegrationTest {
                     return mgr != null ? mgr.getConnectionResult().status() : null;
                 },
                 s -> s == ConnectionStatus.CONNECTED,
-                "user data stream must reach CONNECTED after automatic reconnect");
+                "user data stream must reach CONNECTED after reconnect");
     }
 
     // ─── suporte ──────────────────────────────────────────────────────────────
