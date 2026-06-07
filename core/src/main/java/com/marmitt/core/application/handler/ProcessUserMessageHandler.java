@@ -57,7 +57,7 @@ public class ProcessUserMessageHandler implements HandlerProcessUserMessagePort 
 
             if (isProcessable(result)) {
                 result.getData().ifPresent(this::notifyOrderUpdate);
-            } else {
+            } else if (result.isError()) {
                 if (manager != null) {
                     manager.onMessageError(result.getErrorMessage().orElse("unknown"));
                 }

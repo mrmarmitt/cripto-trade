@@ -77,7 +77,7 @@ public class BinanceUserDataProcessor implements ReceivedMessageProcessorPort {
         if (status == 200) {
             log.info("User data stream subscription confirmed: subscriptionId={}",
                     root.path("result").path("subscriptionId").asText("unknown"));
-            return ProcessingResult.error(correlationId, "Subscription confirmation received", rawMessage);
+            return ProcessingResult.ignored(correlationId, "subscription-confirmed");
         }
         log.error("User data stream subscription rejected by Binance: status={} exchange={} connectionId={}",
                 status, context.exchangeName(), context.connectionId());
