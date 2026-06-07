@@ -1,3 +1,7 @@
 binance:
-  ws-base-url: wss://testnet.binance.vision
+  # REST API e WebSocket API (order placement)
   rest-base-url: https://testnet.binance.vision
+  # Market data streams usam host separado na testnet
+  ws-base-url: wss://stream.testnet.binance.vision
+  # WebSocket API para user data stream (autenticação via mensagem assinada)
+  ws-api-base-url: wss://ws-api.testnet.binance.vision/ws-api/v3

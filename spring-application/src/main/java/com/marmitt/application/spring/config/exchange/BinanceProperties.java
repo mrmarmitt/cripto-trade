@@ -17,6 +17,9 @@ public class BinanceProperties {
     @NotBlank(message = "binance.rest-base-url cannot be blank")
     private String restBaseUrl;
 
+    @NotBlank(message = "binance.ws-api-base-url cannot be blank")
+    private String wsApiBaseUrl;
+
     @NotBlank(message = "binance.api-key is required when binance.api-secret is defined")
     private String apiKey;
 
@@ -55,6 +58,14 @@ public class BinanceProperties {
 
     public void setApiSecret(String apiSecret) {
         this.apiSecret = apiSecret;
+    }
+
+    public String getWsApiBaseUrl() {
+        return wsApiBaseUrl;
+    }
+
+    public void setWsApiBaseUrl(String wsApiBaseUrl) {
+        this.wsApiBaseUrl = wsApiBaseUrl;
     }
 
     public List<String> getSymbols() {

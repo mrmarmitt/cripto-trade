@@ -9,7 +9,6 @@ import okhttp3.WebSocket;
 import okhttp3.WebSocketListener;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
-import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -24,19 +23,18 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.io.IOException;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * Verifica que o user data stream da Binance reconecta automaticamente após falha
- * no WebSocket e obtém um novo listen key via REST.
- *
- * Usa MockWebServer para simular os endpoints REST e WebSocket da Binance sem
- * depender de credenciais ou conexão real.
+ * Verifica que o user data stream da Binance conecta via WebSocket API,
+ * envia subscription message assinada após conexão, e reconecta automaticamente
+ * com nova subscription message após falha — sem chamar endpoints REST de listen key.
  */
 @Testcontainers
 @SpringBootTest(classes = CTradeApplication.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
@@ -67,9 +65,10 @@ class BinanceListenKeyReconnectIntegrationTest {
         r.add("spring.flyway.enabled", () -> "true");
         r.add("runner.boot.orchestrator-enabled", () -> "false");
         r.add("binance.api-key", () -> "test-api-key");
-        r.add("binance.api-secret", () -> "test-api-secret");
+        r.add("binance.api-secret", () -> "dGVzdC1hcGktc2VjcmV0");
         r.add("binance.rest-base-url", () -> "http://localhost:" + MOCK_SERVER.getPort());
         r.add("binance.ws-base-url", () -> "ws://localhost:" + MOCK_SERVER.getPort());
+        r.add("binance.ws-api-base-url", () -> "ws://localhost:" + MOCK_SERVER.getPort());
     }
 
     @AfterAll
@@ -81,44 +80,55 @@ class BinanceListenKeyReconnectIntegrationTest {
     @Autowired WebSocketConnectionRepositoryPort connectionRepository;
 
     @Test
-    void userDataStream_shouldReconnectAndObtainNewListenKey_afterWebSocketFailure() throws Exception {
-        // POST inicial → listen key 1
-        MOCK_SERVER.enqueue(listenKeyResponse("test-key-1"));
-        // WS inicial → resposta 500 garante onFailure no cliente (cancel() pode disparar onClosed)
-        MOCK_SERVER.enqueue(new MockResponse().setResponseCode(500));
-        // DELETE → revogar listen key 1 no início do reconnect
-        MOCK_SERVER.enqueue(new MockResponse().setBody("{}").setHeader("Content-Type", "application/json"));
-        // POST reconexão → listen key 2
-        MOCK_SERVER.enqueue(listenKeyResponse("test-key-2"));
-        // WS reconexão → aceita e mantém aberto
-        MOCK_SERVER.enqueue(wsUpgradeAndKeepOpen());
+    void userDataStream_shouldSubscribeViaWebSocket_andReconnectWithFreshSignature() throws Exception {
+        WebSocket[] firstServerWs = new WebSocket[1];
+        CountDownLatch firstSubscriptionReceived = new CountDownLatch(1);
+        CountDownLatch secondSubscriptionReceived = new CountDownLatch(1);
+
+        // Primera conexão WS: servidor recebe subscription, responde com confirmação
+        MOCK_SERVER.enqueue(new MockResponse().withWebSocketUpgrade(new WebSocketListener() {
+            @Override
+            public void onMessage(WebSocket webSocket, String text) {
+                firstServerWs[0] = webSocket;
+                webSocket.send("{\"id\":\"sub-1\",\"status\":200,\"result\":{\"subscriptionId\":0}}");
+                firstSubscriptionReceived.countDown();
+            }
+        }));
+
+        // Reconexão WS: servidor recebe nova subscription com timestamp fresco
+        MOCK_SERVER.enqueue(new MockResponse().withWebSocketUpgrade(new WebSocketListener() {
+            @Override
+            public void onMessage(WebSocket webSocket, String text) {
+                webSocket.send("{\"id\":\"sub-2\",\"status\":200,\"result\":{\"subscriptionId\":0}}");
+                secondSubscriptionReceived.countDown();
+            }
+        }));
 
         connectUserStreamPort.execute("BINANCE");
 
-        // Verifica a sequência de requisições usando takeRequest com timeouts generosos.
-        // A primeira falha (500) dispara reconnect com 5s de delay; os timeouts abaixo
-        // cobrem toda a sequência sem depender de polling de estado.
-        RecordedRequest req1 = MOCK_SERVER.takeRequest(10, TimeUnit.SECONDS);
-        assertNotNull(req1, "expected initial POST /api/v3/userDataStream");
-        assertEquals("POST", req1.getMethod());
-        assertEquals("/api/v3/userDataStream", req1.getPath());
+        // 1) Subscription message deve ser enviada após conectar
+        assertTrue(firstSubscriptionReceived.await(10, TimeUnit.SECONDS),
+                "subscription message must be sent via WebSocket within 10s");
 
-        RecordedRequest req2 = MOCK_SERVER.takeRequest(5, TimeUnit.SECONDS);
-        assertNotNull(req2, "expected initial WS upgrade request (returns 500)");
-
-        // ConnectionFailedHandler agenda reconnect com 5s de delay
-        RecordedRequest req3 = MOCK_SERVER.takeRequest(15, TimeUnit.SECONDS);
-        assertNotNull(req3, "expected DELETE to revoke listen key before reconnect");
-        assertEquals("DELETE", req3.getMethod());
-
-        RecordedRequest req4 = MOCK_SERVER.takeRequest(5, TimeUnit.SECONDS);
-        assertNotNull(req4, "expected POST for new listen key on reconnect");
-        assertEquals("POST", req4.getMethod());
-        assertEquals("/api/v3/userDataStream", req4.getPath());
-
-        // Após reconexão bem-sucedida, o status deve ser CONNECTED
         ConnectionKey userKey = ConnectionKey.userStream("BINANCE");
-        awaitCondition(Duration.ofSeconds(10), 200,
+        awaitCondition(Duration.ofSeconds(5), 100,
+                () -> {
+                    var mgr = connectionRepository.getConnection(userKey);
+                    return mgr != null ? mgr.getConnectionResult().status() : null;
+                },
+                s -> s == ConnectionStatus.CONNECTED,
+                "user data stream must reach CONNECTED after subscription confirmation");
+
+        // 2) Forçar falha no WebSocket para disparar reconexão
+        WebSocket ws1 = firstServerWs[0];
+        assertNotNull(ws1, "server WebSocket must be set after subscription");
+        ws1.cancel();
+
+        // 3) Reconexão deve enviar nova subscription message
+        assertTrue(secondSubscriptionReceived.await(20, TimeUnit.SECONDS),
+                "reconnect subscription message must be sent within 20s");
+
+        awaitCondition(Duration.ofSeconds(5), 100,
                 () -> {
                     var mgr = connectionRepository.getConnection(userKey);
                     return mgr != null ? mgr.getConnectionResult().status() : null;
@@ -127,19 +137,7 @@ class BinanceListenKeyReconnectIntegrationTest {
                 "user data stream must reach CONNECTED after automatic reconnect");
     }
 
-    // ─── suporte ─────────────────────────────────────────────────────────
-
-    private static MockResponse listenKeyResponse(String listenKey) {
-        return new MockResponse()
-                .setBody("{\"listenKey\":\"" + listenKey + "\"}")
-                .setHeader("Content-Type", "application/json");
-    }
-
-    private static MockResponse wsUpgradeAndKeepOpen() {
-        return new MockResponse().withWebSocketUpgrade(new WebSocketListener() {
-            // sem ação: mantém a conexão aberta para que onOpen do cliente dispare
-        });
-    }
+    // ─── suporte ──────────────────────────────────────────────────────────────
 
     private <T> T awaitCondition(Duration timeout, long pollMs, Supplier<T> supply,
                                   Predicate<T> predicate, String message) {

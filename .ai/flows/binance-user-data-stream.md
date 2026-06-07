@@ -2,18 +2,22 @@
 
 ## Objetivo
 
-Conectar o User Data Stream da Binance, manter o `listenKey` ativo, transformar
-eventos privados de ordem em `OrderDataDto` e entregar esses updates ao fluxo de
-conciliacao de ordens.
+Conectar o User Data Stream da Binance via WebSocket API, autenticar por mensagem
+assinada (HMAC-SHA256) e entregar eventos privados de ordem como `OrderDataDto`
+ao fluxo de conciliacao.
 
 Este fluxo e a entrada real de callbacks de execucao da Binance. Ele nao deve
 decidir regra de dominio; o adapter traduz payload externo e o core aplica a
 conciliacao.
 
+**Nota:** A Binance removeu os endpoints REST de listen key (`/api/v3/userDataStream`)
+em 2026-02-04. O protocolo atual usa WebSocket API com autenticacao por mensagem
+assinada — sem listen key, sem keepalive REST, sem revogacao.
+
 ## Quando Consultar
 
 - Bugs em callbacks de ordem Binance.
-- Mudancas em `listenKey`, keepalive, revoke ou reconexao de User Data Stream.
+- Mudancas em autenticacao WebSocket API, subscription ou reconexao.
 - Alteracoes no parsing de `executionReport`.
 - Problemas em status `NEW`, `PARTIALLY_FILLED`, `FILLED`, `CANCELED`,
   `EXPIRED` ou `REJECTED` vindos da Binance.
@@ -36,29 +40,36 @@ conciliacao.
    `ExchangeUserStreamPort` para a exchange.
 3. O use case registra/recupera a conexao `ConnectionKey.userStream("BINANCE")`.
 4. `BinanceUserStreamSessionAdapter` cria uma `BinanceUserStreamSession`.
-5. `BinanceUserStreamSession.open()` pede o `listenKey` via REST.
-6. A sessao agenda keepalive a cada 30 minutos.
-7. O use case conecta o `WebSocketPort` de user stream no URL
-   `wsBaseUrl + "/ws/" + listenKey`.
-8. `OkHttp3ListenerConverter` publica `RawUserDataMessageReceivedEvent` para
-   mensagens recebidas no canal `USER_DATA`.
-9. `ProcessUserMessageEventListener` chama `HandlerProcessUserMessagePort`.
-10. `ProcessUserMessageHandler` usa `ExchangeUserStreamPort` para processar a
-    mensagem raw.
-11. `BinanceUserDataProcessor` roteia pelo campo `e`.
-12. `ExecutionReportProcessor` converte `executionReport` em `OrderDataDto`.
-13. O handler notifica listeners de ordem registrados.
-14. `PortfolioStrategyRunnerOrderUpdateListener` chama `OrderConciliationPort`.
+5. `BinanceUserStreamSession.open()` retorna `wsApiBaseUrl` diretamente (sem
+   chamada REST — nao ha mais listen key).
+6. O use case conecta o `WebSocketPort` de user stream em `wsApiBaseUrl`.
+7. Apos WebSocket abrir, `WebSocketConnectedEvent` e publicado.
+8. `PostConnectionEstablishHandler` detecta canal `USER_DATA`, recupera a sessao
+   ativa via `adapterRepository.findActiveSession(connectionId)`, chama
+   `session.subscriptionMessage()` e envia a mensagem assinada via WebSocket.
+9. A mensagem de subscricao usa `userDataStream.subscribe.signature` com
+   parametros assinados via HMAC-SHA256 (`BinanceRequestSigner.signWebSocketParams`).
+10. A Binance responde com `{"status": 200, "result": {"subscriptionId": N}}`.
+11. `BinanceUserDataProcessor` identifica a confirmacao e loga; nao notifica listeners.
+12. Eventos de ordem chegam no formato `{"subscriptionId": N, "event": {...}}`.
+13. `BinanceUserDataProcessor` extrai `event`, roteia pelo campo `e`.
+14. `ExecutionReportProcessor` converte `executionReport` em `OrderDataDto`.
+15. O handler notifica listeners de ordem registrados.
+16. `PortfolioStrategyRunnerOrderUpdateListener` chama `OrderConciliationPort`.
 
-## Listen Key
+## Autenticacao WebSocket API
 
-`ListenKeyManager` encapsula o ciclo REST do listen key:
+`BinanceUserStreamSession.subscriptionMessage()` gera on-demand a mensagem de
+subscricao assinada:
 
-- `POST /api/v3/userDataStream`: obtem `listenKey`.
-- `PUT /api/v3/userDataStream?listenKey={listenKey}`: keepalive.
-- `DELETE /api/v3/userDataStream?listenKey={listenKey}`: revoke.
+1. Chama `BinanceRequestSigner.signWebSocketParams({"recvWindow": 5000})`.
+2. O signer adiciona `apiKey`, `timestamp` e `signature` (HMAC-SHA256) em ordem
+   alfabetica.
+3. Serializa `{"id": "<uuid>", "method": "userDataStream.subscribe.signature", "params": {...}}`.
+4. Retorna `Optional.of(json)`.
 
-Todas as chamadas usam header `X-MBX-APIKEY`.
+A mensagem e enviada via `PostConnectionEstablishHandler` apos cada conexao
+(incluindo reconexoes), garantindo timestamp fresco dentro do `recvWindow`.
 
 ## Parsing De executionReport
 
@@ -87,21 +98,26 @@ Falhas WebSocket publicam `WebSocketFailedEvent`. `ConnectionFailedHandler`:
 
 1. marca a conexao como falha;
 2. agenda reconnect com backoff linear de 5 segundos por tentativa;
-3. para `USER_DATA`, fecha a sessao ativa anterior;
+3. para `USER_DATA`, fecha a sessao ativa anterior (`session.close()` e no-op);
 4. remove a sessao antiga do repositorio;
 5. chama `ConnectUserStreamPort` novamente;
-6. a nova conexao obtem novo `listenKey`.
+6. apos nova conexao, `PostConnectionEstablishHandler` envia nova subscription
+   message assinada com timestamp fresco.
 
-Fechamento normal por `WebSocketClosedEvent` tambem fecha/revoga a sessao ativa
-quando a conexao nao estava em processo de disconnect manual.
+Fechamento normal por `WebSocketClosedEvent` tambem fecha a sessao ativa quando
+a conexao nao estava em processo de disconnect manual.
 
 ## Variacoes E Falhas
 
 - Sem credenciais Binance: `BinanceUserStreamConfiguration` nao cria os beans.
 - Sem adapters de user stream: `ConnectUserStreamUseCase` retorna vazio.
-- Falha ao obter listen key: a sessao e fechada e o manager recebe status de
-  falha.
-- Mensagem sem campo `e`: resultado de erro, sem notificacao de listener.
+- Falha ao gerar subscription message (ex: erro de signing): `subscriptionMessage()`
+  retorna `Optional.empty()`, handler loga e retorna sucesso sem enviar.
+- Confirmacao com status != 200: `BinanceUserDataProcessor` loga erro e retorna
+  `ProcessingResult.error()` — sem notificacao de listener.
+- Confirmacao com status 200: loga info, retorna `ProcessingResult.error()` —
+  nao e um evento processavel, listeners nao sao notificados.
+- Mensagem sem campo `e` (nem subscriptionId/event, nem status/id): erro.
 - Evento `e` sem processor registrado: resultado de erro.
 - `executionReport` com side/type/status desconhecido: erro de parse.
 - `clientOrderId` desconhecido ainda passa pelo listener, mas a conciliacao deve
@@ -115,7 +131,7 @@ quando a conexao nao estava em processo de disconnect manual.
 | `core/src/main/java/com/marmitt/core/application/usecase/websocket/ConnectUserStreamUseCase.java` | Orquestra abertura de conexao privada por exchange. |
 | `adapter-binance/src/main/java/com/marmitt/binance/BinanceUserStreamSessionAdapter.java` | Cria sessoes Binance por conexao. |
 | `adapter-binance/src/main/java/com/marmitt/binance/userdata/BinanceUserStreamSession.java` | Abre URL privada e agenda keepalive. |
-| `adapter-binance/src/main/java/com/marmitt/binance/userdata/ListenKeyManager.java` | Obtem, renova e revoga listen key. |
+| `core/src/main/java/com/marmitt/core/application/handler/connection/PostConnectionEstablishHandler.java` | Envia subscription message apos conexao USER_DATA. |
 | `spring-application/src/main/java/com/marmitt/application/spring/adapter/OkHttp3ListenerConverter.java` | Publica eventos raw por canal WebSocket. |
 | `spring-application/src/main/java/com/marmitt/application/spring/handler/ProcessUserMessageEventListener.java` | Consome evento raw de user data de forma async. |
 | `core/src/main/java/com/marmitt/core/application/handler/ProcessUserMessageHandler.java` | Processa payload privado e notifica listeners de ordem. |
@@ -130,11 +146,12 @@ quando a conexao nao estava em processo de disconnect manual.
 - Payload Binance nao deve vazar para o dominio; a borda deve produzir
   `OrderDataDto`.
 - User stream privado usa `ConnectionKey.userStream`, separado do market stream.
-- Keepalive pertence a sessao Binance, nao ao core.
-- Reconnect de user stream precisa fechar/revogar a sessao anterior antes de
-  abrir nova sessao.
+- `subscriptionMessage()` deve ser gerado on-demand (timestamp fresco por chamada).
+- Reconnect de user stream fecha a sessao anterior antes de abrir nova sessao.
 - Apenas `OrderDataDto` deve ser notificado aos `OrderUpdateListener` no user
-  stream.
+  stream; confirmacoes de subscricao nao sao processaveis.
+- `wsApiBaseUrl` nao vaza para o core; `PostConnectionEstablishHandler` nao
+  conhece detalhes de provider.
 - O efeito economico final pertence a `order-conciliation.md`, nao ao adapter.
 
 ## Validacao

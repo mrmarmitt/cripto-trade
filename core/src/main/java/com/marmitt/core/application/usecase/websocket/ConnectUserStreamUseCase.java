@@ -66,11 +66,12 @@ public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
             String url = session.open();
             WebSocketPort webSocket = webSocketRegistry.findUserStreamByExchangeName(exchangeName)
                     .orElseThrow(() -> new IllegalStateException("No user stream WebSocket registered for exchange: " + exchangeName));
-            webSocket.connect(url, exchangeName, manager.getConnectionId());
             adapterRepository.storeActiveSession(manager.getConnectionId(), session);
+            webSocket.connect(url, exchangeName, manager.getConnectionId());
         } catch (IOException | RuntimeException e) {
             log.error("Failed to connect user data stream - exchange={}", exchangeName, e);
             session.close();
+            adapterRepository.removeActiveSession(manager.getConnectionId());
             manager.setConnectionResult(ConnectionResultDto.failure("connect", "Failed: " + e.getMessage()));
         }
 

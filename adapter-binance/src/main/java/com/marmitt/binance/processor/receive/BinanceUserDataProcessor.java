@@ -35,8 +35,16 @@ public class BinanceUserDataProcessor implements ReceivedMessageProcessorPort {
         String correlationId = context.correlationId().toString();
         try {
             JsonNode root = objectMapper.readTree(rawMessage);
-            JsonNode eventTypeNode = root.get("e");
 
+            if (root.has("status") && root.has("id")) {
+                return handleSubscriptionConfirmation(root, correlationId, rawMessage);
+            }
+
+            JsonNode eventNode = root.has("subscriptionId") && root.has("event")
+                    ? root.get("event")
+                    : root;
+
+            JsonNode eventTypeNode = eventNode.get("e");
             if (eventTypeNode == null) {
                 log.debug("User data message with no event type: correlationId={}", correlationId);
                 return ProcessingResult.error(correlationId, "User data message has no event type field", rawMessage);
@@ -51,11 +59,23 @@ public class BinanceUserDataProcessor implements ReceivedMessageProcessorPort {
                         "No processor registered for user data event type: " + eventType, rawMessage);
             }
 
-            return processor.process(root, context);
+            return processor.process(eventNode, context);
 
         } catch (Exception e) {
             log.error("Failed to parse user data message: correlationId={}", correlationId, e);
             return ProcessingResult.error(correlationId, "Failed to parse user data message: " + e.getMessage(), rawMessage, e);
         }
+    }
+
+    private ProcessingResult<? extends ProcessorResponse> handleSubscriptionConfirmation(
+            JsonNode root, String correlationId, String rawMessage) {
+        int status = root.path("status").asInt();
+        if (status == 200) {
+            log.info("User data stream subscription confirmed: subscriptionId={}",
+                    root.path("result").path("subscriptionId").asText("unknown"));
+            return ProcessingResult.error(correlationId, "Subscription confirmation received", rawMessage);
+        }
+        log.error("User data stream subscription failed: status={} raw={}", status, rawMessage);
+        return ProcessingResult.error(correlationId, "Subscription failed with status: " + status, rawMessage);
     }
 }
