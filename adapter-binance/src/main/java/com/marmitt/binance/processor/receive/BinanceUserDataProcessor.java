@@ -44,9 +44,7 @@ public class BinanceUserDataProcessor implements ReceivedMessageProcessorPort {
                 return handleSubscriptionConfirmation(root, correlationId, rawMessage, context);
             }
 
-            JsonNode eventNode = root.has("subscriptionId") && root.has("event")
-                    ? root.get("event")
-                    : root;
+            JsonNode eventNode = root.has("event") ? root.get("event") : root;
 
             JsonNode eventTypeNode = eventNode.get("e");
             if (eventTypeNode == null) {
@@ -55,6 +53,18 @@ public class BinanceUserDataProcessor implements ReceivedMessageProcessorPort {
             }
 
             String eventType = eventTypeNode.asText();
+            if ("serverShutdown".equals(eventType)) {
+                log.warn("Binance server shutdown notification received — triggering proactive reconnect: exchange={}",
+                        context.exchangeName());
+                eventPublisher.publishEvent(WebSocketFailedEvent.of(
+                        context.exchangeName(),
+                        "Binance server shutdown",
+                        context.connectionId(),
+                        null,
+                        context.streamChannel()));
+                return ProcessingResult.ignored(correlationId, "server-shutdown");
+            }
+
             BinanceEventProcessor<?> processor = processorsByEventType.get(eventType);
 
             if (processor == null) {
