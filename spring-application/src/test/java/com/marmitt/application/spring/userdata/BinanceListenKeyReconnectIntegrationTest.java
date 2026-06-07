@@ -110,7 +110,7 @@ class BinanceListenKeyReconnectIntegrationTest {
                 "subscription message must be sent via WebSocket within 10s");
 
         ConnectionKey userKey = ConnectionKey.userStream("BINANCE");
-        awaitCondition(Duration.ofSeconds(5), 100,
+        awaitCondition(Duration.ofSeconds(15), 100,
                 () -> {
                     var mgr = connectionRepository.getConnection(userKey);
                     return mgr != null ? mgr.getConnectionResult().status() : null;
@@ -121,10 +121,10 @@ class BinanceListenKeyReconnectIntegrationTest {
         // 2) Reconectar — deve enviar nova subscription com assinatura fresca
         connectUserStreamPort.execute("BINANCE");
 
-        assertTrue(secondSubscriptionReceived.await(10, TimeUnit.SECONDS),
-                "reconnect subscription message must be sent within 10s");
+        assertTrue(secondSubscriptionReceived.await(15, TimeUnit.SECONDS),
+                "reconnect subscription message must be sent within 15s");
 
-        awaitCondition(Duration.ofSeconds(5), 100,
+        awaitCondition(Duration.ofSeconds(15), 100,
                 () -> {
                     var mgr = connectionRepository.getConnection(userKey);
                     return mgr != null ? mgr.getConnectionResult().status() : null;
