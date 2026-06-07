@@ -5,14 +5,15 @@ import com.marmitt.binance.processor.receive.BinanceUserDataProcessor;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
 import com.marmitt.core.dto.websocket.data.ProcessorResponse;
+import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
 
 public class BinanceUserStreamAdapter implements ExchangeUserStreamPort {
 
     private final BinanceUserDataProcessor receivedMessageProcessor;
 
-    public BinanceUserStreamAdapter(ObjectMapper objectMapper) {
-        this.receivedMessageProcessor = new BinanceUserDataProcessor(objectMapper);
+    public BinanceUserStreamAdapter(ObjectMapper objectMapper, EventPublisherPort eventPublisher) {
+        this.receivedMessageProcessor = new BinanceUserDataProcessor(objectMapper, eventPublisher);
     }
 
     @Override

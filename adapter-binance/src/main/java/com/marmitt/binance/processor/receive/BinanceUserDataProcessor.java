@@ -2,9 +2,11 @@ package com.marmitt.binance.processor.receive;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.marmitt.core.dto.events.WebSocketFailedEvent;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
 import com.marmitt.core.dto.websocket.data.ProcessorResponse;
+import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import lombok.extern.slf4j.Slf4j;
 
@@ -17,10 +19,12 @@ import java.util.stream.Collectors;
 public class BinanceUserDataProcessor implements ReceivedMessageProcessorPort {
 
     private final ObjectMapper objectMapper;
+    private final EventPublisherPort eventPublisher;
     private final Map<String, BinanceEventProcessor<?>> processorsByEventType;
 
-    public BinanceUserDataProcessor(ObjectMapper objectMapper) {
+    public BinanceUserDataProcessor(ObjectMapper objectMapper, EventPublisherPort eventPublisher) {
         this.objectMapper = objectMapper;
+        this.eventPublisher = eventPublisher;
 
         List<BinanceEventProcessor<?>> processors = List.of(
                 new ExecutionReportProcessor(objectMapper)
@@ -37,7 +41,7 @@ public class BinanceUserDataProcessor implements ReceivedMessageProcessorPort {
             JsonNode root = objectMapper.readTree(rawMessage);
 
             if (root.has("status") && root.has("id")) {
-                return handleSubscriptionConfirmation(root, correlationId, rawMessage);
+                return handleSubscriptionConfirmation(root, correlationId, rawMessage, context);
             }
 
             JsonNode eventNode = root.has("subscriptionId") && root.has("event")
@@ -68,14 +72,21 @@ public class BinanceUserDataProcessor implements ReceivedMessageProcessorPort {
     }
 
     private ProcessingResult<? extends ProcessorResponse> handleSubscriptionConfirmation(
-            JsonNode root, String correlationId, String rawMessage) {
+            JsonNode root, String correlationId, String rawMessage, MessageContext context) {
         int status = root.path("status").asInt();
         if (status == 200) {
             log.info("User data stream subscription confirmed: subscriptionId={}",
                     root.path("result").path("subscriptionId").asText("unknown"));
             return ProcessingResult.error(correlationId, "Subscription confirmation received", rawMessage);
         }
-        log.error("User data stream subscription failed: status={} raw={}", status, rawMessage);
-        return ProcessingResult.error(correlationId, "Subscription failed with status: " + status, rawMessage);
+        log.error("User data stream subscription rejected by Binance: status={} exchange={} connectionId={}",
+                status, context.exchangeName(), context.connectionId());
+        eventPublisher.publishEvent(WebSocketFailedEvent.of(
+                context.exchangeName(),
+                "User data stream subscription rejected: status=" + status,
+                context.connectionId(),
+                null,
+                context.streamChannel()));
+        return ProcessingResult.error(correlationId, "Subscription rejected by Binance: status=" + status, rawMessage);
     }
 }

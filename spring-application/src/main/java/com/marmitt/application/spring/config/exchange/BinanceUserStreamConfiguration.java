@@ -38,7 +38,8 @@ public class BinanceUserStreamConfiguration {
     }
 
     @Bean
-    public BinanceUserStreamAdapter binanceUserStreamAdapter(ObjectMapper objectMapper) {
-        return new BinanceUserStreamAdapter(objectMapper);
+    public BinanceUserStreamAdapter binanceUserStreamAdapter(ObjectMapper objectMapper,
+                                                             EventPublisherPort eventPublisher) {
+        return new BinanceUserStreamAdapter(objectMapper, eventPublisher);
     }
 }
