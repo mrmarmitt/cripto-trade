@@ -113,6 +113,64 @@ Deve fazer:
 
 ## Comandos de implementacao
 
+### Implementar com agente de entrega
+
+Comando:
+
+```text
+Use o feature-delivery-agent para implementar suporte a validacao de symbol filters no adapter Binance.
+```
+
+Deve fazer:
+
+- ler `/.ai/agents/feature-delivery-agent.md` e os documentos exigidos por ele;
+- classificar a demanda como feature, bugfix, refactor, test, docs ou
+  investigation;
+- consultar o flow map aplicavel em `/.ai/flows` quando houver fluxo existente;
+- confirmar o comportamento no codigo antes de alterar;
+- implementar no modulo dono da responsabilidade;
+- validar com o comando mais restrito suficiente;
+- avaliar impacto documental;
+- nao fazer commit, push ou PR sem pedido explicito.
+
+### Corrigir bug com agente de entrega
+
+Comando:
+
+```text
+Use o feature-delivery-agent para corrigir o bug em que replay de DLQ de margem resolve entrada sem mudanca de estado.
+```
+
+Deve fazer:
+
+- usar `feature-delivery-agent.md`;
+- ler o flow map mais proximo do bug, por exemplo
+  `/.ai/flows/dead-letter-replay.md`;
+- localizar use case, adapter, teste ou controller responsavel;
+- implementar a correcao mantendo fronteiras de modulo;
+- adicionar ou ajustar teste quando o bug tiver comportamento verificavel;
+- reportar validacao e impacto documental.
+
+### Implementar e abrir PR com agente de entrega
+
+Comando:
+
+```text
+Use o feature-delivery-agent para implementar a mudanca, faca commit, suba a branch e abra um PR draft.
+```
+
+Deve fazer:
+
+- executar o fluxo de entrega normal do agente;
+- usar `/.ai/skills/pr-creator/SKILL.md` apenas na etapa de publicacao;
+- conferir escopo do commit;
+- criar ou usar branch conforme `/.ai/git-workflow.md`;
+- commitar apenas arquivos relacionados;
+- fazer rebase da branch sobre `develop`;
+- subir a branch;
+- abrir PR draft apontando para `develop`;
+- nao fazer merge.
+
 ### Implementar uma mudanca
 
 Comando:
