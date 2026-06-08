@@ -13,6 +13,7 @@ import com.marmitt.core.ports.inbound.websocket.ConnectMarketStreamPort;
 import com.marmitt.core.ports.inbound.websocket.ConnectUserStreamPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
+import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.UUID;
@@ -28,16 +29,19 @@ public class ConnectionFailedHandler implements ConnectionFailedPort {
 
     private final WebSocketConnectionRepositoryPort connectionRepository;
     private final ExchangeAdapterRepositoryPort adapterRepository;
+    private final WebSocketPortRegistryPort webSocketRegistry;
     private final ConnectMarketStreamPort connectMarketStreamPort;
     private final ConnectUserStreamPort connectUserStreamPort;
     private final ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
     public ConnectionFailedHandler(WebSocketConnectionRepositoryPort connectionRepository,
                                    ExchangeAdapterRepositoryPort adapterRepository,
+                                   WebSocketPortRegistryPort webSocketRegistry,
                                    ConnectMarketStreamPort connectMarketStreamPort,
                                    ConnectUserStreamPort connectUserStreamPort) {
         this.connectionRepository = connectionRepository;
         this.adapterRepository = adapterRepository;
+        this.webSocketRegistry = webSocketRegistry;
         this.connectMarketStreamPort = connectMarketStreamPort;
         this.connectUserStreamPort = connectUserStreamPort;
     }
@@ -103,10 +107,20 @@ public class ConnectionFailedHandler implements ConnectionFailedPort {
 
     private void reconnectUserStream(String exchangeName, UUID sessionToClose, int attempt) {
         if (sessionToClose != null) {
+            ConnectionKey key = ConnectionKey.userStream(exchangeName);
+            WebSocketConnectionManager manager = connectionRepository.getConnection(key);
+            UUID currentId = manager.getConnectionResult().connectionId();
+            if (currentId != null && !currentId.equals(sessionToClose)) {
+                log.debug("Skipping stale reconnect task for session={} — stream already moved to connection={}",
+                        sessionToClose, currentId);
+                return;
+            }
             adapterRepository.findActiveSession(sessionToClose).ifPresent(s -> {
                 s.close();
                 adapterRepository.removeActiveSession(sessionToClose);
             });
+            webSocketRegistry.findUserStreamByExchangeName(exchangeName)
+                    .ifPresent(ws -> ws.disconnect(exchangeName, sessionToClose));
         }
         log.info("Reconnecting user data stream - exchange={} attempt={}", exchangeName, attempt);
         WebSocketConnectionResponse response = connectUserStreamPort.execute(exchangeName)

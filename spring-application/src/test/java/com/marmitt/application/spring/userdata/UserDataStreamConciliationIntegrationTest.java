@@ -17,6 +17,7 @@ import com.marmitt.core.ports.inbound.handler.HandlerProcessUserMessagePort;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
+import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSessionPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
@@ -350,8 +351,9 @@ class UserDataStreamConciliationIntegrationTest {
     static class MockUserStreamConfig {
 
         @Bean
-        ExchangeUserStreamPort mockExchangeUserStreamPort(ObjectMapper objectMapper) {
-            BinanceUserDataProcessor processor = new BinanceUserDataProcessor(objectMapper);
+        ExchangeUserStreamPort mockExchangeUserStreamPort(ObjectMapper objectMapper,
+                                                          EventPublisherPort eventPublisher) {
+            BinanceUserDataProcessor processor = new BinanceUserDataProcessor(objectMapper, eventPublisher);
             return new ExchangeUserStreamPort() {
                 @Override public String getExchangeName() { return "MOCK"; }
                 @Override public com.marmitt.core.dto.processing.ProcessingResult<? extends com.marmitt.core.dto.websocket.data.ProcessorResponse> processMessage(String rawMessage, MessageContext context) {

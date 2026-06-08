@@ -1,53 +1,50 @@
 package com.marmitt.binance.userdata;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.marmitt.binance.auth.BinanceRequestSigner;
 import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSession;
 import lombok.extern.slf4j.Slf4j;
 
-import java.io.IOException;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
+import java.util.Map;
+import java.util.Optional;
+import java.util.UUID;
 
 @Slf4j
 public class BinanceUserStreamSession implements UserStreamSession {
 
-    private static final long KEEPALIVE_INTERVAL_MINUTES = 30;
+    private final String wsApiBaseUrl;
+    private final BinanceRequestSigner signer;
+    private final ObjectMapper objectMapper;
 
-    private final ListenKeyManager listenKeyManager;
-    private final String wsBaseUrl;
-    private final ScheduledExecutorService scheduler;
-    private ScheduledFuture<?> keepAliveTask;
-
-    public BinanceUserStreamSession(ListenKeyManager listenKeyManager, String wsBaseUrl) {
-        this.listenKeyManager = listenKeyManager;
-        this.wsBaseUrl = wsBaseUrl;
-        this.scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
-            Thread t = new Thread(r, "binance-listenkey-keepalive");
-            t.setDaemon(true);
-            return t;
-        });
+    public BinanceUserStreamSession(String wsApiBaseUrl, BinanceRequestSigner signer, ObjectMapper objectMapper) {
+        this.wsApiBaseUrl = wsApiBaseUrl;
+        this.signer = signer;
+        this.objectMapper = objectMapper;
     }
 
     @Override
-    public String open() throws IOException {
-        String listenKey = listenKeyManager.obtainListenKey();
-        keepAliveTask = scheduler.scheduleAtFixedRate(
-                listenKeyManager::keepAlive,
-                KEEPALIVE_INTERVAL_MINUTES,
-                KEEPALIVE_INTERVAL_MINUTES,
-                TimeUnit.MINUTES);
-        log.info("Binance user stream session opened — keepalive scheduled every {}min", KEEPALIVE_INTERVAL_MINUTES);
-        return wsBaseUrl + "/ws/" + listenKey;
+    public String open() {
+        return wsApiBaseUrl;
+    }
+
+    @Override
+    public Optional<String> subscriptionMessage() {
+        try {
+            Map<String, Object> params = signer.signWebSocketParams(Map.of("recvWindow", 5000L));
+            Map<String, Object> message = Map.of(
+                    "id", UUID.randomUUID().toString(),
+                    "method", "userDataStream.subscribe.signature",
+                    "params", params
+            );
+            return Optional.of(objectMapper.writeValueAsString(message));
+        } catch (Exception e) {
+            log.error("Failed to generate user data stream subscription message", e);
+            return Optional.empty();
+        }
     }
 
     @Override
     public void close() {
-        if (keepAliveTask != null) {
-            keepAliveTask.cancel(false);
-        }
-        scheduler.shutdown();
-        listenKeyManager.revoke();
-        log.info("Binance user stream session closed");
+        log.info("Binance user data stream session closed");
     }
 }

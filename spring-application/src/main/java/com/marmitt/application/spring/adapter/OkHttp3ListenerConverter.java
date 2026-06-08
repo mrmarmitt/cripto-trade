@@ -55,6 +55,9 @@ public class OkHttp3ListenerConverter {
             public void onClosing(@NotNull WebSocket webSocket, int code, @NotNull String reason) {
                 log.info("WebSocket closing - exchange={} channel={} code={} reason={}", exchangeName, channel, code, reason);
                 eventPublisher.publishEvent(WebSocketClosingEvent.of(exchangeName, code, reason, connectionId, channel));
+                // Complete the close handshake so OkHttp fires onClosed.
+                // Without this call enqueuedClose stays false and onClosed never fires.
+                webSocket.close(1000, "");
             }
 
             @Override

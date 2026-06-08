@@ -17,6 +17,9 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T9  | Observabilidade Docker Compose  | Média        | Codex       | Concluído     |
 | T10 | Otimização da suíte de integração | Média      | Codex       | Pendente      |
 | T11 | Order Quantity Normalization Before Persist | Média | Codex  | Pendente      |
+| T12 | Migração User Data Stream → WebSocket API Binance | Alta | Claude | Pendente |
+| T13 | Order Placement via WebSocket API Binance | Alta | Claude | Pendente |
+| T14 | Refactor Fronteiras Arquiteturais: Transporte e Negócio | Alta | Claude | Pendente |
 
 ## Ordem de execução
 
@@ -46,6 +49,12 @@ T8  Kill Switch     T9  Observabilidade
 T10  Otimização da suíte de integração
        ↓
 T11  Order Quantity Normalization      ← pré-requisito para produção
+       ↓
+T12  Migração User Data Stream → WS API  ← desbloqueio testnet
+       ↓
+T13  Order Placement via WS API          ← elimina REST para ordens
+       ↓
+T14  Refactor fronteiras: transporte     ← reconexão, reações de negócio, HttpClientPort
        ↓
    produção
 ```

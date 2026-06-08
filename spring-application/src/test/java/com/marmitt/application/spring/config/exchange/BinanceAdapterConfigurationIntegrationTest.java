@@ -19,7 +19,8 @@ class BinanceAdapterConfigurationIntegrationTest {
             .withUserConfiguration(TestApplication.class)
             .withPropertyValues(
                     "binance.ws-base-url=wss://stream.binance.com:9443",
-                    "binance.rest-base-url=https://api.binance.com"
+                    "binance.rest-base-url=https://api.binance.com",
+                    "binance.ws-api-base-url=wss://ws-api.binance.com:443/ws-api/v3"
             );
 
     @Test

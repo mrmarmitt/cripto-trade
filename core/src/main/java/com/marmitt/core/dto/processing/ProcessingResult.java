@@ -6,7 +6,7 @@ import java.time.Instant;
 import java.util.Optional;
 
 public sealed interface ProcessingResult<T>
-        permits ProcessingResult.Success, ProcessingResult.Error, ProcessingResult.Warning {
+        permits ProcessingResult.Success, ProcessingResult.Error, ProcessingResult.Warning, ProcessingResult.Ignored {
 
     String correlationId();
 
@@ -199,5 +199,29 @@ public sealed interface ProcessingResult<T>
 
     static <T> ProcessingResult<T> warning(String correlationId, String rawMessage, T data, String warningMessage) {
         return new Warning<>(correlationId, rawMessage, data, warningMessage);
+    }
+
+    record Ignored(
+            String correlationId,
+            String reason,
+            Instant processedAt
+    ) implements ProcessingResult<Void> {
+
+        public Ignored(String correlationId, String reason) {
+            this(correlationId, reason, Instant.now());
+        }
+
+        @Override public boolean isSuccess() { return false; }
+        @Override public boolean isError() { return false; }
+        @Override public boolean isWarning() { return false; }
+        @Override public Optional<Void> getData() { return Optional.empty(); }
+        @Override public Optional<String> getErrorMessage() { return Optional.of(reason); }
+        @Override public Optional<String> getRawMessage() { return Optional.empty(); }
+        @Override public Optional<Exception> getException() { return Optional.empty(); }
+    }
+
+    @SuppressWarnings("unchecked")
+    static <T> ProcessingResult<T> ignored(String correlationId, String reason) {
+        return (ProcessingResult<T>) new Ignored(correlationId, reason);
     }
 }

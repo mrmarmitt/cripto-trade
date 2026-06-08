@@ -32,6 +32,15 @@ public class BinanceMarketStreamConfiguration {
     }
 
     @Bean
+    public OkHttpClient binanceRestClient() {
+        return new OkHttpClient.Builder()
+                .connectTimeout(Duration.ofSeconds(10))
+                .readTimeout(Duration.ofSeconds(30))
+                .writeTimeout(Duration.ofSeconds(10))
+                .build();
+    }
+
+    @Bean
     public OkHttp3WebSocketAdapter binanceMarketWebSocketPort(OkHttpClient binanceWebSocketClient,
                                                                EventPublisherPort eventPublisher,
                                                                WebSocketPortRegistryPort webSocketRegistry) {
