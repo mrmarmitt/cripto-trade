@@ -107,6 +107,14 @@ public class ConnectionFailedHandler implements ConnectionFailedPort {
 
     private void reconnectUserStream(String exchangeName, UUID sessionToClose, int attempt) {
         if (sessionToClose != null) {
+            ConnectionKey key = ConnectionKey.userStream(exchangeName);
+            WebSocketConnectionManager manager = connectionRepository.getConnection(key);
+            UUID currentId = manager.getConnectionResult().connectionId();
+            if (currentId != null && !currentId.equals(sessionToClose)) {
+                log.debug("Skipping stale reconnect task for session={} — stream already moved to connection={}",
+                        sessionToClose, currentId);
+                return;
+            }
             adapterRepository.findActiveSession(sessionToClose).ifPresent(s -> {
                 s.close();
                 adapterRepository.removeActiveSession(sessionToClose);
