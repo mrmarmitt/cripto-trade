@@ -60,18 +60,24 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
 
     private boolean tryDispatchViaWebSocketApi(SendOrderRequest request, String exchangeId) {
         WebSocketPort wsApiPort = webSocketRegistry.findUserStreamByExchangeName(exchangeId).orElse(null);
-        if (wsApiPort == null) {
+        if (wsApiPort == null || !wsApiPort.isConnected()) {
             return false;
         }
         ExchangeStreamingPort streamingPort = exchangeAdapterRepository.findStreamingByName(exchangeId).orElse(null);
         if (streamingPort == null) {
             return false;
         }
-        String message = streamingPort.formatMessage(request);
-        wsApiPort.sendMessage(message);
-        log.debug("dispatch: order sent via WebSocket API - clientOrderId={} exchange={}",
-                request.getClientOrderId(), exchangeId);
-        return true;
+        try {
+            String message = streamingPort.formatMessage(request);
+            wsApiPort.sendMessage(message);
+            log.debug("dispatch: order sent via WebSocket API - clientOrderId={} exchange={}",
+                    request.getClientOrderId(), exchangeId);
+            return true;
+        } catch (Exception e) {
+            log.warn("dispatch: WS API send failed - falling back to REST - clientOrderId={} exchange={} reason={}",
+                    request.getClientOrderId(), exchangeId, e.getMessage());
+            return false;
+        }
     }
 
     private boolean tryDispatchViaRest(SendOrderRequest request, String exchangeId) {

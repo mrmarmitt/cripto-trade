@@ -22,8 +22,15 @@ class OrderApiResponseProcessor {
                     return ProcessingResult.ignored(correlationId, "order-response-no-symbol");
                 }
                 dto = BinanceOrderApiResponseMapper.fromResult(result);
-            } else {
+            } else if (status >= 400 && status < 500) {
+                // 4xx = definitive client-side rejection (invalid params, insufficient balance, etc.)
                 dto = BinanceOrderApiResponseMapper.fromError(root);
+            } else {
+                // 5xx or unexpected: order may have reached matching engine — leave PENDING for watchdog recovery
+                log.warn("Order API response with unknown outcome status={} correlationId={} — leaving for recovery",
+                        status, correlationId);
+                return ProcessingResult.error(correlationId,
+                        "Order API returned unknown outcome status=" + status, rawMessage);
             }
             log.debug("Order API response processed: clientOrderId={} status={} correlationId={}",
                     dto.clientOrderId(), dto.status(), correlationId);

@@ -92,6 +92,26 @@ class OrderApiResponseProcessorTest {
     }
 
     @Test
+    void error5xx_returnsErrorResult_notRejected() throws Exception {
+        String json = """
+                {
+                  "id": "v1rcd1t1000000000000s001B_abc123def456",
+                  "status": 504,
+                  "error": {
+                    "code": -1001,
+                    "msg": "An unknown error occurred while processing the request."
+                  }
+                }
+                """;
+        JsonNode root = mapper.readTree(json);
+
+        ProcessingResult<?> pr = processor.process(root, root.path("result"), 504, "c5", json, ctx());
+
+        assertFalse(pr.isSuccess(), "5xx must not be treated as success/REJECTED");
+        assertTrue(pr.isError(), "5xx must return error so transaction stays PENDING for recovery");
+    }
+
+    @Test
     void sellSide_mappedCorrectly() throws Exception {
         String json = """
                 {

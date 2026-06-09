@@ -98,6 +98,25 @@ class OrderDispatchAdapterTest {
     }
 
     @Test
+    void dispatch_fallsBackToRest_whenUserStreamNotConnected() {
+        RecordingWebSocketPort disconnectedWsApiPort = new RecordingWebSocketPort() {
+            @Override public boolean isConnected() { return false; }
+        };
+        RecordingConciliationPort conciliation = new RecordingConciliationPort();
+        StubStreamingPort streaming = new StubStreamingPort();
+        StubOrderExecutionPort restPort = new StubOrderExecutionPort(OrderDataDto.OrderStatus.NEW);
+
+        WebSocketPortRegistryPort registry = new StubWebSocketRegistry(disconnectedWsApiPort, null);
+        ExchangeAdapterRepositoryPort adapterRepo = new StubAdapterRepository(streaming, restPort);
+
+        OrderDispatchAdapter adapter = new OrderDispatchAdapter(adapterRepo, conciliation, registry);
+        adapter.dispatch(command());
+
+        assertTrue(disconnectedWsApiPort.sentMessages.isEmpty(), "disconnected WS API must not receive messages");
+        assertEquals(1, conciliation.received.size(), "must fall back to REST conciliation");
+    }
+
+    @Test
     void dispatch_fallsBackToStreaming_whenNoUserStreamAndNoRest() {
         RecordingWebSocketPort marketStreamPort = new RecordingWebSocketPort();
         StubStreamingPort streaming = new StubStreamingPort();
