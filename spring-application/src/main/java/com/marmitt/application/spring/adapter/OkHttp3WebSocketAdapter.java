@@ -53,7 +53,9 @@ public class OkHttp3WebSocketAdapter implements WebSocketPort {
 
     @Override
     public void sendMessage(String message) {
-        webSocket.send(message);
+        if (!webSocket.send(message)) {
+            throw new IllegalStateException("WebSocket send rejected — socket is closed or send queue is full");
+        }
     }
 
     @Override

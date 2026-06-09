@@ -43,7 +43,8 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
         SendOrderRequest request = toSendOrderRequest(command, command.exchangeId());
 
         try {
-            if (!tryDispatchViaRest(request, command.exchangeId())) {
+            if (!tryDispatchViaWebSocketApi(request, command.exchangeId())
+                    && !tryDispatchViaRest(request, command.exchangeId())) {
                 dispatchViaStreaming(request, command.exchangeId());
             }
         } catch (OrderFilterViolationException | SymbolFilterLoadException ex) {
@@ -55,6 +56,28 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
 
         log.debug("dispatch: order sent - clientOrderId={} exchange={} symbol={} type={}",
                 command.clientOrderId(), command.exchangeId(), command.symbol(), command.type());
+    }
+
+    private boolean tryDispatchViaWebSocketApi(SendOrderRequest request, String exchangeId) {
+        WebSocketPort wsApiPort = webSocketRegistry.findUserStreamByExchangeName(exchangeId).orElse(null);
+        if (wsApiPort == null || !wsApiPort.isConnected()) {
+            return false;
+        }
+        ExchangeStreamingPort streamingPort = exchangeAdapterRepository.findStreamingByName(exchangeId).orElse(null);
+        if (streamingPort == null) {
+            return false;
+        }
+        try {
+            String message = streamingPort.formatMessage(request);
+            wsApiPort.sendMessage(message);
+            log.debug("dispatch: order sent via WebSocket API - clientOrderId={} exchange={}",
+                    request.getClientOrderId(), exchangeId);
+            return true;
+        } catch (Exception e) {
+            log.warn("dispatch: WS API send failed - falling back to REST - clientOrderId={} exchange={} reason={}",
+                    request.getClientOrderId(), exchangeId, e.getMessage());
+            return false;
+        }
     }
 
     private boolean tryDispatchViaRest(SendOrderRequest request, String exchangeId) {
