@@ -29,7 +29,7 @@ public class ConnectionLostOrderDispatchGuard {
     }
 
     public void onConnectionReestablished(WebSocketConnectedEvent event) {
-        if (!event.wasReconnection()) {
+        if (!adapterRepository.isDispatchBlocked(event.exchange())) {
             return;
         }
         log.info("Connection reestablished on exchange={} channel={} — unblocking order dispatch",

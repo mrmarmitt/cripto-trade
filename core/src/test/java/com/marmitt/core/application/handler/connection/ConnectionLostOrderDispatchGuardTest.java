@@ -64,12 +64,12 @@ class ConnectionLostOrderDispatchGuardTest {
     }
 
     @Test
-    void reconnection_unblocksPreviouslyBlockedDispatch() {
+    void anyConnection_unblocksPreviouslyBlockedDispatch() {
         adapterRepository.blockDispatch("BINANCE");
         assertTrue(adapterRepository.isDispatchBlocked("BINANCE"));
 
-        WebSocketConnectedEvent event = WebSocketConnectedEvent.reconnection(
-                "BINANCE", "Reconnected", UUID.randomUUID(), StreamChannel.MARKET);
+        WebSocketConnectedEvent event = WebSocketConnectedEvent.of(
+                "BINANCE", "Connected", UUID.randomUUID(), StreamChannel.MARKET);
 
         guard.onConnectionReestablished(event);
 
@@ -77,15 +77,15 @@ class ConnectionLostOrderDispatchGuardTest {
     }
 
     @Test
-    void initialConnection_doesNotUnblockDispatch() {
-        adapterRepository.blockDispatch("BINANCE");
+    void connection_whenDispatchNotBlocked_isNoOp() {
+        assertFalse(adapterRepository.isDispatchBlocked("BINANCE"));
 
         WebSocketConnectedEvent event = WebSocketConnectedEvent.of(
                 "BINANCE", "Connected", UUID.randomUUID(), StreamChannel.MARKET);
 
         guard.onConnectionReestablished(event);
 
-        assertTrue(adapterRepository.isDispatchBlocked("BINANCE"), "initial connection must not change dispatch block state");
+        assertFalse(adapterRepository.isDispatchBlocked("BINANCE"));
     }
 
     static class TrackingAdapterRepository implements ExchangeAdapterRepositoryPort {
