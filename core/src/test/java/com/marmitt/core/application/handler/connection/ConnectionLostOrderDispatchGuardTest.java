@@ -64,15 +64,50 @@ class ConnectionLostOrderDispatchGuardTest {
     }
 
     @Test
-    void anyConnection_unblocksPreviouslyBlockedDispatch() {
-        adapterRepository.blockDispatch("BINANCE");
+    void reconnect_unblocks_whenSameChannelRecovers() {
+        WebSocketClosedEvent close = WebSocketClosedEvent.unexpected(
+                "BINANCE", 1006, "Reset", UUID.randomUUID(), StreamChannel.MARKET);
+        guard.onConnectionClosed(close);
         assertTrue(adapterRepository.isDispatchBlocked("BINANCE"));
 
-        WebSocketConnectedEvent event = WebSocketConnectedEvent.of(
+        WebSocketConnectedEvent reconnect = WebSocketConnectedEvent.of(
                 "BINANCE", "Connected", UUID.randomUUID(), StreamChannel.MARKET);
+        guard.onConnectionReestablished(reconnect);
 
-        guard.onConnectionReestablished(event);
+        assertFalse(adapterRepository.isDispatchBlocked("BINANCE"));
+    }
 
+    @Test
+    void reconnect_keepBlocked_whenOtherChannelStillDown() {
+        WebSocketClosedEvent marketClose = WebSocketClosedEvent.unexpected(
+                "BINANCE", 1006, "Reset", UUID.randomUUID(), StreamChannel.MARKET);
+        WebSocketClosedEvent userDataClose = WebSocketClosedEvent.unexpected(
+                "BINANCE", 1006, "Reset", UUID.randomUUID(), StreamChannel.USER_DATA);
+        guard.onConnectionClosed(marketClose);
+        guard.onConnectionClosed(userDataClose);
+
+        // Only MARKET reconnects
+        WebSocketConnectedEvent marketReconnect = WebSocketConnectedEvent.of(
+                "BINANCE", "Connected", UUID.randomUUID(), StreamChannel.MARKET);
+        guard.onConnectionReestablished(marketReconnect);
+
+        assertTrue(adapterRepository.isDispatchBlocked("BINANCE"),
+                "dispatch must stay blocked while USER_DATA is still down");
+    }
+
+    @Test
+    void reconnect_unblocks_whenBothChannelsRecover() {
+        guard.onConnectionClosed(WebSocketClosedEvent.unexpected(
+                "BINANCE", 1006, "Reset", UUID.randomUUID(), StreamChannel.MARKET));
+        guard.onConnectionClosed(WebSocketClosedEvent.unexpected(
+                "BINANCE", 1006, "Reset", UUID.randomUUID(), StreamChannel.USER_DATA));
+
+        guard.onConnectionReestablished(WebSocketConnectedEvent.of(
+                "BINANCE", "Connected", UUID.randomUUID(), StreamChannel.MARKET));
+        assertTrue(adapterRepository.isDispatchBlocked("BINANCE"));
+
+        guard.onConnectionReestablished(WebSocketConnectedEvent.of(
+                "BINANCE", "Connected", UUID.randomUUID(), StreamChannel.USER_DATA));
         assertFalse(adapterRepository.isDispatchBlocked("BINANCE"));
     }
 
@@ -82,7 +117,6 @@ class ConnectionLostOrderDispatchGuardTest {
 
         WebSocketConnectedEvent event = WebSocketConnectedEvent.of(
                 "BINANCE", "Connected", UUID.randomUUID(), StreamChannel.MARKET);
-
         guard.onConnectionReestablished(event);
 
         assertFalse(adapterRepository.isDispatchBlocked("BINANCE"));

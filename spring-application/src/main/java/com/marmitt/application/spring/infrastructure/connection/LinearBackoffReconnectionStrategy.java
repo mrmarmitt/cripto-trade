@@ -60,8 +60,8 @@ public class LinearBackoffReconnectionStrategy implements ReconnectionStrategyPo
         if (attempt > maxAttempts) {
             log.error("Max reconnect attempts ({}) reached - exchange={} channel={} — publishing critical failure",
                     maxAttempts, exchangeName, channel);
-            eventPublisher.publishEvent(WebSocketFailedEvent.withAttempts(
-                    exchangeName, "Max reconnect attempts reached", null, null, attempt, channel));
+            eventPublisher.publishEvent(WebSocketFailedEvent.critical(
+                    exchangeName, "Max reconnect attempts reached", channel));
             return;
         }
 

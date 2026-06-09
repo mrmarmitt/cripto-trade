@@ -98,7 +98,7 @@ class OrderDispatchAdapterTest {
     }
 
     @Test
-    void dispatch_dropsOrder_whenDispatchBlocked() {
+    void dispatch_rejectsOrder_whenDispatchBlocked() {
         RecordingWebSocketPort wsApiPort = new RecordingWebSocketPort();
         RecordingConciliationPort conciliation = new RecordingConciliationPort();
         StubStreamingPort streaming = new StubStreamingPort();
@@ -113,7 +113,8 @@ class OrderDispatchAdapterTest {
         adapter.dispatch(command());
 
         assertTrue(wsApiPort.sentMessages.isEmpty(), "blocked dispatch must not send via WS API");
-        assertTrue(conciliation.received.isEmpty(), "blocked dispatch must not call conciliation");
+        assertEquals(1, conciliation.received.size(), "blocked dispatch must conciliate as REJECTED");
+        assertEquals(OrderDataDto.OrderStatus.REJECTED, conciliation.received.get(0).status());
     }
 
     @Test

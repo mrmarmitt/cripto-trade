@@ -80,6 +80,24 @@ class LinearBackoffReconnectionStrategyTest {
     }
 
     @Test
+    void scheduleReconnect_publishesCriticalEvent_evenWhenMaxAttemptsLessThan5() {
+        List<Object> publishedEvents = new ArrayList<>();
+
+        LinearBackoffReconnectionStrategy strategy = new LinearBackoffReconnectionStrategy(
+                new StubConnectionRepository(null), new StubAdapterRepo(), new StubWebSocketRegistry(),
+                (name, req) -> new WebSocketConnectionResponse(null, "ok", null, name, null, null, true, true, false, false, null),
+                name -> Optional.of(new WebSocketConnectionResponse(null, "ok", null, name, null, null, true, true, false, false, null)),
+                publishedEvents::add, 0, 3);
+
+        // attempt=4 > maxAttempts=3, but 4 < hardcoded threshold 5 in withAttempts — must still be critical
+        strategy.scheduleReconnect(EXCHANGE, StreamChannel.MARKET, null, 4);
+
+        assertEquals(1, publishedEvents.size());
+        WebSocketFailedEvent event = (WebSocketFailedEvent) publishedEvents.get(0);
+        assertTrue(event.isCritical(), "exhaustion event must always be critical regardless of attempt count");
+    }
+
+    @Test
     void delayScalesLinearlyWithAttempt() {
         // Verify attempt=1 → delay=5, attempt=3 → delay=15 via config
         // (indirectly tested via base-delay-seconds=5 default)

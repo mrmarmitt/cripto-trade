@@ -23,4 +23,8 @@ public record WebSocketFailedEvent(
     public static WebSocketFailedEvent withAttempts(String exchange, String reason, UUID connectionId, Throwable cause, int attemptCount, StreamChannel channel) {
         return new WebSocketFailedEvent(exchange, reason, connectionId, cause, Instant.now(), attemptCount >= 5, attemptCount, channel);
     }
+
+    public static WebSocketFailedEvent critical(String exchange, String reason, StreamChannel channel) {
+        return new WebSocketFailedEvent(exchange, reason, null, null, Instant.now(), true, Integer.MAX_VALUE, channel);
+    }
 }

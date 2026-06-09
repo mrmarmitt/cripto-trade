@@ -6,10 +6,14 @@ import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
+
 @Slf4j
 public class ConnectionLostOrderDispatchGuard {
 
     private final ExchangeAdapterRepositoryPort adapterRepository;
+    private final ConcurrentHashMap<String, Set<StreamChannel>> blockedChannels = new ConcurrentHashMap<>();
 
     public ConnectionLostOrderDispatchGuard(ExchangeAdapterRepositoryPort adapterRepository) {
         this.adapterRepository = adapterRepository;
@@ -23,17 +27,26 @@ public class ConnectionLostOrderDispatchGuard {
         if (channel != StreamChannel.MARKET && channel != StreamChannel.USER_DATA) {
             return;
         }
+        String exchange = event.exchange();
+        blockedChannels.computeIfAbsent(exchange, k -> ConcurrentHashMap.newKeySet()).add(channel);
         log.warn("Unexpected connection loss on exchange={} channel={} — blocking order dispatch",
-                event.exchange(), channel);
-        adapterRepository.blockDispatch(event.exchange());
+                exchange, channel);
+        adapterRepository.blockDispatch(exchange);
     }
 
     public void onConnectionReestablished(WebSocketConnectedEvent event) {
-        if (!adapterRepository.isDispatchBlocked(event.exchange())) {
+        String exchange = event.exchange();
+        Set<StreamChannel> pending = blockedChannels.get(exchange);
+        if (pending == null || !pending.remove(event.channel())) {
             return;
         }
-        log.info("Connection reestablished on exchange={} channel={} — unblocking order dispatch",
-                event.exchange(), event.channel());
-        adapterRepository.unblockDispatch(event.exchange());
+        if (pending.isEmpty()) {
+            blockedChannels.remove(exchange);
+            log.info("All lost channels reconnected on exchange={} — unblocking order dispatch", exchange);
+            adapterRepository.unblockDispatch(exchange);
+        } else {
+            log.info("Channel {} reconnected but {} still recovering on exchange={} — dispatch remains blocked",
+                    event.channel(), pending, exchange);
+        }
     }
 }
