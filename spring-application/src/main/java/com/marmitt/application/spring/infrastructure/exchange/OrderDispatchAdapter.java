@@ -40,6 +40,12 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
 
     @Override
     public void dispatch(OrderDispatchCommand command) {
+        if (exchangeAdapterRepository.isDispatchBlocked(command.exchangeId())) {
+            log.warn("dispatch: blocked — connection lost for exchange={} clientOrderId={}",
+                    command.exchangeId(), command.clientOrderId());
+            return;
+        }
+
         SendOrderRequest request = toSendOrderRequest(command, command.exchangeId());
 
         try {

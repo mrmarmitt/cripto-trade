@@ -56,4 +56,10 @@ public interface ExchangeAdapterRepositoryPort {
     Optional<UserStreamSession> findActiveSession(UUID connectionId);
 
     void removeActiveSession(UUID connectionId);
+
+    void blockDispatch(String exchangeName);
+
+    void unblockDispatch(String exchangeName);
+
+    boolean isDispatchBlocked(String exchangeName);
 }

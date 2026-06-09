@@ -98,6 +98,25 @@ class OrderDispatchAdapterTest {
     }
 
     @Test
+    void dispatch_dropsOrder_whenDispatchBlocked() {
+        RecordingWebSocketPort wsApiPort = new RecordingWebSocketPort();
+        RecordingConciliationPort conciliation = new RecordingConciliationPort();
+        StubStreamingPort streaming = new StubStreamingPort();
+        StubOrderExecutionPort restPort = new StubOrderExecutionPort(OrderDataDto.OrderStatus.NEW);
+
+        WebSocketPortRegistryPort registry = new StubWebSocketRegistry(wsApiPort, null);
+        StubAdapterRepository adapterRepo = new StubAdapterRepository(streaming, restPort) {
+            @Override public boolean isDispatchBlocked(String exchangeName) { return true; }
+        };
+
+        OrderDispatchAdapter adapter = new OrderDispatchAdapter(adapterRepo, conciliation, registry);
+        adapter.dispatch(command());
+
+        assertTrue(wsApiPort.sentMessages.isEmpty(), "blocked dispatch must not send via WS API");
+        assertTrue(conciliation.received.isEmpty(), "blocked dispatch must not call conciliation");
+    }
+
+    @Test
     void dispatch_fallsBackToRest_whenUserStreamNotConnected() {
         RecordingWebSocketPort disconnectedWsApiPort = new RecordingWebSocketPort() {
             @Override public boolean isConnected() { return false; }
@@ -209,5 +228,8 @@ class OrderDispatchAdapterTest {
         @Override public Optional<UserStreamSessionPort> findUserStreamSessionByName(String n) { return Optional.empty(); }
         @Override public Optional<UserStreamSession> findActiveSession(UUID id) { return Optional.empty(); }
         @Override public void removeActiveSession(UUID id) {}
+        @Override public void blockDispatch(String exchangeName) {}
+        @Override public void unblockDispatch(String exchangeName) {}
+        @Override public boolean isDispatchBlocked(String exchangeName) { return false; }
     }
 }

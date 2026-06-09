@@ -26,6 +26,7 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
     private static final Logger log = LoggerFactory.getLogger(InMemoryExchangeAdapterRepository.class);
 
     private final Map<String, ExchangeStreamingPort> streamingAdapters = new ConcurrentHashMap<>();
+    private final Set<String> blockedDispatches = ConcurrentHashMap.newKeySet();
     private final Map<String, ExchangeUserStreamPort> userStreamAdapters = new ConcurrentHashMap<>();
     private final Map<String, UserStreamSessionPort> userStreamSessionAdapters = new ConcurrentHashMap<>();
     private final Map<UUID, UserStreamSession> activeSessions = new ConcurrentHashMap<>();
@@ -149,6 +150,23 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
     @Override
     public Optional<UserStreamSessionPort> findUserStreamSessionByName(String exchangeName) {
         return Optional.ofNullable(userStreamSessionAdapters.get(normalize(exchangeName)));
+    }
+
+    @Override
+    public void blockDispatch(String exchangeName) {
+        blockedDispatches.add(normalize(exchangeName));
+        log.warn("Dispatch blocked for exchange={}", normalize(exchangeName));
+    }
+
+    @Override
+    public void unblockDispatch(String exchangeName) {
+        blockedDispatches.remove(normalize(exchangeName));
+        log.info("Dispatch unblocked for exchange={}", normalize(exchangeName));
+    }
+
+    @Override
+    public boolean isDispatchBlocked(String exchangeName) {
+        return blockedDispatches.contains(normalize(exchangeName));
     }
 
     private void registerAllCapabilities(ExchangeStreamingPort streamingAdapter) {
