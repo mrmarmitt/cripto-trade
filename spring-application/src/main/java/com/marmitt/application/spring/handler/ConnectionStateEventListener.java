@@ -68,10 +68,11 @@ public class ConnectionStateEventListener {
     @EventListener
     public void handleConnectionFailed(WebSocketFailedEvent event) {
         dispatchGuard.onConnectionFailed(event);
-        handleConnectionFailedPort.execute(event);
         if (event.isCritical()) {
             handleCriticalConnectionFailedPort.execute(event);
+            return;
         }
+        handleConnectionFailedPort.execute(event);
     }
 
     @EventListener
