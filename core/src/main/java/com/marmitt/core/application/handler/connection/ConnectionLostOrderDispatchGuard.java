@@ -2,6 +2,7 @@ package com.marmitt.core.application.handler.connection;
 
 import com.marmitt.core.dto.events.WebSocketClosedEvent;
 import com.marmitt.core.dto.events.WebSocketConnectedEvent;
+import com.marmitt.core.dto.events.WebSocketFailedEvent;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +31,18 @@ public class ConnectionLostOrderDispatchGuard {
         String exchange = event.exchange();
         blockedChannels.computeIfAbsent(exchange, k -> ConcurrentHashMap.newKeySet()).add(channel);
         log.warn("Unexpected connection loss on exchange={} channel={} — blocking order dispatch",
+                exchange, channel);
+        adapterRepository.blockDispatch(exchange);
+    }
+
+    public void onConnectionFailed(WebSocketFailedEvent event) {
+        StreamChannel channel = event.channel();
+        if (channel != StreamChannel.MARKET && channel != StreamChannel.USER_DATA) {
+            return;
+        }
+        String exchange = event.exchange();
+        blockedChannels.computeIfAbsent(exchange, k -> ConcurrentHashMap.newKeySet()).add(channel);
+        log.warn("Connection failure on exchange={} channel={} — blocking order dispatch",
                 exchange, channel);
         adapterRepository.blockDispatch(exchange);
     }

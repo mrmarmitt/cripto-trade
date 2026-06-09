@@ -50,7 +50,6 @@ public class ConnectionStateEventListener {
     @EventListener
     public void handleConnectionEstablished(WebSocketConnectedEvent event) {
         handleConnectionEstablishedPort.execute(event);
-        dispatchGuard.onConnectionReestablished(event);
         PostConnectionCommandResult result = handlePostConnectionEstablishedPort.execute(event);
         if (!result.success() && event.channel() == StreamChannel.USER_DATA) {
             log.warn("Post-connection setup failed for USER_DATA — triggering reconnect: exchange={} error={}",
@@ -61,11 +60,14 @@ public class ConnectionStateEventListener {
                     event.connectionId(),
                     null,
                     event.channel()));
+        } else {
+            dispatchGuard.onConnectionReestablished(event);
         }
     }
 
     @EventListener
     public void handleConnectionFailed(WebSocketFailedEvent event) {
+        dispatchGuard.onConnectionFailed(event);
         handleConnectionFailedPort.execute(event);
         if (event.isCritical()) {
             handleCriticalConnectionFailedPort.execute(event);

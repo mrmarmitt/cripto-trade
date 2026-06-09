@@ -2,6 +2,7 @@ package com.marmitt.core.application.handler.connection;
 
 import com.marmitt.core.dto.events.WebSocketClosedEvent;
 import com.marmitt.core.dto.events.WebSocketConnectedEvent;
+import com.marmitt.core.dto.events.WebSocketFailedEvent;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
@@ -118,6 +119,38 @@ class ConnectionLostOrderDispatchGuardTest {
         WebSocketConnectedEvent event = WebSocketConnectedEvent.of(
                 "BINANCE", "Connected", UUID.randomUUID(), StreamChannel.MARKET);
         guard.onConnectionReestablished(event);
+
+        assertFalse(adapterRepository.isDispatchBlocked("BINANCE"));
+    }
+
+    @Test
+    void socketFailure_onMarket_blocksDispatch() {
+        WebSocketFailedEvent event = WebSocketFailedEvent.of(
+                "BINANCE", "Connection reset", UUID.randomUUID(), null, StreamChannel.MARKET);
+
+        guard.onConnectionFailed(event);
+
+        assertTrue(adapterRepository.isDispatchBlocked("BINANCE"));
+    }
+
+    @Test
+    void socketFailure_onUserData_blocksDispatch() {
+        WebSocketFailedEvent event = WebSocketFailedEvent.of(
+                "BINANCE", "Connection reset", UUID.randomUUID(), null, StreamChannel.USER_DATA);
+
+        guard.onConnectionFailed(event);
+
+        assertTrue(adapterRepository.isDispatchBlocked("BINANCE"));
+    }
+
+    @Test
+    void socketFailure_thenReconnect_unblocks() {
+        guard.onConnectionFailed(WebSocketFailedEvent.of(
+                "BINANCE", "Connection reset", UUID.randomUUID(), null, StreamChannel.MARKET));
+        assertTrue(adapterRepository.isDispatchBlocked("BINANCE"));
+
+        guard.onConnectionReestablished(WebSocketConnectedEvent.of(
+                "BINANCE", "Reconnected", UUID.randomUUID(), StreamChannel.MARKET));
 
         assertFalse(adapterRepository.isDispatchBlocked("BINANCE"));
     }
