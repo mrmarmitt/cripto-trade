@@ -92,6 +92,36 @@ class OrderApiResponseProcessorTest {
     }
 
     @Test
+    void immediateFill_200_filledStatus_returnsIgnored() throws Exception {
+        String json = """
+                {
+                  "id": "v1rcd1t1000000000000s001B_abc123def456",
+                  "status": 200,
+                  "result": {
+                    "symbol": "BTCUSDT",
+                    "orderId": 9876543,
+                    "clientOrderId": "v1rcd1t1000000000000s001B_abc123def456",
+                    "side": "BUY",
+                    "type": "LIMIT",
+                    "origQty": "0.001",
+                    "executedQty": "0.001",
+                    "cummulativeQuoteQty": "95.00000000",
+                    "price": "95000",
+                    "status": "FILLED",
+                    "transactTime": 1700000000000,
+                    "fills": [{"price": "95000", "qty": "0.001", "commission": "0.00000001", "commissionAsset": "BTC"}]
+                  }
+                }
+                """;
+        JsonNode root = mapper.readTree(json);
+
+        ProcessingResult<?> pr = processor.process(root, root.path("result"), 200, "c-fill", json, ctx());
+
+        assertFalse(pr.isSuccess(), "immediate FILLED must be ignored to defer to fee-accurate executionReport");
+        assertFalse(pr.isError(), "ignored result must not be an error");
+    }
+
+    @Test
     void error5xx_returnsErrorResult_notRejected() throws Exception {
         String json = """
                 {

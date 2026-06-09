@@ -22,6 +22,15 @@ class OrderApiResponseProcessor {
                     return ProcessingResult.ignored(correlationId, "order-response-no-symbol");
                 }
                 dto = BinanceOrderApiResponseMapper.fromResult(result);
+                if (dto.status() == OrderDataDto.OrderStatus.FILLED
+                        || dto.status() == OrderDataDto.OrderStatus.PARTIALLY_FILLED) {
+                    // WS API FULL response may carry fee=0 (fills[] not extracted); the executionReport
+                    // via user data stream carries the authoritative commission. Deferring avoids recording
+                    // a zero-fee fill that blocks the real executionReport as a duplicate.
+                    log.debug("Order API response immediate fill status={} — deferring to executionReport: correlationId={}",
+                            dto.status(), correlationId);
+                    return ProcessingResult.ignored(correlationId, "order-response-deferred-to-execution-report");
+                }
             } else if (status >= 400 && status < 500) {
                 // 4xx = definitive client-side rejection (invalid params, insufficient balance, etc.)
                 dto = BinanceOrderApiResponseMapper.fromError(root);
