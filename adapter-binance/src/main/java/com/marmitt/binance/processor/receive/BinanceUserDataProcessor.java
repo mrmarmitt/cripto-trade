@@ -2,6 +2,7 @@ package com.marmitt.binance.processor.receive;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.dto.events.WebSocketFailedEvent;
 import com.marmitt.core.dto.processing.ProcessingResult;
 import com.marmitt.core.dto.websocket.MessageContext;
@@ -21,6 +22,7 @@ public class BinanceUserDataProcessor implements ReceivedMessageProcessorPort {
     private final ObjectMapper objectMapper;
     private final EventPublisherPort eventPublisher;
     private final Map<String, BinanceEventProcessor<?>> processorsByEventType;
+    private final OrderApiResponseProcessor orderApiResponseProcessor = new OrderApiResponseProcessor();
 
     public BinanceUserDataProcessor(ObjectMapper objectMapper, EventPublisherPort eventPublisher) {
         this.objectMapper = objectMapper;
@@ -41,6 +43,14 @@ public class BinanceUserDataProcessor implements ReceivedMessageProcessorPort {
             JsonNode root = objectMapper.readTree(rawMessage);
 
             if (root.has("status") && root.has("id")) {
+                JsonNode result = root.path("result");
+                if (result.has("subscriptionId")) {
+                    return handleSubscriptionConfirmation(root, correlationId, rawMessage, context);
+                }
+                if (ClientOrderId.isValid(root.path("id").asText())) {
+                    return orderApiResponseProcessor.process(
+                            root, result, root.path("status").asInt(), correlationId, rawMessage, context);
+                }
                 return handleSubscriptionConfirmation(root, correlationId, rawMessage, context);
             }
 
