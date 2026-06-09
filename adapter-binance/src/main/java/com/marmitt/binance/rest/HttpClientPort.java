@@ -1,4 +1,4 @@
-package com.marmitt.core.ports.outbound.http;
+package com.marmitt.binance.rest;
 
 import java.io.IOException;
 import java.util.Map;

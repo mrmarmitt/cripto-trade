@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.binance.rest.BinanceRestRequestBuilder;
 import com.marmitt.binance.rest.RestRequest;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
-import com.marmitt.core.ports.outbound.http.HttpClientPort;
+import com.marmitt.binance.rest.HttpClientPort;
 import lombok.extern.slf4j.Slf4j;
 
 import java.io.IOException;

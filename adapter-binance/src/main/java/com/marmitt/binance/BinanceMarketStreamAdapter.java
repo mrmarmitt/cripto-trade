@@ -28,7 +28,7 @@ import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
-import com.marmitt.core.ports.outbound.http.HttpClientPort;
+import com.marmitt.binance.rest.HttpClientPort;
 
 import java.io.IOException;
 import java.util.List;
