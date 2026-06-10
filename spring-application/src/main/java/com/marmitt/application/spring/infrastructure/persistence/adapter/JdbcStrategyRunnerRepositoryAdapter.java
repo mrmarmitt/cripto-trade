@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.infrastructure.persistence.adapter;
 
+import com.marmitt.application.spring.infrastructure.persistence.entity.RunnerPositionEntity;
 import com.marmitt.application.spring.infrastructure.persistence.mapper.StrategyRunnerEntityMapper;
 import com.marmitt.application.spring.infrastructure.persistence.repository.RunnerPositionJdbcRepository;
 import com.marmitt.application.spring.infrastructure.persistence.repository.RunnerTransactionJdbcRepository;
@@ -20,8 +21,10 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.relational.core.conversion.DbActionExecutionException;
 import org.springframework.stereotype.Repository;
-import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.DefaultTransactionDefinition;
 
 import java.util.Collection;
 import java.time.Instant;
@@ -37,10 +40,14 @@ import java.math.RoundingMode;
 @RequiredArgsConstructor
 public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerRepositoryPort {
 
+    private static final DefaultTransactionDefinition NESTED_TX_DEF =
+            new DefaultTransactionDefinition(TransactionDefinition.PROPAGATION_NESTED);
+
     private final StrategyRunnerJdbcRepository runnerRepo;
     private final RunnerPositionJdbcRepository positionRepo;
     private final RunnerTransactionJdbcRepository transactionRepo;
     private final RunnerTransactionMatchJdbcRepository matchRepo;
+    private final PlatformTransactionManager txManager;
 
     // ── StrategyRunner ──────────────────────────────────────────────────────
 
@@ -132,20 +139,24 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     }
 
     @Override
-    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean trySavePosition(Position position) {
         long start = System.nanoTime();
         validateOpenedByInvariant(position);
+        RunnerPositionEntity entity = StrategyRunnerEntityMapper.toEntity(position);
+        // PROPAGATION_NESTED creates a savepoint inside the outer fill transaction.
+        // On duplicate key the savepoint is rolled back (restoring the PostgreSQL connection)
+        // and the outer transaction continues cleanly — preventing the orphaned position
+        // that REQUIRES_NEW would leave committed if saveTransaction later rolls back.
+        org.springframework.transaction.TransactionStatus savepoint = txManager.getTransaction(NESTED_TX_DEF);
         try {
-            positionRepo.save(StrategyRunnerEntityMapper.toEntity(position));
+            positionRepo.save(entity);
+            txManager.commit(savepoint);
             log.trace("[REPO] position.trySave({}) - inserted - {}ms", position.getId(), RepoTiming.elapsedMs(start));
             return true;
-        } catch (DataIntegrityViolationException e) {
-            log.trace("[REPO] position.trySave({}) - duplicate open - {}ms", position.getId(), RepoTiming.elapsedMs(start));
-            return false;
-        } catch (DbActionExecutionException e) {
-            // Spring Data JDBC wraps DuplicateKeyException in DbActionExecutionException
-            if (e.getCause() instanceof DataIntegrityViolationException) {
+        } catch (DataIntegrityViolationException | DbActionExecutionException e) {
+            txManager.rollback(savepoint);
+            if (e instanceof DataIntegrityViolationException ||
+                    (e instanceof DbActionExecutionException && e.getCause() instanceof DataIntegrityViolationException)) {
                 log.trace("[REPO] position.trySave({}) - duplicate open - {}ms", position.getId(), RepoTiming.elapsedMs(start));
                 return false;
             }
