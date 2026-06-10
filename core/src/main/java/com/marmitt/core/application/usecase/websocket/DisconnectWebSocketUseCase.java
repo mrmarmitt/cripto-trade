@@ -6,7 +6,7 @@ import com.marmitt.core.dto.websocket.mapper.ConnectionResultMapper;
 import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.ports.inbound.websocket.DisconnectWebSocketPort;
-import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
+import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
@@ -33,8 +33,8 @@ public class DisconnectWebSocketUseCase implements DisconnectWebSocketPort {
     public WebSocketConnectionResponse execute(final String exchangeName) {
         WebSocketConnectionManager manager = connectionRepository.getConnection(ConnectionKey.market(exchangeName));
 
-        Optional<ExchangeStreamingPort> streamingOptional = adapterRepository.findStreamingByName(exchangeName);
-        if (streamingOptional.isEmpty()) {
+        Optional<ExchangeAdapterDescriptor> adapterOpt = adapterRepository.findAdapter(exchangeName);
+        if (adapterOpt.isEmpty()) {
             return ConnectionResultMapper.toResponse(
                     ConnectionResultDto.failure(this.getClass().getSimpleName(), "Exchange does not exist"),
                     exchangeName);
@@ -46,7 +46,7 @@ public class DisconnectWebSocketUseCase implements DisconnectWebSocketPort {
                 .orElseThrow(() -> new IllegalStateException("No WebSocket registered for exchange: " + exchangeName));
         webSocket.disconnect(exchangeName, connectionId);
 
-        if (adapterRepository.findUserStreamSessionByName(exchangeName).isPresent()) {
+        if (adapterOpt.get().hasUserStreamSession()) {
             WebSocketConnectionManager userManager = connectionRepository.getConnection(ConnectionKey.userStream(exchangeName));
             if (userManager != null) {
                 UUID userConnectionId = userManager.getConnectionId();

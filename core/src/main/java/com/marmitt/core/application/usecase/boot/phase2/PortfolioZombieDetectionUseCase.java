@@ -9,6 +9,7 @@ import com.marmitt.core.dto.portfolio.PortfolioZombieDetectionResult;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.enums.RunnerStatus;
+import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
@@ -61,16 +62,15 @@ public class PortfolioZombieDetectionUseCase {
             );
         }
 
-        Optional<ExchangeOrderQueryPort> orderQueryOptional =
-                exchangeAdapterRepository.findOrderQueryByName(exchangeId);
-        if (orderQueryOptional.isEmpty()) {
+        Optional<ExchangeAdapterDescriptor> adapterOpt = exchangeAdapterRepository.findAdapter(exchangeId);
+        if (adapterOpt.isEmpty() || !adapterOpt.get().hasOrderQuery()) {
             return PortfolioZombieDetectionResult.skipped(
                     portfolioId, exchangeId, "ORDER_QUERY_NOT_AVAILABLE",
                     "Exchange order query capability is not available.");
         }
 
         try {
-            List<OrderDataDto> openOrders = orderQueryOptional.get().listAllOpenOrders();
+            List<OrderDataDto> openOrders = adapterOpt.get().orderQuery().listAllOpenOrders();
             return classifyOpenOrders(
                     portfolioId,
                     exchangeId,

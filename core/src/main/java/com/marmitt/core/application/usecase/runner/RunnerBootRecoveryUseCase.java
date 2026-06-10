@@ -11,6 +11,7 @@ import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.exceptions.ExchangeQueryException;
+import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
@@ -143,15 +144,14 @@ public class RunnerBootRecoveryUseCase {
     }
 
     private void step0CaptureAccountSnapshot(RecoveryContext ctx) {
-        Optional<ExchangeAccountQueryPort> accountQueryOptional =
-                exchangeAdapterRepository.findAccountQueryByName(ctx.exchangeId());
-        if (accountQueryOptional.isEmpty()) {
+        Optional<ExchangeAdapterDescriptor> adapterOpt = exchangeAdapterRepository.findAdapter(ctx.exchangeId());
+        if (adapterOpt.isEmpty() || !adapterOpt.get().hasAccountQuery()) {
             ctx.note("Step 0: account snapshot capability not available for exchange=" + ctx.exchangeId());
             return;
         }
 
         try {
-            var account = accountQueryOptional.get().queryAccountSnapshot();
+            var account = adapterOpt.get().accountQuery().queryAccountSnapshot();
             ctx.note("Step 0: account snapshot captured exchange=" + ctx.exchangeId()
                     + " assets=" + account.balances().size());
         } catch (UnsupportedOperationException e) {
@@ -194,16 +194,15 @@ public class RunnerBootRecoveryUseCase {
             return;
         }
 
-        Optional<ExchangeOrderQueryPort> orderQueryOptional =
-                exchangeAdapterRepository.findOrderQueryByName(ctx.exchangeId());
-        if (orderQueryOptional.isEmpty()) {
+        Optional<ExchangeAdapterDescriptor> adapterForQuery = exchangeAdapterRepository.findAdapter(ctx.exchangeId());
+        if (adapterForQuery.isEmpty() || !adapterForQuery.get().hasOrderQuery()) {
             ctx.error("Step 2 ERROR: exchange does not expose order query capability exchange=" + ctx.exchangeId());
             log.warn("bootRecovery: missing order query capability exchange={} runnerId={}",
                     ctx.exchangeId(), ctx.runnerId());
             return;
         }
 
-        ctx.orderQuery(orderQueryOptional.get());
+        ctx.orderQuery(adapterForQuery.get().orderQuery());
         ctx.note("Step 2: order query capability resolved for exchange=" + ctx.exchangeId());
     }
 

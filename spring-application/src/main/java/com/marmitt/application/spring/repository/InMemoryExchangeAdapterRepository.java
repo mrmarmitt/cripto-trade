@@ -1,14 +1,7 @@
 package com.marmitt.application.spring.repository;
 
-import com.marmitt.core.ports.outbound.exchange.ExchangeOrderPort;
-import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
-import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
-import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
-import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
-import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
-import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
+import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSession;
-import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSessionPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -26,44 +19,37 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
 
     private static final Logger log = LoggerFactory.getLogger(InMemoryExchangeAdapterRepository.class);
 
-    private final Map<String, ExchangeStreamingPort> streamingAdapters = new ConcurrentHashMap<>();
-    private final Set<String> blockedDispatches = ConcurrentHashMap.newKeySet();
-    private final Map<String, ExchangeUserStreamPort> userStreamAdapters = new ConcurrentHashMap<>();
-    private final Map<String, UserStreamSessionPort> userStreamSessionAdapters = new ConcurrentHashMap<>();
+    private final Map<String, ExchangeAdapterDescriptor> adapters = new ConcurrentHashMap<>();
     private final Map<UUID, UserStreamSession> activeSessions = new ConcurrentHashMap<>();
-    private final Map<String, ExchangeOrderExecutionPort> orderExecutionAdapters = new ConcurrentHashMap<>();
-    private final Map<String, ExchangeOrderQueryPort> orderQueryAdapters = new ConcurrentHashMap<>();
-    private final Map<String, ExchangeAccountQueryPort> accountQueryAdapters = new ConcurrentHashMap<>();
-    private final Map<String, ExchangeBootReadinessPort> bootReadinessAdapters = new ConcurrentHashMap<>();
+    private final Set<String> blockedDispatches = ConcurrentHashMap.newKeySet();
     private final Map<UUID, String> adapterByPortfolio = new ConcurrentHashMap<>();
-    private final Map<String, ExchangeOrderPort> orderPorts = new ConcurrentHashMap<>();
 
-    public InMemoryExchangeAdapterRepository(List<ExchangeStreamingPort> adapters,
-                                             List<ExchangeUserStreamPort> userStreamAdapters,
-                                             List<UserStreamSessionPort> userStreamSessions,
-                                             List<ExchangeOrderPort> orderPorts) {
-        adapters.forEach(this::registerAllCapabilities);
-        userStreamAdapters.forEach(this::registerUserStreamAdapter);
-        userStreamSessions.forEach(this::registerUserStreamSession);
-        orderPorts.forEach(this::registerOrderPort);
+    public InMemoryExchangeAdapterRepository(List<ExchangeAdapterDescriptor> descriptors) {
+        descriptors.forEach(d -> {
+            String name = d.exchangeName().toUpperCase();
+            adapters.put(name, d);
+            log.info("Exchange adapter registered - exchange={} userStream={} orderQuery={} accountQuery={} bootReadiness={}",
+                    name,
+                    d.hasUserStream(),
+                    d.hasOrderQuery(),
+                    d.hasAccountQuery(),
+                    d.hasBootReadiness());
+        });
     }
 
     @Override
-    public void registerStreamingAdapter(ExchangeStreamingPort adapter) {
-        String exchangeName = normalize(adapter.getExchangeName());
-        streamingAdapters.put(exchangeName, adapter);
+    public Optional<ExchangeAdapterDescriptor> findAdapter(String exchangeName) {
+        return Optional.ofNullable(adapters.get(normalize(exchangeName)));
     }
 
     @Override
-    public void registerUserStreamAdapter(ExchangeUserStreamPort adapter) {
-        userStreamAdapters.put(normalize(adapter.getExchangeName()), adapter);
-        log.info("User stream adapter registered - exchange={}", normalize(adapter.getExchangeName()));
+    public boolean hasAdapter(String exchangeName) {
+        return adapters.containsKey(normalize(exchangeName));
     }
 
     @Override
-    public void registerUserStreamSession(UserStreamSessionPort session) {
-        userStreamSessionAdapters.put(normalize(session.getExchangeName()), session);
-        log.info("User stream session registered - exchange={}", normalize(session.getExchangeName()));
+    public Set<String> getAllExchangeNames() {
+        return adapters.keySet();
     }
 
     @Override
@@ -79,93 +65,6 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
     @Override
     public void removeActiveSession(UUID connectionId) {
         activeSessions.remove(connectionId);
-    }
-
-    @Override
-    public void registerOrderExecutionAdapter(String exchangeName, ExchangeOrderExecutionPort adapter) {
-        orderExecutionAdapters.put(normalize(exchangeName), adapter);
-    }
-
-    @Override
-    public void registerOrderQueryAdapter(String exchangeName, ExchangeOrderQueryPort adapter) {
-        orderQueryAdapters.put(normalize(exchangeName), adapter);
-    }
-
-    @Override
-    public void registerAccountQueryAdapter(String exchangeName, ExchangeAccountQueryPort adapter) {
-        accountQueryAdapters.put(normalize(exchangeName), adapter);
-    }
-
-    @Override
-    public void registerBootReadinessAdapter(String exchangeName, ExchangeBootReadinessPort adapter) {
-        bootReadinessAdapters.put(normalize(exchangeName), adapter);
-    }
-
-    @Override
-    public void registerPortfolioByAdapter(String exchangeName, UUID portfolioId) {
-        adapterByPortfolio.put(portfolioId, normalize(exchangeName));
-    }
-
-    @Override
-    public boolean hasAdapter(String exchangeName) {
-        return streamingAdapters.containsKey(normalize(exchangeName));
-    }
-
-    @Override
-    public Set<String> getAllExchangeNames() {
-        return streamingAdapters.keySet();
-    }
-
-    @Override
-    public int getAdapterCount() {
-        return streamingAdapters.size();
-    }
-
-    @Override
-    public Optional<ExchangeStreamingPort> findStreamingByName(String exchangeName) {
-        return Optional.ofNullable(streamingAdapters.get(normalize(exchangeName)));
-    }
-
-    @Override
-    public Optional<ExchangeOrderExecutionPort> findOrderExecutionByName(String exchangeName) {
-        return Optional.ofNullable(orderExecutionAdapters.get(normalize(exchangeName)));
-    }
-
-    @Override
-    public Optional<ExchangeOrderQueryPort> findOrderQueryByName(String exchangeName) {
-        return Optional.ofNullable(orderQueryAdapters.get(normalize(exchangeName)));
-    }
-
-    @Override
-    public Optional<ExchangeAccountQueryPort> findAccountQueryByName(String exchangeName) {
-        return Optional.ofNullable(accountQueryAdapters.get(normalize(exchangeName)));
-    }
-
-    @Override
-    public Optional<ExchangeBootReadinessPort> findBootReadinessByName(String exchangeName) {
-        return Optional.ofNullable(bootReadinessAdapters.get(normalize(exchangeName)));
-    }
-
-    @Override
-    public Optional<ExchangeUserStreamPort> findUserStreamByName(String exchangeName) {
-        return Optional.ofNullable(userStreamAdapters.get(normalize(exchangeName)));
-    }
-
-    @Override
-    public Optional<UserStreamSessionPort> findUserStreamSessionByName(String exchangeName) {
-        return Optional.ofNullable(userStreamSessionAdapters.get(normalize(exchangeName)));
-    }
-
-    @Override
-    public void registerOrderPort(ExchangeOrderPort port) {
-        String exchangeName = normalize(port.getExchangeName());
-        orderPorts.put(exchangeName, port);
-        log.info("Order port registered - exchange={}", exchangeName);
-    }
-
-    @Override
-    public Optional<ExchangeOrderPort> findOrderPortByName(String exchangeName) {
-        return Optional.ofNullable(orderPorts.get(normalize(exchangeName)));
     }
 
     @Override
@@ -185,30 +84,9 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
         return blockedDispatches.contains(normalize(exchangeName));
     }
 
-    private void registerAllCapabilities(ExchangeStreamingPort streamingAdapter) {
-        String exchangeName = normalize(streamingAdapter.getExchangeName());
-        registerStreamingAdapter(streamingAdapter);
-
-        if (streamingAdapter instanceof ExchangeOrderExecutionPort orderExecutionPort) {
-            registerOrderExecutionAdapter(exchangeName, orderExecutionPort);
-        }
-        if (streamingAdapter instanceof ExchangeOrderQueryPort orderQueryPort) {
-            registerOrderQueryAdapter(exchangeName, orderQueryPort);
-        }
-        if (streamingAdapter instanceof ExchangeAccountQueryPort accountQueryPort) {
-            registerAccountQueryAdapter(exchangeName, accountQueryPort);
-        }
-        if (streamingAdapter instanceof ExchangeBootReadinessPort bootReadinessPort) {
-            registerBootReadinessAdapter(exchangeName, bootReadinessPort);
-        }
-
-        log.info("Exchange capabilities registered - exchange={} streaming={} orderExec={} orderQuery={} accountQuery={} bootReadiness={}",
-                exchangeName,
-                true,
-                orderExecutionAdapters.containsKey(exchangeName),
-                orderQueryAdapters.containsKey(exchangeName),
-                accountQueryAdapters.containsKey(exchangeName),
-                bootReadinessAdapters.containsKey(exchangeName));
+    @Override
+    public void registerPortfolioByAdapter(String exchangeName, UUID portfolioId) {
+        adapterByPortfolio.put(portfolioId, normalize(exchangeName));
     }
 
     private static String normalize(String exchangeName) {

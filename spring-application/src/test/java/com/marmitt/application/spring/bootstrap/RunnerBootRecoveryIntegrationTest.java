@@ -731,7 +731,8 @@ class RunnerBootRecoveryIntegrationTest {
     }
 
     private MockExchangeAdapter getMockExchangeAdapter() {
-        return exchangeAdapterRepository.findStreamingByName("MOCK")
+        return exchangeAdapterRepository.findAdapter("MOCK")
+                .map(d -> d.streaming())
                 .filter(MockExchangeAdapter.class::isInstance)
                 .map(MockExchangeAdapter.class::cast)
                 .orElseThrow(() -> new IllegalStateException("MOCK adapter not found or has invalid type"));

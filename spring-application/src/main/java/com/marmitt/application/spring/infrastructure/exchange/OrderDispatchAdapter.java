@@ -41,9 +41,10 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
         }
 
         ExchangeOrderPort orderPort = exchangeAdapterRepository
-                .findOrderPortByName(command.exchangeId())
+                .findAdapter(command.exchangeId())
                 .orElseThrow(() -> new IllegalStateException(
-                        "No order port registered for exchangeId: " + command.exchangeId()));
+                        "No adapter registered for exchangeId: " + command.exchangeId()))
+                .orderPort();
 
         SendOrderRequest request = toSendOrderRequest(command, command.exchangeId());
         OrderSubmissionResult result = orderPort.submitOrder(request);

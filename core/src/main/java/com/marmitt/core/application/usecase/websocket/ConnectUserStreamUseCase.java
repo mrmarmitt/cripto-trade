@@ -7,6 +7,7 @@ import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.enums.ConnectionStatus;
 import com.marmitt.core.ports.inbound.websocket.ConnectUserStreamPort;
+import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSession;
 import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSessionPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
@@ -37,8 +38,10 @@ public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
 
     @Override
     public Optional<WebSocketConnectionResponse> execute(String exchangeName) {
-        if (adapterRepository.findUserStreamSessionByName(exchangeName).isEmpty()
-                || adapterRepository.findUserStreamByName(exchangeName).isEmpty()) {
+        Optional<ExchangeAdapterDescriptor> adapterOpt = adapterRepository.findAdapter(exchangeName);
+        if (adapterOpt.isEmpty()
+                || !adapterOpt.get().hasUserStreamSession()
+                || !adapterOpt.get().hasUserStream()) {
             return Optional.empty();
         }
 
@@ -59,7 +62,7 @@ public class ConnectUserStreamUseCase implements ConnectUserStreamPort {
                 ? ConnectionResultDto.reconnecting(1, 1)
                 : ConnectionResultDto.connecting());
 
-        UserStreamSessionPort factory = adapterRepository.findUserStreamSessionByName(exchangeName).orElseThrow();
+        UserStreamSessionPort factory = adapterOpt.get().userStreamSession();
         UserStreamSession session = factory.createSession(manager.getConnectionId());
 
         try {

@@ -17,6 +17,7 @@ import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.exceptions.ExchangeQueryException;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
+import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
@@ -55,7 +56,7 @@ class RecoverTransactionStatusUseCaseTest {
         when(repository.findOpenPositionByRunnerIdAndSymbolForUpdate(transaction.getRunnerId(), transaction.getSymbol()))
                 .thenReturn(Optional.empty());
         when(repository.trySavePosition(any())).thenReturn(true);
-        when(exchangeRepository.findOrderQueryByName("BINANCE")).thenReturn(Optional.of(orderQueryPort));
+        stubOrderQuery(exchangeRepository, orderQueryPort);
         when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
                 .thenReturn(Optional.of(orderData(
                         transaction,
@@ -91,7 +92,7 @@ class RecoverTransactionStatusUseCaseTest {
         when(repository.findTransactionById(transaction.getId())).thenReturn(Optional.of(transaction));
         when(repository.findById(transaction.getRunnerId())).thenReturn(Optional.of(runner));
         when(repository.findTransactionByClientOrderId(transaction.getClientOrderId())).thenReturn(Optional.of(transaction));
-        when(exchangeRepository.findOrderQueryByName("BINANCE")).thenReturn(Optional.of(orderQueryPort));
+        stubOrderQuery(exchangeRepository, orderQueryPort);
         when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
                 .thenReturn(Optional.empty());
 
@@ -120,7 +121,7 @@ class RecoverTransactionStatusUseCaseTest {
         when(repository.findTransactionById(transaction.getId())).thenReturn(Optional.of(transaction));
         when(repository.findById(transaction.getRunnerId())).thenReturn(Optional.of(runner));
         when(repository.findTransactionByClientOrderId(transaction.getClientOrderId())).thenReturn(Optional.of(transaction));
-        when(exchangeRepository.findOrderQueryByName("BINANCE")).thenReturn(Optional.of(orderQueryPort));
+        stubOrderQuery(exchangeRepository, orderQueryPort);
         when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
                 .thenReturn(Optional.empty());
 
@@ -148,7 +149,7 @@ class RecoverTransactionStatusUseCaseTest {
 
         when(repository.findTransactionById(transaction.getId())).thenReturn(Optional.of(transaction));
         when(repository.findById(transaction.getRunnerId())).thenReturn(Optional.of(runner));
-        when(exchangeRepository.findOrderQueryByName("BINANCE")).thenReturn(Optional.of(orderQueryPort));
+        stubOrderQuery(exchangeRepository, orderQueryPort);
         when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
                 .thenReturn(Optional.empty());
         when(deadLetterRepository.existsUnresolvedByIdentity(
@@ -188,7 +189,7 @@ class RecoverTransactionStatusUseCaseTest {
 
         when(repository.findTransactionById(transaction.getId())).thenReturn(Optional.of(transaction));
         when(repository.findById(transaction.getRunnerId())).thenReturn(Optional.of(runner));
-        when(exchangeRepository.findOrderQueryByName("BINANCE")).thenReturn(Optional.of(orderQueryPort));
+        stubOrderQuery(exchangeRepository, orderQueryPort);
         when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
                 .thenThrow(new UnsupportedOperationException("not supported"));
 
@@ -215,7 +216,7 @@ class RecoverTransactionStatusUseCaseTest {
 
         when(repository.findTransactionById(transaction.getId())).thenReturn(Optional.of(transaction));
         when(repository.findById(transaction.getRunnerId())).thenReturn(Optional.of(runner));
-        when(exchangeRepository.findOrderQueryByName("BINANCE")).thenReturn(Optional.of(orderQueryPort));
+        stubOrderQuery(exchangeRepository, orderQueryPort);
         when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
                 .thenThrow(new ExchangeQueryException(
                         "BINANCE",
@@ -246,7 +247,7 @@ class RecoverTransactionStatusUseCaseTest {
 
         when(repository.findTransactionById(transaction.getId())).thenReturn(Optional.of(transaction));
         when(repository.findById(transaction.getRunnerId())).thenReturn(Optional.of(runner));
-        when(exchangeRepository.findOrderQueryByName("BINANCE")).thenReturn(Optional.of(orderQueryPort));
+        stubOrderQuery(exchangeRepository, orderQueryPort);
         when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
                 .thenThrow(new RuntimeException("temporary upstream timeout"));
 
@@ -273,7 +274,7 @@ class RecoverTransactionStatusUseCaseTest {
 
         when(repository.findTransactionById(transaction.getId())).thenReturn(Optional.of(transaction));
         when(repository.findById(transaction.getRunnerId())).thenReturn(Optional.of(runner));
-        when(exchangeRepository.findOrderQueryByName("BINANCE")).thenReturn(Optional.of(orderQueryPort));
+        stubOrderQuery(exchangeRepository, orderQueryPort);
         when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
                 .thenReturn(Optional.of(orderData(
                         "another-client-order-id",
@@ -308,7 +309,7 @@ class RecoverTransactionStatusUseCaseTest {
 
         when(repository.findTransactionById(transaction.getId())).thenReturn(Optional.of(transaction));
         when(repository.findById(transaction.getRunnerId())).thenReturn(Optional.of(runner));
-        when(exchangeRepository.findOrderQueryByName("BINANCE")).thenReturn(Optional.of(orderQueryPort));
+        stubOrderQuery(exchangeRepository, orderQueryPort);
         when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
                 .thenReturn(Optional.of(orderData(
                         transaction.getClientOrderId(),
@@ -352,6 +353,14 @@ class RecoverTransactionStatusUseCaseTest {
         assertEquals(TransactionStatus.FILLED, response.statusBefore());
         assertEquals(TransactionStatus.FILLED, response.statusAfter());
         assertNull(response.exchangeId());
+    }
+
+    private static void stubOrderQuery(ExchangeAdapterRepositoryPort exchangeRepository,
+                                       ExchangeOrderQueryPort orderQueryPort) {
+        ExchangeAdapterDescriptor descriptor = mock(ExchangeAdapterDescriptor.class);
+        when(descriptor.hasOrderQuery()).thenReturn(true);
+        when(descriptor.orderQuery()).thenReturn(orderQueryPort);
+        when(exchangeRepository.findAdapter("BINANCE")).thenReturn(Optional.of(descriptor));
     }
 
     private static RecoverTransactionStatusUseCase newUseCase(StrategyRunnerRepositoryPort repository,

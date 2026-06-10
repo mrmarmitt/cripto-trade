@@ -8,15 +8,9 @@ import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
+import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.exchange.ExchangeOrderPort;
-import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
-import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
-import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
-import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
-import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
-import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSession;
-import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSessionPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import org.junit.jupiter.api.Test;
 
@@ -114,34 +108,38 @@ class OrderDispatchAdapterTest {
         @Override public OrderSubmissionResult submitOrder(SendOrderRequest request) { return result; }
     }
 
-    static class StubAdapterRepository implements ExchangeAdapterRepositoryPort {
+    static class StubDescriptor implements ExchangeAdapterDescriptor {
         private final ExchangeOrderPort orderPort;
-        StubAdapterRepository(ExchangeOrderPort orderPort) { this.orderPort = orderPort; }
-        @Override public Optional<ExchangeOrderPort> findOrderPortByName(String n) { return Optional.ofNullable(orderPort); }
-        @Override public void registerOrderPort(ExchangeOrderPort p) {}
-        @Override public void registerStreamingAdapter(ExchangeStreamingPort a) {}
-        @Override public void registerUserStreamAdapter(ExchangeUserStreamPort a) {}
-        @Override public void registerUserStreamSession(UserStreamSessionPort s) {}
-        @Override public void storeActiveSession(UUID id, UserStreamSession s) {}
-        @Override public void registerOrderExecutionAdapter(String n, ExchangeOrderExecutionPort a) {}
-        @Override public void registerOrderQueryAdapter(String n, ExchangeOrderQueryPort a) {}
-        @Override public void registerAccountQueryAdapter(String n, ExchangeAccountQueryPort a) {}
-        @Override public void registerBootReadinessAdapter(String n, ExchangeBootReadinessPort a) {}
-        @Override public void registerPortfolioByAdapter(String n, UUID id) {}
+        StubDescriptor(ExchangeOrderPort orderPort) { this.orderPort = orderPort; }
+        @Override public String exchangeName() { return EXCHANGE; }
+        @Override public com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort streaming() { return null; }
+        @Override public ExchangeOrderPort orderPort() { return orderPort; }
+        @Override public boolean hasUserStream() { return false; }
+        @Override public com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort userStream() { throw new com.marmitt.core.exceptions.UnsupportedCapabilityException(EXCHANGE, "userStream"); }
+        @Override public boolean hasUserStreamSession() { return false; }
+        @Override public com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSessionPort userStreamSession() { throw new com.marmitt.core.exceptions.UnsupportedCapabilityException(EXCHANGE, "userStreamSession"); }
+        @Override public boolean hasOrderExecution() { return false; }
+        @Override public com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort orderExecution() { throw new com.marmitt.core.exceptions.UnsupportedCapabilityException(EXCHANGE, "orderExecution"); }
+        @Override public boolean hasOrderQuery() { return false; }
+        @Override public com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort orderQuery() { throw new com.marmitt.core.exceptions.UnsupportedCapabilityException(EXCHANGE, "orderQuery"); }
+        @Override public boolean hasAccountQuery() { return false; }
+        @Override public com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort accountQuery() { throw new com.marmitt.core.exceptions.UnsupportedCapabilityException(EXCHANGE, "accountQuery"); }
+        @Override public boolean hasBootReadiness() { return false; }
+        @Override public com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort bootReadiness() { throw new com.marmitt.core.exceptions.UnsupportedCapabilityException(EXCHANGE, "bootReadiness"); }
+    }
+
+    static class StubAdapterRepository implements ExchangeAdapterRepositoryPort {
+        private final ExchangeAdapterDescriptor descriptor;
+        StubAdapterRepository(ExchangeOrderPort orderPort) { this.descriptor = new StubDescriptor(orderPort); }
+        @Override public Optional<ExchangeAdapterDescriptor> findAdapter(String n) { return Optional.of(descriptor); }
         @Override public boolean hasAdapter(String n) { return true; }
         @Override public Set<String> getAllExchangeNames() { return Set.of(EXCHANGE); }
-        @Override public int getAdapterCount() { return 1; }
-        @Override public Optional<ExchangeStreamingPort> findStreamingByName(String n) { return Optional.empty(); }
-        @Override public Optional<ExchangeOrderExecutionPort> findOrderExecutionByName(String n) { return Optional.empty(); }
-        @Override public Optional<ExchangeOrderQueryPort> findOrderQueryByName(String n) { return Optional.empty(); }
-        @Override public Optional<ExchangeAccountQueryPort> findAccountQueryByName(String n) { return Optional.empty(); }
-        @Override public Optional<ExchangeBootReadinessPort> findBootReadinessByName(String n) { return Optional.empty(); }
-        @Override public Optional<ExchangeUserStreamPort> findUserStreamByName(String n) { return Optional.empty(); }
-        @Override public Optional<UserStreamSessionPort> findUserStreamSessionByName(String n) { return Optional.empty(); }
+        @Override public void storeActiveSession(UUID id, UserStreamSession s) {}
         @Override public Optional<UserStreamSession> findActiveSession(UUID id) { return Optional.empty(); }
         @Override public void removeActiveSession(UUID id) {}
         @Override public void blockDispatch(String exchangeName) {}
         @Override public void unblockDispatch(String exchangeName) {}
         @Override public boolean isDispatchBlocked(String exchangeName) { return false; }
+        @Override public void registerPortfolioByAdapter(String n, UUID id) {}
     }
 }

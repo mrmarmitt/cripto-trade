@@ -12,6 +12,7 @@ import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.exceptions.ExchangeQueryException;
 import com.marmitt.core.ports.inbound.runner.RecoverTransactionStatusPort;
+import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
@@ -92,9 +93,8 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
         }
 
         String exchangeId = runner.getExchangeId();
-        Optional<ExchangeOrderQueryPort> orderQueryOptional =
-                exchangeAdapterRepository.findOrderQueryByName(exchangeId);
-        if (orderQueryOptional.isEmpty()) {
+        Optional<ExchangeAdapterDescriptor> adapterOpt = exchangeAdapterRepository.findAdapter(exchangeId);
+        if (adapterOpt.isEmpty() || !adapterOpt.get().hasOrderQuery()) {
             return RecoverTransactionStatusResponse.failed(
                     transaction.getId(),
                     transaction.getRunnerId(),
@@ -107,7 +107,7 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
 
         Optional<OrderDataDto> queried;
         try {
-            queried = orderQueryOperation.query(orderQueryOptional.get(), transaction, runner);
+            queried = orderQueryOperation.query(adapterOpt.get().orderQuery(), transaction, runner);
         } catch (UnsupportedOperationException e) {
             return failureFromQuery(
                     transaction,

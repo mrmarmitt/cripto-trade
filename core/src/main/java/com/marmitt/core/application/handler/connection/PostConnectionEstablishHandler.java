@@ -6,6 +6,7 @@ import com.marmitt.core.dto.exchange.command.PostConnectionCommandResult;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.inbound.websocket.PostConnectionEstablishedPort;
+import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSession;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
@@ -43,12 +44,12 @@ public class PostConnectionEstablishHandler implements PostConnectionEstablished
     }
 
     private PostConnectionCommandResult handleMarketPostConnection(WebSocketConnectedEvent event) {
-        Optional<ExchangeStreamingPort> streamingOptional = adapterRepository.findStreamingByName(event.exchange());
-        if (streamingOptional.isEmpty()) {
+        Optional<ExchangeAdapterDescriptor> adapterOpt = adapterRepository.findAdapter(event.exchange());
+        if (adapterOpt.isEmpty()) {
             return PostConnectionCommandResult.failure(event.exchange(), "Exchange does not exist.");
         }
 
-        ExchangeStreamingPort streaming = streamingOptional.get();
+        ExchangeStreamingPort streaming = adapterOpt.get().streaming();
         if (!streaming.requiresPostConnection()) {
             return PostConnectionCommandResult.success(event.exchange(), "Post-connection not configured.");
         }

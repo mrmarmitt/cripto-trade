@@ -3,10 +3,12 @@ package com.marmitt.application.spring.config.exchange;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.application.spring.adapter.OkHttp3ListenerConverter;
 import com.marmitt.application.spring.adapter.OkHttp3WebSocketAdapter;
+import com.marmitt.application.spring.repository.DefaultExchangeAdapterDescriptor;
 import com.marmitt.core.dto.exchange.OrderSubmissionResult;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
+import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.exchange.ExchangeOrderPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
 import org.springframework.context.annotation.Bean;
@@ -43,5 +45,18 @@ public class CoinbaseAdapterConfiguration {
                 return OrderSubmissionResult.dispatched();
             }
         };
+    }
+
+    @Bean
+    public ExchangeAdapterDescriptor coinbaseAdapterDescriptor(CoinbaseExchangeAdapter coinbaseExchangeAdapter,
+                                                                ExchangeOrderPort coinbaseOrderPort) {
+        return DefaultExchangeAdapterDescriptor.builder("COINBASE")
+                .streaming(coinbaseExchangeAdapter)
+                .orderPort(coinbaseOrderPort)
+                .orderExecution(coinbaseExchangeAdapter)
+                .orderQuery(coinbaseExchangeAdapter)
+                .accountQuery(coinbaseExchangeAdapter)
+                .bootReadiness(coinbaseExchangeAdapter)
+                .build();
     }
 }
