@@ -20,7 +20,8 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T12 | Migração User Data Stream → WebSocket API Binance | Alta | Claude | Concluído |
 | T13 | Order Placement via WebSocket API Binance | Alta | Claude | Concluído |
 | T14 | Refactor Fronteiras Arquiteturais: Transporte e Negócio | Alta | Claude | Concluído |
-| T15 | ExchangeOrderPort: Mover seleção de transporte para adapter-binance | Média | Claude | Pendente |
+| T15 | ExchangeOrderPort: Mover seleção de transporte para adapter-binance | Média | Claude | Concluído |
+| T16 | ExchangeAdapterDescriptor: Centralizar capabilities por adapter | Média | Claude | Pendente |
 
 ## Ordem de execução
 
@@ -58,6 +59,8 @@ T13  Order Placement via WS API          ← elimina REST para ordens
 T14  Refactor fronteiras: transporte     ← reconexão, reações de negócio, HttpClientPort
        ↓
 T15  ExchangeOrderPort                  ← seleção de transporte no adapter-binance
+       ↓
+T16  ExchangeAdapterDescriptor          ← capabilities por adapter, repositório simplificado
        ↓
    produção
 ```
