@@ -10,6 +10,7 @@ import com.marmitt.binance.BinanceMarketStreamAdapter;
 import com.marmitt.binance.BinanceOrderAdapter;
 import com.marmitt.binance.BinanceUserStreamAdapter;
 import com.marmitt.binance.BinanceUserStreamSessionAdapter;
+import com.marmitt.binance.auth.BinanceCredentials;
 import com.marmitt.binance.filters.SymbolFilterCache;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
@@ -26,7 +27,7 @@ import java.time.Duration;
 @Configuration
 @EnableConfigurationProperties(BinanceProperties.class)
 @ConditionalOnExpression("!'${binance.api-key:}'.isBlank() && !'${binance.api-secret:}'.isBlank()")
-public class BinanceMarketStreamConfiguration {
+public class BinanceAdapterConfiguration {
 
     @Bean
     public OkHttpClient binanceWebSocketClient() {
@@ -52,6 +53,16 @@ public class BinanceMarketStreamConfiguration {
         OkHttp3WebSocketAdapter ws = new OkHttp3WebSocketAdapter(binanceWebSocketClient,
                 new OkHttp3ListenerConverter(eventPublisher, StreamChannel.MARKET));
         webSocketRegistry.register("BINANCE", ws);
+        return ws;
+    }
+
+    @Bean
+    public OkHttp3WebSocketAdapter binanceUserStreamWebSocketPort(OkHttpClient binanceWebSocketClient,
+                                                                   EventPublisherPort eventPublisher,
+                                                                   WebSocketPortRegistryPort webSocketRegistry) {
+        OkHttp3WebSocketAdapter ws = new OkHttp3WebSocketAdapter(binanceWebSocketClient,
+                new OkHttp3ListenerConverter(eventPublisher, StreamChannel.USER_DATA));
+        webSocketRegistry.registerUserStream("BINANCE", ws);
         return ws;
     }
 
@@ -85,6 +96,19 @@ public class BinanceMarketStreamConfiguration {
                 .build();
         return new BinanceMarketStreamAdapter(objectMapper, config,
                 new OkHttpClientAdapter(bootReadinessClient), binanceSymbolFilterCache);
+    }
+
+    @Bean
+    public BinanceUserStreamSessionAdapter binanceUserStreamSessionAdapter(ObjectMapper objectMapper,
+                                                                            BinanceProperties properties) {
+        var credentials = new BinanceCredentials(properties.getApiKey(), properties.getApiSecret());
+        return new BinanceUserStreamSessionAdapter(properties.getWsApiBaseUrl(), credentials, objectMapper);
+    }
+
+    @Bean
+    public BinanceUserStreamAdapter binanceUserStreamAdapter(ObjectMapper objectMapper,
+                                                             EventPublisherPort eventPublisher) {
+        return new BinanceUserStreamAdapter(objectMapper, eventPublisher);
     }
 
     @Bean
