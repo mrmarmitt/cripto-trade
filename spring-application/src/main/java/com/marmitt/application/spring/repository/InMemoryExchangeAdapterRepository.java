@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.repository;
 
+import com.marmitt.core.ports.outbound.exchange.ExchangeOrderPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
@@ -35,13 +36,16 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
     private final Map<String, ExchangeAccountQueryPort> accountQueryAdapters = new ConcurrentHashMap<>();
     private final Map<String, ExchangeBootReadinessPort> bootReadinessAdapters = new ConcurrentHashMap<>();
     private final Map<UUID, String> adapterByPortfolio = new ConcurrentHashMap<>();
+    private final Map<String, ExchangeOrderPort> orderPorts = new ConcurrentHashMap<>();
 
     public InMemoryExchangeAdapterRepository(List<ExchangeStreamingPort> adapters,
                                              List<ExchangeUserStreamPort> userStreamAdapters,
-                                             List<UserStreamSessionPort> userStreamSessions) {
+                                             List<UserStreamSessionPort> userStreamSessions,
+                                             List<ExchangeOrderPort> orderPorts) {
         adapters.forEach(this::registerAllCapabilities);
         userStreamAdapters.forEach(this::registerUserStreamAdapter);
         userStreamSessions.forEach(this::registerUserStreamSession);
+        orderPorts.forEach(this::registerOrderPort);
     }
 
     @Override
@@ -150,6 +154,18 @@ public class InMemoryExchangeAdapterRepository implements ExchangeAdapterReposit
     @Override
     public Optional<UserStreamSessionPort> findUserStreamSessionByName(String exchangeName) {
         return Optional.ofNullable(userStreamSessionAdapters.get(normalize(exchangeName)));
+    }
+
+    @Override
+    public void registerOrderPort(ExchangeOrderPort port) {
+        String exchangeName = normalize(port.getExchangeName());
+        orderPorts.put(exchangeName, port);
+        log.info("Order port registered - exchange={}", exchangeName);
+    }
+
+    @Override
+    public Optional<ExchangeOrderPort> findOrderPortByName(String exchangeName) {
+        return Optional.ofNullable(orderPorts.get(normalize(exchangeName)));
     }
 
     @Override
