@@ -1,15 +1,21 @@
 package com.marmitt.application.spring.config.exchange;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.marmitt.application.spring.repository.DefaultExchangeAdapterDescriptor;
 import com.marmitt.core.dto.exchange.OrderSubmissionResult;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
+import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.exchange.ExchangeOrderPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
+import com.marmitt.core.ports.outbound.exchange.streaming.UserStreamSessionPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
 import com.marmitt.mock.adapter.LocalEventWebSocketAdapter;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.util.List;
 
 @Configuration
 public class MockAdapterConfiguration {
@@ -50,5 +56,31 @@ public class MockAdapterConfiguration {
                 }
             }
         };
+    }
+
+    @Bean
+    public ExchangeAdapterDescriptor mockAdapterDescriptor(MockExchangeAdapter mockExchangeAdapter,
+                                                            ExchangeOrderPort mockOrderPort,
+                                                            List<ExchangeUserStreamPort> userStreamPorts,
+                                                            List<UserStreamSessionPort> userStreamSessionPorts) {
+        var builder = DefaultExchangeAdapterDescriptor.builder("MOCK")
+                .streaming(mockExchangeAdapter)
+                .orderPort(mockOrderPort)
+                .orderExecution(mockExchangeAdapter)
+                .orderQuery(mockExchangeAdapter)
+                .accountQuery(mockExchangeAdapter)
+                .bootReadiness(mockExchangeAdapter);
+
+        userStreamPorts.stream()
+                .filter(p -> "MOCK".equals(p.getExchangeName()))
+                .findFirst()
+                .ifPresent(builder::userStream);
+
+        userStreamSessionPorts.stream()
+                .filter(p -> "MOCK".equals(p.getExchangeName()))
+                .findFirst()
+                .ifPresent(builder::userStreamSession);
+
+        return builder.build();
     }
 }

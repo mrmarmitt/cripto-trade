@@ -7,7 +7,7 @@ import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.websocket.data.ProcessorResponse;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.ports.inbound.handler.HandlerProcessUserMessagePort;
-import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
+import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
@@ -44,16 +44,14 @@ public class ProcessUserMessageHandler implements HandlerProcessUserMessagePort 
         }
 
         try {
-            ExchangeUserStreamPort userStream = exchangeAdapterRepository
-                    .findUserStreamByName(context.exchangeName())
-                    .orElse(null);
-
-            if (userStream == null) {
+            var adapterOpt = exchangeAdapterRepository.findAdapter(context.exchangeName());
+            if (adapterOpt.isEmpty() || !adapterOpt.get().hasUserStream()) {
                 return ProcessingResult.error(correlationId,
                         "No user stream adapter found for exchange: " + context.exchangeName());
             }
 
-            ProcessingResult<? extends ProcessorResponse> result = userStream.processMessage(rawMessage, context);
+            ProcessingResult<? extends ProcessorResponse> result =
+                    adapterOpt.get().userStream().processMessage(rawMessage, context);
 
             if (isProcessable(result)) {
                 result.getData().ifPresent(this::notifyOrderUpdate);

@@ -4,12 +4,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.application.spring.adapter.OkHttp3ListenerConverter;
 import com.marmitt.application.spring.adapter.OkHttp3WebSocketAdapter;
 import com.marmitt.application.spring.adapter.binance.OkHttpClientAdapter;
+import com.marmitt.application.spring.repository.DefaultExchangeAdapterDescriptor;
 import com.marmitt.binance.BinanceConnectionConfig;
 import com.marmitt.binance.BinanceMarketStreamAdapter;
 import com.marmitt.binance.BinanceOrderAdapter;
+import com.marmitt.binance.BinanceUserStreamAdapter;
+import com.marmitt.binance.BinanceUserStreamSessionAdapter;
 import com.marmitt.binance.filters.SymbolFilterCache;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
+import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPortRegistryPort;
 import okhttp3.OkHttpClient;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
@@ -93,5 +97,22 @@ public class BinanceMarketStreamConfiguration {
                 binanceMarketStreamAdapter,
                 binanceMarketStreamAdapter
         );
+    }
+
+    @Bean
+    public ExchangeAdapterDescriptor binanceAdapterDescriptor(BinanceMarketStreamAdapter binanceMarketStreamAdapter,
+                                                               BinanceUserStreamAdapter binanceUserStreamAdapter,
+                                                               BinanceUserStreamSessionAdapter binanceUserStreamSessionAdapter,
+                                                               BinanceOrderAdapter binanceOrderAdapter) {
+        return DefaultExchangeAdapterDescriptor.builder("BINANCE")
+                .streaming(binanceMarketStreamAdapter)
+                .orderPort(binanceOrderAdapter)
+                .userStream(binanceUserStreamAdapter)
+                .userStreamSession(binanceUserStreamSessionAdapter)
+                .orderExecution(binanceMarketStreamAdapter)
+                .orderQuery(binanceMarketStreamAdapter)
+                .accountQuery(binanceMarketStreamAdapter)
+                .bootReadiness(binanceMarketStreamAdapter)
+                .build();
     }
 }

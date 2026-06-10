@@ -126,10 +126,10 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
         log.info("bootSequence.phase1: start exchanges={}", exchanges.size());
 
         for (String exchange : exchanges) {
-            ExchangeBootReadiness readiness = exchangeAdapterRepository.findBootReadinessByName(exchange)
+            ExchangeBootReadiness readiness = exchangeAdapterRepository.findAdapter(exchange)
                     .orElseThrow(() -> new IllegalStateException(
                             "Boot readiness capability is not registered for exchange=" + exchange))
-                    .checkBootReadiness();
+                    .bootReadiness().checkBootReadiness();
 
             if (!readiness.ready()) {
                 throw triggerFailFast(runId, "phase1.infrastructure", readiness.code(),

@@ -3,6 +3,7 @@ package com.marmitt.core.application.usecase.boot.phase2;
 import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.dto.portfolio.PortfolioBootSanityResult;
 import com.marmitt.core.dto.websocket.data.AccountDataDto;
+import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
@@ -41,9 +42,8 @@ public class PortfolioBootSanityUseCase {
                     "GlobalBalance not found for portfolio.");
         }
 
-        Optional<ExchangeAccountQueryPort> accountQuery =
-                exchangeAdapterRepository.findAccountQueryByName(exchangeId);
-        if (accountQuery.isEmpty()) {
+        Optional<ExchangeAdapterDescriptor> adapterOpt = exchangeAdapterRepository.findAdapter(exchangeId);
+        if (adapterOpt.isEmpty() || !adapterOpt.get().hasAccountQuery()) {
             return PortfolioBootSanityResult.skipped(
                     portfolioId, exchangeId, "ACCOUNT_QUERY_NOT_AVAILABLE",
                     "Exchange account query capability is not available.");
@@ -51,7 +51,7 @@ public class PortfolioBootSanityUseCase {
 
         try {
             GlobalBalance local = balanceOptional.get();
-            AccountDataDto account = accountQuery.get().queryAccountSnapshot();
+            AccountDataDto account = adapterOpt.get().accountQuery().queryAccountSnapshot();
 
             String baseCurrency = local.getBaseCurrency().toUpperCase();
             BigDecimal localTotal = local.getTotalBalance();

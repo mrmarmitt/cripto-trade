@@ -3,7 +3,7 @@
 **Complexidade:** Média  
 **Responsável:** Claude  
 **Dependências:** T15 (ExchangeOrderPort — seleção de transporte no adapter-binance)  
-**Status:** Pendente
+**Status:** Concluído
 
 ---
 

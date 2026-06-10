@@ -120,7 +120,8 @@ abstract class MockOrderOverrideIntegrationTestSupport {
     }
 
     protected MockExchangeAdapter getMockExchangeAdapter() {
-        return exchangeAdapterRepository.findStreamingByName(MOCK_EXCHANGE)
+        return exchangeAdapterRepository.findAdapter(MOCK_EXCHANGE)
+                .map(d -> d.streaming())
                 .filter(MockExchangeAdapter.class::isInstance)
                 .map(MockExchangeAdapter.class::cast)
                 .orElseThrow(() -> new IllegalStateException(

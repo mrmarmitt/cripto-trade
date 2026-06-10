@@ -5,7 +5,7 @@ import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.dto.websocket.response.SendWebSocketResponse;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.ports.inbound.websocket.SendMessageWebSocketPort;
-import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
+import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import com.marmitt.core.ports.outbound.websocket.WebSocketPort;
@@ -31,13 +31,13 @@ public class SendMessageWebSocketUseCase implements SendMessageWebSocketPort {
     public SendWebSocketResponse execute(MessageRequest request) {
         WebSocketConnectionManager manager = connectionRepository.getConnection(ConnectionKey.market(request.getExchangeName()));
 
-        Optional<ExchangeStreamingPort> streamingOptional = adapterRepository.findStreamingByName(request.getExchangeName());
-        if (streamingOptional.isEmpty()) {
+        Optional<ExchangeAdapterDescriptor> adapterOpt = adapterRepository.findAdapter(request.getExchangeName());
+        if (adapterOpt.isEmpty()) {
             return SendWebSocketResponse.failure(request.getExchangeName(), "Exchange does not exist");
         }
 
         manager.addRequestToHistory(request);
-        String message = streamingOptional.get().formatMessage(request);
+        String message = adapterOpt.get().streaming().formatMessage(request);
         WebSocketPort webSocket = webSocketRegistry.findByExchangeName(request.getExchangeName())
                 .orElseThrow(() -> new IllegalStateException("No WebSocket registered for exchange: " + request.getExchangeName()));
         webSocket.sendMessage(message);

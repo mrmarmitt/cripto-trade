@@ -8,6 +8,7 @@ import com.marmitt.core.dto.websocket.response.WebSocketConnectionResponse;
 import com.marmitt.core.dto.wrapper.WebSocketConnectionManager;
 import com.marmitt.core.enums.ConnectionStatus;
 import com.marmitt.core.ports.inbound.websocket.ConnectMarketStreamPort;
+import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeStreamingPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
@@ -32,15 +33,15 @@ public class ConnectMarketStreamUseCase implements ConnectMarketStreamPort {
 
     @Override
     public WebSocketConnectionResponse execute(final String exchangeName, final StreamSubscriptionRequest parameters) {
-        Optional<ExchangeStreamingPort> streamingOptional = adapterRepository.findStreamingByName(exchangeName);
-        if (streamingOptional.isEmpty()) {
+        Optional<ExchangeAdapterDescriptor> adapterOpt = adapterRepository.findAdapter(exchangeName);
+        if (adapterOpt.isEmpty()) {
             return ConnectionResultMapper.toResponse(
                     ConnectionResultDto.failure(this.getClass().getSimpleName(), "Exchange does not exist"),
                     exchangeName);
         }
 
         WebSocketConnectionManager manager = prepareMarketManager(exchangeName, parameters);
-        ExchangeStreamingPort streaming = streamingOptional.get();
+        ExchangeStreamingPort streaming = adapterOpt.get().streaming();
         String url = streaming.buildConnectionUrl(parameters, exchangeName);
         WebSocketPort webSocket = webSocketRegistry.findByExchangeName(exchangeName)
                 .orElseThrow(() -> new IllegalStateException("No WebSocket registered for exchange: " + exchangeName));
