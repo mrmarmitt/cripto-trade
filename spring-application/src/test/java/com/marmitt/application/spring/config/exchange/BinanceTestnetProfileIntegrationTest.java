@@ -46,8 +46,7 @@ class BinanceTestnetProfileIntegrationTest {
             InMemoryWebSocketPortRegistry.class,
             MockAdapterConfiguration.class,
             CoinbaseAdapterConfiguration.class,
-            BinanceMarketStreamConfiguration.class,
-            BinanceUserStreamConfiguration.class
+            BinanceAdapterConfiguration.class
     })
     static class TestApplication {
 
