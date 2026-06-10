@@ -444,9 +444,19 @@ public class RunnerBootRecoveryUseCase {
         }
 
         if (!ctx.hasErrors()) {
-            latestRunner.completeReconciliation();
+            RunnerStatus currentStatus = latestRunner.getStatus();
+            if (currentStatus == RunnerStatus.CREATED) {
+                latestRunner.startInitializing();
+                latestRunner.activate();
+                ctx.note("Step 6: runner activated CREATED->ACTIVE.");
+            } else if (currentStatus == RunnerStatus.INITIALIZING) {
+                latestRunner.activate();
+                ctx.note("Step 6: runner activated INITIALIZING->ACTIVE.");
+            } else {
+                latestRunner.completeReconciliation();
+                ctx.note("Step 6: reconciliation completed and runner persisted.");
+            }
             strategyRunnerRepository.save(latestRunner);
-            ctx.note("Step 6: reconciliation completed and runner persisted.");
             return;
         }
 
