@@ -25,6 +25,7 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
     private boolean enabled = true;
     private final SimpleMovingAverageConfig config;
     private final List<BigDecimal> priceHistory = new ArrayList<>();
+    private Instant lastProcessedTimestamp = null;
 
     public SimpleMovingAverageStrategy() {
         this(SimpleMovingAverageConfig.defaultConfig());
@@ -60,7 +61,13 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
     }
 
     @Override
-    public StrategyOutputDto executeStrategy(StrategyInputDto input, StrategyContextDto portfolioContext) {
+    public synchronized StrategyOutputDto executeStrategy(StrategyInputDto input, StrategyContextDto portfolioContext) {
+        if (input.timestamp() != null && input.timestamp().equals(lastProcessedTimestamp)) {
+            log.debug("SMA: duplicate price update at timestamp={} - skipping", input.timestamp());
+            return StrategyOutputDto.hold(STRATEGY_NAME, "Duplicate price update skipped.");
+        }
+        lastProcessedTimestamp = input.timestamp();
+
         BigDecimal currentPrice = input.currentPrice();
         updateHistory(currentPrice);
 
