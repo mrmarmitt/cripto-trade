@@ -183,5 +183,7 @@ class ConnectionLostOrderDispatchGuardTest {
         @Override public Optional<UserStreamSessionPort> findUserStreamSessionByName(String n) { return Optional.empty(); }
         @Override public Optional<UserStreamSession> findActiveSession(UUID id) { return Optional.empty(); }
         @Override public void removeActiveSession(UUID id) {}
+        @Override public void registerOrderPort(com.marmitt.core.ports.outbound.exchange.ExchangeOrderPort p) {}
+        @Override public Optional<com.marmitt.core.ports.outbound.exchange.ExchangeOrderPort> findOrderPortByName(String n) { return Optional.empty(); }
     }
 }
