@@ -6,6 +6,7 @@ import com.marmitt.application.spring.adapter.OkHttp3WebSocketAdapter;
 import com.marmitt.application.spring.adapter.binance.OkHttpClientAdapter;
 import com.marmitt.binance.BinanceConnectionConfig;
 import com.marmitt.binance.BinanceMarketStreamAdapter;
+import com.marmitt.binance.BinanceOrderAdapter;
 import com.marmitt.binance.filters.SymbolFilterCache;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
@@ -80,5 +81,17 @@ public class BinanceMarketStreamConfiguration {
                 .build();
         return new BinanceMarketStreamAdapter(objectMapper, config,
                 new OkHttpClientAdapter(bootReadinessClient), binanceSymbolFilterCache);
+    }
+
+    @Bean
+    public BinanceOrderAdapter binanceOrderAdapter(OkHttp3WebSocketAdapter binanceUserStreamWebSocketPort,
+                                                   OkHttp3WebSocketAdapter binanceMarketWebSocketPort,
+                                                   BinanceMarketStreamAdapter binanceMarketStreamAdapter) {
+        return new BinanceOrderAdapter(
+                binanceUserStreamWebSocketPort,
+                binanceMarketWebSocketPort,
+                binanceMarketStreamAdapter,
+                binanceMarketStreamAdapter
+        );
     }
 }

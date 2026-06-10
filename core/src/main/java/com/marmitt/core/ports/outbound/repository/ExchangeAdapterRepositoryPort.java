@@ -1,5 +1,6 @@
 package com.marmitt.core.ports.outbound.repository;
 
+import com.marmitt.core.ports.outbound.exchange.ExchangeOrderPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
@@ -56,6 +57,10 @@ public interface ExchangeAdapterRepositoryPort {
     Optional<UserStreamSession> findActiveSession(UUID connectionId);
 
     void removeActiveSession(UUID connectionId);
+
+    void registerOrderPort(ExchangeOrderPort port);
+
+    Optional<ExchangeOrderPort> findOrderPortByName(String exchangeName);
 
     void blockDispatch(String exchangeName);
 
