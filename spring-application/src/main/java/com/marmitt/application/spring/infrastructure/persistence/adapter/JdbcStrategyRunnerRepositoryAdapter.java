@@ -18,7 +18,9 @@ import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
+import org.springframework.data.relational.core.conversion.DbActionExecutionException;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.Collection;
@@ -130,7 +132,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     }
 
     @Override
-    @Transactional
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean trySavePosition(Position position) {
         long start = System.nanoTime();
         validateOpenedByInvariant(position);
@@ -141,6 +143,13 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         } catch (DataIntegrityViolationException e) {
             log.trace("[REPO] position.trySave({}) - duplicate open - {}ms", position.getId(), RepoTiming.elapsedMs(start));
             return false;
+        } catch (DbActionExecutionException e) {
+            // Spring Data JDBC wraps DuplicateKeyException in DbActionExecutionException
+            if (e.getCause() instanceof DataIntegrityViolationException) {
+                log.trace("[REPO] position.trySave({}) - duplicate open - {}ms", position.getId(), RepoTiming.elapsedMs(start));
+                return false;
+            }
+            throw e;
         }
     }
 
