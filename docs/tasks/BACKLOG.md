@@ -22,8 +22,8 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T14 | Refactor Fronteiras Arquiteturais: Transporte e Negócio | Alta | Claude | Concluído |
 | T15 | ExchangeOrderPort: Mover seleção de transporte para adapter-binance | Média | Claude | Concluído |
 | T16 | ExchangeAdapterDescriptor: Centralizar capabilities por adapter | Média | Claude | Concluído |
-| T17 | Loki: Agregação de Logs                                          | Média | Claude | Pendente  |
-| T18 | Trade Reconciliation Report                                      | Média | Claude | Pendente  |
+| T17 | Loki: Agregação de Logs                                          | Média | Claude | Concluído |
+| T18 | Trade Reconciliation Report                                      | Média | Claude | Concluído |
 
 ## Ordem de execução
 
