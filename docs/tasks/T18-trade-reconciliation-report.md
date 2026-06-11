@@ -129,13 +129,14 @@ Inclui status: `FILLED`, `PARTIALLY_FILLED`. Ignora `SUBMITTED`, `PENDING`, `CAN
 ### 5. Endpoint REST (em `spring-application`)
 
 ```
-GET /api/reconciliation?symbol=BTCUSDT&from=2025-01-01T00:00:00Z&to=2025-01-02T00:00:00Z
+GET /api/reconciliation?symbol=BTCUSDT&from=2025-01-01T00:00:00Z&to=2025-01-02T00:00:00Z&exchangeId=BINANCE
 ```
 
 Parâmetros:
 - `symbol` — obrigatório
 - `from` — ISO-8601, obrigatório
 - `to` — ISO-8601, obrigatório
+- `exchangeId` — identificador da exchange, default `BINANCE` (único exchange suportado atualmente)
 - `includeMatched` — boolean, default `false` (oculta MATCHED para reduzir ruído)
 
 Response: `200 OK` com `ReconciliationReportDto` em JSON.

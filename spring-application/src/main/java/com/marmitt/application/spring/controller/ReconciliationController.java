@@ -4,7 +4,6 @@ import com.marmitt.core.dto.reconciliation.ReconciliationReportDto;
 import com.marmitt.core.dto.reconciliation.ReconciliationRequest;
 import com.marmitt.core.ports.inbound.reconciliation.ReconcileTradesPort;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,7 +16,6 @@ import java.time.Instant;
 @Slf4j
 @RestController
 @RequestMapping("/api/reconciliation")
-@ConditionalOnBean(ReconcileTradesPort.class)
 public class ReconciliationController {
 
     private final ReconcileTradesPort reconcileTradesPort;
@@ -35,7 +33,7 @@ public class ReconciliationController {
     @GetMapping
     public ResponseEntity<?> reconcile(
             @RequestParam String symbol,
-            @RequestParam String exchangeId,
+            @RequestParam(defaultValue = "BINANCE") String exchangeId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @RequestParam(defaultValue = "false") boolean includeMatched) {
