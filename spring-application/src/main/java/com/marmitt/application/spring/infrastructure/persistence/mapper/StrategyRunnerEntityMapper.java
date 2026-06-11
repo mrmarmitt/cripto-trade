@@ -138,6 +138,7 @@ public class StrategyRunnerEntityMapper {
                 .requestedAt(domain.getRequestedAt())
                 .updatedAt(domain.getUpdatedAt())
                 .executedAt(domain.getExecutedAt())
+                .lastPartialFillAt(domain.getLastPartialFillAt())
                 .rejectReason(domain.getRejectReason())
                 .version(domain.getVersion())
                 .build();
@@ -163,6 +164,7 @@ public class StrategyRunnerEntityMapper {
                 .requestedAt(entity.getRequestedAt())
                 .updatedAt(entity.getUpdatedAt())
                 .executedAt(entity.getExecutedAt())
+                .lastPartialFillAt(entity.getLastPartialFillAt())
                 .rejectReason(entity.getRejectReason())
                 .version(entity.getVersion())
                 .build();

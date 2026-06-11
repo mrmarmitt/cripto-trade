@@ -90,6 +90,12 @@ public class Transaction {
     private final Instant requestedAt;
     private Instant updatedAt;
     private Instant executedAt;
+    /**
+     * Timestamp of the most recent partial fill. Set by {@link #partialFill} and NOT overwritten
+     * by {@link #cancel()}, so it survives PARTIAL → CANCELED transitions intact.
+     * Used as the time-filter anchor for CANCELED transactions in reconciliation queries.
+     */
+    private Instant lastPartialFillAt;
     private String rejectReason;
     private Long version;
 
@@ -149,6 +155,7 @@ public class Transaction {
             Instant requestedAt,
             Instant updatedAt,
             Instant executedAt,
+            Instant lastPartialFillAt,
             String rejectReason,
             Long version
     ) {
@@ -170,6 +177,7 @@ public class Transaction {
         this.requestedAt = Objects.requireNonNull(requestedAt, "requestedAt cannot be null");
         this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt cannot be null");
         this.executedAt = executedAt;
+        this.lastPartialFillAt = lastPartialFillAt;
         this.rejectReason = rejectReason;
         this.version = version;
     }
@@ -208,6 +216,7 @@ public class Transaction {
         this.executedPrice = avgExecutedPrice;
         this.status = TransactionStatus.PARTIAL;
         this.updatedAt = Instant.now();
+        this.lastPartialFillAt = this.updatedAt;
     }
 
     /**

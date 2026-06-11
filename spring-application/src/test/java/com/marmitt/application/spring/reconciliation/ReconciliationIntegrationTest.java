@@ -135,10 +135,12 @@ class ReconciliationIntegrationTest {
     }
 
     @Test
-    void findFilledBySymbolAndPeriod_includesCanceledTransactionsWithPartialExecution() {
-        Instant updatedAt = Instant.parse("2026-01-01T10:00:00Z");
-        insertTransactionWithStatus("BTCUSDT", "BINANCE", "client-canceled-partial",
-                new BigDecimal("0.005"), "CANCELED", updatedAt);
+    void findFilledBySymbolAndPeriod_includesCanceledTransactionsWhenFillWasInWindow() {
+        // Fill at 10:00 (inside window), cancel at 12:00 (also inside, but different time)
+        Instant fillAt = Instant.parse("2026-01-01T10:00:00Z");
+        Instant cancelAt = Instant.parse("2026-01-01T12:00:00Z");
+        insertCanceledPartialTransaction("BTCUSDT", "BINANCE", "client-canceled-partial",
+                new BigDecimal("0.005"), fillAt, cancelAt);
 
         List<Transaction> result = strategyRunnerRepository.findFilledBySymbolAndPeriod(
                 "BTCUSDT", "BINANCE",
@@ -150,10 +152,26 @@ class ReconciliationIntegrationTest {
     }
 
     @Test
+    void findFilledBySymbolAndPeriod_excludesCanceledTransactionsWhenFillWasOutsideWindow() {
+        // Fill before window, cancel inside window — cancel time must NOT be used as fill time
+        Instant fillAt = Instant.parse("2025-12-31T10:00:00Z");   // before window
+        Instant cancelAt = Instant.parse("2026-01-01T10:00:00Z"); // inside window
+        insertCanceledPartialTransaction("BTCUSDT", "BINANCE", "client-old-canceled",
+                new BigDecimal("0.005"), fillAt, cancelAt);
+
+        List<Transaction> result = strategyRunnerRepository.findFilledBySymbolAndPeriod(
+                "BTCUSDT", "BINANCE",
+                Instant.parse("2026-01-01T00:00:00Z"),
+                Instant.parse("2026-01-02T00:00:00Z"));
+
+        assertEquals(0, result.size());
+    }
+
+    @Test
     void findFilledBySymbolAndPeriod_excludesCanceledTransactionsWithNoExecution() {
-        Instant updatedAt = Instant.parse("2026-01-01T10:00:00Z");
-        insertTransactionWithStatus("BTCUSDT", "BINANCE", "client-canceled-zero",
-                BigDecimal.ZERO, "CANCELED", updatedAt);
+        Instant cancelAt = Instant.parse("2026-01-01T10:00:00Z");
+        insertCanceledPartialTransaction("BTCUSDT", "BINANCE", "client-canceled-zero",
+                BigDecimal.ZERO, null, cancelAt);
 
         List<Transaction> result = strategyRunnerRepository.findFilledBySymbolAndPeriod(
                 "BTCUSDT", "BINANCE",
@@ -165,11 +183,6 @@ class ReconciliationIntegrationTest {
 
     private void insertFilledTransaction(String symbol, String exchangeId, String clientOrderId,
                                          BigDecimal qty, Instant executedAt) {
-        insertTransactionWithStatus(symbol, exchangeId, clientOrderId, qty, "FILLED", executedAt);
-    }
-
-    private void insertTransactionWithStatus(String symbol, String exchangeId, String clientOrderId,
-                                              BigDecimal executedQty, String status, Instant updatedAt) {
         UUID portfolioId = UUID.randomUUID();
         UUID runnerId = UUID.randomUUID();
         String shortCode = UUID.randomUUID().toString().substring(0, 4).toUpperCase();
@@ -187,15 +200,50 @@ class ReconciliationIntegrationTest {
                 "0.1, 1, 1, false, NOW())",
                 runnerId, portfolioId, shortCode, UUID.randomUUID(), symbol, exchangeId);
 
-        // For FILLED: executed_at is set (time filter uses it). For CANCELED/PARTIAL: uses updated_at.
-        boolean isFilled = "FILLED".equals(status);
+        // executed_at used as the time filter (COALESCE(executed_at, updated_at)); for PARTIAL, updated_at would be used
         jdbcTemplate.update(
                 "INSERT INTO transactions (id, runner_id, client_order_id, exchange_order_id, status, type, " +
                 "symbol, quantity, executed_quantity, price, executed_price, total, requested_at, updated_at, executed_at, version) " +
-                "VALUES (?, ?, ?, '100234', ?, 'BUY', ?, 0.01, ?, 50000, 50000, ?, NOW(), ?, ?, 0)",
-                UUID.randomUUID(), runnerId, clientOrderId, status, symbol,
+                "VALUES (?, ?, ?, '100234', 'FILLED', 'BUY', ?, ?, ?, 50000, 50000, ?, NOW(), ?, ?, 0)",
+                UUID.randomUUID(), runnerId, clientOrderId, symbol,
+                qty, qty, qty.multiply(new BigDecimal("50000")),
+                Timestamp.from(executedAt),
+                Timestamp.from(executedAt));
+    }
+
+    /**
+     * Inserts a CANCELED transaction with partial execution.
+     * fillAt = the time the partial fill occurred (stored in last_partial_fill_at).
+     * cancelAt = the time cancel() was called (stored in updated_at, which would overwrite fillAt).
+     * Pass fillAt=null to simulate a CANCELED order with zero execution.
+     */
+    private void insertCanceledPartialTransaction(String symbol, String exchangeId, String clientOrderId,
+                                                   BigDecimal executedQty, Instant fillAt, Instant cancelAt) {
+        UUID portfolioId = UUID.randomUUID();
+        UUID runnerId = UUID.randomUUID();
+        String shortCode = UUID.randomUUID().toString().substring(0, 4).toUpperCase();
+
+        jdbcTemplate.update(
+                "INSERT INTO portfolios (id, name, is_active, safe_mode_status, capital_pooling_mode, created_at) " +
+                "VALUES (?, ?, true, 'NORMAL', 'SHARED', NOW())",
+                portfolioId, "test-portfolio-" + portfolioId);
+
+        jdbcTemplate.update(
+                "INSERT INTO strategy_runners (id, portfolio_id, short_code, strategy_id, strategy_name, symbol, " +
+                "exchange_id, status, status_changed_at, execution_policy, accounting_policy_type, " +
+                "max_allocation_percent, max_open_positions, max_pending_orders, is_reconciling, created_at) " +
+                "VALUES (?, ?, ?, ?, 'Test Strategy', ?, ?, 'ACTIVE', NOW(), 'SINGLE', 'FIFO', " +
+                "0.1, 1, 1, false, NOW())",
+                runnerId, portfolioId, shortCode, UUID.randomUUID(), symbol, exchangeId);
+
+        jdbcTemplate.update(
+                "INSERT INTO transactions (id, runner_id, client_order_id, exchange_order_id, status, type, " +
+                "symbol, quantity, executed_quantity, price, executed_price, total, requested_at, " +
+                "updated_at, executed_at, last_partial_fill_at, version) " +
+                "VALUES (?, ?, ?, '100234', 'CANCELED', 'BUY', ?, 0.01, ?, 50000, 50000, ?, NOW(), ?, NULL, ?, 0)",
+                UUID.randomUUID(), runnerId, clientOrderId, symbol,
                 executedQty, executedQty.multiply(new BigDecimal("50000")),
-                Timestamp.from(updatedAt),
-                isFilled ? Timestamp.from(updatedAt) : null);
+                Timestamp.from(cancelAt),
+                fillAt != null ? Timestamp.from(fillAt) : null);
     }
 }
