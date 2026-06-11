@@ -22,6 +22,8 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T14 | Refactor Fronteiras Arquiteturais: Transporte e Negócio | Alta | Claude | Concluído |
 | T15 | ExchangeOrderPort: Mover seleção de transporte para adapter-binance | Média | Claude | Concluído |
 | T16 | ExchangeAdapterDescriptor: Centralizar capabilities por adapter | Média | Claude | Concluído |
+| T17 | Loki: Agregação de Logs                                          | Média | Claude | Pendente  |
+| T18 | Trade Reconciliation Report                                      | Média | Claude | Pendente  |
 
 ## Ordem de execução
 
@@ -62,6 +64,9 @@ T15  ExchangeOrderPort                  ← seleção de transporte no adapter-b
        ↓
 T16  ExchangeAdapterDescriptor          ← capabilities por adapter, repositório simplificado
        ↓
+T17  Loki                               ← agregação de logs, alertas de ERROR
+T18  Trade Reconciliation Report        ← auditoria fills Binance vs local (independente)
+       ↓
    produção
 ```
 
@@ -74,3 +79,5 @@ T16  ExchangeAdapterDescriptor          ← capabilities por adapter, repositór
 - Nenhuma ordem é enviada violando filtros de símbolo (stepSize, minNotional, tickSize).
 - Kill switch interrompe todos os runners sem efeito financeiro residual.
 - Métricas visíveis no Grafana durante staging.
+- Logs de ERROR agregados no Loki e acessíveis por `clientOrderId` no Grafana.
+- Relatório de reconciliação mostra `binanceOnly=0` e `localOnly=0` após sessão sem falhas.

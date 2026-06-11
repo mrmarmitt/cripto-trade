@@ -11,7 +11,10 @@ import com.marmitt.binance.BinanceOrderAdapter;
 import com.marmitt.binance.BinanceUserStreamAdapter;
 import com.marmitt.binance.BinanceUserStreamSessionAdapter;
 import com.marmitt.binance.auth.BinanceCredentials;
+import com.marmitt.binance.auth.BinanceRequestSigner;
 import com.marmitt.binance.filters.SymbolFilterCache;
+import com.marmitt.binance.rest.BinanceRestRequestBuilder;
+import com.marmitt.binance.trade.BinanceTradeHistoryAdapter;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
@@ -121,6 +124,16 @@ public class BinanceAdapterConfiguration {
                 binanceMarketStreamAdapter,
                 binanceMarketStreamAdapter
         );
+    }
+
+    @Bean
+    public BinanceTradeHistoryAdapter binanceTradeHistoryAdapter(BinanceProperties properties,
+                                                                  OkHttpClient binanceRestClient,
+                                                                  ObjectMapper objectMapper) {
+        BinanceCredentials credentials = new BinanceCredentials(properties.getApiKey(), properties.getApiSecret());
+        BinanceRequestSigner signer = new BinanceRequestSigner(credentials);
+        BinanceRestRequestBuilder requestBuilder = new BinanceRestRequestBuilder(properties.getRestBaseUrl(), signer);
+        return new BinanceTradeHistoryAdapter(requestBuilder, new OkHttpClientAdapter(binanceRestClient), objectMapper);
     }
 
     @Bean

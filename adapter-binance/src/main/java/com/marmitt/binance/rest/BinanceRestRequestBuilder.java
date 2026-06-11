@@ -15,6 +15,7 @@ public class BinanceRestRequestBuilder {
     private static final String ORDER_PATH       = "/api/v3/order";
     private static final String OPEN_ORDERS_PATH = "/api/v3/openOrders";
     private static final String ACCOUNT_PATH     = "/api/v3/account";
+    private static final String MY_TRADES_PATH   = "/api/v3/myTrades";
 
     private final String restBaseUrl;
     private final BinanceRequestSigner signer;
@@ -69,6 +70,23 @@ public class BinanceRestRequestBuilder {
 
     public RestRequest buildAccountSnapshot() {
         return get(ACCOUNT_PATH, Map.of());
+    }
+
+    public RestRequest buildMyTrades(String symbol, long startTime, long endTime) {
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("symbol", symbol);
+        params.put("startTime", String.valueOf(startTime));
+        params.put("endTime", String.valueOf(endTime));
+        params.put("limit", "1000");
+        return get(MY_TRADES_PATH, params);
+    }
+
+    public RestRequest buildMyTradesFromId(String symbol, long fromId) {
+        Map<String, String> params = new LinkedHashMap<>();
+        params.put("symbol", symbol);
+        params.put("fromId", String.valueOf(fromId));
+        params.put("limit", "1000");
+        return get(MY_TRADES_PATH, params);
     }
 
     private RestRequest get(String path, Map<String, String> params) {

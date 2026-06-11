@@ -235,4 +235,14 @@ public interface StrategyRunnerRepositoryPort {
      * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 6.2.1</a>
      */
     void saveAtomicTransactionAndMatch(Transaction transaction, TransactionMatch match);
+
+    /**
+     * Busca transações com status FILLED ou PARTIAL para um símbolo dentro de um período.
+     * Usado pela reconciliação de trades para comparar com o histórico da exchange.
+     *
+     * @param symbol par de trading (ex: "BTCUSDT")
+     * @param from   início do período (inclusive)
+     * @param to     fim do período (inclusive)
+     */
+    List<Transaction> findFilledBySymbolAndPeriod(String symbol, Instant from, Instant to);
 }

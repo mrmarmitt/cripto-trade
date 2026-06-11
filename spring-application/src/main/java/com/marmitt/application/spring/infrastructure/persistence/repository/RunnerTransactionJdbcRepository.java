@@ -34,4 +34,11 @@ public interface RunnerTransactionJdbcRepository extends CrudRepository<RunnerTr
             @Param("updatedBefore") Instant updatedBefore,
             @Param("limit") int limit
     );
+
+    @Query("SELECT * FROM transactions WHERE symbol = :symbol AND status IN ('FILLED', 'PARTIAL') AND requested_at >= :from AND requested_at <= :to ORDER BY requested_at")
+    List<RunnerTransactionEntity> findFilledBySymbolAndPeriod(
+            @Param("symbol") String symbol,
+            @Param("from") Instant from,
+            @Param("to") Instant to
+    );
 }
