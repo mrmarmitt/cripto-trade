@@ -35,9 +35,19 @@ public interface RunnerTransactionJdbcRepository extends CrudRepository<RunnerTr
             @Param("limit") int limit
     );
 
-    @Query("SELECT * FROM transactions WHERE symbol = :symbol AND status IN ('FILLED', 'PARTIAL') AND COALESCE(executed_at, requested_at) >= :from AND COALESCE(executed_at, requested_at) <= :to ORDER BY COALESCE(executed_at, requested_at)")
+    @Query("""
+            SELECT t.* FROM transactions t
+            JOIN strategy_runners sr ON sr.id = t.runner_id
+            WHERE t.symbol = :symbol
+              AND UPPER(sr.exchange_id) = UPPER(:exchangeId)
+              AND t.status IN ('FILLED', 'PARTIAL')
+              AND COALESCE(t.executed_at, t.updated_at) >= :from
+              AND COALESCE(t.executed_at, t.updated_at) <= :to
+            ORDER BY COALESCE(t.executed_at, t.updated_at)
+            """)
     List<RunnerTransactionEntity> findFilledBySymbolAndPeriod(
             @Param("symbol") String symbol,
+            @Param("exchangeId") String exchangeId,
             @Param("from") Instant from,
             @Param("to") Instant to
     );

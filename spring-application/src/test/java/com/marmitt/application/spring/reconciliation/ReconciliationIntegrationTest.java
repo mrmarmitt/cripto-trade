@@ -66,10 +66,10 @@ class ReconciliationIntegrationTest {
     @Test
     void findFilledBySymbolAndPeriod_returnsFilledTransactionsWithinPeriod() {
         Instant requestedAt = Instant.parse("2026-01-01T10:00:00Z");
-        insertFilledTransaction("BTCUSDT", "client-1", new BigDecimal("0.01"), requestedAt);
+        insertFilledTransaction("BTCUSDT", "BINANCE", "client-1", new BigDecimal("0.01"), requestedAt);
 
         List<Transaction> result = strategyRunnerRepository.findFilledBySymbolAndPeriod(
-                "BTCUSDT",
+                "BTCUSDT", "BINANCE",
                 Instant.parse("2026-01-01T00:00:00Z"),
                 Instant.parse("2026-01-02T00:00:00Z"));
 
@@ -81,10 +81,10 @@ class ReconciliationIntegrationTest {
     @Test
     void findFilledBySymbolAndPeriod_excludesTransactionsOutsidePeriod() {
         Instant outside = Instant.parse("2026-01-03T10:00:00Z"); // after range
-        insertFilledTransaction("BTCUSDT", "client-outside", new BigDecimal("0.01"), outside);
+        insertFilledTransaction("BTCUSDT", "BINANCE", "client-outside", new BigDecimal("0.01"), outside);
 
         List<Transaction> result = strategyRunnerRepository.findFilledBySymbolAndPeriod(
-                "BTCUSDT",
+                "BTCUSDT", "BINANCE",
                 Instant.parse("2026-01-01T00:00:00Z"),
                 Instant.parse("2026-01-02T00:00:00Z"));
 
@@ -94,10 +94,10 @@ class ReconciliationIntegrationTest {
     @Test
     void findFilledBySymbolAndPeriod_excludesTransactionsByDifferentSymbol() {
         Instant requestedAt = Instant.parse("2026-01-01T10:00:00Z");
-        insertFilledTransaction("ETHUSDT", "client-eth", new BigDecimal("1.0"), requestedAt);
+        insertFilledTransaction("ETHUSDT", "BINANCE", "client-eth", new BigDecimal("1.0"), requestedAt);
 
         List<Transaction> result = strategyRunnerRepository.findFilledBySymbolAndPeriod(
-                "BTCUSDT",
+                "BTCUSDT", "BINANCE",
                 Instant.parse("2026-01-01T00:00:00Z"),
                 Instant.parse("2026-01-02T00:00:00Z"));
 
@@ -105,13 +105,26 @@ class ReconciliationIntegrationTest {
     }
 
     @Test
-    void findFilledBySymbolAndPeriod_returnsMultipleTransactionsOrderedByRequestedAt() {
-        insertFilledTransaction("BTCUSDT", "client-1", new BigDecimal("0.01"), Instant.parse("2026-01-01T08:00:00Z"));
-        insertFilledTransaction("BTCUSDT", "client-2", new BigDecimal("0.02"), Instant.parse("2026-01-01T12:00:00Z"));
-        insertFilledTransaction("BTCUSDT", "client-3", new BigDecimal("0.03"), Instant.parse("2026-01-01T16:00:00Z"));
+    void findFilledBySymbolAndPeriod_excludesTransactionsByDifferentExchange() {
+        Instant requestedAt = Instant.parse("2026-01-01T10:00:00Z");
+        insertFilledTransaction("BTCUSDT", "COINBASE", "client-coinbase", new BigDecimal("0.01"), requestedAt);
 
         List<Transaction> result = strategyRunnerRepository.findFilledBySymbolAndPeriod(
-                "BTCUSDT",
+                "BTCUSDT", "BINANCE",
+                Instant.parse("2026-01-01T00:00:00Z"),
+                Instant.parse("2026-01-02T00:00:00Z"));
+
+        assertEquals(0, result.size());
+    }
+
+    @Test
+    void findFilledBySymbolAndPeriod_returnsMultipleTransactionsOrderedByExecutedAt() {
+        insertFilledTransaction("BTCUSDT", "BINANCE", "client-1", new BigDecimal("0.01"), Instant.parse("2026-01-01T08:00:00Z"));
+        insertFilledTransaction("BTCUSDT", "BINANCE", "client-2", new BigDecimal("0.02"), Instant.parse("2026-01-01T12:00:00Z"));
+        insertFilledTransaction("BTCUSDT", "BINANCE", "client-3", new BigDecimal("0.03"), Instant.parse("2026-01-01T16:00:00Z"));
+
+        List<Transaction> result = strategyRunnerRepository.findFilledBySymbolAndPeriod(
+                "BTCUSDT", "BINANCE",
                 Instant.parse("2026-01-01T00:00:00Z"),
                 Instant.parse("2026-01-02T00:00:00Z"));
 
@@ -121,7 +134,8 @@ class ReconciliationIntegrationTest {
         assertEquals("client-3", result.get(2).getClientOrderId());
     }
 
-    private void insertFilledTransaction(String symbol, String clientOrderId, BigDecimal qty, Instant requestedAt) {
+    private void insertFilledTransaction(String symbol, String exchangeId, String clientOrderId,
+                                         BigDecimal qty, Instant executedAt) {
         UUID portfolioId = UUID.randomUUID();
         UUID runnerId = UUID.randomUUID();
         String shortCode = UUID.randomUUID().toString().substring(0, 4).toUpperCase();
@@ -135,18 +149,18 @@ class ReconciliationIntegrationTest {
                 "INSERT INTO strategy_runners (id, portfolio_id, short_code, strategy_id, strategy_name, symbol, " +
                 "exchange_id, status, status_changed_at, execution_policy, accounting_policy_type, " +
                 "max_allocation_percent, max_open_positions, max_pending_orders, is_reconciling, created_at) " +
-                "VALUES (?, ?, ?, ?, 'Test Strategy', ?, 'MOCK', 'ACTIVE', NOW(), 'SINGLE', 'FIFO', " +
+                "VALUES (?, ?, ?, ?, 'Test Strategy', ?, ?, 'ACTIVE', NOW(), 'SINGLE', 'FIFO', " +
                 "0.1, 1, 1, false, NOW())",
-                runnerId, portfolioId, shortCode, UUID.randomUUID(), symbol);
+                runnerId, portfolioId, shortCode, UUID.randomUUID(), symbol, exchangeId);
 
-        // executed_at is the time filter column used by findFilledBySymbolAndPeriod (COALESCE(executed_at, requested_at))
+        // executed_at used as the time filter (COALESCE(executed_at, updated_at)); for PARTIAL, updated_at would be used
         jdbcTemplate.update(
                 "INSERT INTO transactions (id, runner_id, client_order_id, exchange_order_id, status, type, " +
                 "symbol, quantity, executed_quantity, price, executed_price, total, requested_at, updated_at, executed_at, version) " +
-                "VALUES (?, ?, ?, '100234', 'FILLED', 'BUY', ?, ?, ?, 50000, 50000, ?, ?, NOW(), ?, 0)",
+                "VALUES (?, ?, ?, '100234', 'FILLED', 'BUY', ?, ?, ?, 50000, 50000, ?, NOW(), ?, ?, 0)",
                 UUID.randomUUID(), runnerId, clientOrderId, symbol,
                 qty, qty, qty.multiply(new BigDecimal("50000")),
-                Timestamp.from(requestedAt),
-                Timestamp.from(requestedAt));
+                Timestamp.from(executedAt),
+                Timestamp.from(executedAt));
     }
 }

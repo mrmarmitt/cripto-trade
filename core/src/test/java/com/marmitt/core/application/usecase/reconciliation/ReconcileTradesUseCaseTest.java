@@ -33,27 +33,29 @@ class ReconcileTradesUseCaseTest {
     private final ReconcileTradesUseCase useCase =
             new ReconcileTradesUseCase(tradeHistoryQueryPort, strategyRunnerRepository);
 
+    private static final String EXCHANGE_ID = "BINANCE";
+
     @Test
     void reconcile_delegatesToBothPortsWithCorrectArgumentsAndReturnsMatchedReport() {
-        ReconciliationRequest request = new ReconciliationRequest(SYMBOL, FROM, TO, true);
+        ReconciliationRequest request = new ReconciliationRequest(SYMBOL, EXCHANGE_ID, FROM, TO, true);
 
         // Exchange fill with orderId=100234; local tx with exchangeOrderId="100234" → MATCHED
         when(tradeHistoryQueryPort.fetchTrades(SYMBOL, FROM, TO)).thenReturn(List.of(fill("0.01")));
-        when(strategyRunnerRepository.findFilledBySymbolAndPeriod(SYMBOL, FROM, TO))
+        when(strategyRunnerRepository.findFilledBySymbolAndPeriod(SYMBOL, EXCHANGE_ID, FROM, TO))
                 .thenReturn(List.of(localTx("client-1", "0.01")));
 
         ReconciliationReportDto report = useCase.reconcile(request);
 
         verify(tradeHistoryQueryPort).fetchTrades(eq(SYMBOL), eq(FROM), eq(TO));
-        verify(strategyRunnerRepository).findFilledBySymbolAndPeriod(eq(SYMBOL), eq(FROM), eq(TO));
+        verify(strategyRunnerRepository).findFilledBySymbolAndPeriod(eq(SYMBOL), eq(EXCHANGE_ID), eq(FROM), eq(TO));
         assertEquals(1, report.summary().matched());
     }
 
     @Test
     void reconcile_returnsEmptyReportWhenBothPortsReturnEmpty() {
-        ReconciliationRequest request = new ReconciliationRequest(SYMBOL, FROM, TO, false);
+        ReconciliationRequest request = new ReconciliationRequest(SYMBOL, EXCHANGE_ID, FROM, TO, false);
         when(tradeHistoryQueryPort.fetchTrades(SYMBOL, FROM, TO)).thenReturn(List.of());
-        when(strategyRunnerRepository.findFilledBySymbolAndPeriod(SYMBOL, FROM, TO)).thenReturn(List.of());
+        when(strategyRunnerRepository.findFilledBySymbolAndPeriod(SYMBOL, EXCHANGE_ID, FROM, TO)).thenReturn(List.of());
 
         ReconciliationReportDto report = useCase.reconcile(request);
 
@@ -63,7 +65,7 @@ class ReconcileTradesUseCaseTest {
 
     @Test
     void reconcile_propagatesExceptionFromExchangePort() {
-        ReconciliationRequest request = new ReconciliationRequest(SYMBOL, FROM, TO, false);
+        ReconciliationRequest request = new ReconciliationRequest(SYMBOL, EXCHANGE_ID, FROM, TO, false);
         when(tradeHistoryQueryPort.fetchTrades(SYMBOL, FROM, TO))
                 .thenThrow(new RuntimeException("Exchange unreachable"));
 

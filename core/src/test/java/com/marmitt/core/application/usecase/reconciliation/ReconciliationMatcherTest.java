@@ -303,6 +303,6 @@ class ReconciliationMatcherTest {
     }
 
     private static ReconciliationRequest request(boolean includeMatched) {
-        return new ReconciliationRequest("BTCUSDT", FROM, TO, includeMatched);
+        return new ReconciliationRequest("BTCUSDT", "BINANCE", FROM, TO, includeMatched);
     }
 }

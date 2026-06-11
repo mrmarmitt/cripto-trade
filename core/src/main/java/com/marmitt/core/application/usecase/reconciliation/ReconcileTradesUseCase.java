@@ -27,7 +27,7 @@ public class ReconcileTradesUseCase implements ReconcileTradesPort {
                 request.symbol(), request.from(), request.to());
 
         List<Transaction> localTransactions = strategyRunnerRepository.findFilledBySymbolAndPeriod(
-                request.symbol(), request.from(), request.to());
+                request.symbol(), request.exchangeId(), request.from(), request.to());
 
         return ReconciliationMatcher.match(exchangeFills, localTransactions, request);
     }

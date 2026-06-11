@@ -27,7 +27,7 @@ public class ReconciliationController {
     }
 
     /**
-     * GET /reconciliation?symbol=BTCUSDT&from=2025-01-01T00:00:00Z&to=2025-01-02T00:00:00Z
+     * GET /api/reconciliation?symbol=BTCUSDT&exchangeId=BINANCE&from=2025-01-01T00:00:00Z&to=2025-01-02T00:00:00Z
      *
      * @param includeMatched when false (default), MATCHED entries are omitted from the entries list
      *                       but still counted in summary.matched
@@ -35,6 +35,7 @@ public class ReconciliationController {
     @GetMapping
     public ResponseEntity<?> reconcile(
             @RequestParam String symbol,
+            @RequestParam String exchangeId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant to,
             @RequestParam(defaultValue = "false") boolean includeMatched) {
@@ -43,11 +44,12 @@ public class ReconciliationController {
             return ResponseEntity.badRequest().body("'from' must be before 'to'");
         }
 
-        log.info("reconciliation: symbol={} from={} to={} includeMatched={}", symbol, from, to, includeMatched);
+        log.info("reconciliation: symbol={} exchangeId={} from={} to={} includeMatched={}",
+                symbol, exchangeId, from, to, includeMatched);
 
         try {
             ReconciliationReportDto report = reconcileTradesPort.reconcile(
-                    new ReconciliationRequest(symbol, from, to, includeMatched));
+                    new ReconciliationRequest(symbol, exchangeId, from, to, includeMatched));
             log.info("reconciliation: done symbol={} total={} matched={} divergent={} exchangeOnly={} localOnly={}",
                     symbol,
                     report.summary().total(),

@@ -43,6 +43,7 @@ class ReconciliationControllerTest {
 
         mockMvc.perform(get("/api/reconciliation")
                         .param("symbol", "BTCUSDT")
+                        .param("exchangeId", "BINANCE")
                         .param("from", "2026-01-01T00:00:00Z")
                         .param("to", "2026-01-02T00:00:00Z"))
                 .andExpect(status().isOk())
@@ -56,6 +57,7 @@ class ReconciliationControllerTest {
     void reconcile_returnsBadRequestWhenFromIsAfterTo() throws Exception {
         mockMvc.perform(get("/api/reconciliation")
                         .param("symbol", "BTCUSDT")
+                        .param("exchangeId", "BINANCE")
                         .param("from", "2026-01-02T00:00:00Z")
                         .param("to", "2026-01-01T00:00:00Z"))
                 .andExpect(status().isBadRequest());
@@ -68,13 +70,14 @@ class ReconciliationControllerTest {
 
         mockMvc.perform(get("/api/reconciliation")
                         .param("symbol", "BTCUSDT")
+                        .param("exchangeId", "BINANCE")
                         .param("from", "2026-01-01T00:00:00Z")
                         .param("to", "2026-01-02T00:00:00Z"))
                 .andExpect(status().isBadGateway());
     }
 
     @Test
-    void reconcile_passesIncludeMatchedParamToUseCase() throws Exception {
+    void reconcile_passesAllParamsToUseCase() throws Exception {
         ReconciliationReportDto report = new ReconciliationReportDto(
                 "BTCUSDT",
                 Instant.parse("2026-01-01T00:00:00Z"),
@@ -85,6 +88,7 @@ class ReconciliationControllerTest {
 
         mockMvc.perform(get("/api/reconciliation")
                         .param("symbol", "BTCUSDT")
+                        .param("exchangeId", "BINANCE")
                         .param("from", "2026-01-01T00:00:00Z")
                         .param("to", "2026-01-02T00:00:00Z")
                         .param("includeMatched", "true"))
@@ -93,6 +97,7 @@ class ReconciliationControllerTest {
         verify(reconcileTradesPort).reconcile(
                 new ReconciliationRequest(
                         "BTCUSDT",
+                        "BINANCE",
                         Instant.parse("2026-01-01T00:00:00Z"),
                         Instant.parse("2026-01-02T00:00:00Z"),
                         true));

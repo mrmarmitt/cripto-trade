@@ -368,13 +368,13 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     }
 
     @Override
-    public List<Transaction> findFilledBySymbolAndPeriod(String symbol, Instant from, Instant to) {
+    public List<Transaction> findFilledBySymbolAndPeriod(String symbol, String exchangeId, Instant from, Instant to) {
         long start = System.nanoTime();
-        List<Transaction> result = transactionRepo.findFilledBySymbolAndPeriod(symbol, from, to).stream()
+        List<Transaction> result = transactionRepo.findFilledBySymbolAndPeriod(symbol, exchangeId, from, to).stream()
                 .map(StrategyRunnerEntityMapper::toDomain)
                 .toList();
-        log.trace("[REPO] transaction.findFilledBySymbolAndPeriod({}, {}, {}) - {}ms - {} results",
-                symbol, from, to, RepoTiming.elapsedMs(start), result.size());
+        log.trace("[REPO] transaction.findFilledBySymbolAndPeriod({}, {}, {}, {}) - {}ms - {} results",
+                symbol, exchangeId, from, to, RepoTiming.elapsedMs(start), result.size());
         return result;
     }
 
