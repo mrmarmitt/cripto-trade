@@ -4,6 +4,7 @@ import com.marmitt.core.dto.reconciliation.ReconciliationReportDto;
 import com.marmitt.core.dto.reconciliation.ReconciliationRequest;
 import com.marmitt.core.ports.inbound.reconciliation.ReconcileTradesPort;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnExpression;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -16,6 +17,7 @@ import java.time.Instant;
 @Slf4j
 @RestController
 @RequestMapping("/api/reconciliation")
+@ConditionalOnExpression("!'${binance.api-key:}'.isBlank() && !'${binance.api-secret:}'.isBlank()")
 public class ReconciliationController {
 
     private final ReconcileTradesPort reconcileTradesPort;
