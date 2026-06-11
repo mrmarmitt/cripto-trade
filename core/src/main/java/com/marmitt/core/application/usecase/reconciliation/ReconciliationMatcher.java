@@ -1,6 +1,7 @@
 package com.marmitt.core.application.usecase.reconciliation;
 
 import com.marmitt.core.domain.runner.Transaction;
+import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.dto.reconciliation.ExchangeSideDto;
 import com.marmitt.core.dto.reconciliation.LocalSideDto;
 import com.marmitt.core.dto.reconciliation.ReconciliationEntryDto;
@@ -82,7 +83,10 @@ final class ReconciliationMatcher {
                 boolean quoteMatch = exchangeSide.totalQuote().subtract(localExecValue).abs()
                         .compareTo(QUOTE_TOLERANCE) <= 0;
 
-                ReconciliationStatus status = qtyMatch && quoteMatch
+                // Compare trade side — a BUY fill against a SELL local record is a critical discrepancy
+                boolean sideMatch = exchangeSide.isBuy() == (local.getType() == TransactionType.BUY);
+
+                ReconciliationStatus status = qtyMatch && quoteMatch && sideMatch
                         ? ReconciliationStatus.MATCHED
                         : ReconciliationStatus.DIVERGENT;
 
@@ -126,6 +130,7 @@ final class ReconciliationMatcher {
         Instant firstFill = null;
         Instant lastFill = null;
         long orderId = 0;
+        boolean isBuy = fills.get(0).isBuy(); // all fills for an order share the same side
 
         for (TradeExecutionDto f : fills) {
             totalQty = totalQty.add(f.qty());
@@ -143,7 +148,7 @@ final class ReconciliationMatcher {
 
         return new ExchangeSideDto(
                 orderId, fills.size(), totalQty, avgPrice,
-                totalQuote, totalFees, feeAsset, firstFill, lastFill);
+                totalQuote, totalFees, feeAsset, firstFill, lastFill, isBuy);
     }
 
     private static LocalSideDto toLocalSide(Transaction t) {

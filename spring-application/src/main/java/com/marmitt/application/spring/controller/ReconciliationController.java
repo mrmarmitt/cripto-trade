@@ -16,7 +16,7 @@ import java.time.Instant;
 
 @Slf4j
 @RestController
-@RequestMapping("/reconciliation")
+@RequestMapping("/api/reconciliation")
 @ConditionalOnBean(ReconcileTradesPort.class)
 public class ReconciliationController {
 

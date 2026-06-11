@@ -66,6 +66,38 @@ class ReconciliationMatcherTest {
     }
 
     @Test
+    void matchReturnsDivergentWhenSideDiffers() {
+        // Exchange fill is BUY but local transaction is SELL → side mismatch
+        TradeExecutionDto buyFill = new TradeExecutionDto(
+                "t1", ORDER_ID, null, "BTCUSDT",
+                new BigDecimal("50000"), new BigDecimal("0.01"), new BigDecimal("500"),
+                new BigDecimal("0.0001"), "BNB", FILL_AT, true /* isBuy */);
+        Transaction sellLocal = Transaction.reconstitute()
+                .id(UUID.randomUUID())
+                .runnerId(UUID.randomUUID())
+                .clientOrderId("client-1")
+                .exchangeOrderId(String.valueOf(ORDER_ID))
+                .status(TransactionStatus.FILLED)
+                .type(TransactionType.SELL)   // opposite side
+                .symbol("BTCUSDT")
+                .quantity(new BigDecimal("0.01"))
+                .executedQuantity(new BigDecimal("0.01"))
+                .price(new BigDecimal("50000"))
+                .executedPrice(new BigDecimal("50000"))
+                .total(new BigDecimal("500"))
+                .confidence(null).reasoning(null).targetLotId(null)
+                .requestedAt(FILL_AT).updatedAt(FILL_AT).executedAt(FILL_AT)
+                .rejectReason(null).version(0L)
+                .build();
+
+        ReconciliationReportDto report = ReconciliationMatcher.match(
+                List.of(buyFill), List.of(sellLocal), request(true));
+
+        assertEquals(1, report.summary().divergent());
+        assertEquals(ReconciliationStatus.DIVERGENT, report.entries().get(0).status());
+    }
+
+    @Test
     void matchReturnsMatchedWhenQtyAndQuoteAreBothWithinTolerance() {
         // qty diff = 0.000001 (≤ QTY_TOLERANCE), quote diff = 0.005 (< QUOTE_TOLERANCE 0.01)
         ReconciliationReportDto report = ReconciliationMatcher.match(

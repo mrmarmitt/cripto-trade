@@ -41,7 +41,7 @@ class ReconciliationControllerTest {
 
         when(reconcileTradesPort.reconcile(any(ReconciliationRequest.class))).thenReturn(report);
 
-        mockMvc.perform(get("/reconciliation")
+        mockMvc.perform(get("/api/reconciliation")
                         .param("symbol", "BTCUSDT")
                         .param("from", "2026-01-01T00:00:00Z")
                         .param("to", "2026-01-02T00:00:00Z"))
@@ -54,7 +54,7 @@ class ReconciliationControllerTest {
 
     @Test
     void reconcile_returnsBadRequestWhenFromIsAfterTo() throws Exception {
-        mockMvc.perform(get("/reconciliation")
+        mockMvc.perform(get("/api/reconciliation")
                         .param("symbol", "BTCUSDT")
                         .param("from", "2026-01-02T00:00:00Z")
                         .param("to", "2026-01-01T00:00:00Z"))
@@ -66,7 +66,7 @@ class ReconciliationControllerTest {
         when(reconcileTradesPort.reconcile(any(ReconciliationRequest.class)))
                 .thenThrow(new RuntimeException("Binance timeout"));
 
-        mockMvc.perform(get("/reconciliation")
+        mockMvc.perform(get("/api/reconciliation")
                         .param("symbol", "BTCUSDT")
                         .param("from", "2026-01-01T00:00:00Z")
                         .param("to", "2026-01-02T00:00:00Z"))
@@ -83,7 +83,7 @@ class ReconciliationControllerTest {
                 List.of());
         when(reconcileTradesPort.reconcile(any(ReconciliationRequest.class))).thenReturn(report);
 
-        mockMvc.perform(get("/reconciliation")
+        mockMvc.perform(get("/api/reconciliation")
                         .param("symbol", "BTCUSDT")
                         .param("from", "2026-01-01T00:00:00Z")
                         .param("to", "2026-01-02T00:00:00Z")

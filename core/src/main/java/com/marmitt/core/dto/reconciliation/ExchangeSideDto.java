@@ -13,5 +13,6 @@ public record ExchangeSideDto(
         BigDecimal totalFees,
         String feeAsset,
         Instant firstFillAt,
-        Instant lastFillAt
+        Instant lastFillAt,
+        boolean isBuy
 ) {}
