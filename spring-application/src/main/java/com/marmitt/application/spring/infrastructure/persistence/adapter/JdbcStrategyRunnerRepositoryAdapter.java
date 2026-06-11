@@ -367,6 +367,17 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
         return locked;
     }
 
+    @Override
+    public List<Transaction> findFilledBySymbolAndPeriod(String symbol, String exchangeId, Instant from, Instant to) {
+        long start = System.nanoTime();
+        List<Transaction> result = transactionRepo.findFilledBySymbolAndPeriod(symbol, exchangeId, from, to).stream()
+                .map(StrategyRunnerEntityMapper::toDomain)
+                .toList();
+        log.trace("[REPO] transaction.findFilledBySymbolAndPeriod({}, {}, {}, {}) - {}ms - {} results",
+                symbol, exchangeId, from, to, RepoTiming.elapsedMs(start), result.size());
+        return result;
+    }
+
     private static void validateOpenedByInvariant(Position position) {
         PositionStatus status = position.getStatus();
         boolean active = status == PositionStatus.OPEN || status == PositionStatus.CLOSING;

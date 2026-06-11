@@ -53,6 +53,7 @@ public class RunnerTransactionEntity {
     private Instant requestedAt;
     private Instant updatedAt;
     private Instant executedAt;
+    private Instant lastPartialFillAt;
     private String rejectReason;
 
     @Version
