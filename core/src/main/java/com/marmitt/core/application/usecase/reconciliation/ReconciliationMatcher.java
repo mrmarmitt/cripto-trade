@@ -73,6 +73,10 @@ final class ReconciliationMatcher {
                 BigDecimal localQty = local.getExecutedQuantity() != null
                         ? local.getExecutedQuantity()
                         : BigDecimal.ZERO;
+                // NOTE: localQty is cumulative (all-time); exchangeSide.executedQty() is windowed.
+                // Orders with fills on both sides of the from/to boundary will appear DIVERGENT
+                // even when correct. Fixing this requires fetching all fills per order from Binance
+                // (outside T18 scope; tracked as a known limitation of window-scoped reconciliation).
                 boolean qtyMatch = exchangeSide.executedQty().subtract(localQty).abs()
                         .compareTo(QTY_TOLERANCE) <= 0;
 

@@ -134,8 +134,42 @@ class ReconciliationIntegrationTest {
         assertEquals("client-3", result.get(2).getClientOrderId());
     }
 
+    @Test
+    void findFilledBySymbolAndPeriod_includesCanceledTransactionsWithPartialExecution() {
+        Instant updatedAt = Instant.parse("2026-01-01T10:00:00Z");
+        insertTransactionWithStatus("BTCUSDT", "BINANCE", "client-canceled-partial",
+                new BigDecimal("0.005"), "CANCELED", updatedAt);
+
+        List<Transaction> result = strategyRunnerRepository.findFilledBySymbolAndPeriod(
+                "BTCUSDT", "BINANCE",
+                Instant.parse("2026-01-01T00:00:00Z"),
+                Instant.parse("2026-01-02T00:00:00Z"));
+
+        assertEquals(1, result.size());
+        assertEquals("client-canceled-partial", result.get(0).getClientOrderId());
+    }
+
+    @Test
+    void findFilledBySymbolAndPeriod_excludesCanceledTransactionsWithNoExecution() {
+        Instant updatedAt = Instant.parse("2026-01-01T10:00:00Z");
+        insertTransactionWithStatus("BTCUSDT", "BINANCE", "client-canceled-zero",
+                BigDecimal.ZERO, "CANCELED", updatedAt);
+
+        List<Transaction> result = strategyRunnerRepository.findFilledBySymbolAndPeriod(
+                "BTCUSDT", "BINANCE",
+                Instant.parse("2026-01-01T00:00:00Z"),
+                Instant.parse("2026-01-02T00:00:00Z"));
+
+        assertEquals(0, result.size());
+    }
+
     private void insertFilledTransaction(String symbol, String exchangeId, String clientOrderId,
                                          BigDecimal qty, Instant executedAt) {
+        insertTransactionWithStatus(symbol, exchangeId, clientOrderId, qty, "FILLED", executedAt);
+    }
+
+    private void insertTransactionWithStatus(String symbol, String exchangeId, String clientOrderId,
+                                              BigDecimal executedQty, String status, Instant updatedAt) {
         UUID portfolioId = UUID.randomUUID();
         UUID runnerId = UUID.randomUUID();
         String shortCode = UUID.randomUUID().toString().substring(0, 4).toUpperCase();
@@ -153,14 +187,15 @@ class ReconciliationIntegrationTest {
                 "0.1, 1, 1, false, NOW())",
                 runnerId, portfolioId, shortCode, UUID.randomUUID(), symbol, exchangeId);
 
-        // executed_at used as the time filter (COALESCE(executed_at, updated_at)); for PARTIAL, updated_at would be used
+        // For FILLED: executed_at is set (time filter uses it). For CANCELED/PARTIAL: uses updated_at.
+        boolean isFilled = "FILLED".equals(status);
         jdbcTemplate.update(
                 "INSERT INTO transactions (id, runner_id, client_order_id, exchange_order_id, status, type, " +
                 "symbol, quantity, executed_quantity, price, executed_price, total, requested_at, updated_at, executed_at, version) " +
-                "VALUES (?, ?, ?, '100234', 'FILLED', 'BUY', ?, ?, ?, 50000, 50000, ?, NOW(), ?, ?, 0)",
-                UUID.randomUUID(), runnerId, clientOrderId, symbol,
-                qty, qty, qty.multiply(new BigDecimal("50000")),
-                Timestamp.from(executedAt),
-                Timestamp.from(executedAt));
+                "VALUES (?, ?, ?, '100234', ?, 'BUY', ?, 0.01, ?, 50000, 50000, ?, NOW(), ?, ?, 0)",
+                UUID.randomUUID(), runnerId, clientOrderId, status, symbol,
+                executedQty, executedQty.multiply(new BigDecimal("50000")),
+                Timestamp.from(updatedAt),
+                isFilled ? Timestamp.from(updatedAt) : null);
     }
 }
