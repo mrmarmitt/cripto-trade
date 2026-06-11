@@ -14,7 +14,6 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.util.ArrayList;
-import java.util.Comparator;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -23,6 +22,8 @@ import java.util.stream.Collectors;
 final class ReconciliationMatcher {
 
     private static final BigDecimal QTY_TOLERANCE = new BigDecimal("0.000001");
+    // Absolute tolerance for quote value comparison (e.g. USDT rounding differences from partial fills)
+    private static final BigDecimal QUOTE_TOLERANCE = new BigDecimal("0.01");
 
     private ReconciliationMatcher() {}
 
@@ -31,37 +32,57 @@ final class ReconciliationMatcher {
             List<Transaction> localTransactions,
             ReconciliationRequest request) {
 
-        Map<String, List<TradeExecutionDto>> fillsByClientOrderId = exchangeFills.stream()
-                .filter(f -> f.clientOrderId() != null && !f.clientOrderId().isBlank())
+        // Binance GET /api/v3/myTrades does not return clientOrderId; group by orderId (always present).
+        Map<String, List<TradeExecutionDto>> fillsByOrderId = exchangeFills.stream()
                 .collect(Collectors.groupingBy(
-                        TradeExecutionDto::clientOrderId,
+                        f -> String.valueOf(f.exchangeOrderId()),
                         LinkedHashMap::new,
                         Collectors.toList()));
 
-        Map<String, Transaction> localByClientOrderId = localTransactions.stream()
-                .collect(Collectors.toMap(Transaction::getClientOrderId, t -> t, (a, b) -> a, LinkedHashMap::new));
+        // Index submitted local transactions by their exchangeOrderId (set on order submission).
+        // Transactions without an exchangeOrderId were never successfully submitted.
+        Map<String, Transaction> localByOrderId = new LinkedHashMap<>();
+        List<Transaction> neverSubmitted = new ArrayList<>();
+        for (Transaction t : localTransactions) {
+            if (t.getExchangeOrderId() != null && !t.getExchangeOrderId().isBlank()) {
+                localByOrderId.put(t.getExchangeOrderId(), t);
+            } else {
+                neverSubmitted.add(t);
+            }
+        }
 
         List<ReconciliationEntryDto> entries = new ArrayList<>();
         int matched = 0, divergent = 0, exchangeOnly = 0, localOnly = 0;
 
-        for (Map.Entry<String, List<TradeExecutionDto>> e : fillsByClientOrderId.entrySet()) {
-            String clientOrderId = e.getKey();
+        for (Map.Entry<String, List<TradeExecutionDto>> e : fillsByOrderId.entrySet()) {
             ExchangeSideDto exchangeSide = aggregate(e.getValue());
-            Transaction local = localByClientOrderId.remove(clientOrderId);
+            Transaction local = localByOrderId.remove(e.getKey());
 
             if (local == null) {
                 exchangeOnly++;
+                // Use exchange clientOrderId when available (e.g. some exchange environments return it)
+                String displayId = e.getValue().get(0).clientOrderId() != null
+                        ? e.getValue().get(0).clientOrderId()
+                        : "order-" + e.getKey();
                 entries.add(new ReconciliationEntryDto(
-                        ReconciliationStatus.EXCHANGE_ONLY, clientOrderId, exchangeSide, null));
+                        ReconciliationStatus.EXCHANGE_ONLY, displayId, exchangeSide, null));
             } else {
                 LocalSideDto localSide = toLocalSide(local);
+
                 BigDecimal localQty = local.getExecutedQuantity() != null
                         ? local.getExecutedQuantity()
                         : BigDecimal.ZERO;
                 boolean qtyMatch = exchangeSide.executedQty().subtract(localQty).abs()
                         .compareTo(QTY_TOLERANCE) <= 0;
 
-                ReconciliationStatus status = qtyMatch
+                // Compare executed quote value to catch price discrepancies (same qty, wrong price)
+                BigDecimal localExecValue = local.getExecutedPrice() != null && local.getExecutedQuantity() != null
+                        ? local.getExecutedPrice().multiply(local.getExecutedQuantity())
+                        : local.getTotal();
+                boolean quoteMatch = exchangeSide.totalQuote().subtract(localExecValue).abs()
+                        .compareTo(QUOTE_TOLERANCE) <= 0;
+
+                ReconciliationStatus status = qtyMatch && quoteMatch
                         ? ReconciliationStatus.MATCHED
                         : ReconciliationStatus.DIVERGENT;
 
@@ -69,26 +90,25 @@ final class ReconciliationMatcher {
                 else divergent++;
 
                 if (status != ReconciliationStatus.MATCHED || request.includeMatched()) {
-                    entries.add(new ReconciliationEntryDto(status, clientOrderId, exchangeSide, localSide));
+                    entries.add(new ReconciliationEntryDto(
+                            status, local.getClientOrderId(), exchangeSide, localSide));
                 }
             }
         }
 
-        // Remaining local transactions have no exchange confirmation
-        for (Transaction local : localByClientOrderId.values()) {
+        // Submitted local transactions with no matching exchange fill
+        for (Transaction local : localByOrderId.values()) {
             localOnly++;
             entries.add(new ReconciliationEntryDto(
-                    ReconciliationStatus.LOCAL_ONLY,
-                    local.getClientOrderId(),
-                    null,
-                    toLocalSide(local)));
+                    ReconciliationStatus.LOCAL_ONLY, local.getClientOrderId(), null, toLocalSide(local)));
         }
 
-        // Exchange-only entries from Binance without our clientOrderId format (manual trades, etc.)
-        long unmatchedExchangeCount = exchangeFills.stream()
-                .filter(f -> f.clientOrderId() == null || f.clientOrderId().isBlank())
-                .count();
-        exchangeOnly += (int) unmatchedExchangeCount;
+        // Never-submitted local transactions (no exchangeOrderId) — always LOCAL_ONLY
+        for (Transaction local : neverSubmitted) {
+            localOnly++;
+            entries.add(new ReconciliationEntryDto(
+                    ReconciliationStatus.LOCAL_ONLY, local.getClientOrderId(), null, toLocalSide(local)));
+        }
 
         int total = matched + divergent + exchangeOnly + localOnly;
         ReconciliationSummaryDto summary = new ReconciliationSummaryDto(
