@@ -25,6 +25,8 @@ import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.dao.OptimisticLockingFailureException;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
@@ -52,8 +54,11 @@ import java.util.concurrent.Executor;
  *
  * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 6.2.1, 6.3</a>
  */
+@Slf4j
 @Configuration
 public class RunnerConfig {
+
+    private static final int CONCILIATION_MAX_RETRIES = 3;
 
     /**
      * Retorna {@code OrderConciliationUseCase} (tipo concreto) para que Spring possa injetá-lo
@@ -75,12 +80,21 @@ public class RunnerConfig {
         return new ConciliationOrderUpdateExecutor() {
             @Override
             public void execute(OrderDataDto orderData) {
-                conciliationOrderUpdate.execute(
-                        orderData,
-                        this::submitTransaction,
-                        this::processFill,
-                        this::releaseMargin
-                );
+                for (int attempt = 1; attempt <= CONCILIATION_MAX_RETRIES; attempt++) {
+                    try {
+                        conciliationOrderUpdate.execute(
+                                orderData,
+                                this::submitTransaction,
+                                this::processFill,
+                                this::releaseMargin
+                        );
+                        return;
+                    } catch (OptimisticLockingFailureException e) {
+                        if (attempt == CONCILIATION_MAX_RETRIES) throw e;
+                        log.warn("conciliation: optimistic lock retry attempt={}/{} clientOrderId={}",
+                                attempt, CONCILIATION_MAX_RETRIES, orderData.clientOrderId());
+                    }
+                }
             }
 
             @Override

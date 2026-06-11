@@ -60,7 +60,7 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
     }
 
     @Override
-    public StrategyOutputDto executeStrategy(StrategyInputDto input, StrategyContextDto portfolioContext) {
+    public synchronized StrategyOutputDto executeStrategy(StrategyInputDto input, StrategyContextDto portfolioContext) {
         BigDecimal currentPrice = input.currentPrice();
         updateHistory(currentPrice);
 
