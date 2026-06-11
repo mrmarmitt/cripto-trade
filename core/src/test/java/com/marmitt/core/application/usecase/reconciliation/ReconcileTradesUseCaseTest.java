@@ -25,6 +25,7 @@ import static org.mockito.Mockito.when;
 class ReconcileTradesUseCaseTest {
 
     private static final String SYMBOL = "BTCUSDT";
+    private static final String EXCHANGE_ID = "BINANCE";
     private static final Instant FROM = Instant.parse("2026-01-01T00:00:00Z");
     private static final Instant TO = Instant.parse("2026-01-02T00:00:00Z");
 
@@ -33,10 +34,9 @@ class ReconcileTradesUseCaseTest {
     private final ReconcileTradesUseCase useCase =
             new ReconcileTradesUseCase(tradeHistoryQueryPort, strategyRunnerRepository);
 
-    private static final String EXCHANGE_ID = "BINANCE";
-
     @Test
     void reconcile_delegatesToBothPortsWithCorrectArgumentsAndReturnsMatchedReport() {
+        when(tradeHistoryQueryPort.getExchangeName()).thenReturn(EXCHANGE_ID);
         ReconciliationRequest request = new ReconciliationRequest(SYMBOL, EXCHANGE_ID, FROM, TO, true);
 
         // Exchange fill with orderId=100234; local tx with exchangeOrderId="100234" → MATCHED
@@ -53,6 +53,7 @@ class ReconcileTradesUseCaseTest {
 
     @Test
     void reconcile_returnsEmptyReportWhenBothPortsReturnEmpty() {
+        when(tradeHistoryQueryPort.getExchangeName()).thenReturn(EXCHANGE_ID);
         ReconciliationRequest request = new ReconciliationRequest(SYMBOL, EXCHANGE_ID, FROM, TO, false);
         when(tradeHistoryQueryPort.fetchTrades(SYMBOL, FROM, TO)).thenReturn(List.of());
         when(strategyRunnerRepository.findFilledBySymbolAndPeriod(SYMBOL, EXCHANGE_ID, FROM, TO)).thenReturn(List.of());
@@ -64,7 +65,16 @@ class ReconcileTradesUseCaseTest {
     }
 
     @Test
+    void reconcile_throwsWhenExchangeIdDoesNotMatchConfiguredAdapter() {
+        when(tradeHistoryQueryPort.getExchangeName()).thenReturn("BINANCE");
+        ReconciliationRequest request = new ReconciliationRequest(SYMBOL, "COINBASE", FROM, TO, false);
+
+        assertThrows(IllegalArgumentException.class, () -> useCase.reconcile(request));
+    }
+
+    @Test
     void reconcile_propagatesExceptionFromExchangePort() {
+        when(tradeHistoryQueryPort.getExchangeName()).thenReturn(EXCHANGE_ID);
         ReconciliationRequest request = new ReconciliationRequest(SYMBOL, EXCHANGE_ID, FROM, TO, false);
         when(tradeHistoryQueryPort.fetchTrades(SYMBOL, FROM, TO))
                 .thenThrow(new RuntimeException("Exchange unreachable"));

@@ -58,6 +58,9 @@ public class ReconciliationController {
                     report.summary().exchangeOnly(),
                     report.summary().localOnly());
             return ResponseEntity.ok(report);
+        } catch (IllegalArgumentException e) {
+            log.warn("reconciliation: bad request symbol={} error={}", symbol, e.getMessage());
+            return ResponseEntity.badRequest().body(e.getMessage());
         } catch (RuntimeException e) {
             log.error("reconciliation: failed symbol={} error={}", symbol, e.getMessage(), e);
             return ResponseEntity.status(502).body("Exchange query failed: " + e.getMessage());

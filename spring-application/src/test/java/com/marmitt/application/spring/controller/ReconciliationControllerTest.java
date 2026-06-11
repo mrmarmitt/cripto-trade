@@ -64,6 +64,19 @@ class ReconciliationControllerTest {
     }
 
     @Test
+    void reconcile_returns400WhenExchangeIdNotSupported() throws Exception {
+        when(reconcileTradesPort.reconcile(any(ReconciliationRequest.class)))
+                .thenThrow(new IllegalArgumentException("Exchange 'COINBASE' is not supported"));
+
+        mockMvc.perform(get("/api/reconciliation")
+                        .param("symbol", "BTCUSDT")
+                        .param("exchangeId", "COINBASE")
+                        .param("from", "2026-01-01T00:00:00Z")
+                        .param("to", "2026-01-02T00:00:00Z"))
+                .andExpect(status().isBadRequest());
+    }
+
+    @Test
     void reconcile_returns502WhenExchangeThrows() throws Exception {
         when(reconcileTradesPort.reconcile(any(ReconciliationRequest.class)))
                 .thenThrow(new RuntimeException("Binance timeout"));

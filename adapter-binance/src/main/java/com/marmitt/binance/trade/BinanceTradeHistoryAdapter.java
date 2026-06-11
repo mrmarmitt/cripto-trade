@@ -19,6 +19,8 @@ import java.util.List;
 public class BinanceTradeHistoryAdapter implements TradeHistoryQueryPort {
 
     private static final int PAGE_LIMIT = 1000;
+    // Binance caps startTime/endTime window at 24 hours for GET /api/v3/myTrades
+    private static final long WINDOW_MS = 24L * 60 * 60 * 1000;
 
     private final BinanceRestRequestBuilder requestBuilder;
     private final HttpClientPort httpClient;
@@ -33,28 +35,47 @@ public class BinanceTradeHistoryAdapter implements TradeHistoryQueryPort {
     }
 
     @Override
+    public String getExchangeName() {
+        return "BINANCE";
+    }
+
+    @Override
     public List<TradeExecutionDto> fetchTrades(String symbol, Instant from, Instant to) {
         List<TradeExecutionDto> all = new ArrayList<>();
-        long startTime = from.toEpochMilli();
-        long endTime = to.toEpochMilli();
+        long windowStart = from.toEpochMilli();
+        long totalEnd = to.toEpochMilli();
 
-        List<TradeExecutionDto> page = fetchPage(requestBuilder.buildMyTrades(symbol, startTime, endTime));
+        while (windowStart <= totalEnd) {
+            // Keep each Binance request within the 24-hour limit.
+            // Last window uses totalEnd so it always covers the requested endpoint exactly.
+            boolean isLastWindow = (totalEnd - windowStart) <= WINDOW_MS;
+            long windowEnd = isLastWindow ? totalEnd : windowStart + WINDOW_MS - 1;
+            fetchWindowInto(symbol, windowStart, windowEnd, all);
+            if (isLastWindow) break;
+            windowStart = windowEnd + 1;
+        }
+
+        log.debug("reconciliation: fetched {} trades for symbol={} from={} to={}", all.size(), symbol, from, to);
+        return all;
+    }
+
+    private void fetchWindowInto(String symbol, long startMs, long endMs, List<TradeExecutionDto> all) {
+        Instant windowEndInstant = Instant.ofEpochMilli(endMs);
+
+        List<TradeExecutionDto> page = fetchPage(requestBuilder.buildMyTrades(symbol, startMs, endMs));
         all.addAll(page);
 
         // Paginate: if full page returned, advance using fromId of last trade
         while (page.size() == PAGE_LIMIT) {
             long lastId = Long.parseLong(page.getLast().exchangeTradeId());
             page = fetchPage(requestBuilder.buildMyTradesFromId(symbol, lastId + 1));
-            // Filter client-side to stay within endTime since fromId ignores time range
+            // Filter client-side to stay within this window's end (fromId ignores time range)
             page = page.stream()
-                    .filter(t -> !t.executedAt().isAfter(to))
+                    .filter(t -> !t.executedAt().isAfter(windowEndInstant))
                     .toList();
             all.addAll(page);
             if (page.size() < PAGE_LIMIT) break;
         }
-
-        log.debug("reconciliation: fetched {} trades for symbol={} from={} to={}", all.size(), symbol, from, to);
-        return all;
     }
 
     private List<TradeExecutionDto> fetchPage(RestRequest req) {

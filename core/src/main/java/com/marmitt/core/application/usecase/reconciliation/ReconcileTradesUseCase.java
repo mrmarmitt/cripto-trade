@@ -23,6 +23,12 @@ public class ReconcileTradesUseCase implements ReconcileTradesPort {
 
     @Override
     public ReconciliationReportDto reconcile(ReconciliationRequest request) {
+        if (!tradeHistoryQueryPort.getExchangeName().equalsIgnoreCase(request.exchangeId())) {
+            throw new IllegalArgumentException(
+                    "Exchange '" + request.exchangeId() + "' is not supported; "
+                    + "configured adapter serves '" + tradeHistoryQueryPort.getExchangeName() + "'");
+        }
+
         List<TradeExecutionDto> exchangeFills = tradeHistoryQueryPort.fetchTrades(
                 request.symbol(), request.from(), request.to());
 

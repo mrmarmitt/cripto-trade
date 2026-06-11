@@ -11,6 +11,9 @@ import java.util.List;
  */
 public interface TradeHistoryQueryPort {
 
+    /** Exchange identifier this adapter serves (e.g. "BINANCE"). Case-insensitive. */
+    String getExchangeName();
+
     /**
      * Fetches all fills for {@code symbol} executed within [{@code from}, {@code to}].
      * Multiple fills for the same order (partial fills) are returned as separate entries.

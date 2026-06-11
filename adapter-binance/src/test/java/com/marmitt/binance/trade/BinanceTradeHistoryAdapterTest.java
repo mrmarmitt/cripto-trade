@@ -128,6 +128,35 @@ class BinanceTradeHistoryAdapterTest {
         assertThrows(RuntimeException.class, () -> adapter.fetchTrades(SYMBOL, FROM, TO));
     }
 
+    @Test
+    void fetchTrades_issuesSingleRequestWhenWindowIsWithin24Hours() throws IOException {
+        // FROM → TO is exactly 24h; should produce 1 buildMyTrades call, not 2
+        when(requestBuilder.buildMyTrades(anyString(), anyLong(), anyLong())).thenReturn(DUMMY_REQ);
+        when(httpClient.get(any(), any())).thenReturn(new HttpClientPort.HttpResponse(200, "[]"));
+
+        adapter.fetchTrades(SYMBOL, FROM, TO);
+
+        verify(requestBuilder, times(1)).buildMyTrades(anyString(), anyLong(), anyLong());
+    }
+
+    @Test
+    void fetchTrades_splitsIntoTwoWindowsWhenPeriodSpans48Hours() throws IOException {
+        // 48h → 2 separate buildMyTrades calls (one per 24h window)
+        Instant from48 = Instant.parse("2026-01-01T00:00:00Z");
+        Instant to48 = Instant.parse("2026-01-03T00:00:00Z");
+        when(requestBuilder.buildMyTrades(anyString(), anyLong(), anyLong())).thenReturn(DUMMY_REQ);
+        when(httpClient.get(any(), any())).thenReturn(new HttpClientPort.HttpResponse(200, "[]"));
+
+        adapter.fetchTrades(SYMBOL, from48, to48);
+
+        verify(requestBuilder, times(2)).buildMyTrades(anyString(), anyLong(), anyLong());
+    }
+
+    @Test
+    void getExchangeName_returnsBinance() {
+        assertEquals("BINANCE", adapter.getExchangeName());
+    }
+
     private static String buildTradeJsonArray(int count, long startId) {
         StringBuilder sb = new StringBuilder("[");
         for (int i = 0; i < count; i++) {
