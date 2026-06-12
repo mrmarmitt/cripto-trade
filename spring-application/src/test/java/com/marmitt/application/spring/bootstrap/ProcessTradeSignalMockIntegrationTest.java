@@ -59,11 +59,13 @@ class ProcessTradeSignalMockIntegrationTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void cleanDatabase() {
-        exchangeAdapterRepository.findAdapter("MOCK")
+        MockExchangeAdapter mock = (MockExchangeAdapter) exchangeAdapterRepository
+                .findAdapter("MOCK")
                 .map(d -> d.streaming())
                 .filter(MockExchangeAdapter.class::isInstance)
                 .map(MockExchangeAdapter.class::cast)
-                .ifPresent(MockExchangeAdapter::reset);
+                .orElseThrow(() -> new IllegalStateException("MOCK adapter not registered"));
+        mock.reset();
         jdbcTemplate.execute("TRUNCATE TABLE portfolios CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE capital_event_ledger");
     }
