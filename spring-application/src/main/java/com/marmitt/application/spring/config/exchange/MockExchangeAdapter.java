@@ -194,6 +194,10 @@ public class MockExchangeAdapter implements ExchangeStreamingPort,
         runtime.clearQueryFailurePlans();
     }
 
+    public void reset() {
+        runtime.reset();
+    }
+
     private static void simulateDelayIfNeeded(long delayMs) {
         if (delayMs <= 0) {
             return;

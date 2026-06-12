@@ -1,6 +1,6 @@
 package com.marmitt.application.spring.bootstrap;
 
-import com.marmitt.application.spring.CTradeApplication;
+import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.portfolio.request.CreatePortfolioRequest;
@@ -11,18 +11,12 @@ import com.marmitt.core.dto.websocket.data.MarketDataDto;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
+import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.annotation.DirtiesContext;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -38,13 +32,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
-@Testcontainers
-@SpringBootTest(
-        classes = CTradeApplication.class,
-        webEnvironment = SpringBootTest.WebEnvironment.NONE
-)
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
-class OrderLifecycleMockIntegrationTest {
+class OrderLifecycleMockIntegrationTest extends AbstractIntegrationTest {
 
     private static final UUID SMA_STRATEGY_ID =
             UUID.fromString("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
@@ -54,22 +42,6 @@ class OrderLifecycleMockIntegrationTest {
     // Sentinel de regressao: no estado atual, SELL FILLED pode deixar pequeno residual
     // de reserva por diferenca entre custo reservado e custo efetivo consolidado.
     private static final BigDecimal MAX_ACCEPTABLE_RESERVED_RESIDUAL = new BigDecimal("2.00000000");
-
-    @Container
-    @SuppressWarnings("resource")
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withDatabaseName("ctrade")
-            .withUsername("ctrade")
-            .withPassword("ctrade123");
-
-    @DynamicPropertySource
-    static void registerProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
-        registry.add("spring.flyway.enabled", () -> "true");
-        registry.add("runner.boot.orchestrator-enabled", () -> "false");
-    }
 
     @Autowired
     private CreatePortfolioPort createPortfolioPort;
@@ -84,10 +56,18 @@ class OrderLifecycleMockIntegrationTest {
     private StrategyRunnerRepositoryPort strategyRunnerRepository;
 
     @Autowired
+    private ExchangeAdapterRepositoryPort exchangeAdapterRepository;
+
+    @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @BeforeEach
     void cleanDatabase() {
+        exchangeAdapterRepository.findAdapter("MOCK")
+                .map(d -> d.streaming())
+                .filter(MockExchangeAdapter.class::isInstance)
+                .map(MockExchangeAdapter.class::cast)
+                .ifPresent(MockExchangeAdapter::reset);
         jdbcTemplate.execute("TRUNCATE TABLE portfolios CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE capital_event_ledger");
     }

@@ -1,6 +1,5 @@
 package com.marmitt.application.spring.bootstrap;
 
-import com.marmitt.application.spring.CTradeApplication;
 import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
@@ -27,14 +26,9 @@ import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.sql.Timestamp;
@@ -48,13 +42,7 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@Testcontainers
-@SpringBootTest(
-        classes = CTradeApplication.class,
-        webEnvironment = SpringBootTest.WebEnvironment.NONE
-)
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
-class RunnerBootRecoveryIntegrationTest {
+class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
 
     private static final UUID SMA_STRATEGY_ID =
             UUID.fromString("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
@@ -63,20 +51,8 @@ class RunnerBootRecoveryIntegrationTest {
     private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(8);
     private static final long ZOMBIE_TTL_MS = 300_000L;
 
-    @Container
-    @SuppressWarnings("resource")
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withDatabaseName("ctrade")
-            .withUsername("ctrade")
-            .withPassword("ctrade123");
-
     @DynamicPropertySource
-    static void registerProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
-        registry.add("spring.flyway.enabled", () -> "true");
-        registry.add("runner.boot.orchestrator-enabled", () -> "false");
+    static void registerRecoveryProperties(DynamicPropertyRegistry registry) {
         registry.add("runner.boot.phase2.portfolio.reservation-ttl.ttl-ms", () -> ZOMBIE_TTL_MS);
         registry.add("runner.boot.phase3.exchange-query-timeout-ms", () -> 500L);
         registry.add("runner.boot.phase3.exchange-query-max-attempts", () -> 3);
@@ -111,6 +87,7 @@ class RunnerBootRecoveryIntegrationTest {
 
     @BeforeEach
     void cleanDatabase() {
+        getMockExchangeAdapter().reset();
         jdbcTemplate.execute("TRUNCATE TABLE portfolios CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE capital_event_ledger");
     }
