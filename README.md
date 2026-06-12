@@ -24,7 +24,8 @@ Sistema modular de trading com arquitetura hexagonal para conexão WebSocket com
 - **Linguagem**: Java 21
 - **Build**: Gradle multi-módulo
 - **WebSocket**: OkHttp3
-- **Database**: H2 (em memória)
+- **Database**: PostgreSQL 16
+- **Observabilidade**: Prometheus + Grafana + Loki
 - **Documentação**: Swagger/OpenAPI 3
 
 ## Arquitetura
@@ -98,10 +99,62 @@ Use o wrapper documentado abaixo no PowerShell:
 
 O script `scripts/gradle-run.ps1` fixa `GRADLE_USER_HOME` em `.gradle-local` e faz retry curto quando encontrar lock de execucao concorrente.
 
+### Variáveis de ambiente
+
+| Variável | Obrigatória | Default | Descrição |
+|---|---|---|---|
+| `BINANCE_API_KEY` | Não* | `""` | API Key da Binance. Sem ela o adapter Binance não é carregado |
+| `BINANCE_API_SECRET` | Não* | `""` | API Secret da Binance. Obrigatório junto com `BINANCE_API_KEY` |
+| `LOKI_URL` | Não | `http://loki:3100` | URL do Loki para envio de logs. Usar `http://localhost:3100` ao rodar fora do Docker |
+| `SPRING_PROFILES_ACTIVE` | Não | _(nenhum)_ | Perfis Spring ativos. Usar `testnet` para apontar para a Binance Testnet |
+| `DB_HOST` | Não | `localhost` | Host do PostgreSQL |
+| `DB_PORT` | Não | `5432` | Porta do PostgreSQL |
+| `DB_NAME` | Não | `ctrade` | Nome do banco |
+| `DB_USERNAME` | Não | `ctrade` | Usuário do banco |
+| `DB_PASSWORD` | Não | `ctrade123` | Senha do banco |
+| `ADMIN_API_KEY` | Não | `""` | Chave para endpoints administrativos protegidos |
+
+*O par `BINANCE_API_KEY` + `BINANCE_API_SECRET` é necessário para qualquer operação real com a Binance.
+
+#### Exemplo — IntelliJ Run Configuration
+
+Adicione em **Run > Edit Configurations > Environment variables**:
+
+```
+BINANCE_API_KEY=sua-chave
+BINANCE_API_SECRET=seu-secret
+SPRING_PROFILES_ACTIVE=testnet
+LOKI_URL=http://localhost:3100
+```
+
+#### Exemplo — linha de comando
+
+```bash
+BINANCE_API_KEY=sua-chave \
+BINANCE_API_SECRET=seu-secret \
+SPRING_PROFILES_ACTIVE=testnet \
+LOKI_URL=http://localhost:3100 \
+./gradlew :spring-application:bootRun
+```
+
+### Stack de infra (Docker)
+
+```bash
+# Apenas banco de dados
+docker compose up -d
+
+# Banco + observabilidade (Prometheus, Grafana, Loki)
+docker compose --profile observability up -d
+
+# Stack completa incluindo app containerizada
+docker compose --profile observability --profile app up -d
+```
+
+Grafana disponível em `http://localhost:3000` (admin / ctrade123).
+
 ### Configuração
 
 - **Porta**: 8080
-- **Database**: H2 em memória
 - **Swagger**: `/swagger-ui/index.html`
 
 ## APIs
