@@ -1,6 +1,5 @@
 package com.marmitt.application.spring.bootstrap;
 
-import com.marmitt.application.spring.CTradeApplication;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.runner.ClientOrderId;
@@ -22,14 +21,7 @@ import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.annotation.DirtiesContext;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -42,35 +34,13 @@ import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@Testcontainers
-@SpringBootTest(
-        classes = CTradeApplication.class,
-        webEnvironment = SpringBootTest.WebEnvironment.NONE
-)
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
-class OrderTerminationConciliationIntegrationTest {
+class OrderTerminationConciliationIntegrationTest extends AbstractIntegrationTest {
 
     private static final UUID SMA_STRATEGY_ID =
             UUID.fromString("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
     private static final String SYMBOL = "BTCUSDT";
     private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(8);
     private static final BigDecimal INITIAL_CAPITAL = new BigDecimal("1000.00000000");
-
-    @Container
-    @SuppressWarnings("resource")
-    static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withDatabaseName("ctrade")
-            .withUsername("ctrade")
-            .withPassword("ctrade123");
-
-    @DynamicPropertySource
-    static void registerProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
-        registry.add("spring.flyway.enabled", () -> "true");
-        registry.add("runner.boot.orchestrator-enabled", () -> "false");
-    }
 
     @Autowired
     private CreatePortfolioPort createPortfolioPort;

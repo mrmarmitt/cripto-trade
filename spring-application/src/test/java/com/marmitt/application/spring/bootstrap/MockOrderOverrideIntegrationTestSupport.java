@@ -1,6 +1,5 @@
 package com.marmitt.application.spring.bootstrap;
 
-import com.marmitt.application.spring.CTradeApplication;
 import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.StrategyRunner;
@@ -24,14 +23,7 @@ import com.marmitt.mock.config.MockOrderScenarioOverride;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.annotation.DirtiesContext;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.PostgreSQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
 
 import java.math.BigDecimal;
 import java.time.Duration;
@@ -46,13 +38,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-@Testcontainers
-@SpringBootTest(
-        classes = CTradeApplication.class,
-        webEnvironment = SpringBootTest.WebEnvironment.NONE
-)
-@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_EACH_TEST_METHOD)
-abstract class MockOrderOverrideIntegrationTestSupport {
+abstract class MockOrderOverrideIntegrationTestSupport extends AbstractIntegrationTest {
 
     protected static final UUID SMA_STRATEGY_ID =
             UUID.fromString("a1b2c3d4-e5f6-7890-abcd-ef1234567890");
@@ -64,6 +50,7 @@ abstract class MockOrderOverrideIntegrationTestSupport {
     protected static final long FILLED_STABILITY_POLL_INTERVAL_MS = 50L;
     protected static final long INITIAL_CALLBACK_DELAY_MS = 120L;
     protected static final long NEAR_SIMULTANEOUS_CALLBACK_GAP_MS = 20L;
+    protected static final long STABILITY_WINDOW_MS = 500L;
     protected static final String SCENARIO_DUPLICATE_PARTIAL = "phase1b deterministic override";
     protected static final String SCENARIO_PARTIAL_FILLED_CONVERGENCE = "phase1b partial+filled convergence";
     protected static final String SCENARIO_DUPLICATE_FILLED = "phase1b duplicate filled idempotency";
@@ -78,22 +65,6 @@ abstract class MockOrderOverrideIntegrationTestSupport {
             "phase2 late canceled after sell filled";
     protected static final String SCENARIO_REJECTED_FINANCIAL = "phase1b rejected financial";
     protected static final String SCENARIO_EXPIRED_FINANCIAL = "phase1b expired financial";
-
-    @Container
-    @SuppressWarnings("resource")
-    protected static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
-            .withDatabaseName("ctrade")
-            .withUsername("ctrade")
-            .withPassword("ctrade123");
-
-    @DynamicPropertySource
-    protected static void registerProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", POSTGRES::getJdbcUrl);
-        registry.add("spring.datasource.username", POSTGRES::getUsername);
-        registry.add("spring.datasource.password", POSTGRES::getPassword);
-        registry.add("spring.flyway.enabled", () -> "true");
-        registry.add("runner.boot.orchestrator-enabled", () -> "false");
-    }
 
     @Autowired
     protected CreatePortfolioPort createPortfolioPort;
@@ -115,6 +86,7 @@ abstract class MockOrderOverrideIntegrationTestSupport {
 
     @BeforeEach
     protected void cleanDatabase() {
+        getMockExchangeAdapter().reset();
         jdbcTemplate.execute("TRUNCATE TABLE portfolios CASCADE");
         jdbcTemplate.execute("TRUNCATE TABLE capital_event_ledger");
     }
@@ -361,15 +333,19 @@ abstract class MockOrderOverrideIntegrationTestSupport {
                                                     BigDecimal expectedQuantity) {
         Instant deadline = Instant.now().plus(timeout);
         BuyStateSnapshot converged = null;
+        Instant convergedAt = null;
         while (Instant.now().isBefore(deadline)) {
             BuyStateSnapshot current = readBuyState(openedByTransactionId);
             if (converged == null) {
                 if (isExpectedFilledState(current, expectedQuantity)) {
                     converged = current;
+                    convergedAt = Instant.now();
                 }
             } else if (!isExpectedFilledState(current, expectedQuantity)) {
                 throw new AssertionError("Filled buy state drift detected after convergence for openedByTransactionId="
                         + openedByTransactionId + " current=" + current);
+            } else if (Duration.between(convergedAt, Instant.now()).toMillis() >= STABILITY_WINDOW_MS) {
+                return converged;
             }
             sleep(FILLED_STABILITY_POLL_INTERVAL_MS);
         }
@@ -388,15 +364,19 @@ abstract class MockOrderOverrideIntegrationTestSupport {
                                                    BigDecimal expectedPnl) {
         Instant deadline = Instant.now().plus(timeout);
         SellStateSnapshot converged = null;
+        Instant convergedAt = null;
         while (Instant.now().isBefore(deadline)) {
             SellStateSnapshot current = readSellState(portfolioId, sellTransactionId, positionId);
             if (converged == null) {
                 if (isExpectedSellFilledState(current, expectedQuantity, expectedPnl)) {
                     converged = current;
+                    convergedAt = Instant.now();
                 }
             } else if (!isExpectedSellFilledState(current, expectedQuantity, expectedPnl)) {
                 throw new AssertionError("Filled sell state drift detected after convergence for sellTransactionId="
                         + sellTransactionId + " current=" + current);
+            } else if (Duration.between(convergedAt, Instant.now()).toMillis() >= STABILITY_WINDOW_MS) {
+                return converged;
             }
             sleep(FILLED_STABILITY_POLL_INTERVAL_MS);
         }
