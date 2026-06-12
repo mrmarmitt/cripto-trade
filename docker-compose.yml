@@ -71,8 +71,6 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      loki:
-        condition: service_healthy
 
   grafana:
     image: grafana/grafana:latest
