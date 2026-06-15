@@ -13,9 +13,12 @@ import com.marmitt.core.dto.runner.response.CreateRunnerResponse;
 import com.marmitt.core.dto.websocket.MessageContext;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
+import com.marmitt.core.domain.Symbol;
+import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.ports.inbound.handler.HandlerProcessUserMessagePort;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
+import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
@@ -41,14 +44,21 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Testcontainers
 @SpringBootTest(classes = CTradeApplication.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
@@ -79,6 +89,7 @@ class UserDataStreamConciliationIntegrationTest {
     }
 
     @Autowired HandlerProcessUserMessagePort processUserMessage;
+    @Autowired OrderConciliationPort orderConciliation;
     @Autowired CreatePortfolioPort createPortfolioPort;
     @Autowired CreateRunnerPort createRunnerPort;
     @Autowired StrategyRunnerRepositoryPort strategyRunnerRepository;
@@ -211,6 +222,56 @@ class UserDataStreamConciliationIntegrationTest {
                 "duplicate FILLED must not open a second position");
         assertEquals(0, countTransactionMatches(tx.getId()),
                 "BUY FILLED has no matches yet (match happens on SELL fill)");
+    }
+
+    @Test
+    void concurrentNewPartiallyFilledFilled_shouldConvergeToFilledWithSinglePosition() throws Exception {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        String clientOrderId = ClientOrderId.generate(runner.getShortCode(), TransactionType.BUY);
+        BigDecimal cost = QUANTITY.multiply(PRICE);
+        BigDecimal partialQty = new BigDecimal("0.50000000");
+        Transaction tx = seedBuyTransaction(runner, clientOrderId, cost);
+        globalBalanceRepository.reserveAtomic(portfolioId, cost);
+
+        Symbol symbol = Symbol.of(SYMBOL);
+        Instant now = Instant.now();
+        OrderDataDto newDto = new OrderDataDto("9876543", clientOrderId, symbol,
+                OrderDataDto.OrderSide.BUY, OrderDataDto.OrderType.LIMIT,
+                QUANTITY, BigDecimal.ZERO, PRICE, BigDecimal.ZERO, BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.NEW, null, now);
+        OrderDataDto partialDto = new OrderDataDto("9876543", clientOrderId, symbol,
+                OrderDataDto.OrderSide.BUY, OrderDataDto.OrderType.LIMIT,
+                QUANTITY, partialQty, PRICE, PRICE, BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.PARTIALLY_FILLED, null, now);
+        OrderDataDto filledDto = new OrderDataDto("9876543", clientOrderId, symbol,
+                OrderDataDto.OrderSide.BUY, OrderDataDto.OrderType.LIMIT,
+                QUANTITY, QUANTITY, PRICE, PRICE, BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.FILLED, null, now);
+
+        CountDownLatch ready = new CountDownLatch(3);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(3);
+        try {
+            List<Future<?>> futures = List.of(
+                    executor.submit(() -> { ready.countDown(); start.await(); orderConciliation.execute(newDto);     return null; }),
+                    executor.submit(() -> { ready.countDown(); start.await(); orderConciliation.execute(partialDto); return null; }),
+                    executor.submit(() -> { ready.countDown(); start.await(); orderConciliation.execute(filledDto);  return null; })
+            );
+            assertTrue(ready.await(5, TimeUnit.SECONDS), "threads did not reach ready state");
+            start.countDown();
+            for (Future<?> f : futures) {
+                f.get(10, TimeUnit.SECONDS);
+            }
+        } finally {
+            executor.shutdown();
+        }
+
+        awaitTransactionStatus(tx.getId(), TransactionStatus.FILLED);
+        assertEquals(1, countOpenPositions(tx.getId()),
+                "concurrent burst must produce exactly one open position");
+        assertEquals(0, QUANTITY.compareTo(readOpenPositionQuantity(tx.getId())),
+                "position quantity must equal the full executed quantity after concurrent burst");
     }
 
     @Test
