@@ -82,12 +82,8 @@ public class RunnerConfig {
         return new ConciliationOrderUpdateExecutor() {
             @Override
             public void execute(OrderDataDto orderData) {
-                if (orderData.clientOrderId() == null) {
-                    conciliationOrderUpdate.execute(orderData,
-                            this::submitTransaction, this::processFill, this::releaseMargin);
-                    return;
-                }
-                Lock lock = CONCILIATION_LOCKS.get(orderData.clientOrderId());
+                String clientOrderId = orderData.clientOrderId();
+                Lock lock = CONCILIATION_LOCKS.get(clientOrderId != null ? clientOrderId : "");
                 lock.lock();
                 boolean[] unlockedEarly = {false};
                 try {
