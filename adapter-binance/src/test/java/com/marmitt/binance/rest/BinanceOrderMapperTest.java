@@ -5,6 +5,7 @@ import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -115,6 +116,76 @@ class BinanceOrderMapperTest {
                 """;
 
         assertEquals(OrderDataDto.OrderStatus.EXPIRED, mapper.fromJson(json).status());
+    }
+
+    @Test
+    void fromJson_shouldUseUpdateTime_whenPresent() {
+        String json = """
+                {
+                  "orderId": 4026112,
+                  "clientOrderId": "v1r2646t",
+                  "symbol": "BTCUSDT",
+                  "side": "SELL",
+                  "type": "LIMIT",
+                  "status": "FILLED",
+                  "origQty": "0.01567",
+                  "executedQty": "0.01567",
+                  "price": "64568.82",
+                  "cummulativeQuoteQty": "1011.79",
+                  "time": 1749700000000,
+                  "updateTime": 1749748681115
+                }
+                """;
+
+        OrderDataDto dto = mapper.fromJson(json);
+
+        assertEquals(Instant.ofEpochMilli(1749748681115L), dto.timestamp());
+    }
+
+    @Test
+    void fromJson_shouldFallbackToTransactTime_whenUpdateTimeAbsent() {
+        String json = """
+                {
+                  "orderId": 1,
+                  "clientOrderId": "x",
+                  "symbol": "BTCUSDT",
+                  "side": "BUY",
+                  "type": "MARKET",
+                  "status": "FILLED",
+                  "origQty": "0.001",
+                  "executedQty": "0.001",
+                  "price": "0",
+                  "cummulativeQuoteQty": "95.00",
+                  "transactTime": 1749700000000
+                }
+                """;
+
+        OrderDataDto dto = mapper.fromJson(json);
+
+        assertEquals(Instant.ofEpochMilli(1749700000000L), dto.timestamp());
+    }
+
+    @Test
+    void fromJson_shouldFallbackToTime_whenUpdateTimeAndTransactTimeAbsent() {
+        String json = """
+                {
+                  "orderId": 1,
+                  "clientOrderId": "x",
+                  "symbol": "BTCUSDT",
+                  "side": "BUY",
+                  "type": "LIMIT",
+                  "status": "NEW",
+                  "origQty": "0.001",
+                  "executedQty": "0",
+                  "price": "90000",
+                  "cummulativeQuoteQty": "0",
+                  "time": 1749700000000
+                }
+                """;
+
+        OrderDataDto dto = mapper.fromJson(json);
+
+        assertEquals(Instant.ofEpochMilli(1749700000000L), dto.timestamp());
     }
 
     @Test

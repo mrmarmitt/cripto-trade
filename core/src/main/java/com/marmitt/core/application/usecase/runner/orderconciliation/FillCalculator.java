@@ -40,9 +40,9 @@ class FillCalculator {
         BigDecimal prevPrice = transaction.getEffectiveExecutedPrice();
 
         if (isFinal) {
-            transaction.fill(orderData.executedQuantity(), orderData.executedPrice());
+            transaction.fill(orderData.executedQuantity(), orderData.executedPrice(), orderData.timestamp());
         } else {
-            transaction.partialFill(orderData.executedQuantity(), orderData.executedPrice());
+            transaction.partialFill(orderData.executedQuantity(), orderData.executedPrice(), orderData.timestamp());
         }
 
         BigDecimal fillIncrement = transaction.getExecutedQuantity().subtract(prevQty);
