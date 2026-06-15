@@ -205,6 +205,10 @@ public class Transaction {
      * @param avgExecutedPrice preço médio ponderado acumulado (em quote asset)
      */
     public void partialFill(BigDecimal cumulativeQty, BigDecimal avgExecutedPrice) {
+        partialFill(cumulativeQty, avgExecutedPrice, Instant.now());
+    }
+
+    public void partialFill(BigDecimal cumulativeQty, BigDecimal avgExecutedPrice, Instant fillAt) {
         if (this.status != TransactionStatus.SUBMITTED && this.status != TransactionStatus.PARTIAL) {
             throw new IllegalStateException(
                     "Cannot apply partial fill from status: " + this.status);
@@ -215,8 +219,8 @@ public class Transaction {
         this.executedQuantity = cumulativeQty;
         this.executedPrice = avgExecutedPrice;
         this.status = TransactionStatus.PARTIAL;
-        this.updatedAt = Instant.now();
-        this.lastPartialFillAt = this.updatedAt;
+        this.updatedAt = fillAt;
+        this.lastPartialFillAt = fillAt;
     }
 
     /**
@@ -227,6 +231,10 @@ public class Transaction {
      * @param avgExecutedPrice preço médio ponderado final (em quote asset)
      */
     public void fill(BigDecimal cumulativeQty, BigDecimal avgExecutedPrice) {
+        fill(cumulativeQty, avgExecutedPrice, Instant.now());
+    }
+
+    public void fill(BigDecimal cumulativeQty, BigDecimal avgExecutedPrice, Instant fillAt) {
         if (this.status != TransactionStatus.SUBMITTED && this.status != TransactionStatus.PARTIAL) {
             throw new IllegalStateException(
                     "Cannot apply fill from status: " + this.status);
@@ -236,9 +244,9 @@ public class Transaction {
 
         this.executedQuantity = cumulativeQty;
         this.executedPrice = avgExecutedPrice;
-        this.executedAt = Instant.now();
+        this.executedAt = fillAt;
         this.status = TransactionStatus.FILLED;
-        this.updatedAt = this.executedAt;
+        this.updatedAt = fillAt;
     }
 
     /**
