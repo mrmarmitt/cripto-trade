@@ -80,17 +80,26 @@ public class RunnerConfig {
         return new ConciliationOrderUpdateExecutor() {
             @Override
             public void execute(OrderDataDto orderData) {
+                if (orderData.clientOrderId() == null) {
+                    conciliationOrderUpdate.execute(orderData,
+                            this::submitTransaction, this::processFill, this::releaseMargin);
+                    return;
+                }
                 Lock lock = CONCILIATION_LOCKS.get(orderData.clientOrderId());
                 lock.lock();
+                boolean[] unlockedEarly = {false};
                 try {
-                    conciliationOrderUpdate.execute(
-                            orderData,
-                            this::submitTransaction,
-                            this::processFill,
-                            this::releaseMargin
+                    conciliationOrderUpdate.execute(orderData, this::submitTransaction, this::processFill,
+                            tx -> {
+                                // Release before txTemplate commits to avoid holding the stripe
+                                // during AFTER_COMMIT retries of MarginReleaseEvent (max-attempts=MAX_INT).
+                                lock.unlock();
+                                unlockedEarly[0] = true;
+                                releaseMargin(tx);
+                            }
                     );
                 } finally {
-                    lock.unlock();
+                    if (!unlockedEarly[0]) lock.unlock();
                 }
             }
 
