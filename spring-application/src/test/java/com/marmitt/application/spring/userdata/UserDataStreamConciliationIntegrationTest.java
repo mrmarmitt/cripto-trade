@@ -41,14 +41,21 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 import java.util.function.Supplier;
 
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 @Testcontainers
 @SpringBootTest(classes = CTradeApplication.class, webEnvironment = SpringBootTest.WebEnvironment.NONE)
@@ -211,6 +218,47 @@ class UserDataStreamConciliationIntegrationTest {
                 "duplicate FILLED must not open a second position");
         assertEquals(0, countTransactionMatches(tx.getId()),
                 "BUY FILLED has no matches yet (match happens on SELL fill)");
+    }
+
+    @Test
+    void concurrentNewPartiallyFilledFilled_shouldConvergeToFilledWithSinglePosition() throws Exception {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        String clientOrderId = ClientOrderId.generate(runner.getShortCode(), TransactionType.BUY);
+        BigDecimal cost = QUANTITY.multiply(PRICE);
+        BigDecimal partialQty = new BigDecimal("0.50000000");
+        BigDecimal partialQuote = partialQty.multiply(PRICE);
+        Transaction tx = seedBuyTransaction(runner, clientOrderId, cost);
+        globalBalanceRepository.reserveAtomic(portfolioId, cost);
+
+        MessageContext ctx = MessageContext.createUserData(EXCHANGE, UUID.randomUUID());
+        String newMsg     = executionReport(clientOrderId, "NEW",              "BUY", QUANTITY, BigDecimal.ZERO, BigDecimal.ZERO, null);
+        String partialMsg = executionReport(clientOrderId, "PARTIALLY_FILLED", "BUY", QUANTITY, partialQty,     partialQuote,    null);
+        String filledMsg  = executionReport(clientOrderId, "FILLED",           "BUY", QUANTITY, QUANTITY,       cost,            null);
+
+        CountDownLatch ready = new CountDownLatch(3);
+        CountDownLatch start = new CountDownLatch(1);
+        ExecutorService executor = Executors.newFixedThreadPool(3);
+        try {
+            List<Future<?>> futures = List.of(
+                    executor.submit(() -> { ready.countDown(); start.await(); processUserMessage.execute(newMsg,     ctx); return null; }),
+                    executor.submit(() -> { ready.countDown(); start.await(); processUserMessage.execute(partialMsg, ctx); return null; }),
+                    executor.submit(() -> { ready.countDown(); start.await(); processUserMessage.execute(filledMsg,  ctx); return null; })
+            );
+            assertTrue(ready.await(5, TimeUnit.SECONDS), "threads did not reach ready state");
+            start.countDown();
+            for (Future<?> f : futures) {
+                f.get(10, TimeUnit.SECONDS);
+            }
+        } finally {
+            executor.shutdown();
+        }
+
+        awaitTransactionStatus(tx.getId(), TransactionStatus.FILLED);
+        assertEquals(1, countOpenPositions(tx.getId()),
+                "concurrent burst must produce exactly one open position");
+        assertEquals(0, QUANTITY.compareTo(readOpenPositionQuantity(tx.getId())),
+                "position quantity must equal the full executed quantity after concurrent burst");
     }
 
     @Test
