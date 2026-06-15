@@ -25,8 +25,6 @@ import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
-import lombok.extern.slf4j.Slf4j;
-import org.springframework.dao.OptimisticLockingFailureException;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
@@ -37,7 +35,10 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.transaction.support.TransactionTemplate;
 
+import com.google.common.util.concurrent.Striped;
+
 import java.util.concurrent.Executor;
+import java.util.concurrent.locks.Lock;
 
 
 /**
@@ -54,18 +55,17 @@ import java.util.concurrent.Executor;
  *
  * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 6.2.1, 6.3</a>
  */
-@Slf4j
 @Configuration
 public class RunnerConfig {
 
-    private static final int CONCILIATION_MAX_RETRIES = 3;
+    private static final Striped<Lock> CONCILIATION_LOCKS = Striped.lock(64);
 
     /**
      * Retorna {@code OrderConciliationUseCase} (tipo concreto) para que Spring possa injetá-lo
      * tanto como {@code OrderConciliationPort} quanto como {@code HandleOrderTerminationPort}.
      */
     @Bean
-    public ConciliationOrderUpdate reconcileOrderUpdate(
+    public ConciliationOrderUpdate conciliationOrderUpdate(
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             EventPublisherPort eventPublisher
     ) {
@@ -80,20 +80,17 @@ public class RunnerConfig {
         return new ConciliationOrderUpdateExecutor() {
             @Override
             public void execute(OrderDataDto orderData) {
-                for (int attempt = 1; attempt <= CONCILIATION_MAX_RETRIES; attempt++) {
-                    try {
-                        conciliationOrderUpdate.execute(
-                                orderData,
-                                this::submitTransaction,
-                                this::processFill,
-                                this::releaseMargin
-                        );
-                        return;
-                    } catch (OptimisticLockingFailureException e) {
-                        if (attempt == CONCILIATION_MAX_RETRIES) throw e;
-                        log.warn("conciliation: optimistic lock retry attempt={}/{} clientOrderId={}",
-                                attempt, CONCILIATION_MAX_RETRIES, orderData.clientOrderId());
-                    }
+                Lock lock = CONCILIATION_LOCKS.get(orderData.clientOrderId());
+                lock.lock();
+                try {
+                    conciliationOrderUpdate.execute(
+                            orderData,
+                            this::submitTransaction,
+                            this::processFill,
+                            this::releaseMargin
+                    );
+                } finally {
+                    lock.unlock();
                 }
             }
 
