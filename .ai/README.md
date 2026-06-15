@@ -19,9 +19,13 @@ Todo agente deve consultar este material antes de implementar, revisar, refatora
 4. `validation.md`
 5. `git-workflow.md`
 
+## Specs de tasks
+
+As especificacoes tecnicas das tasks ativas ficam em `/.ai/tasks/`. Consulte o arquivo da task corrente antes de iniciar qualquer implementacao. O backlog e status de entrega ficam em `docs/tasks/BACKLOG.md`.
+
 ## Contexto minimo por tarefa
 
-- Implementacao: `project-context.md`, `architecture.md`, `coding-standards.md`, `validation.md` e flow map aplicavel em `flows/`
+- Implementacao: spec da task em `tasks/`, `project-context.md`, `architecture.md`, `coding-standards.md`, `validation.md` e flow map aplicavel em `flows/`
 - Review de PR ou diff: `project-context.md`, `architecture.md`, `coding-standards.md`, `validation.md`, `review.md`, `agents/code-review-agent.md` e flow map aplicavel em `flows/`
 - Resolver comentarios de PR: `project-context.md`, `architecture.md`, `coding-standards.md`, `validation.md`, `review.md`, `agents/code-review-agent.md`, `skills/pr-comment-resolver/SKILL.md`
 - Criacao de PR: `project-context.md`, `architecture.md`, `coding-standards.md`, `validation.md`, `git-workflow.md`, `skills/pr-creator/SKILL.md`

@@ -25,6 +25,8 @@ tarefa ou no PR.
 - `/.ai/*`: regras detalhadas e canonicas para agentes e colaboradores
 - `/.ai/flows/*`: mapas curtos de fluxos implementados, conectando comportamento,
   codigo principal, invariantes e testes
+- `/.ai/tasks/*`: especificacoes tecnicas das tasks; consultadas antes de qualquer implementacao
+- `docs/tasks/BACKLOG.md`: visao de roadmap e status de entrega para humanos
 
 ## Regra pratica
 
