@@ -33,8 +33,6 @@ import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.transaction.support.TransactionSynchronization;
-import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.google.common.util.concurrent.Striped;
@@ -85,25 +83,11 @@ public class RunnerConfig {
                 String clientOrderId = orderData.clientOrderId();
                 Lock lock = CONCILIATION_LOCKS.get(clientOrderId != null ? clientOrderId : "");
                 lock.lock();
-                boolean[] unlockedEarly = {false};
                 try {
-                    conciliationOrderUpdate.execute(orderData, this::submitTransaction, this::processFill,
-                            tx -> txTemplate.executeWithoutResult(status -> {
-                                // Registered first so afterCommit fires before MarginReleaseEvent
-                                // listener, avoiding stripe blockage during max-attempts=MAX_INT retries.
-                                TransactionSynchronizationManager.registerSynchronization(
-                                        new TransactionSynchronization() {
-                                            @Override
-                                            public void afterCommit() {
-                                                lock.unlock();
-                                                unlockedEarly[0] = true;
-                                            }
-                                        });
-                                conciliationOrderUpdate.releaseMargin(tx);
-                            })
-                    );
+                    conciliationOrderUpdate.execute(orderData,
+                            this::submitTransaction, this::processFill, this::releaseMargin);
                 } finally {
-                    if (!unlockedEarly[0]) lock.unlock();
+                    lock.unlock();
                 }
             }
 
