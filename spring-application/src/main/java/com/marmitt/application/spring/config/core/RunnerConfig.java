@@ -33,6 +33,8 @@ import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 import com.google.common.util.concurrent.Striped;
@@ -90,13 +92,19 @@ public class RunnerConfig {
                 boolean[] unlockedEarly = {false};
                 try {
                     conciliationOrderUpdate.execute(orderData, this::submitTransaction, this::processFill,
-                            tx -> {
-                                // Release before txTemplate commits to avoid holding the stripe
-                                // during AFTER_COMMIT retries of MarginReleaseEvent (max-attempts=MAX_INT).
-                                lock.unlock();
-                                unlockedEarly[0] = true;
-                                releaseMargin(tx);
-                            }
+                            tx -> txTemplate.executeWithoutResult(status -> {
+                                // Registered first so afterCommit fires before MarginReleaseEvent
+                                // listener, avoiding stripe blockage during max-attempts=MAX_INT retries.
+                                TransactionSynchronizationManager.registerSynchronization(
+                                        new TransactionSynchronization() {
+                                            @Override
+                                            public void afterCommit() {
+                                                lock.unlock();
+                                                unlockedEarly[0] = true;
+                                            }
+                                        });
+                                conciliationOrderUpdate.releaseMargin(tx);
+                            })
                     );
                 } finally {
                     if (!unlockedEarly[0]) lock.unlock();
