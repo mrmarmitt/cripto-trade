@@ -219,7 +219,7 @@ public class Transaction {
         this.executedQuantity = cumulativeQty;
         this.executedPrice = avgExecutedPrice;
         this.status = TransactionStatus.PARTIAL;
-        this.updatedAt = fillAt;
+        this.updatedAt = Instant.now();
         this.lastPartialFillAt = fillAt;
     }
 
@@ -246,7 +246,7 @@ public class Transaction {
         this.executedPrice = avgExecutedPrice;
         this.executedAt = fillAt;
         this.status = TransactionStatus.FILLED;
-        this.updatedAt = fillAt;
+        this.updatedAt = Instant.now();
     }
 
     /**
