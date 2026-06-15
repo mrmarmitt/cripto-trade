@@ -32,10 +32,10 @@ public class BinanceOrderMapper {
         BigDecimal cumulativeQuoteQty = decimal(node, "cummulativeQuoteQty");
         BigDecimal price             = decimal(node, "price");
         BigDecimal executedPrice     = computeWap(executedQty, cumulativeQuoteQty);
-        long timeMs = node.path("time").asLong(0);
-        if (timeMs == 0) {
-            timeMs = node.path("transactTime").asLong(0);
-        }
+        // updateTime = last status change (fill time for FILLED); preferred over creation time
+        long timeMs = node.path("updateTime").asLong(0);
+        if (timeMs == 0) timeMs = node.path("transactTime").asLong(0);
+        if (timeMs == 0) timeMs = node.path("time").asLong(0);
 
         return new OrderDataDto(
                 exchangeOrderId,
