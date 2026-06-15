@@ -13,9 +13,12 @@ import com.marmitt.core.dto.runner.response.CreateRunnerResponse;
 import com.marmitt.core.dto.websocket.MessageContext;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
+import com.marmitt.core.domain.Symbol;
+import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.ports.inbound.handler.HandlerProcessUserMessagePort;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
+import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
 import com.marmitt.core.ports.outbound.exchange.adapter.ReceivedMessageProcessorPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.streaming.ExchangeUserStreamPort;
@@ -86,6 +89,7 @@ class UserDataStreamConciliationIntegrationTest {
     }
 
     @Autowired HandlerProcessUserMessagePort processUserMessage;
+    @Autowired OrderConciliationPort orderConciliation;
     @Autowired CreatePortfolioPort createPortfolioPort;
     @Autowired CreateRunnerPort createRunnerPort;
     @Autowired StrategyRunnerRepositoryPort strategyRunnerRepository;
@@ -227,23 +231,32 @@ class UserDataStreamConciliationIntegrationTest {
         String clientOrderId = ClientOrderId.generate(runner.getShortCode(), TransactionType.BUY);
         BigDecimal cost = QUANTITY.multiply(PRICE);
         BigDecimal partialQty = new BigDecimal("0.50000000");
-        BigDecimal partialQuote = partialQty.multiply(PRICE);
         Transaction tx = seedBuyTransaction(runner, clientOrderId, cost);
         globalBalanceRepository.reserveAtomic(portfolioId, cost);
 
-        MessageContext ctx = MessageContext.createUserData(EXCHANGE, UUID.randomUUID());
-        String newMsg     = executionReport(clientOrderId, "NEW",              "BUY", QUANTITY, BigDecimal.ZERO, BigDecimal.ZERO, null);
-        String partialMsg = executionReport(clientOrderId, "PARTIALLY_FILLED", "BUY", QUANTITY, partialQty,     partialQuote,    null);
-        String filledMsg  = executionReport(clientOrderId, "FILLED",           "BUY", QUANTITY, QUANTITY,       cost,            null);
+        Symbol symbol = Symbol.of(SYMBOL);
+        Instant now = Instant.now();
+        OrderDataDto newDto = new OrderDataDto("9876543", clientOrderId, symbol,
+                OrderDataDto.OrderSide.BUY, OrderDataDto.OrderType.LIMIT,
+                QUANTITY, BigDecimal.ZERO, PRICE, BigDecimal.ZERO, BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.NEW, null, now);
+        OrderDataDto partialDto = new OrderDataDto("9876543", clientOrderId, symbol,
+                OrderDataDto.OrderSide.BUY, OrderDataDto.OrderType.LIMIT,
+                QUANTITY, partialQty, PRICE, PRICE, BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.PARTIALLY_FILLED, null, now);
+        OrderDataDto filledDto = new OrderDataDto("9876543", clientOrderId, symbol,
+                OrderDataDto.OrderSide.BUY, OrderDataDto.OrderType.LIMIT,
+                QUANTITY, QUANTITY, PRICE, PRICE, BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.FILLED, null, now);
 
         CountDownLatch ready = new CountDownLatch(3);
         CountDownLatch start = new CountDownLatch(1);
         ExecutorService executor = Executors.newFixedThreadPool(3);
         try {
             List<Future<?>> futures = List.of(
-                    executor.submit(() -> { ready.countDown(); start.await(); processUserMessage.execute(newMsg,     ctx); return null; }),
-                    executor.submit(() -> { ready.countDown(); start.await(); processUserMessage.execute(partialMsg, ctx); return null; }),
-                    executor.submit(() -> { ready.countDown(); start.await(); processUserMessage.execute(filledMsg,  ctx); return null; })
+                    executor.submit(() -> { ready.countDown(); start.await(); orderConciliation.execute(newDto);     return null; }),
+                    executor.submit(() -> { ready.countDown(); start.await(); orderConciliation.execute(partialDto); return null; }),
+                    executor.submit(() -> { ready.countDown(); start.await(); orderConciliation.execute(filledDto);  return null; })
             );
             assertTrue(ready.await(5, TimeUnit.SECONDS), "threads did not reach ready state");
             start.countDown();
