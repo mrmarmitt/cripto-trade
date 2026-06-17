@@ -24,6 +24,15 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T16 | ExchangeAdapterDescriptor: Centralizar capabilities por adapter | Média | Claude | Concluído |
 | T17 | Loki: Agregação de Logs                                          | Média | Claude | Concluído |
 | T18 | Trade Reconciliation Report                                      | Média | Claude | Concluído |
+| T19 | Serializar conciliação por clientOrderId via striped lock        | Baixa | Codex  | Concluído |
+| T20 | Preencher `executed_at` com timestamp da exchange no boot recovery | Baixa | Codex | Concluído |
+| T21 | Active Error Reporting via Discord                               | Média | Claude | Pendente  |
+| T22 | Estudo e Desenho do Sistema de Monitoramento                    | Média | Claude | Concluído |
+| T23 | Instrumentação: Gaps Críticos de Observabilidade                | Média | Claude | Pendente  |
+| T24 | Circuit Breaker nas Chamadas REST à Exchange                    | Média | Claude | Pendente  |
+| T25 | Safe Mode Automático                                            | Média | Claude | Pendente  |
+| T26 | Rastreamento End-to-End de um Sinal                             | Alta  | Claude | Pendente  |
+| TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Pendente  |
 
 ## Ordem de execução
 
@@ -69,6 +78,22 @@ T18  Trade Reconciliation Report        ← auditoria fills Binance vs local (in
        ↓
    produção
 ```
+
+## Ordem de execução — Observabilidade ativa
+
+```
+T22  Estudo do sistema de monitoramento   ← output: monitoring-spec.md (concluído)
+       ↓
+T21  Active Error Reporting (Discord)      T24  Circuit Breaker REST (independente)
+       ↓
+T23  Gaps de instrumentação (G1-G5)
+       ↓
+T25  Safe Mode automático      T26  Trace end-to-end (transactionId no MDC)
+```
+
+> Tasks de correção/refino já entregues fora da trilha principal: T19 (striped lock na
+> conciliação) e T20 (`executed_at` no boot recovery). TD1 permanece como débito técnico
+> de telemetria do canal USER_DATA.
 
 ## Critério de pronto da trilha
 
