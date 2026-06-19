@@ -32,6 +32,10 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T24 | Circuit Breaker nas Chamadas REST à Exchange                    | Média | Claude | Pendente  |
 | T25 | Safe Mode Automático                                            | Média | Claude | Pendente  |
 | T26 | Rastreamento End-to-End de um Sinal                             | Alta  | Claude | Pendente  |
+| T27 | Padronização do Retorno das Controllers (camada Spring)         | Média | Claude | Pendente  |
+| T28 | Camada agnóstica de adapter p/ consulta de saldo e histórico    | Média | Claude | Pendente  |
+| T29 | Implementar consulta de saldo na exchange                       | Média | Claude | Pendente  |
+| T30 | Implementar consulta de histórico de trades na exchange         | Média | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Pendente  |
 
 ## Ordem de execução
@@ -90,6 +94,22 @@ T23  Gaps de instrumentação (G1-G5)
        ↓
 T25  Safe Mode automático      T26  Trace end-to-end (transactionId no MDC)
 ```
+
+## Ordem de execução — API HTTP e consultas à exchange
+
+```
+T27  Padronização do retorno das controllers   ← envelope ApiError + @RestControllerAdvice (independente)
+       (define o padrão de endpoint reusado por T29/T30)
+
+T28  Camada agnóstica de consulta             ← fundação: ports + descriptor (hasTradeHistory/tradeHistory), use cases esqueleto
+       ↓
+T29  Consulta de saldo                T30  Consulta de histórico de trades
+   (reusa queryAccountSnapshot)          (reusa BinanceTradeHistoryAdapter)
+```
+
+> T27 é independente, mas define o padrão de resposta que os endpoints opcionais de T29/T30
+> devem seguir. T28 é pré-requisito de T29 e T30; ambas reusam infraestrutura Binance já
+> existente, sem nova rota REST, e mantêm boot/recovery/reconciliação intactos.
 
 > Tasks de correção/refino já entregues fora da trilha principal: T19 (striped lock na
 > conciliação) e T20 (`executed_at` no boot recovery). TD1 permanece como débito técnico
