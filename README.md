@@ -163,17 +163,17 @@ Grafana disponível em `http://localhost:3000` (admin / ctrade123).
 
 ```bash
 # WebSocket Management
-POST /websocket/connect
-POST /websocket/disconnect
-GET  /websocket/stats
+POST /api/websocket/connect
+POST /api/websocket/disconnect
+GET  /api/websocket/stats
 
 # Market Data
-POST /websocket/exchange/market-data/subscribe
-POST /websocket/exchange/market-data/unsubscribe
+POST /api/websocket/exchange/market-data/subscribe
+POST /api/websocket/exchange/market-data/unsubscribe
 
 # Order Management  
-POST /websocket/exchange/orders/create
-POST /websocket/exchange/orders/cancel
+POST /api/websocket/exchange/orders/create
+POST /api/websocket/exchange/orders/cancel
 ```
 
 ### Documentação

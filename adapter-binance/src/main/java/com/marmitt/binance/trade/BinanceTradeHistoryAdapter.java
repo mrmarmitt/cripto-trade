@@ -6,6 +6,7 @@ import com.marmitt.binance.rest.BinanceRestRequestBuilder;
 import com.marmitt.binance.rest.HttpClientPort;
 import com.marmitt.binance.rest.RestRequest;
 import com.marmitt.core.dto.reconciliation.TradeExecutionDto;
+import com.marmitt.core.exceptions.ExchangeQueryException;
 import com.marmitt.core.ports.outbound.exchange.TradeHistoryQueryPort;
 import lombok.extern.slf4j.Slf4j;
 
@@ -83,11 +84,12 @@ public class BinanceTradeHistoryAdapter implements TradeHistoryQueryPort {
         try {
             response = httpClient.get(req.url(), req.headers());
         } catch (IOException e) {
-            throw new RuntimeException("Failed to fetch myTrades from Binance: " + e.getMessage(), e);
+            throw new ExchangeQueryException("BINANCE", ExchangeQueryException.ErrorType.TEMPORARY,
+                    "Failed to fetch myTrades from Binance: " + e.getMessage(), e);
         }
 
         if (!response.isSuccessful()) {
-            throw new RuntimeException(
+            throw new ExchangeQueryException("BINANCE", errorTypeFor(response.statusCode()),
                     "Binance myTrades returned HTTP " + response.statusCode() + ": " + response.body());
         }
 
@@ -99,8 +101,18 @@ public class BinanceTradeHistoryAdapter implements TradeHistoryQueryPort {
             }
             return trades;
         } catch (IOException e) {
-            throw new RuntimeException("Failed to parse myTrades response: " + e.getMessage(), e);
+            throw new ExchangeQueryException("BINANCE", ExchangeQueryException.ErrorType.UNKNOWN,
+                    "Failed to parse myTrades response: " + e.getMessage(), e);
         }
+    }
+
+    private static ExchangeQueryException.ErrorType errorTypeFor(int statusCode) {
+        return switch (statusCode) {
+            case 400 -> ExchangeQueryException.ErrorType.INVALID_REQUEST;
+            case 401, 403 -> ExchangeQueryException.ErrorType.AUTH;
+            case 429 -> ExchangeQueryException.ErrorType.RATE_LIMIT;
+            default -> ExchangeQueryException.ErrorType.TEMPORARY;
+        };
     }
 
     private TradeExecutionDto parseTrade(JsonNode node) {

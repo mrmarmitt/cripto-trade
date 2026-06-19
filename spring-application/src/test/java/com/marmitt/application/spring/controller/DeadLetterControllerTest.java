@@ -1,9 +1,12 @@
 package com.marmitt.application.spring.controller;
 
+import com.marmitt.application.spring.web.GlobalExceptionHandler;
 import com.marmitt.core.dto.portfolio.response.DeadLetterEntryDto;
 import com.marmitt.core.dto.portfolio.response.ReprocessDeadLetterResponse;
 import com.marmitt.core.dto.portfolio.response.ResolveDeadLetterResponse;
 import com.marmitt.core.enums.DlqReason;
+import com.marmitt.core.exceptions.DeadLetterConflictException;
+import com.marmitt.core.exceptions.DeadLetterNotFoundException;
 import com.marmitt.core.ports.inbound.portfolio.ManageDeadLetterPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -30,7 +33,9 @@ class DeadLetterControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new DeadLetterController(manageDeadLetter)).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(new DeadLetterController(manageDeadLetter))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
     }
 
     @Test
@@ -106,7 +111,7 @@ class DeadLetterControllerTest {
     void resolveShouldReturnNotFoundWhenEntryDoesNotExist() throws Exception {
         UUID deadLetterId = UUID.randomUUID();
         when(manageDeadLetter.resolve(deadLetterId, "operator@test", "manual review"))
-                .thenReturn(ResolveDeadLetterResponse.failure(deadLetterId, "Dead letter entry not found"));
+                .thenThrow(new DeadLetterNotFoundException(deadLetterId));
 
         mockMvc.perform(post("/api/dead-letters/{id}/resolve", deadLetterId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -117,15 +122,16 @@ class DeadLetterControllerTest {
                                 }
                                 """))
                 .andExpect(status().isNotFound())
-                .andExpect(jsonPath("$.resolved").value(false))
-                .andExpect(jsonPath("$.message").value("Dead letter entry not found"));
+                .andExpect(jsonPath("$.status").value(404))
+                .andExpect(jsonPath("$.error").value("Not Found"))
+                .andExpect(jsonPath("$.path").value("/api/dead-letters/" + deadLetterId + "/resolve"));
     }
 
     @Test
     void resolveShouldReturnConflictWhenEntryIsAlreadyResolved() throws Exception {
         UUID deadLetterId = UUID.randomUUID();
         when(manageDeadLetter.resolve(deadLetterId, "operator@test", "manual review"))
-                .thenReturn(ResolveDeadLetterResponse.failure(deadLetterId, "Dead letter entry is already resolved"));
+                .thenThrow(new DeadLetterConflictException(deadLetterId, "Dead letter entry is already resolved"));
 
         mockMvc.perform(post("/api/dead-letters/{id}/resolve", deadLetterId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -136,7 +142,7 @@ class DeadLetterControllerTest {
                                 }
                                 """))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.resolved").value(false))
+                .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.message").value("Dead letter entry is already resolved"));
     }
 
@@ -155,8 +161,8 @@ class DeadLetterControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.resolved").value(false))
-                .andExpect(jsonPath("$.message").value("Invalid request: resolvedBy cannot be blank"));
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("resolvedBy cannot be blank"));
     }
 
     @Test
@@ -186,10 +192,8 @@ class DeadLetterControllerTest {
     void reprocessShouldReturnConflictWhenEntryCannotBeReprocessedAutomatically() throws Exception {
         UUID deadLetterId = UUID.randomUUID();
         when(manageDeadLetter.reprocess(deadLetterId, "operator@test", "retry capital flow"))
-                .thenReturn(ReprocessDeadLetterResponse.failure(
-                        deadLetterId,
-                        "Dead letter entry cannot be reprocessed automatically"
-                ));
+                .thenThrow(new DeadLetterConflictException(
+                        deadLetterId, "Dead letter entry cannot be reprocessed automatically"));
 
         mockMvc.perform(post("/api/dead-letters/{id}/reprocess", deadLetterId)
                         .contentType(MediaType.APPLICATION_JSON)
@@ -200,7 +204,7 @@ class DeadLetterControllerTest {
                                 }
                                 """))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.reprocessed").value(false))
+                .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.message").value("Dead letter entry cannot be reprocessed automatically"));
     }
 
@@ -219,8 +223,8 @@ class DeadLetterControllerTest {
                                 }
                                 """))
                 .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.reprocessed").value(false))
-                .andExpect(jsonPath("$.message").value("Invalid request: requestedBy cannot be blank"));
+                .andExpect(jsonPath("$.status").value(400))
+                .andExpect(jsonPath("$.message").value("requestedBy cannot be blank"));
     }
 
     private static DeadLetterEntryDto newEntry(UUID deadLetterId,

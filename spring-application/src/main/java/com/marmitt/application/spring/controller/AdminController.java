@@ -3,7 +3,6 @@ package com.marmitt.application.spring.controller;
 import com.marmitt.binance.filters.SymbolFilterCache;
 import com.marmitt.core.dto.runner.response.RunnerDto;
 import com.marmitt.core.dto.runner.response.RunnerHaltResult;
-import com.marmitt.core.exceptions.RunnerNotFoundException;
 import com.marmitt.core.ports.inbound.runner.HaltRunnerPort;
 import com.marmitt.core.ports.inbound.runner.QueryRunnerPort;
 import org.springframework.http.ResponseEntity;
@@ -45,11 +44,7 @@ public class AdminController {
 
     @PostMapping("/runners/{id}/halt")
     public ResponseEntity<RunnerHaltResult> haltById(@PathVariable UUID id) {
-        try {
-            return ResponseEntity.ok(haltRunner.haltById(id));
-        } catch (RunnerNotFoundException e) {
-            return ResponseEntity.notFound().build();
-        }
+        return ResponseEntity.ok(haltRunner.haltById(id));
     }
 
     @GetMapping("/runners/status")

@@ -6,6 +6,8 @@ import com.marmitt.core.dto.portfolio.DeadLetterReprocessingResult;
 import com.marmitt.core.dto.portfolio.response.ReprocessDeadLetterResponse;
 import com.marmitt.core.dto.portfolio.response.ResolveDeadLetterResponse;
 import com.marmitt.core.enums.DlqReason;
+import com.marmitt.core.exceptions.DeadLetterConflictException;
+import com.marmitt.core.exceptions.DeadLetterNotFoundException;
 import com.marmitt.core.ports.outbound.repository.DeadLetterReprocessingPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import org.junit.jupiter.api.Test;
@@ -16,9 +18,7 @@ import java.util.Optional;
 import java.util.UUID;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
-import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.Mockito.mock;
@@ -99,7 +99,7 @@ class ManageDeadLetterUseCaseTest {
     }
 
     @Test
-    void resolveShouldReturnFailureWhenEntryDoesNotExist() {
+    void resolveShouldThrowNotFoundWhenEntryDoesNotExist() {
         DeadLetterEntryRepositoryPort repository = mock(DeadLetterEntryRepositoryPort.class);
         DeadLetterReprocessingPort reprocessingPort = mock(DeadLetterReprocessingPort.class);
         UUID deadLetterId = UUID.randomUUID();
@@ -107,15 +107,12 @@ class ManageDeadLetterUseCaseTest {
 
         ManageDeadLetterUseCase useCase = new ManageDeadLetterUseCase(repository, reprocessingPort);
 
-        ResolveDeadLetterResponse response = useCase.resolve(deadLetterId, "operator@test", "manual review");
-
-        assertFalse(response.resolved());
-        assertEquals("Dead letter entry not found", response.message());
-        assertNull(response.entry());
+        assertThrows(DeadLetterNotFoundException.class,
+                () -> useCase.resolve(deadLetterId, "operator@test", "manual review"));
     }
 
     @Test
-    void resolveShouldReturnFailureWhenEntryIsAlreadyResolved() {
+    void resolveShouldThrowConflictWhenEntryIsAlreadyResolved() {
         DeadLetterEntryRepositoryPort repository = mock(DeadLetterEntryRepositoryPort.class);
         DeadLetterReprocessingPort reprocessingPort = mock(DeadLetterReprocessingPort.class);
         DeadLetterEntry entry = newEntry(UUID.randomUUID(), UUID.randomUUID(), "client-3");
@@ -124,11 +121,9 @@ class ManageDeadLetterUseCaseTest {
 
         ManageDeadLetterUseCase useCase = new ManageDeadLetterUseCase(repository, reprocessingPort);
 
-        ResolveDeadLetterResponse response = useCase.resolve(entry.getId(), "another@test", "manual review");
-
-        assertFalse(response.resolved());
-        assertEquals("Dead letter entry is already resolved", response.message());
-        assertNull(response.entry());
+        DeadLetterConflictException error = assertThrows(DeadLetterConflictException.class,
+                () -> useCase.resolve(entry.getId(), "another@test", "manual review"));
+        assertEquals("Dead letter entry is already resolved", error.getMessage());
     }
 
     @Test
@@ -152,7 +147,7 @@ class ManageDeadLetterUseCaseTest {
     }
 
     @Test
-    void reprocessShouldReturnFailureWhenEntryDoesNotExist() {
+    void reprocessShouldThrowNotFoundWhenEntryDoesNotExist() {
         DeadLetterEntryRepositoryPort repository = mock(DeadLetterEntryRepositoryPort.class);
         DeadLetterReprocessingPort reprocessingPort = mock(DeadLetterReprocessingPort.class);
         UUID deadLetterId = UUID.randomUUID();
@@ -160,15 +155,12 @@ class ManageDeadLetterUseCaseTest {
 
         ManageDeadLetterUseCase useCase = new ManageDeadLetterUseCase(repository, reprocessingPort);
 
-        ReprocessDeadLetterResponse response = useCase.reprocess(deadLetterId, "operator@test", "retry capital flow");
-
-        assertFalse(response.reprocessed());
-        assertEquals("Dead letter entry not found", response.message());
-        assertNull(response.entry());
+        assertThrows(DeadLetterNotFoundException.class,
+                () -> useCase.reprocess(deadLetterId, "operator@test", "retry capital flow"));
     }
 
     @Test
-    void reprocessShouldReturnFailureWhenEntryIsAlreadyResolved() {
+    void reprocessShouldThrowConflictWhenEntryIsAlreadyResolved() {
         DeadLetterEntryRepositoryPort repository = mock(DeadLetterEntryRepositoryPort.class);
         DeadLetterReprocessingPort reprocessingPort = mock(DeadLetterReprocessingPort.class);
         DeadLetterEntry entry = newRetryExhaustedEntry(UUID.randomUUID(), UUID.randomUUID(), "client-5");
@@ -177,15 +169,14 @@ class ManageDeadLetterUseCaseTest {
 
         ManageDeadLetterUseCase useCase = new ManageDeadLetterUseCase(repository, reprocessingPort);
 
-        ReprocessDeadLetterResponse response = useCase.reprocess(entry.getId(), "operator@test", "retry capital flow");
-
-        assertFalse(response.reprocessed());
-        assertEquals("Dead letter entry is already resolved", response.message());
+        DeadLetterConflictException error = assertThrows(DeadLetterConflictException.class,
+                () -> useCase.reprocess(entry.getId(), "operator@test", "retry capital flow"));
+        assertEquals("Dead letter entry is already resolved", error.getMessage());
         verify(reprocessingPort, never()).reprocess(entry);
     }
 
     @Test
-    void reprocessShouldReturnFailureWhenEntryIsNotSupported() {
+    void reprocessShouldThrowConflictWhenEntryIsNotSupported() {
         DeadLetterEntryRepositoryPort repository = mock(DeadLetterEntryRepositoryPort.class);
         DeadLetterReprocessingPort reprocessingPort = mock(DeadLetterReprocessingPort.class);
         DeadLetterEntry entry = newEntry(UUID.randomUUID(), UUID.randomUUID(), "client-6");
@@ -194,15 +185,14 @@ class ManageDeadLetterUseCaseTest {
 
         ManageDeadLetterUseCase useCase = new ManageDeadLetterUseCase(repository, reprocessingPort);
 
-        ReprocessDeadLetterResponse response = useCase.reprocess(entry.getId(), "operator@test", "retry capital flow");
-
-        assertFalse(response.reprocessed());
-        assertEquals("Dead letter entry cannot be reprocessed automatically", response.message());
+        DeadLetterConflictException error = assertThrows(DeadLetterConflictException.class,
+                () -> useCase.reprocess(entry.getId(), "operator@test", "retry capital flow"));
+        assertEquals("Dead letter entry cannot be reprocessed automatically", error.getMessage());
         verify(reprocessingPort, never()).reprocess(entry);
     }
 
     @Test
-    void reprocessShouldReturnFailureWhenReplayProducesNoStateChange() {
+    void reprocessShouldThrowConflictWhenReplayProducesNoStateChange() {
         DeadLetterEntryRepositoryPort repository = mock(DeadLetterEntryRepositoryPort.class);
         DeadLetterReprocessingPort reprocessingPort = mock(DeadLetterReprocessingPort.class);
         DeadLetterEntry entry = newRetryExhaustedEntry(UUID.randomUUID(), UUID.randomUUID(), "client-7");
@@ -214,10 +204,9 @@ class ManageDeadLetterUseCaseTest {
 
         ManageDeadLetterUseCase useCase = new ManageDeadLetterUseCase(repository, reprocessingPort);
 
-        ReprocessDeadLetterResponse response = useCase.reprocess(entry.getId(), "operator@test", "retry capital flow");
-
-        assertFalse(response.reprocessed());
-        assertEquals("Dead letter replay produced no state change and requires manual review", response.message());
+        DeadLetterConflictException error = assertThrows(DeadLetterConflictException.class,
+                () -> useCase.reprocess(entry.getId(), "operator@test", "retry capital flow"));
+        assertEquals("Dead letter replay produced no state change and requires manual review", error.getMessage());
         verify(repository, never()).save(entry);
     }
 
