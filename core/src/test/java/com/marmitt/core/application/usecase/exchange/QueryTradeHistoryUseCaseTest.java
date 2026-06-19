@@ -64,6 +64,24 @@ class QueryTradeHistoryUseCaseTest {
         verify(tradeHistory).fetchTrades(eq(SYMBOL), eq(FROM), eq(TO));
     }
 
+    @Test
+    void queryTrades_throwsWhenFromAfterTo() {
+        assertThrows(IllegalArgumentException.class,
+                () -> useCase.queryTrades(EXCHANGE, SYMBOL, TO, FROM));
+    }
+
+    @Test
+    void queryTrades_throwsWhenIntervalBoundIsNull() {
+        assertThrows(IllegalArgumentException.class,
+                () -> useCase.queryTrades(EXCHANGE, SYMBOL, null, TO));
+    }
+
+    @Test
+    void queryTrades_throwsWhenSymbolIsBlank() {
+        assertThrows(IllegalArgumentException.class,
+                () -> useCase.queryTrades(EXCHANGE, "  ", FROM, TO));
+    }
+
     private static TradeExecutionDto fill() {
         return new TradeExecutionDto(
                 "trade-1", 100234L, null, SYMBOL,

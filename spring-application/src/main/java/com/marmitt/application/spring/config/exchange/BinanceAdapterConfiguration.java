@@ -140,7 +140,8 @@ public class BinanceAdapterConfiguration {
     public ExchangeAdapterDescriptor binanceAdapterDescriptor(BinanceMarketStreamAdapter binanceMarketStreamAdapter,
                                                                BinanceUserStreamAdapter binanceUserStreamAdapter,
                                                                BinanceUserStreamSessionAdapter binanceUserStreamSessionAdapter,
-                                                               BinanceOrderAdapter binanceOrderAdapter) {
+                                                               BinanceOrderAdapter binanceOrderAdapter,
+                                                               BinanceTradeHistoryAdapter binanceTradeHistoryAdapter) {
         return DefaultExchangeAdapterDescriptor.builder("BINANCE")
                 .streaming(binanceMarketStreamAdapter)
                 .orderPort(binanceOrderAdapter)
@@ -149,6 +150,7 @@ public class BinanceAdapterConfiguration {
                 .orderExecution(binanceMarketStreamAdapter)
                 .orderQuery(binanceMarketStreamAdapter)
                 .accountQuery(binanceMarketStreamAdapter)
+                .tradeHistory(binanceTradeHistoryAdapter)
                 .bootReadiness(binanceMarketStreamAdapter)
                 .build();
     }

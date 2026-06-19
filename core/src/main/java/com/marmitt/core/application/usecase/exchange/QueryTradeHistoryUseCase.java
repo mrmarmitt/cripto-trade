@@ -14,10 +14,9 @@ import java.util.List;
  * <p>Resolve o {@link ExchangeAdapterDescriptor} da exchange pedida e despacha pela
  * capacidade de histórico, sem conhecer nenhum adapter concreto.
  *
- * <p><b>Fundação (T28):</b> nenhuma exchange liga {@code tradeHistory()} ainda, então
- * {@code hasTradeHistory()} é {@code false} e o caso de uso sinaliza "não implementado"
- * via {@link UnsupportedOperationException}. T30 liga o {@code BinanceTradeHistoryAdapter}
- * existente ao accessor; o despacho aqui passa a retornar fills reais sem alteração.
+ * <p>Valida o intervalo na borda ({@code symbol}, {@code from <= to}, ambos presentes)
+ * antes de delegar. A paginação/limite de janela da exchange é tratada no adapter
+ * (ex.: {@code BinanceTradeHistoryAdapter} fatia janelas de 24h internamente).
  */
 public class QueryTradeHistoryUseCase implements QueryTradeHistoryPort {
 
@@ -29,6 +28,8 @@ public class QueryTradeHistoryUseCase implements QueryTradeHistoryPort {
 
     @Override
     public List<TradeExecutionDto> queryTrades(String exchangeName, String symbol, Instant from, Instant to) {
+        validateInterval(symbol, from, to);
+
         ExchangeAdapterDescriptor descriptor = resolveAdapter(exchangeName);
 
         if (!descriptor.hasTradeHistory()) {
@@ -37,6 +38,18 @@ public class QueryTradeHistoryUseCase implements QueryTradeHistoryPort {
         }
 
         return descriptor.tradeHistory().fetchTrades(symbol, from, to);
+    }
+
+    private static void validateInterval(String symbol, Instant from, Instant to) {
+        if (symbol == null || symbol.isBlank()) {
+            throw new IllegalArgumentException("symbol must not be blank");
+        }
+        if (from == null || to == null) {
+            throw new IllegalArgumentException("from and to must not be null");
+        }
+        if (from.isAfter(to)) {
+            throw new IllegalArgumentException("from must not be after to (from=" + from + ", to=" + to + ")");
+        }
     }
 
     private ExchangeAdapterDescriptor resolveAdapter(String exchangeName) {
