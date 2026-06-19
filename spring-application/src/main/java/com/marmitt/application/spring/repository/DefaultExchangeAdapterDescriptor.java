@@ -3,6 +3,7 @@ package com.marmitt.application.spring.repository;
 import com.marmitt.core.exceptions.UnsupportedCapabilityException;
 import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.exchange.ExchangeOrderPort;
+import com.marmitt.core.ports.outbound.exchange.TradeHistoryQueryPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderExecutionPort;
@@ -21,6 +22,7 @@ public final class DefaultExchangeAdapterDescriptor implements ExchangeAdapterDe
     private final ExchangeOrderExecutionPort orderExecution;
     private final ExchangeOrderQueryPort orderQuery;
     private final ExchangeAccountQueryPort accountQuery;
+    private final TradeHistoryQueryPort tradeHistory;
     private final ExchangeBootReadinessPort bootReadiness;
 
     private DefaultExchangeAdapterDescriptor(Builder builder) {
@@ -32,6 +34,7 @@ public final class DefaultExchangeAdapterDescriptor implements ExchangeAdapterDe
         this.orderExecution = builder.orderExecution;
         this.orderQuery = builder.orderQuery;
         this.accountQuery = builder.accountQuery;
+        this.tradeHistory = builder.tradeHistory;
         this.bootReadiness = builder.bootReadiness;
     }
 
@@ -86,6 +89,13 @@ public final class DefaultExchangeAdapterDescriptor implements ExchangeAdapterDe
         return accountQuery;
     }
 
+    @Override public boolean hasTradeHistory() { return tradeHistory != null; }
+
+    @Override public TradeHistoryQueryPort tradeHistory() {
+        if (tradeHistory == null) throw new UnsupportedCapabilityException(exchangeName, "tradeHistory");
+        return tradeHistory;
+    }
+
     @Override public boolean hasBootReadiness() { return bootReadiness != null; }
 
     @Override public ExchangeBootReadinessPort bootReadiness() {
@@ -102,6 +112,7 @@ public final class DefaultExchangeAdapterDescriptor implements ExchangeAdapterDe
         private ExchangeOrderExecutionPort orderExecution;
         private ExchangeOrderQueryPort orderQuery;
         private ExchangeAccountQueryPort accountQuery;
+        private TradeHistoryQueryPort tradeHistory;
         private ExchangeBootReadinessPort bootReadiness;
 
         private Builder(String exchangeName) {
@@ -115,6 +126,7 @@ public final class DefaultExchangeAdapterDescriptor implements ExchangeAdapterDe
         public Builder orderExecution(ExchangeOrderExecutionPort orderExecution) { this.orderExecution = orderExecution; return this; }
         public Builder orderQuery(ExchangeOrderQueryPort orderQuery) { this.orderQuery = orderQuery; return this; }
         public Builder accountQuery(ExchangeAccountQueryPort accountQuery) { this.accountQuery = accountQuery; return this; }
+        public Builder tradeHistory(TradeHistoryQueryPort tradeHistory) { this.tradeHistory = tradeHistory; return this; }
         public Builder bootReadiness(ExchangeBootReadinessPort bootReadiness) { this.bootReadiness = bootReadiness; return this; }
 
         public DefaultExchangeAdapterDescriptor build() {

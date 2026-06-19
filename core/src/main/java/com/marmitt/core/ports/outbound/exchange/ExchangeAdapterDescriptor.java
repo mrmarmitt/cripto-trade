@@ -36,6 +36,10 @@ public interface ExchangeAdapterDescriptor {
 
     ExchangeAccountQueryPort accountQuery();
 
+    boolean hasTradeHistory();
+
+    TradeHistoryQueryPort tradeHistory();
+
     boolean hasBootReadiness();
 
     ExchangeBootReadinessPort bootReadiness();
