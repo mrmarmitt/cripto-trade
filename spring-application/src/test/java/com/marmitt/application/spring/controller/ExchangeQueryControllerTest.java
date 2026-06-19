@@ -125,6 +125,26 @@ class ExchangeQueryControllerTest {
     }
 
     @Test
+    void getTrades_returns400WhenRequiredParamMissing() throws Exception {
+        // symbol omitted → Spring binding fails before the use case runs
+        mockMvc.perform(get("/api/exchanges/{exchange}/trades", EXCHANGE)
+                        .param("from", FROM.toString())
+                        .param("to", TO.toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
+    void getTrades_returns400WhenTimestampMalformed() throws Exception {
+        mockMvc.perform(get("/api/exchanges/{exchange}/trades", EXCHANGE)
+                        .param("symbol", "BTCUSDT")
+                        .param("from", "not-a-timestamp")
+                        .param("to", TO.toString()))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.status").value(400));
+    }
+
+    @Test
     void getTrades_returns501WhenCapabilityUnsupported() throws Exception {
         when(queryTrades.queryTrades("COINBASE", "BTCUSDT", FROM, TO))
                 .thenThrow(new UnsupportedOperationException("Trade history query capability is not available"));
