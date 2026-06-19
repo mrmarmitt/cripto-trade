@@ -5,6 +5,7 @@ import com.marmitt.core.ports.inbound.exchange.QueryTradeHistoryPort;
 import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 
@@ -14,11 +15,16 @@ import java.util.List;
  * <p>Resolve o {@link ExchangeAdapterDescriptor} da exchange pedida e despacha pela
  * capacidade de histórico, sem conhecer nenhum adapter concreto.
  *
- * <p>Valida o intervalo na borda ({@code symbol}, {@code from <= to}, ambos presentes)
- * antes de delegar. A paginação/limite de janela da exchange é tratada no adapter
- * (ex.: {@code BinanceTradeHistoryAdapter} fatia janelas de 24h internamente).
+ * <p>Valida o intervalo na borda ({@code symbol}, {@code from <= to}, ambos presentes e
+ * janela &le; {@value #MAX_WINDOW_DAYS} dias) antes de delegar. O limite de janela protege
+ * contra fan-out: o adapter da exchange fatia o intervalo em janelas de 24h e pagina
+ * (ex.: {@code BinanceTradeHistoryAdapter}), então um intervalo longo viraria muitas
+ * chamadas assinadas numa única requisição.
  */
 public class QueryTradeHistoryUseCase implements QueryTradeHistoryPort {
+
+    static final int MAX_WINDOW_DAYS = 31;
+    private static final Duration MAX_WINDOW = Duration.ofDays(MAX_WINDOW_DAYS);
 
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
 
@@ -49,6 +55,10 @@ public class QueryTradeHistoryUseCase implements QueryTradeHistoryPort {
         }
         if (from.isAfter(to)) {
             throw new IllegalArgumentException("from must not be after to (from=" + from + ", to=" + to + ")");
+        }
+        if (Duration.between(from, to).compareTo(MAX_WINDOW) > 0) {
+            throw new IllegalArgumentException(
+                    "query window must not exceed " + MAX_WINDOW_DAYS + " days (from=" + from + ", to=" + to + ")");
         }
     }
 
