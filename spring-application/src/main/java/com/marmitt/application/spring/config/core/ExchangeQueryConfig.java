@@ -1,7 +1,9 @@
 package com.marmitt.application.spring.config.core;
 
 import com.marmitt.core.application.usecase.exchange.QueryExchangeBalanceUseCase;
+import com.marmitt.core.application.usecase.exchange.QueryTradeHistoryUseCase;
 import com.marmitt.core.ports.inbound.exchange.QueryExchangeBalancePort;
+import com.marmitt.core.ports.inbound.exchange.QueryTradeHistoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -19,5 +21,11 @@ public class ExchangeQueryConfig {
     public QueryExchangeBalancePort queryExchangeBalanceUseCase(
             ExchangeAdapterRepositoryPort exchangeAdapterRepository) {
         return new QueryExchangeBalanceUseCase(exchangeAdapterRepository);
+    }
+
+    @Bean
+    public QueryTradeHistoryPort queryTradeHistoryUseCase(
+            ExchangeAdapterRepositoryPort exchangeAdapterRepository) {
+        return new QueryTradeHistoryUseCase(exchangeAdapterRepository);
     }
 }

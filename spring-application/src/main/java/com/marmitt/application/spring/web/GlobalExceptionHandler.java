@@ -23,6 +23,7 @@ import java.time.Instant;
  *   <tr><td>IllegalArgumentException / validação</td><td>400</td></tr>
  *   <tr><td>RunnerNotFoundException / DeadLetterNotFoundException</td><td>404</td></tr>
  *   <tr><td>DeadLetterConflictException</td><td>409</td></tr>
+ *   <tr><td>UnsupportedOperationException (capacidade não suportada pela exchange)</td><td>501</td></tr>
  *   <tr><td>ExchangeQueryException</td><td>502</td></tr>
  *   <tr><td>Exception (fallback)</td><td>500</td></tr>
  * </table>
@@ -49,6 +50,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DeadLetterConflictException.class)
     public ResponseEntity<ApiError> handleConflict(DeadLetterConflictException ex, HttpServletRequest request) {
         return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(UnsupportedOperationException.class)
+    public ResponseEntity<ApiError> handleUnsupported(UnsupportedOperationException ex, HttpServletRequest request) {
+        return build(HttpStatus.NOT_IMPLEMENTED, ex.getMessage(), request);
     }
 
     @ExceptionHandler(ExchangeQueryException.class)
