@@ -124,6 +124,8 @@ class OrderDispatchAdapterTest {
         @Override public com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort orderQuery() { throw new com.marmitt.core.exceptions.UnsupportedCapabilityException(EXCHANGE, "orderQuery"); }
         @Override public boolean hasAccountQuery() { return false; }
         @Override public com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort accountQuery() { throw new com.marmitt.core.exceptions.UnsupportedCapabilityException(EXCHANGE, "accountQuery"); }
+        @Override public boolean hasTradeHistory() { return false; }
+        @Override public com.marmitt.core.ports.outbound.exchange.TradeHistoryQueryPort tradeHistory() { throw new com.marmitt.core.exceptions.UnsupportedCapabilityException(EXCHANGE, "tradeHistory"); }
         @Override public boolean hasBootReadiness() { return false; }
         @Override public com.marmitt.core.ports.outbound.exchange.rest.ExchangeBootReadinessPort bootReadiness() { throw new com.marmitt.core.exceptions.UnsupportedCapabilityException(EXCHANGE, "bootReadiness"); }
     }
