@@ -10,8 +10,10 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 import java.time.Instant;
 
@@ -20,9 +22,10 @@ import java.time.Instant;
  * {@link ApiError}. Controllers não decidem status de erro nem montam corpo de erro.
  *
  * <table>
- *   <tr><td>IllegalArgumentException / validação</td><td>400</td></tr>
+ *   <tr><td>IllegalArgumentException / validação / parâmetro ausente ou inválido</td><td>400</td></tr>
  *   <tr><td>RunnerNotFoundException / DeadLetterNotFoundException</td><td>404</td></tr>
  *   <tr><td>DeadLetterConflictException</td><td>409</td></tr>
+ *   <tr><td>UnsupportedOperationException (capacidade não suportada pela exchange)</td><td>501</td></tr>
  *   <tr><td>ExchangeQueryException</td><td>502</td></tr>
  *   <tr><td>Exception (fallback)</td><td>500</td></tr>
  * </table>
@@ -41,6 +44,18 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
     }
 
+    @ExceptionHandler(MissingServletRequestParameterException.class)
+    public ResponseEntity<ApiError> handleMissingParam(MissingServletRequestParameterException ex,
+                                                       HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity<ApiError> handleTypeMismatch(MethodArgumentTypeMismatchException ex,
+                                                       HttpServletRequest request) {
+        return build(HttpStatus.BAD_REQUEST, "Invalid value for parameter '" + ex.getName() + "'", request);
+    }
+
     @ExceptionHandler({RunnerNotFoundException.class, DeadLetterNotFoundException.class})
     public ResponseEntity<ApiError> handleNotFound(RuntimeException ex, HttpServletRequest request) {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), request);
@@ -49,6 +64,11 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DeadLetterConflictException.class)
     public ResponseEntity<ApiError> handleConflict(DeadLetterConflictException ex, HttpServletRequest request) {
         return build(HttpStatus.CONFLICT, ex.getMessage(), request);
+    }
+
+    @ExceptionHandler(UnsupportedOperationException.class)
+    public ResponseEntity<ApiError> handleUnsupported(UnsupportedOperationException ex, HttpServletRequest request) {
+        return build(HttpStatus.NOT_IMPLEMENTED, ex.getMessage(), request);
     }
 
     @ExceptionHandler(ExchangeQueryException.class)

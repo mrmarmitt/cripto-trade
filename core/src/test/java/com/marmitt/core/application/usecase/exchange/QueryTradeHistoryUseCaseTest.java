@@ -7,6 +7,7 @@ import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
@@ -80,6 +81,13 @@ class QueryTradeHistoryUseCaseTest {
     void queryTrades_throwsWhenSymbolIsBlank() {
         assertThrows(IllegalArgumentException.class,
                 () -> useCase.queryTrades(EXCHANGE, "  ", FROM, TO));
+    }
+
+    @Test
+    void queryTrades_throwsWhenWindowExceedsMax() {
+        Instant tooFar = FROM.plus(Duration.ofDays(32));
+        assertThrows(IllegalArgumentException.class,
+                () -> useCase.queryTrades(EXCHANGE, SYMBOL, FROM, tooFar));
     }
 
     private static TradeExecutionDto fill() {

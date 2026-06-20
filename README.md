@@ -174,6 +174,10 @@ POST /api/websocket/exchange/market-data/unsubscribe
 # Order Management  
 POST /api/websocket/exchange/orders/create
 POST /api/websocket/exchange/orders/cancel
+
+# Exchange Queries
+GET  /api/exchanges/{exchange}/balances          # ?asset=USDT filtra um ativo
+GET  /api/exchanges/{exchange}/trades            # ?symbol=BTCUSDT&from=...&to=...
 ```
 
 ### Documentação
