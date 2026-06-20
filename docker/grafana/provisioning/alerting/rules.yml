@@ -1,0 +1,191 @@
+apiVersion: 1
+
+# Alert rules comportamentais sobre os logs no Loki (T21 — Camadas 2 e 3).
+# Todas roteiam para o Discord via label channel=alerts-behavior.
+groups:
+  - orgId: 1
+    name: ctrade-behavior
+    folder: ctrade-alerts
+    interval: 1m
+    rules:
+      # --- Camada 2: anomalias por taxa ---
+      - uid: ctrade-warn-rate-high
+        title: Alta taxa de WARN
+        condition: C
+        for: 2m
+        labels:
+          channel: alerts-behavior
+          severity: warning
+        annotations:
+          summary: 'Taxa de logs WARN elevada nos últimos 5 min'
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: loki
+            model:
+              datasource: { type: loki, uid: loki }
+              expr: 'sum(count_over_time({app="ctrade", level="WARN"} [5m]))'
+              queryType: instant
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              datasource: { type: __expr__, uid: __expr__ }
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [150] }
+              refId: C
+
+      - uid: ctrade-error-spike
+        title: Spike de ERROR
+        condition: C
+        for: 0m
+        labels:
+          channel: alerts-behavior
+          severity: critical
+        annotations:
+          summary: 'Spike de logs ERROR no último minuto'
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange: { from: 60, to: 0 }
+            datasourceUid: loki
+            model:
+              datasource: { type: loki, uid: loki }
+              expr: 'sum(count_over_time({app="ctrade", level="ERROR"} [1m]))'
+              queryType: instant
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              datasource: { type: __expr__, uid: __expr__ }
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [6] }
+              refId: C
+
+      - uid: ctrade-reconnect-frequent
+        title: Reconexões frequentes
+        condition: C
+        for: 1m
+        labels:
+          channel: alerts-behavior
+          severity: warning
+        annotations:
+          summary: 'Frequência de reconexão acima do esperado (> 3/min em 5 min)'
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange: { from: 300, to: 0 }
+            datasourceUid: loki
+            model:
+              datasource: { type: loki, uid: loki }
+              expr: 'sum(count_over_time({app="ctrade"} |= `reconnect` [5m]))'
+              queryType: instant
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              datasource: { type: __expr__, uid: __expr__ }
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [15] }
+              refId: C
+
+      # --- Camada 3: ausência de sinais de fluxo (logs sentinel) ---
+      - uid: ctrade-no-fills-confirmed
+        title: Nenhum fill confirmado
+        condition: C
+        for: 0m
+        labels:
+          channel: alerts-behavior
+          severity: warning
+        annotations:
+          summary: 'Nenhum executionConfirmedReaction final nos últimos 10 min'
+        noDataState: Alerting
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: loki
+            model:
+              datasource: { type: loki, uid: loki }
+              expr: 'sum(count_over_time({app="ctrade"} |= `executionConfirmedReaction:` |~ `isFinal=true` [10m]))'
+              queryType: instant
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              datasource: { type: __expr__, uid: __expr__ }
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+              refId: C
+
+      - uid: ctrade-no-orders-submitted
+        title: Nenhuma ordem submetida
+        condition: C
+        for: 0m
+        labels:
+          channel: alerts-behavior
+          severity: warning
+        annotations:
+          summary: 'Nenhuma transição PENDING->SUBMITTED nos últimos 30 min'
+        noDataState: Alerting
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange: { from: 1800, to: 0 }
+            datasourceUid: loki
+            model:
+              datasource: { type: loki, uid: loki }
+              expr: 'sum(count_over_time({app="ctrade"} |= `PENDING->SUBMITTED` [30m]))'
+              queryType: instant
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              datasource: { type: __expr__, uid: __expr__ }
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+              refId: C
+
+      - uid: ctrade-boot-recovery-errors
+        title: Boot recovery com erros
+        condition: C
+        for: 0m
+        labels:
+          channel: alerts-behavior
+          severity: critical
+        annotations:
+          summary: 'bootRecovery: completed com hasErrors=true'
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: loki
+            model:
+              datasource: { type: loki, uid: loki }
+              expr: 'sum(count_over_time({app="ctrade"} |= `bootRecovery: completed` |~ `hasErrors=true` [10m]))'
+              queryType: instant
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              datasource: { type: __expr__, uid: __expr__ }
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+              refId: C

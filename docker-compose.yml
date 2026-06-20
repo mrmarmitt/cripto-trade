@@ -87,6 +87,9 @@ services:
       GF_SECURITY_ADMIN_USER: admin
       GF_SECURITY_ADMIN_PASSWORD: ctrade123
       GF_USERS_ALLOW_SIGN_UP: "false"
+      # Usado pelo contact point Discord provisionado (docker/grafana/provisioning/alerting).
+      # Sem a env var os alertas comportamentais disparam mas não entregam no Discord.
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
     volumes:
       - ./docker/grafana/provisioning:/etc/grafana/provisioning:ro
       - grafana_data:/var/lib/grafana

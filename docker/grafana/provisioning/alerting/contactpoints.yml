@@ -1,0 +1,14 @@
+apiVersion: 1
+
+# Contact point Discord para alertas comportamentais (T21 — Camada 2).
+# A URL vem da env var DISCORD_WEBHOOK_URL passada ao container do Grafana.
+# Sem a env var o contact point fica sem destino — os alertas disparam mas não entregam.
+contactPoints:
+  - orgId: 1
+    name: discord
+    receivers:
+      - uid: discord-behavior
+        type: discord
+        settings:
+          url: $__env{DISCORD_WEBHOOK_URL}
+        disableResolveMessage: false
