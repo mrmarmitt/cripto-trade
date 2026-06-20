@@ -6,6 +6,7 @@ import com.marmitt.binance.rest.BinanceRestRequestBuilder;
 import com.marmitt.binance.rest.HttpClientPort;
 import com.marmitt.binance.rest.RestRequest;
 import com.marmitt.core.dto.reconciliation.TradeExecutionDto;
+import com.marmitt.core.exceptions.ExchangeQueryException;
 import com.marmitt.core.ports.outbound.exchange.TradeHistoryQueryPort;
 import lombok.extern.slf4j.Slf4j;
 
@@ -67,7 +68,7 @@ public class BinanceTradeHistoryAdapter implements TradeHistoryQueryPort {
 
         // Paginate: if full page returned, advance using fromId of last trade
         while (page.size() == PAGE_LIMIT) {
-            long lastId = Long.parseLong(page.getLast().exchangeTradeId());
+            long lastId = parseTradeId(page.getLast().exchangeTradeId());
             page = fetchPage(requestBuilder.buildMyTradesFromId(symbol, lastId + 1));
             // Filter client-side to stay within this window's end (fromId ignores time range)
             page = page.stream()
@@ -83,11 +84,12 @@ public class BinanceTradeHistoryAdapter implements TradeHistoryQueryPort {
         try {
             response = httpClient.get(req.url(), req.headers());
         } catch (IOException e) {
-            throw new RuntimeException("Failed to fetch myTrades from Binance: " + e.getMessage(), e);
+            throw new ExchangeQueryException("BINANCE", ExchangeQueryException.ErrorType.TEMPORARY,
+                    "Failed to fetch myTrades from Binance: " + e.getMessage(), e);
         }
 
         if (!response.isSuccessful()) {
-            throw new RuntimeException(
+            throw new ExchangeQueryException("BINANCE", errorTypeFor(response.statusCode()),
                     "Binance myTrades returned HTTP " + response.statusCode() + ": " + response.body());
         }
 
@@ -98,9 +100,37 @@ public class BinanceTradeHistoryAdapter implements TradeHistoryQueryPort {
                 trades.add(parseTrade(node));
             }
             return trades;
-        } catch (IOException e) {
-            throw new RuntimeException("Failed to parse myTrades response: " + e.getMessage(), e);
+        } catch (IOException | RuntimeException e) {
+            // IOException: body is not valid JSON.
+            // RuntimeException (e.g. NumberFormatException from a missing/non-numeric
+            // price/qty/quoteQty): provider returned HTTP 200 with a malformed payload.
+            // Both are exchange-side failures (502), never client errors (400).
+            throw new ExchangeQueryException("BINANCE", ExchangeQueryException.ErrorType.UNKNOWN,
+                    "Failed to parse myTrades response: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Converte o {@code id} do último trade da página para o cursor {@code fromId} da paginação.
+     * Um {@code id} ausente/não-numérico em HTTP 200 é payload inválido do provider (502), não
+     * erro do cliente — espelha o tratamento de {@code parseTrade} em {@link #fetchPage}.
+     */
+    private static long parseTradeId(String rawId) {
+        try {
+            return Long.parseLong(rawId);
+        } catch (RuntimeException e) {
+            throw new ExchangeQueryException("BINANCE", ExchangeQueryException.ErrorType.UNKNOWN,
+                    "Failed to parse trade id for pagination cursor: " + rawId, e);
+        }
+    }
+
+    private static ExchangeQueryException.ErrorType errorTypeFor(int statusCode) {
+        return switch (statusCode) {
+            case 400 -> ExchangeQueryException.ErrorType.INVALID_REQUEST;
+            case 401, 403 -> ExchangeQueryException.ErrorType.AUTH;
+            case 429 -> ExchangeQueryException.ErrorType.RATE_LIMIT;
+            default -> ExchangeQueryException.ErrorType.TEMPORARY;
+        };
     }
 
     private TradeExecutionDto parseTrade(JsonNode node) {

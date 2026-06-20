@@ -33,7 +33,7 @@ public class ReconciliationController {
      *                       but still counted in summary.matched
      */
     @GetMapping
-    public ResponseEntity<?> reconcile(
+    public ResponseEntity<ReconciliationReportDto> reconcile(
             @RequestParam String symbol,
             @RequestParam(defaultValue = "BINANCE") String exchangeId,
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME) Instant from,
@@ -41,29 +41,22 @@ public class ReconciliationController {
             @RequestParam(defaultValue = "false") boolean includeMatched) {
 
         if (from.isAfter(to)) {
-            return ResponseEntity.badRequest().body("'from' must be before 'to'");
+            throw new IllegalArgumentException("'from' must be before 'to'");
         }
 
         log.info("reconciliation: symbol={} exchangeId={} from={} to={} includeMatched={}",
                 symbol, exchangeId, from, to, includeMatched);
 
-        try {
-            ReconciliationReportDto report = reconcileTradesPort.reconcile(
-                    new ReconciliationRequest(symbol, exchangeId, from, to, includeMatched));
-            log.info("reconciliation: done symbol={} total={} matched={} divergent={} exchangeOnly={} localOnly={}",
-                    symbol,
-                    report.summary().total(),
-                    report.summary().matched(),
-                    report.summary().divergent(),
-                    report.summary().exchangeOnly(),
-                    report.summary().localOnly());
-            return ResponseEntity.ok(report);
-        } catch (IllegalArgumentException e) {
-            log.warn("reconciliation: bad request symbol={} error={}", symbol, e.getMessage());
-            return ResponseEntity.badRequest().body(e.getMessage());
-        } catch (RuntimeException e) {
-            log.error("reconciliation: failed symbol={} error={}", symbol, e.getMessage(), e);
-            return ResponseEntity.status(502).body("Exchange query failed: " + e.getMessage());
-        }
+        ReconciliationReportDto report = reconcileTradesPort.reconcile(
+                new ReconciliationRequest(symbol, exchangeId, from, to, includeMatched));
+
+        log.info("reconciliation: done symbol={} total={} matched={} divergent={} exchangeOnly={} localOnly={}",
+                symbol,
+                report.summary().total(),
+                report.summary().matched(),
+                report.summary().divergent(),
+                report.summary().exchangeOnly(),
+                report.summary().localOnly());
+        return ResponseEntity.ok(report);
     }
 }

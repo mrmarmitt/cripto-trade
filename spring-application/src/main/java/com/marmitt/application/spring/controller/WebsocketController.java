@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 import java.util.Map;
 
 @RestController
-@RequestMapping("/websocket")
+@RequestMapping("/api/websocket")
 public class WebsocketController {
 
     private final ExchangeConnectService exchangeConnectionService;

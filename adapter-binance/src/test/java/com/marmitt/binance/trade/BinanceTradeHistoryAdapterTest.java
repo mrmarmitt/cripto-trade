@@ -5,6 +5,7 @@ import com.marmitt.binance.rest.BinanceRestRequestBuilder;
 import com.marmitt.binance.rest.HttpClientPort;
 import com.marmitt.binance.rest.RestRequest;
 import com.marmitt.core.dto.reconciliation.TradeExecutionDto;
+import com.marmitt.core.exceptions.ExchangeQueryException;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -129,6 +130,35 @@ class BinanceTradeHistoryAdapterTest {
     }
 
     @Test
+    void fetchTrades_throwsExchangeQueryExceptionWhenNumericFieldIsNotNumeric() throws IOException {
+        // HTTP 200 with a non-numeric price → NumberFormatException inside parseTrade.
+        // Must surface as a provider-side ExchangeQueryException (502), never leak as
+        // IllegalArgumentException (which the global handler maps to a 400 client error).
+        when(requestBuilder.buildMyTrades(anyString(), anyLong(), anyLong())).thenReturn(DUMMY_REQ);
+        String json = """
+                [{"id":"28457","orderId":100234,"clientOrderId":"client-1","symbol":"BTCUSDT",
+                  "price":"not-a-number","qty":"0.01","quoteQty":"500.00","commission":"0.0001",
+                  "commissionAsset":"BNB","time":1699865549590,"isBuyer":true}]
+                """;
+        when(httpClient.get(any(), any())).thenReturn(new HttpClientPort.HttpResponse(200, json));
+
+        assertThrows(ExchangeQueryException.class, () -> adapter.fetchTrades(SYMBOL, FROM, TO));
+    }
+
+    @Test
+    void fetchTrades_throwsExchangeQueryExceptionWhenPaginationCursorIdIsNotNumeric() throws IOException {
+        // Full page (1000) triggers pagination, but the last trade's id is non-numeric.
+        // The Long.parseLong cursor conversion must surface as ExchangeQueryException (502),
+        // not leak as IllegalArgumentException (400) — same provider-payload contract as parseTrade.
+        when(requestBuilder.buildMyTrades(anyString(), anyLong(), anyLong())).thenReturn(DUMMY_REQ);
+        String fullPageWithBadLastId = buildTradeJsonArrayWithLastId(1000, 0L, "not-a-number");
+        when(httpClient.get(any(), any()))
+                .thenReturn(new HttpClientPort.HttpResponse(200, fullPageWithBadLastId));
+
+        assertThrows(ExchangeQueryException.class, () -> adapter.fetchTrades(SYMBOL, FROM, TO));
+    }
+
+    @Test
     void fetchTrades_issuesSingleRequestWhenWindowIsWithin24Hours() throws IOException {
         // FROM → TO is exactly 24h; should produce 1 buildMyTrades call, not 2
         when(requestBuilder.buildMyTrades(anyString(), anyLong(), anyLong())).thenReturn(DUMMY_REQ);
@@ -166,6 +196,21 @@ class BinanceTradeHistoryAdapterTest {
                     "\"price\":\"50000\",\"qty\":\"0.01\",\"quoteQty\":\"500\",\"commission\":\"0.0001\"," +
                     "\"commissionAsset\":\"BNB\",\"time\":1699865549590,\"isBuyer\":true}",
                     startId + i, i));
+        }
+        sb.append("]");
+        return sb.toString();
+    }
+
+    private static String buildTradeJsonArrayWithLastId(int count, long startId, String lastId) {
+        StringBuilder sb = new StringBuilder("[");
+        for (int i = 0; i < count; i++) {
+            if (i > 0) sb.append(",");
+            String id = (i == count - 1) ? "\"" + lastId + "\"" : "\"" + (startId + i) + "\"";
+            sb.append(String.format(
+                    "{\"id\":%s,\"orderId\":100234,\"clientOrderId\":\"client-%d\",\"symbol\":\"BTCUSDT\"," +
+                    "\"price\":\"50000\",\"qty\":\"0.01\",\"quoteQty\":\"500\",\"commission\":\"0.0001\"," +
+                    "\"commissionAsset\":\"BNB\",\"time\":1699865549590,\"isBuyer\":true}",
+                    id, i));
         }
         sb.append("]");
         return sb.toString();

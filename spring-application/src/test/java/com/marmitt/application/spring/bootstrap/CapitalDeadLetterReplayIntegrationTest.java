@@ -209,7 +209,7 @@ class CapitalDeadLetterReplayIntegrationTest extends AbstractIntegrationTest {
                                 }
                                 """))
                 .andExpect(status().isConflict())
-                .andExpect(jsonPath("$.reprocessed").value(false))
+                .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.message").value(
                         "Dead letter replay produced no state change and requires manual review"
                 ));

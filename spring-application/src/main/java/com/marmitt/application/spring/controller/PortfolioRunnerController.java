@@ -24,7 +24,7 @@ import java.util.UUID;
 
 @Slf4j
 @RestController
-@RequestMapping("/portfolios")
+@RequestMapping("/api/portfolios")
 public class PortfolioRunnerController {
 
     private final CreateRunnerPort createRunner;
@@ -53,36 +53,20 @@ public class PortfolioRunnerController {
         log.info("Received request to create runner - PortfolioId: {}, StrategyId: {}, Symbol: {}, Exchange: {}",
                 id, dto.strategyId(), dto.symbol(), dto.exchangeName());
 
-        try {
-            CreateRunnerRequest request = CreateRunnerRequest.builder()
-                    .portfolioId(id)
-                    .strategyId(dto.strategyId())
-                    .symbol(dto.symbol())
-                    .exchangeName(dto.exchangeName())
-                    .allowedMarketDataSources(dto.allowedMarketDataSources())
-                    .build();
+        CreateRunnerRequest request = CreateRunnerRequest.builder()
+                .portfolioId(id)
+                .strategyId(dto.strategyId())
+                .symbol(dto.symbol())
+                .exchangeName(dto.exchangeName())
+                .allowedMarketDataSources(dto.allowedMarketDataSources())
+                .build();
 
-            CreateRunnerResponse response = createRunner.execute(request);
+        CreateRunnerResponse response = createRunner.execute(request);
 
-            if (response.runnerId() != null) {
-                return ResponseEntity.status(HttpStatus.CREATED).body(response);
-            }
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-
-        } catch (IllegalArgumentException e) {
-            log.error("Invalid argument in create runner request: {}", e.getMessage());
-            CreateRunnerResponse errorResponse = CreateRunnerResponse.failure(
-                    "Invalid argument: " + e.getMessage()
-            );
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
-
-        } catch (Exception e) {
-            log.error("Unexpected error creating runner", e);
-            CreateRunnerResponse errorResponse = CreateRunnerResponse.failure(
-                    "Internal server error: " + e.getMessage()
-            );
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        if (response.runnerId() == null) {
+            throw new IllegalArgumentException(response.message());
         }
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     /**

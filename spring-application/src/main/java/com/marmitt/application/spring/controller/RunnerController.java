@@ -14,7 +14,7 @@ import java.util.UUID;
 
 @Slf4j
 @RestController
-@RequestMapping("/runners")
+@RequestMapping("/api/runners")
 public class RunnerController {
 
     private final QueryRunnerPort queryRunner;
@@ -25,7 +25,7 @@ public class RunnerController {
 
     /**
      * Lista transacoes de um runner
-     * GET /runners/{id}/transactions
+     * GET /api/runners/{id}/transactions
      */
     @GetMapping("/{id}/transactions")
     public ResponseEntity<List<TransactionDto>> getTransactionsByRunnerId(@PathVariable UUID id) {

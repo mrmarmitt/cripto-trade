@@ -15,6 +15,9 @@ public class AdminWebMvcConfig implements WebMvcConfigurer {
 
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        registry.addInterceptor(adminApiKeyInterceptor).addPathPatterns("/api/admin/**");
+        // /api/exchanges/** expõe saldo e fills da conta na exchange — operações sensíveis
+        // que devem exigir a mesma chave de admin que /api/admin/**.
+        registry.addInterceptor(adminApiKeyInterceptor)
+                .addPathPatterns("/api/admin/**", "/api/exchanges/**");
     }
 }

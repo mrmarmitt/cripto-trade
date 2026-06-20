@@ -1,8 +1,10 @@
 package com.marmitt.application.spring.controller;
 
+import com.marmitt.application.spring.web.GlobalExceptionHandler;
 import com.marmitt.core.dto.reconciliation.ReconciliationReportDto;
 import com.marmitt.core.dto.reconciliation.ReconciliationRequest;
 import com.marmitt.core.dto.reconciliation.ReconciliationSummaryDto;
+import com.marmitt.core.exceptions.ExchangeQueryException;
 import com.marmitt.core.ports.inbound.reconciliation.ReconcileTradesPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,7 +29,9 @@ class ReconciliationControllerTest {
 
     @BeforeEach
     void setUp() {
-        mockMvc = MockMvcBuilders.standaloneSetup(new ReconciliationController(reconcileTradesPort)).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(new ReconciliationController(reconcileTradesPort))
+                .setControllerAdvice(new GlobalExceptionHandler())
+                .build();
     }
 
     @Test
@@ -77,16 +81,19 @@ class ReconciliationControllerTest {
     }
 
     @Test
-    void reconcile_returns502WhenExchangeThrows() throws Exception {
+    void reconcile_returns502WhenExchangeQueryFails() throws Exception {
         when(reconcileTradesPort.reconcile(any(ReconciliationRequest.class)))
-                .thenThrow(new RuntimeException("Binance timeout"));
+                .thenThrow(new ExchangeQueryException("BINANCE",
+                        ExchangeQueryException.ErrorType.TEMPORARY, "Binance timeout"));
 
         mockMvc.perform(get("/api/reconciliation")
                         .param("symbol", "BTCUSDT")
                         .param("exchangeId", "BINANCE")
                         .param("from", "2026-01-01T00:00:00Z")
                         .param("to", "2026-01-02T00:00:00Z"))
-                .andExpect(status().isBadGateway());
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.status").value(502))
+                .andExpect(jsonPath("$.path").value("/api/reconciliation"));
     }
 
     @Test

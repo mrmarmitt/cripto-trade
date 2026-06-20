@@ -25,7 +25,7 @@ import java.util.UUID;
 
 @Slf4j
 @RestController
-@RequestMapping("/portfolios")
+@RequestMapping("/api/portfolios")
 public class PortfolioController {
 
     private final CreatePortfolioPort createPortfolio;
@@ -50,29 +50,12 @@ public class PortfolioController {
         log.info("Received request to create portfolio - Name: {}, InitialCapital: {}, Currency: {}",
                 request.name(), request.initialCapitalAmount(), request.currency());
 
-        try {
-            CreatePortfolioResponse response = createPortfolio.execute(request);
+        CreatePortfolioResponse response = createPortfolio.execute(request);
 
-            if (response.portfolioId() != null) {
-                return ResponseEntity.status(HttpStatus.CREATED).body(response);
-            } else {
-                return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(response);
-            }
-
-        } catch (IllegalArgumentException e) {
-            log.error("Invalid argument in create portfolio request: {}", e.getMessage());
-            CreatePortfolioResponse errorResponse = CreatePortfolioResponse.failure(
-                    "Invalid argument: " + e.getMessage()
-            );
-            return ResponseEntity.status(HttpStatus.BAD_REQUEST).body(errorResponse);
-
-        } catch (Exception e) {
-            log.error("Unexpected error creating portfolio", e);
-            CreatePortfolioResponse errorResponse = CreatePortfolioResponse.failure(
-                    "Internal server error: " + e.getMessage()
-            );
-            return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(errorResponse);
+        if (response.portfolioId() == null) {
+            throw new IllegalArgumentException(response.message());
         }
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     /**

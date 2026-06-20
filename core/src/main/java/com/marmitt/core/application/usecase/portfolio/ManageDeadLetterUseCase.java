@@ -5,6 +5,8 @@ import com.marmitt.core.dto.portfolio.response.DeadLetterEntryDto;
 import com.marmitt.core.dto.portfolio.DeadLetterReprocessingResult;
 import com.marmitt.core.dto.portfolio.response.ReprocessDeadLetterResponse;
 import com.marmitt.core.dto.portfolio.response.ResolveDeadLetterResponse;
+import com.marmitt.core.exceptions.DeadLetterConflictException;
+import com.marmitt.core.exceptions.DeadLetterNotFoundException;
 import com.marmitt.core.ports.inbound.portfolio.ManageDeadLetterPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterReprocessingPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
@@ -45,13 +47,11 @@ public class ManageDeadLetterUseCase implements ManageDeadLetterPort {
             throw new IllegalArgumentException("resolvedBy cannot be blank");
         }
 
-        DeadLetterEntry entry = deadLetterEntryRepository.findById(deadLetterId).orElse(null);
-        if (entry == null) {
-            return ResolveDeadLetterResponse.failure(deadLetterId, "Dead letter entry not found");
-        }
+        DeadLetterEntry entry = deadLetterEntryRepository.findById(deadLetterId)
+                .orElseThrow(() -> new DeadLetterNotFoundException(deadLetterId));
 
         if (entry.isResolved()) {
-            return ResolveDeadLetterResponse.failure(deadLetterId, "Dead letter entry is already resolved");
+            throw new DeadLetterConflictException(deadLetterId, "Dead letter entry is already resolved");
         }
 
         entry.resolve(resolvedBy);
@@ -72,25 +72,21 @@ public class ManageDeadLetterUseCase implements ManageDeadLetterPort {
             throw new IllegalArgumentException("requestedBy cannot be blank");
         }
 
-        DeadLetterEntry entry = deadLetterEntryRepository.findById(deadLetterId).orElse(null);
-        if (entry == null) {
-            return ReprocessDeadLetterResponse.failure(deadLetterId, "Dead letter entry not found");
-        }
+        DeadLetterEntry entry = deadLetterEntryRepository.findById(deadLetterId)
+                .orElseThrow(() -> new DeadLetterNotFoundException(deadLetterId));
 
         if (entry.isResolved()) {
-            return ReprocessDeadLetterResponse.failure(deadLetterId, "Dead letter entry is already resolved");
+            throw new DeadLetterConflictException(deadLetterId, "Dead letter entry is already resolved");
         }
 
         if (!deadLetterReprocessingPort.supports(entry)) {
-            return ReprocessDeadLetterResponse.failure(
-                    deadLetterId,
-                    "Dead letter entry cannot be reprocessed automatically"
-            );
+            throw new DeadLetterConflictException(
+                    deadLetterId, "Dead letter entry cannot be reprocessed automatically");
         }
 
         DeadLetterReprocessingResult reprocessingResult = deadLetterReprocessingPort.reprocess(entry);
         if (!reprocessingResult.applied()) {
-            return ReprocessDeadLetterResponse.failure(deadLetterId, reprocessingResult.message());
+            throw new DeadLetterConflictException(deadLetterId, reprocessingResult.message());
         }
 
         entry.resolve(requestedBy);
