@@ -3,7 +3,20 @@
 **Complexidade:** Média  
 **Responsável:** Claude  
 **Dependências:** T17 (Loki + Grafana já no stack)  
-**Status:** Pendente
+**Status:** Concluído
+
+> **Camada 1 (código):** `ErrorNotificationPort` no core + `DiscordWebhookNotificationAdapter`
+> (no-op quando `DISCORD_WEBHOOK_URL` vazio, envio assíncrono e tolerante a falha), com disparo
+> em `CapitalEventListener` (DLQ persistido) e `BootAlertListener` (boot fail-fast). Critérios 1-4.
+>
+> **Camada 2 (Grafana):** provisioning em `docker/grafana/provisioning/alerting/` — contact point
+> Discord (`$__env{DISCORD_WEBHOOK_URL}`), notification policy roteando por `channel=alerts-behavior`
+> e 6 alert rules sobre o Loki. `DISCORD_WEBHOOK_URL` passado ao container do Grafana no compose.
+> Validado subindo o stack: `finished to provision alerting` sem erros e rules avaliando contra o Loki.
+>
+> **Camada 3 (logs):** enriquecimento dos logs sentinel de baixa qualidade em `RunBootSequenceUseCase`
+> (`runId` + contagens) e `ProcessMessageEventListener` (`correlationId`); alert rules de ausência
+> (`no-fills-confirmed`, `no-orders-submitted`, `boot-recovery-errors`) incluídas na Camada 2.
 
 ---
 
