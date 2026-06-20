@@ -5,6 +5,7 @@ import com.marmitt.binance.rest.BinanceRestRequestBuilder;
 import com.marmitt.binance.rest.HttpClientPort;
 import com.marmitt.binance.rest.RestRequest;
 import com.marmitt.core.dto.reconciliation.TradeExecutionDto;
+import com.marmitt.core.exceptions.ExchangeQueryException;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -126,6 +127,22 @@ class BinanceTradeHistoryAdapterTest {
                 .thenReturn(new HttpClientPort.HttpResponse(200, "not-json"));
 
         assertThrows(RuntimeException.class, () -> adapter.fetchTrades(SYMBOL, FROM, TO));
+    }
+
+    @Test
+    void fetchTrades_throwsExchangeQueryExceptionWhenNumericFieldIsNotNumeric() throws IOException {
+        // HTTP 200 with a non-numeric price → NumberFormatException inside parseTrade.
+        // Must surface as a provider-side ExchangeQueryException (502), never leak as
+        // IllegalArgumentException (which the global handler maps to a 400 client error).
+        when(requestBuilder.buildMyTrades(anyString(), anyLong(), anyLong())).thenReturn(DUMMY_REQ);
+        String json = """
+                [{"id":"28457","orderId":100234,"clientOrderId":"client-1","symbol":"BTCUSDT",
+                  "price":"not-a-number","qty":"0.01","quoteQty":"500.00","commission":"0.0001",
+                  "commissionAsset":"BNB","time":1699865549590,"isBuyer":true}]
+                """;
+        when(httpClient.get(any(), any())).thenReturn(new HttpClientPort.HttpResponse(200, json));
+
+        assertThrows(ExchangeQueryException.class, () -> adapter.fetchTrades(SYMBOL, FROM, TO));
     }
 
     @Test

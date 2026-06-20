@@ -100,7 +100,11 @@ public class BinanceTradeHistoryAdapter implements TradeHistoryQueryPort {
                 trades.add(parseTrade(node));
             }
             return trades;
-        } catch (IOException e) {
+        } catch (IOException | RuntimeException e) {
+            // IOException: body is not valid JSON.
+            // RuntimeException (e.g. NumberFormatException from a missing/non-numeric
+            // price/qty/quoteQty): provider returned HTTP 200 with a malformed payload.
+            // Both are exchange-side failures (502), never client errors (400).
             throw new ExchangeQueryException("BINANCE", ExchangeQueryException.ErrorType.UNKNOWN,
                     "Failed to parse myTrades response: " + e.getMessage(), e);
         }
