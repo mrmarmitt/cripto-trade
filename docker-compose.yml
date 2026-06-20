@@ -68,6 +68,10 @@ services:
       BINANCE_API_KEY: ${BINANCE_API_KEY:-}
       BINANCE_API_SECRET: ${BINANCE_API_SECRET:-}
       ADMIN_API_KEY: ${ADMIN_API_KEY:-}
+      # Compose só injeta variáveis explicitamente listadas; sem isto o adapter Discord
+      # ficaria em no-op dentro do container mesmo com DISCORD_WEBHOOK_URL setado no host.
+      DISCORD_WEBHOOK_URL: ${DISCORD_WEBHOOK_URL:-}
+      GRAFANA_EXPLORE_URL_TEMPLATE: ${GRAFANA_EXPLORE_URL_TEMPLATE:-}
     depends_on:
       postgres:
         condition: service_healthy
