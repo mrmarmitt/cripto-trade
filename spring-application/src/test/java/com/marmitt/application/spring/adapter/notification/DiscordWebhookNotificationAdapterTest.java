@@ -94,6 +94,32 @@ class DiscordWebhookNotificationAdapterTest {
                 .doesNotThrowAnyException();
     }
 
+    @Test
+    void notifyError_blocksUntilDeliveryForBootFailFast() {
+        // Boot fail-fast aborta o processo logo após publicar o evento: a entrega precisa
+        // ocorrer de forma síncrona (flush) para que o alerta saia antes do shutdown.
+        server.enqueue(new MockResponse().setResponseCode(204));
+        DiscordWebhookNotificationAdapter adapter = new DiscordWebhookNotificationAdapter(
+                server.url("/webhook").toString(), "", MAPPER, httpClient);
+
+        adapter.notifyError(bootFailFastEvent());
+
+        // Sem aguardar: a request já foi recebida ao retornar, provando o flush síncrono.
+        assertThat(server.getRequestCount()).isEqualTo(1);
+    }
+
+    @Test
+    void notifyError_swallowsConnectionFailureOnBootFailFast() throws IOException {
+        String deadUrl = server.url("/webhook").toString();
+        server.shutdown(); // ninguém escutando → falha de conexão durante o flush
+
+        DiscordWebhookNotificationAdapter adapter =
+                new DiscordWebhookNotificationAdapter(deadUrl, "", MAPPER, httpClient);
+
+        assertThatCode(() -> adapter.notifyError(bootFailFastEvent()))
+                .doesNotThrowAnyException();
+    }
+
     private static ErrorNotificationEvent dlqEvent(UUID dlqId, String correlationId) {
         return ErrorNotificationEvent.dlqPersisted(
                 "Capital event sent to DLQ",
@@ -101,6 +127,14 @@ class DiscordWebhookNotificationAdapterTest {
                 correlationId,
                 UUID.randomUUID(),
                 dlqId,
+                Instant.parse("2026-06-20T10:00:00Z"));
+    }
+
+    private static ErrorNotificationEvent bootFailFastEvent() {
+        return ErrorNotificationEvent.bootFailFast(
+                "Boot fail-fast: phase1.infrastructure",
+                "code=READINESS_FAILED message=exchange unavailable",
+                "boot-run-1",
                 Instant.parse("2026-06-20T10:00:00Z"));
     }
 }
