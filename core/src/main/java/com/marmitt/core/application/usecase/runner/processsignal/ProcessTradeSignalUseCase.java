@@ -14,6 +14,7 @@ import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.strategy.TradingStrategy;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
+import com.marmitt.core.ports.outbound.exchange.rest.OrderQuantityNormalizerPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
@@ -72,6 +73,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     private final StrategySignalEvaluator signalEvaluator;
     private final RunnerContextAssembler contextAssembler;
     private final TradeIntentFactory tradeIntentFactory;
+    private final OrderNormalizer orderNormalizer;
     private final BuySignalHandler buySignalHandler;
     private final SellSignalHandler sellSignalHandler;
     private final RunnerExposureService runnerExposureService;
@@ -82,7 +84,8 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                                         GlobalBalanceRepositoryPort globalBalanceRepository,
                                         PortfolioRepositoryPort portfolioRepository,
                                         OrderDispatchPort orderDispatch,
-                                        OrderConciliationPort orderConciliation) {
+                                        OrderConciliationPort orderConciliation,
+                                        List<OrderQuantityNormalizerPort> orderNormalizers) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.orderConciliation = orderConciliation;
 
@@ -91,6 +94,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         this.contextAssembler = new RunnerContextAssembler(
                 globalBalanceRepository, strategyRunnerRepository, MINIMUM_OPERATION_AMOUNT);
         this.tradeIntentFactory = new TradeIntentFactory();
+        this.orderNormalizer = new OrderNormalizer(orderNormalizers);
         this.buySignalHandler = new BuySignalHandler(this.tradeIntentFactory, orderDispatch);
         this.sellSignalHandler = new SellSignalHandler(strategyRunnerRepository, this.tradeIntentFactory, orderDispatch);
         this.runnerExposureService = new RunnerExposureService(strategyRunnerRepository);
@@ -276,7 +280,13 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
             return;
         }
 
-        Transaction transaction = tradeIntentFactory.buildTransaction(runner, signal, currentPrice);
+        // Normaliza quantidade e preço às regras de filtro da exchange ANTES de materializar
+        // a transação, de modo que o valor persistido, reservado e enviado sejam idênticos.
+        OrderNormalizer.NormalizedOrder normalized = orderNormalizer.normalize(
+                runner.getExchangeId(), runner.getSymbol(), signal.quantity(), currentPrice);
+
+        Transaction transaction = tradeIntentFactory.buildTransaction(
+                runner, signal, normalized.quantity(), normalized.price());
         if (transaction.isBuy()) {
             BigDecimal precomputedExposure = exposureSnapshot != null
                     ? exposureSnapshot.inFlightExposure()

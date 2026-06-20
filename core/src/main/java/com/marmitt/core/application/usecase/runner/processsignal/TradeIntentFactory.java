@@ -56,22 +56,27 @@ class TradeIntentFactory {
      *
      * <p>O {@code clientOrderId} gerado aqui e a chave de roteamento que permite ao sistema
      * reconciliar os callbacks assincronos da exchange com a transacao correta no banco.
-     * O total e calculado como {@code quantity × currentPrice} e usado como valor de
-     * reserva de capital — o valor executado real sera atualizado ao receber os fills.
+     * O total e calculado como {@code quantity × price} e usado como valor de reserva de
+     * capital — o valor executado real sera atualizado ao receber os fills.
+     *
+     * <p>A {@code quantity} e o {@code price} recebidos ja devem estar normalizados as regras
+     * de filtro da exchange (ver {@link OrderNormalizer}), garantindo que o valor persistido e
+     * reservado seja identico ao enviado para a exchange.
      */
-    public Transaction buildTransaction(StrategyRunner runner, StrategyOutputDto signal, BigDecimal currentPrice) {
+    public Transaction buildTransaction(StrategyRunner runner, StrategyOutputDto signal,
+                                        BigDecimal quantity, BigDecimal price) {
         TransactionType type = signal.decision() == TradingAction.SHOULD_BUY
                 ? TransactionType.BUY : TransactionType.SELL;
         String clientOrderId = ClientOrderId.generate(runner.getShortCode(), type);
-        BigDecimal total = signal.quantity().multiply(currentPrice).setScale(8, RoundingMode.HALF_UP);
+        BigDecimal total = quantity.multiply(price).setScale(8, RoundingMode.HALF_UP);
 
         return new Transaction(
                 runner.getId(),
                 clientOrderId,
                 type,
                 runner.getSymbol(),
-                signal.quantity(),
-                currentPrice,
+                quantity,
+                price,
                 total,
                 signal.confidence(),
                 signal.reasoning(),
