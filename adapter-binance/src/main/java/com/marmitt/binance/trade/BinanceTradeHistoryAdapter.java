@@ -68,7 +68,7 @@ public class BinanceTradeHistoryAdapter implements TradeHistoryQueryPort {
 
         // Paginate: if full page returned, advance using fromId of last trade
         while (page.size() == PAGE_LIMIT) {
-            long lastId = Long.parseLong(page.getLast().exchangeTradeId());
+            long lastId = parseTradeId(page.getLast().exchangeTradeId());
             page = fetchPage(requestBuilder.buildMyTradesFromId(symbol, lastId + 1));
             // Filter client-side to stay within this window's end (fromId ignores time range)
             page = page.stream()
@@ -107,6 +107,20 @@ public class BinanceTradeHistoryAdapter implements TradeHistoryQueryPort {
             // Both are exchange-side failures (502), never client errors (400).
             throw new ExchangeQueryException("BINANCE", ExchangeQueryException.ErrorType.UNKNOWN,
                     "Failed to parse myTrades response: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Converte o {@code id} do último trade da página para o cursor {@code fromId} da paginação.
+     * Um {@code id} ausente/não-numérico em HTTP 200 é payload inválido do provider (502), não
+     * erro do cliente — espelha o tratamento de {@code parseTrade} em {@link #fetchPage}.
+     */
+    private static long parseTradeId(String rawId) {
+        try {
+            return Long.parseLong(rawId);
+        } catch (RuntimeException e) {
+            throw new ExchangeQueryException("BINANCE", ExchangeQueryException.ErrorType.UNKNOWN,
+                    "Failed to parse trade id for pagination cursor: " + rawId, e);
         }
     }
 
