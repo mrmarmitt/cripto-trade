@@ -26,7 +26,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T18 | Trade Reconciliation Report                                      | Média | Claude | Concluído |
 | T19 | Serializar conciliação por clientOrderId via striped lock        | Baixa | Codex  | Concluído |
 | T20 | Preencher `executed_at` com timestamp da exchange no boot recovery | Baixa | Codex | Concluído |
-| T21 | Active Error Reporting via Discord                               | Média | Claude | Pendente  |
+| T21 | Active Error Reporting via Discord                               | Média | Claude | Concluído |
 | T22 | Estudo e Desenho do Sistema de Monitoramento                    | Média | Claude | Concluído |
 | T23 | Instrumentação: Gaps Críticos de Observabilidade                | Média | Claude | Pendente  |
 | T24 | Circuit Breaker nas Chamadas REST à Exchange                    | Média | Claude | Pendente  |

@@ -141,7 +141,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
                     exchange, readiness.code(), readiness.message());
         }
 
-        log.info("bootSequence.phase1: completed exchanges={}", exchanges.size());
+        log.info("bootSequence.phase1: completed runId={} exchanges={}", runId, exchanges.size());
     }
 
     private void runPhase2PortfolioSanity(String runId,
@@ -200,7 +200,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
             }
         }
 
-        log.info("bootSequence.phase2.sanity: completed");
+        log.info("bootSequence.phase2.sanity: completed runId={} portfolios={}", runId, portfolios.size());
     }
 
     private void runPhase2ZombieDetection(String runId,
@@ -212,6 +212,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
         log.info("bootSequence.phase2.zombie: start portfolios={} mode={} cutoffEnabled={}",
                 portfolios.size(), mode, command.cutoffEnabled());
 
+        int zombiesTotal = 0;
         for (Portfolio portfolio : portfolios) {
             Set<String> exchanges = resolvePortfolioExchanges(portfolio, eligibleRunners);
             if (exchanges.isEmpty()) {
@@ -223,6 +224,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
                 PortfolioZombieDetectionResult result =
                         portfolioZombieDetectionUseCase.execute(portfolio.getId(), exchange, command.cutoffEnabled());
                 long durationMs = (System.nanoTime() - startedNs) / 1_000_000L;
+                zombiesTotal += result.zombieCount();
                 observer.onPortfolioPhaseEvaluated("phase2.zombie", result.status().name(), exchange, mode.name(), durationMs);
 
                 switch (result.status()) {
@@ -264,7 +266,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
             }
         }
 
-        log.info("bootSequence.phase2.zombie: completed");
+        log.info("bootSequence.phase2.zombie: completed runId={} zombies={}", runId, zombiesTotal);
     }
 
     private void runPhase2ReservationTtl(String runId,
@@ -276,6 +278,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
         BootFailureMode mode = command.failureMode();
         log.info("bootSequence.phase2.ttl: start portfolios={} mode={} ttlMs={}", portfolios.size(), mode, ttlMs);
 
+        int expiredTotal = 0;
         for (Portfolio portfolio : portfolios) {
             Set<String> exchanges = resolvePortfolioExchanges(portfolio, eligibleRunners);
             if (exchanges.isEmpty()) {
@@ -292,6 +295,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
                 PortfolioReservationTtlResult result =
                         portfolioReservationTtlUseCase.execute(portfolio.getId(), exchange, ttlMs, scopedRunners);
                 long durationMs = (System.nanoTime() - startedNs) / 1_000_000L;
+                expiredTotal += result.expiredCount();
                 observer.onPortfolioPhaseEvaluated("phase2.reservation_ttl", result.status().name(), exchange, mode.name(), durationMs);
 
                 switch (result.status()) {
@@ -332,7 +336,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
             }
         }
 
-        log.info("bootSequence.phase2.ttl: completed");
+        log.info("bootSequence.phase2.ttl: completed runId={} expired={}", runId, expiredTotal);
     }
 
     private void executePhase(String phase, boolean enabled, Runnable action, BootExecutionObserverPort observer) {

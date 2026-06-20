@@ -30,7 +30,9 @@ public class ProcessMessageEventListener {
             ProcessingResult<?> result = processMessagePort.execute(event.getRawMessage(), event.getContext());
 
             if (result.isSuccess() && result.getData().isPresent()) {
-                log.info("Processing SUCCESS - type={}", result.getData().get().getClass().getSimpleName());
+                log.info("Processing SUCCESS - type={} correlationId={}",
+                        result.getData().get().getClass().getSimpleName(),
+                        event.getContext().correlationId());
             } else if (result.isWarning() && result.getData().isPresent()) {
                 log.warn("Processing WARNING - type={} warning={} rawMessage={}",
                         result.getData().get().getClass().getSimpleName(),
