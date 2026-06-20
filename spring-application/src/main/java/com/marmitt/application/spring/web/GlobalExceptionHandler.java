@@ -8,8 +8,10 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.HttpStatusCode;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.web.ErrorResponse;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -28,6 +30,7 @@ import java.time.Instant;
  *   <tr><td>DeadLetterConflictException</td><td>409</td></tr>
  *   <tr><td>UnsupportedOperationException (capacidade não suportada pela exchange)</td><td>501</td></tr>
  *   <tr><td>ExchangeQueryException</td><td>502</td></tr>
+ *   <tr><td>ErrorResponse (exceções MVC do Spring: 404/405/415...)</td><td>status original</td></tr>
  *   <tr><td>Exception (fallback)</td><td>500</td></tr>
  * </table>
  */
@@ -86,15 +89,25 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ApiError> handleUnexpected(Exception ex, HttpServletRequest request) {
+        // Exceções padrão do Spring MVC (ex.: HttpRequestMethodNotSupportedException → 405,
+        // NoResourceFoundException → 404, HttpMediaTypeNotSupportedException → 415) implementam
+        // ErrorResponse e já carregam o status HTTP correto. Preserva esse status em vez de
+        // tratá-las como falha interna 500.
+        if (ex instanceof ErrorResponse errorResponse) {
+            String detail = errorResponse.getBody().getDetail();
+            String message = detail != null ? detail : errorResponse.getBody().getTitle();
+            return build(errorResponse.getStatusCode(), message, request);
+        }
         log.error("unexpected error path={}", request.getRequestURI(), ex);
         return build(HttpStatus.INTERNAL_SERVER_ERROR, "Internal server error", request);
     }
 
-    private static ResponseEntity<ApiError> build(HttpStatus status, String message, HttpServletRequest request) {
+    private static ResponseEntity<ApiError> build(HttpStatusCode status, String message, HttpServletRequest request) {
+        String reason = (status instanceof HttpStatus httpStatus) ? httpStatus.getReasonPhrase() : "";
         ApiError body = new ApiError(
                 Instant.now(),
                 status.value(),
-                status.getReasonPhrase(),
+                reason,
                 message,
                 request.getRequestURI());
         return ResponseEntity.status(status).body(body);
