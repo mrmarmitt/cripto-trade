@@ -71,22 +71,26 @@ class BinanceSymbolFilterIntegrationTest {
     }
 
     @Test
-    void shouldAdjustQuantityToFloorStepSize() {
-        // stepSize=0.00001 → 0.001234 / 0.00001 = 123.4 → floor=123 → 0.00123
+    void shouldRejectQuantityNotAlignedToStepSize() {
+        // Normalização (floor) é responsabilidade do BinanceOrderNormalizer, antes do dispatch.
+        // Uma quantidade desalinhada chegando aqui é bug do chamador → rejeição.
         server.enqueue(new MockResponse().setResponseCode(200).setBody(EXCHANGE_INFO_BTCUSDT));
 
         SendOrderRequest request = orderRequest("0.001234", "50000.00");
-        SendOrderRequest result = validator.validate(request);
 
-        assertThat(result.getQuantity()).isEqualByComparingTo("0.00123");
+        assertThatThrownBy(() -> validator.validate(request))
+                .isInstanceOf(OrderFilterViolationException.class)
+                .hasMessageContaining("stepSize")
+                .hasMessageContaining(SYMBOL);
     }
 
     @Test
-    void shouldRejectQuantityBelowMinQtyAfterFloor() {
-        String exchangeInfo = exchangeInfoWithLotSize("0.001", "0.001", "9000");
+    void shouldRejectAlignedQuantityBelowMinQty() {
+        // stepSize=0.001, minQty=0.005 → 0.002 está alinhado mas abaixo do minQty.
+        String exchangeInfo = exchangeInfoWithLotSize("0.001", "0.005", "9000");
         server.enqueue(new MockResponse().setResponseCode(200).setBody(exchangeInfo));
 
-        SendOrderRequest request = orderRequest("0.0005", "50000.00");
+        SendOrderRequest request = orderRequest("0.002", "50000.00");
 
         assertThatThrownBy(() -> validator.validate(request))
                 .isInstanceOf(OrderFilterViolationException.class)
@@ -107,13 +111,16 @@ class BinanceSymbolFilterIntegrationTest {
     }
 
     @Test
-    void shouldRoundPriceToTickSize() {
+    void shouldRejectPriceNotAlignedToTickSize() {
+        // Alinhamento de preço (tickSize) é feito pelo BinanceOrderNormalizer antes do dispatch.
         server.enqueue(new MockResponse().setResponseCode(200).setBody(EXCHANGE_INFO_BTCUSDT));
 
         SendOrderRequest request = orderRequest("0.001", "43521.755");
-        SendOrderRequest result = validator.validate(request);
 
-        assertThat(result.getPrice()).isEqualByComparingTo("43521.76");
+        assertThatThrownBy(() -> validator.validate(request))
+                .isInstanceOf(OrderFilterViolationException.class)
+                .hasMessageContaining("tickSize")
+                .hasMessageContaining(SYMBOL);
     }
 
     @Test

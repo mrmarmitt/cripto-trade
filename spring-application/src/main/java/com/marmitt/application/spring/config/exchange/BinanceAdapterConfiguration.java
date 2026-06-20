@@ -12,6 +12,7 @@ import com.marmitt.binance.BinanceUserStreamAdapter;
 import com.marmitt.binance.BinanceUserStreamSessionAdapter;
 import com.marmitt.binance.auth.BinanceCredentials;
 import com.marmitt.binance.auth.BinanceRequestSigner;
+import com.marmitt.binance.filters.BinanceOrderNormalizer;
 import com.marmitt.binance.filters.SymbolFilterCache;
 import com.marmitt.binance.rest.BinanceRestRequestBuilder;
 import com.marmitt.binance.trade.BinanceTradeHistoryAdapter;
@@ -80,6 +81,11 @@ public class BinanceAdapterConfiguration {
         // Eager-load configured symbols at startup; SymbolFilterLoadException propagates and aborts boot
         properties.getSymbols().forEach(cache::loadAndCache);
         return cache;
+    }
+
+    @Bean
+    public BinanceOrderNormalizer binanceOrderNormalizer(SymbolFilterCache binanceSymbolFilterCache) {
+        return new BinanceOrderNormalizer(binanceSymbolFilterCache);
     }
 
     @Bean

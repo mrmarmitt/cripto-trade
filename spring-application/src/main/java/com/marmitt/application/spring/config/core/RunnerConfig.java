@@ -24,6 +24,7 @@ import com.marmitt.core.ports.inbound.runner.QueryRunnerPort;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
+import com.marmitt.core.ports.outbound.exchange.rest.OrderQuantityNormalizerPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
@@ -37,6 +38,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.google.common.util.concurrent.Striped;
 
+import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.locks.Lock;
 
@@ -126,7 +128,8 @@ public class RunnerConfig {
             GlobalBalanceRepositoryPort globalBalanceRepository,
             PortfolioRepositoryPort portfolioRepository,
             OrderDispatchPort orderDispatch,
-            OrderConciliationPort orderConciliation) {
+            OrderConciliationPort orderConciliation,
+            List<OrderQuantityNormalizerPort> orderNormalizers) {
 
         return new ProcessTradeSignalUseCase(
                 strategyRunnerRepository,
@@ -134,7 +137,8 @@ public class RunnerConfig {
                 globalBalanceRepository,
                 portfolioRepository,
                 orderDispatch,
-                orderConciliation) {
+                orderConciliation,
+                orderNormalizers) {
 
             @Override
             public void transactionalPersistBuyAndReserve(BuyExecutionContext context) {

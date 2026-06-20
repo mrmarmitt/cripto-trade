@@ -33,9 +33,13 @@ adaptadores externos.
    posicoes, ordens pendentes, limites e PnL.
 5. `StrategySignalEvaluator` avalia a estrategia.
 6. Sinal `HOLD` encerra o fluxo sem efeito.
-7. Sinal `BUY` passa por `BuySignalHandler`.
-8. Sinal `SELL` passa por `SellSignalHandler`.
-9. A transacao e persistida antes do envio externo da ordem.
+7. `OrderNormalizer` alinha quantidade e preco as regras de filtro da exchange
+   (`stepSize`/`tickSize`) ANTES de materializar a transacao, via
+   `OrderQuantityNormalizerPort`. Exchange sem normalizador (ex.: MOCK) usa os
+   valores originais.
+8. Sinal `BUY` passa por `BuySignalHandler`.
+9. Sinal `SELL` passa por `SellSignalHandler`.
+10. A transacao e persistida antes do envio externo da ordem.
 
 ## BUY
 
@@ -63,6 +67,7 @@ mesma posicao, o fluxo falha com `ConcurrentPositionLockException`.
 | Componente | Papel |
 | --- | --- |
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/ProcessTradeSignalUseCase.java` | Orquestra ticks, runners, contexto, decisao e handlers BUY/SELL. |
+| `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/OrderNormalizer.java` | Resolve `OrderQuantityNormalizerPort` por exchange e alinha quantidade/preco antes do persist. |
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/RunnerContextAssembler.java` | Monta `StrategyContextDto`. |
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/BuySignalHandler.java` | Persiste BUY, reserva capital e faz dispatch. |
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/SellSignalHandler.java` | Persiste SELL, trava posicao e faz dispatch. |
@@ -73,6 +78,9 @@ mesma posicao, o fluxo falha com `ConcurrentPositionLockException`.
 
 - Nenhuma ordem externa deve ser enviada antes da transacao local existir.
 - BUY so pode seguir para dispatch depois de reserva de capital aceita.
+- Quantidade e preco persistidos/reservados devem ser identicos aos enviados a
+  exchange: a normalizacao acontece antes do persist, e o `OrderFilterValidator`
+  no dispatch apenas valida (rejeita desalinhamento), sem reajustar valores.
 - SELL so pode seguir para dispatch depois de posicao travada.
 - Falha em um runner nao deve impedir a avaliacao dos demais runners do tick.
 - `RunnerContextAssembler` exige `GlobalBalance`; sem ele a avaliacao nao deve
