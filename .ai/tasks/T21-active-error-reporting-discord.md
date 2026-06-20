@@ -3,7 +3,13 @@
 **Complexidade:** Média  
 **Responsável:** Claude  
 **Dependências:** T17 (Loki + Grafana já no stack)  
-**Status:** Pendente
+**Status:** Em andamento — Camada 1 (código) entregue; Camadas 2 e 3 (Grafana/logs) pendentes
+
+> **Progresso Camada 1:** `ErrorNotificationPort` no core + `DiscordWebhookNotificationAdapter`
+> (no-op quando `DISCORD_WEBHOOK_URL` vazio, envio assíncrono e tolerante a falha), com disparo
+> em `CapitalEventListener` (DLQ persistido) e `BootAlertListener` (boot fail-fast). Atende os
+> critérios de aceitação 1-4. Critérios 5-6 (alert rules Grafana e link Loki provisionado)
+> dependem das Camadas 2/3.
 
 ---
 

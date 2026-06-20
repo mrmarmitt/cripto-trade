@@ -6,10 +6,13 @@ import com.marmitt.core.application.reaction.MarginReleasedReaction;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
 import com.marmitt.core.dto.events.ExecutionConfirmedEvent;
 import com.marmitt.core.dto.events.MarginReleaseEvent;
+import com.marmitt.core.dto.notification.ErrorNotificationEvent;
 import com.marmitt.core.enums.DlqReason;
+import com.marmitt.core.ports.outbound.notification.ErrorNotificationPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 import org.springframework.dao.CannotAcquireLockException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.dao.PessimisticLockingFailureException;
@@ -23,6 +26,7 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -40,19 +44,22 @@ public class CapitalEventListener {
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final DeadLetterEntryRepositoryPort deadLetterEntryRepository;
     private final CapitalDeadLetterPayloadCodec payloadCodec;
+    private final ErrorNotificationPort errorNotification;
 
     public CapitalEventListener(
             ExecutionConfirmedReaction handleExecutionConfirmed,
             MarginReleasedReaction handleMarginRelease,
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             DeadLetterEntryRepositoryPort deadLetterEntryRepository,
-            CapitalDeadLetterPayloadCodec payloadCodec
+            CapitalDeadLetterPayloadCodec payloadCodec,
+            ErrorNotificationPort errorNotification
     ) {
         this.handleExecutionConfirmed = handleExecutionConfirmed;
         this.handleMarginRelease = handleMarginRelease;
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.deadLetterEntryRepository = deadLetterEntryRepository;
         this.payloadCodec = payloadCodec;
+        this.errorNotification = errorNotification;
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -151,6 +158,8 @@ public class CapitalEventListener {
                     safeMessage(originalFailure),
                     originalFailure
             );
+
+            notifyDlqPersisted(eventType, runnerId, entry.getId(), originalFailure);
         } catch (Exception persistFailure) {
             log.error(
                     "CAPITAL_DLQ: failed to persist dead letter entry - eventType={} portfolioId={} runnerId={} persistCause={} originalCause={}",
@@ -162,6 +171,16 @@ public class CapitalEventListener {
                     persistFailure
             );
         }
+    }
+
+    private void notifyDlqPersisted(String eventType, UUID runnerId, UUID dlqId, Exception originalFailure) {
+        errorNotification.notifyError(ErrorNotificationEvent.dlqPersisted(
+                "Capital event sent to DLQ",
+                eventType + " esgotou os retries: " + safeMessage(originalFailure),
+                MDC.get("correlationId"),
+                runnerId,
+                dlqId,
+                Instant.now()));
     }
 
     private static String safeMessage(Throwable throwable) {

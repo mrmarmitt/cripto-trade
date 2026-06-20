@@ -11,11 +11,14 @@ import com.marmitt.core.dto.capital.ExecutionConfirmation;
 import com.marmitt.core.dto.capital.MarginRelease;
 import com.marmitt.core.dto.events.ExecutionConfirmedEvent;
 import com.marmitt.core.dto.events.MarginReleaseEvent;
+import com.marmitt.core.dto.notification.ErrorNotificationEvent;
+import com.marmitt.core.dto.notification.ErrorNotificationType;
 import com.marmitt.core.enums.AccountingPolicyType;
 import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.enums.ExecutionPolicy;
 import com.marmitt.core.enums.ReleaseReason;
 import com.marmitt.core.enums.RunnerStatus;
+import com.marmitt.core.ports.outbound.notification.ErrorNotificationPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.junit.jupiter.api.Test;
@@ -45,12 +48,14 @@ class CapitalEventListenerTest {
         MarginReleasedReaction marginReaction = mock(MarginReleasedReaction.class);
         StrategyRunnerRepositoryPort runnerRepository = mock(StrategyRunnerRepositoryPort.class);
         DeadLetterEntryRepositoryPort deadLetterRepository = mock(DeadLetterEntryRepositoryPort.class);
+        ErrorNotificationPort notification = mock(ErrorNotificationPort.class);
         CapitalEventListener listener = new CapitalEventListener(
                 executionReaction,
                 marginReaction,
                 runnerRepository,
                 deadLetterRepository,
-                payloadCodec()
+                payloadCodec(),
+                notification
         );
         ExecutionConfirmedEvent event = executionConfirmedEvent(UUID.randomUUID(), UUID.randomUUID(), UUID.randomUUID());
 
@@ -66,12 +71,14 @@ class CapitalEventListenerTest {
         MarginReleasedReaction marginReaction = mock(MarginReleasedReaction.class);
         StrategyRunnerRepositoryPort runnerRepository = mock(StrategyRunnerRepositoryPort.class);
         DeadLetterEntryRepositoryPort deadLetterRepository = mock(DeadLetterEntryRepositoryPort.class);
+        ErrorNotificationPort notification = mock(ErrorNotificationPort.class);
         CapitalEventListener listener = new CapitalEventListener(
                 executionReaction,
                 marginReaction,
                 runnerRepository,
                 deadLetterRepository,
-                payloadCodec()
+                payloadCodec(),
+                notification
         );
         MarginReleaseEvent event = marginReleaseEvent(UUID.randomUUID(), UUID.randomUUID());
 
@@ -90,12 +97,14 @@ class CapitalEventListenerTest {
         UUID portfolioId = UUID.randomUUID();
         UUID runnerId = UUID.randomUUID();
         when(runnerRepository.findById(runnerId)).thenReturn(Optional.of(activeRunner(portfolioId, runnerId)));
+        ErrorNotificationPort notification = mock(ErrorNotificationPort.class);
         CapitalEventListener listener = new CapitalEventListener(
                 executionReaction,
                 marginReaction,
                 runnerRepository,
                 deadLetterRepository,
-                payloadCodec()
+                payloadCodec(),
+                notification
         );
         ExecutionConfirmedEvent event = executionConfirmedEvent(UUID.randomUUID(), runnerId, UUID.randomUUID());
         RuntimeException failure = new RuntimeException("temporary failure");
@@ -112,6 +121,13 @@ class CapitalEventListenerTest {
         assertTrue(entry.getRawPayload().contains("\"transactionId\":\"" + event.confirmation().transactionId() + "\""));
         assertTrue(entry.getRawPayload().contains("\"matchId\":\"" + event.confirmation().matchId() + "\""));
         assertTrue(entry.getRawPayload().contains("\"failureMessage\":\"temporary failure\""));
+
+        ArgumentCaptor<ErrorNotificationEvent> notificationCaptor = ArgumentCaptor.forClass(ErrorNotificationEvent.class);
+        verify(notification).notifyError(notificationCaptor.capture());
+        ErrorNotificationEvent notified = notificationCaptor.getValue();
+        assertEquals(ErrorNotificationType.DLQ_PERSISTED, notified.type());
+        assertEquals(entry.getId(), notified.dlqId());
+        assertEquals(runnerId, notified.runnerId());
     }
 
     @Test
@@ -123,12 +139,14 @@ class CapitalEventListenerTest {
         UUID portfolioId = UUID.randomUUID();
         UUID runnerId = UUID.randomUUID();
         when(runnerRepository.findById(runnerId)).thenReturn(Optional.of(activeRunner(portfolioId, runnerId)));
+        ErrorNotificationPort notification = mock(ErrorNotificationPort.class);
         CapitalEventListener listener = new CapitalEventListener(
                 executionReaction,
                 marginReaction,
                 runnerRepository,
                 deadLetterRepository,
-                payloadCodec()
+                payloadCodec(),
+                notification
         );
         MarginReleaseEvent event = marginReleaseEvent(UUID.randomUUID(), runnerId);
         RuntimeException failure = new RuntimeException("temporary failure");
@@ -145,6 +163,13 @@ class CapitalEventListenerTest {
         assertTrue(entry.getRawPayload().contains("\"transactionId\":\"" + event.release().transactionId() + "\""));
         assertTrue(entry.getRawPayload().contains("\"reason\":\"" + event.release().reason() + "\""));
         assertTrue(entry.getRawPayload().contains("\"failureMessage\":\"temporary failure\""));
+
+        ArgumentCaptor<ErrorNotificationEvent> notificationCaptor = ArgumentCaptor.forClass(ErrorNotificationEvent.class);
+        verify(notification).notifyError(notificationCaptor.capture());
+        ErrorNotificationEvent notified = notificationCaptor.getValue();
+        assertEquals(ErrorNotificationType.DLQ_PERSISTED, notified.type());
+        assertEquals(entry.getId(), notified.dlqId());
+        assertEquals(runnerId, notified.runnerId());
     }
 
     @Test
@@ -155,18 +180,21 @@ class CapitalEventListenerTest {
         DeadLetterEntryRepositoryPort deadLetterRepository = mock(DeadLetterEntryRepositoryPort.class);
         UUID runnerId = UUID.randomUUID();
         when(runnerRepository.findById(runnerId)).thenReturn(Optional.empty());
+        ErrorNotificationPort notification = mock(ErrorNotificationPort.class);
         CapitalEventListener listener = new CapitalEventListener(
                 executionReaction,
                 marginReaction,
                 runnerRepository,
                 deadLetterRepository,
-                payloadCodec()
+                payloadCodec(),
+                notification
         );
         ExecutionConfirmedEvent event = executionConfirmedEvent(UUID.randomUUID(), runnerId, UUID.randomUUID());
 
         listener.recoverExecutionConfirmed(new RuntimeException("temporary failure"), event);
 
         verify(deadLetterRepository, never()).save(any(DeadLetterEntry.class));
+        verify(notification, never()).notifyError(any(ErrorNotificationEvent.class));
     }
 
     @Test
@@ -179,12 +207,14 @@ class CapitalEventListenerTest {
         UUID runnerId = UUID.randomUUID();
         when(runnerRepository.findById(runnerId)).thenReturn(Optional.of(activeRunner(portfolioId, runnerId)));
         doThrow(new RuntimeException("db down")).when(deadLetterRepository).save(any(DeadLetterEntry.class));
+        ErrorNotificationPort notification = mock(ErrorNotificationPort.class);
         CapitalEventListener listener = new CapitalEventListener(
                 executionReaction,
                 marginReaction,
                 runnerRepository,
                 deadLetterRepository,
-                payloadCodec()
+                payloadCodec(),
+                notification
         );
         MarginReleaseEvent event = marginReleaseEvent(UUID.randomUUID(), runnerId);
 
@@ -192,6 +222,7 @@ class CapitalEventListenerTest {
                 listener.recoverMarginRelease(new RuntimeException("temporary failure"), event));
 
         verify(deadLetterRepository).save(any(DeadLetterEntry.class));
+        verify(notification, never()).notifyError(any(ErrorNotificationEvent.class));
     }
 
     private static CapitalDeadLetterPayloadCodec payloadCodec() {
