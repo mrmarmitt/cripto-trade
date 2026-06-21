@@ -36,6 +36,8 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T28 | Camada agnóstica de adapter p/ consulta de saldo e histórico    | Média | Claude | Pendente  |
 | T29 | Implementar consulta de saldo na exchange                       | Média | Claude | Pendente  |
 | T30 | Implementar consulta de histórico de trades na exchange         | Média | Claude | Pendente  |
+| T31 | TTL / Cancelamento de ordem limite aberta em runtime            | Alta  | Claude | Pendente  |
+| T32 | Ação `SHOULD_CANCEL` no contrato da estratégia                  | Alta  | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Pendente  |
 
 ## Ordem de execução
@@ -110,6 +112,21 @@ T29  Consulta de saldo                T30  Consulta de histórico de trades
 > T27 é independente, mas define o padrão de resposta que os endpoints opcionais de T29/T30
 > devem seguir. T28 é pré-requisito de T29 e T30; ambas reusam infraestrutura Binance já
 > existente, sem nova rota REST, e mantêm boot/recovery/reconciliação intactos.
+
+## Ordem de execução — Ciclo de vida de ordem limite aberta
+
+```
+T31  TTL / cancel de ordem limite em runtime   ← política de execução: libera capital
+       (estabelece OrderDispatchPort.cancel + caminho de liberação via conciliação)
+       ↓
+T32  Ação SHOULD_CANCEL na estratégia          ← decisão de negócio: puxar ordem antes do fill
+   (reusa o caminho outbound de cancelamento da T31)
+```
+
+> Gap identificado: com ordens LIMIT, uma ordem que não enche mantém capital reservado preso
+> até encher, reinício, ou cancelamento manual. T31 cobre o encerramento por idade (execução);
+> T32 cobre o cancelamento por reversão de tese (alpha da estratégia). O watchdog de recovery
+> (T1) e o reservation TTL de boot não cobrem esse caso — só limbo técnico e PENDING sem ordem.
 
 > Tasks de correção/refino já entregues fora da trilha principal: T19 (striped lock na
 > conciliação) e T20 (`executed_at` no boot recovery). TD1 permanece como débito técnico
