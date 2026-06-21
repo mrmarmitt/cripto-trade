@@ -32,10 +32,10 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T24 | Circuit Breaker nas Chamadas REST à Exchange                    | Média | Claude | Pendente  |
 | T25 | Safe Mode Automático                                            | Média | Claude | Pendente  |
 | T26 | Rastreamento End-to-End de um Sinal                             | Alta  | Claude | Pendente  |
-| T27 | Padronização do Retorno das Controllers (camada Spring)         | Média | Claude | Pendente  |
-| T28 | Camada agnóstica de adapter p/ consulta de saldo e histórico    | Média | Claude | Pendente  |
-| T29 | Implementar consulta de saldo na exchange                       | Média | Claude | Pendente  |
-| T30 | Implementar consulta de histórico de trades na exchange         | Média | Claude | Pendente  |
+| T27 | Padronização do Retorno das Controllers (camada Spring)         | Média | Claude | Concluído |
+| T28 | Camada agnóstica de adapter p/ consulta de saldo e histórico    | Média | Claude | Concluído |
+| T29 | Implementar consulta de saldo na exchange                       | Média | Claude | Concluído |
+| T30 | Implementar consulta de histórico de trades na exchange         | Média | Claude | Concluído |
 | T31 | TTL / Cancelamento de ordem limite aberta em runtime            | Alta  | Claude | Pendente  |
 | T32 | Ação `SHOULD_CANCEL` no contrato da estratégia                  | Alta  | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Pendente  |
