@@ -36,7 +36,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T28 | Camada agnóstica de adapter p/ consulta de saldo e histórico    | Média | Claude | Concluído |
 | T29 | Implementar consulta de saldo na exchange                       | Média | Claude | Concluído |
 | T30 | Implementar consulta de histórico de trades na exchange         | Média | Claude | Concluído |
-| T31 | TTL / Cancelamento de ordem limite aberta em runtime            | Alta  | Claude | Pendente  |
+| T31 | Limpeza de reserva órfã em runtime + fundação de cancelamento   | Média | Claude | Pendente  |
 | T32 | Ação `SHOULD_CANCEL` no contrato da estratégia                  | Alta  | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 
@@ -116,17 +116,19 @@ T29  Consulta de saldo                T30  Consulta de histórico de trades
 ## Ordem de execução — Ciclo de vida de ordem limite aberta
 
 ```
-T31  TTL / cancel de ordem limite em runtime   ← política de execução: libera capital
-       (estabelece OrderDispatchPort.cancel + caminho de liberação via conciliação)
+T31  Limpeza de reserva órfã em runtime        ← capital comprometido com nada (PENDING sem ordem)
+       + fundação OrderDispatchPort.cancel        — neutra em relação à estratégia
        ↓
-T32  Ação SHOULD_CANCEL na estratégia          ← decisão de negócio: puxar ordem antes do fill
-   (reusa o caminho outbound de cancelamento da T31)
+T32  Ação SHOULD_CANCEL na estratégia          ← decisão de negócio: puxar ordem VIVA antes do fill
+   (reusa o verbo de cancelamento entregue pela T31)
 ```
 
-> Gap identificado: com ordens LIMIT, uma ordem que não enche mantém capital reservado preso
-> até encher, reinício, ou cancelamento manual. T31 cobre o encerramento por idade (execução);
-> T32 cobre o cancelamento por reversão de tese (alpha da estratégia). O watchdog de recovery
-> (T1) e o reservation TTL de boot não cobrem esse caso — só limbo técnico e PENDING sem ordem.
+> Separação de responsabilidades: para uma ordem **viva** na exchange, o capital reservado está
+> *comprometido* (correto), não preso — cancelá-la é decisão de alpha e pertence à T32. O único
+> capital genuinamente preso é a **reserva órfã** (`PENDING` sem `exchangeOrderId`): hoje só é
+> limpa no boot (`PortfolioReservationTtlUseCase`); T31 leva isso para runtime. T31 **não** cancela
+> ordem viva por TTL global — isso anularia estratégias de horizonte longo. O recovery watchdog (T1)
+> cobre apenas limbo técnico (`SUBMITTED`/`PARTIAL` reconciliados com a exchange).
 
 > Tasks de correção/refino já entregues fora da trilha principal: T19 (striped lock na
 > conciliação) e T20 (`executed_at` no boot recovery). TD1 permanece como débito técnico

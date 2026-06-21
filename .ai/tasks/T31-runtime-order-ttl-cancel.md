@@ -1,6 +1,6 @@
-# T31 — TTL / Cancelamento de Ordem Limite Aberta em Runtime
+# T31 — Limpeza de Reserva Órfã em Runtime + Fundação de Cancelamento de Ordem
 
-**Complexidade:** Alta  
+**Complexidade:** Média  
 **Responsável:** Claude  
 **Dependências:** Nenhuma (estabelece o caminho outbound de cancelamento reusado por T32)  
 **Status:** Pendente
@@ -9,46 +9,61 @@
 
 ## Descrição
 
-O caminho real de execução envia **ordens LIMIT** (`OrderDispatchAdapter` materializa `OrderType.LIMIT`). Uma ordem limite pode ficar aberta na exchange (`SUBMITTED`/`NEW`) indefinidamente quando o preço não chega nela. Hoje nada cancela essa ordem por iniciativa do sistema em runtime:
+Esta task resolve **um único caso de capital genuinamente preso** — a reserva órfã — e entrega o **mecanismo de cancelamento** que a T32 vai reusar. Ela é deliberadamente **neutra em relação à estratégia**: nada aqui cancela uma ordem que a estratégia mandou abrir.
 
-- O **watchdog** (`RecoverStaleTransactionsUseCase`, eligible `SUBMITTED`/`PARTIAL`) apenas **reconcilia** o status real com a exchange. Se a exchange responde `NEW`, a transação continua viva — o watchdog não a encerra, porque ela não está em limbo técnico, está legitimamente aberta.
-- O **`PortfolioReservationTtlUseCase`** expira reservas de capital, mas só cobre `PENDING` **sem `exchangeOrderId`** e **só roda no boot** (phase2).
+> **Escopo corrigido.** Uma versão anterior desta spec previa um scheduler global que cancelava ordens limite abertas após um TTL externo. Isso estava errado: anularia a intenção de estratégias de horizonte longo (compra limite esperando um dip por dias, take-profit mantido por semanas) e partia de uma premissa falsa sobre capital "preso". Ver "Premissa corrigida" abaixo. A decisão de cancelar uma ordem **viva** passa a ser responsabilidade exclusiva da estratégia (T32).
 
-Resultado: uma ordem de compra limite que não enche mantém **capital reservado preso** até encher, até reinício da aplicação, ou até cancelamento **manual** via API. Falta uma política de execução que, em runtime, encerre ordens limite velhas demais — liberando capital e (opcionalmente) reprecificando.
+---
 
-> Esta task é **política de execução** (order management), não alpha de estratégia. A decisão "esta ordem está velha demais" é guiada por idade/tempo, não pela tese de mercado. A decisão de negócio "mudei de ideia" fica na T32.
+## Premissa corrigida: "capital preso" vs "capital comprometido"
+
+Há dois casos que parecem o mesmo e não são:
+
+| Caso | Situação | Capital | É problema? |
+|---|---|---|---|
+| **A — Reserva órfã** | `PENDING` que reservou capital mas **nunca chegou à exchange** (sem `exchangeOrderId`) — envio falhou ou processo caiu no meio | Comprometido com **nada** | **Sim.** Lixo. Nenhuma estratégia quer isso. |
+| **B — Ordem viva** | Ordem limite aberta na exchange (`SUBMITTED`/`PARTIAL`), legitimamente esperando o preço | **Corretamente comprometido** com a ordem | **Não.** É a estratégia operando. |
+
+Para o **Caso B**, o capital reservado **não está preso — está comprometido**. Se a estratégia quer manter uma compra limite aberta por semanas, esse capital *precisa* ficar reservado por semanas: não dá para ter a ordem aberta **e** usar o mesmo capital em outra oportunidade (seria gastar duas vezes). Logo, "capital comprometido por muito tempo" é consequência legítima da estratégia, não um vazamento.
+
+**Esta task só atua no Caso A.** O Caso B só pode ser encerrado por decisão de quem tem a tese — a estratégia (T32) — ou, se um dia existir um TTL de execução, por um parâmetro **opt-in por runner, default desligado/infinito** (fora do escopo aqui).
 
 ---
 
 ## Contexto técnico
 
-### Capacidade de cancelamento já existente
+### O que já existe
 
-- `ExchangeOrderExecutionPort.cancelOrder(SendCancelOrderRequest)` — documentado como *"cancelamento por watchdog/recovery"*. Implementado nos adapters.
-- `CancelOrderProcessor` (Binance/Coinbase) monta a mensagem `order.cancel`.
-- `OrderManagementService.unsubscribe()` já usa esse caminho para cancelamento **manual** via WebSocket.
+| Artefato | Situação |
+|---|---|
+| `PortfolioReservationTtlUseCase` (boot, phase2) | Já expira reserva órfã (`PENDING` sem `exchangeOrderId`) — mas **só no boot**. Em runtime, uma reserva órfã criada após o boot fica até o próximo restart. |
+| `RecoverStaleTransactionsUseCase` (watchdog runtime, T1) | Cobre `SUBMITTED`/`PARTIAL` reconciliando com a exchange. **Não** cobre `PENDING` órfão. |
+| `ExchangeOrderExecutionPort.cancelOrder(SendCancelOrderRequest)` | Capacidade de cancelamento já existe no transporte. `CancelOrderProcessor` (Binance/Coinbase) monta `order.cancel`. Hoje só é acionada por cancelamento **manual** (`OrderManagementService.unsubscribe`). |
+| `OrderDispatchPort.dispatch(...)` | Porta outbound de **envio** (submit). Não tem verbo de cancelamento. |
 
-Ou seja, o transporte de cancelamento existe. Falta o **disparo automático por política de runtime** e a integração com conciliação/liberação de capital.
+### A lacuna que esta task fecha
 
-### Liberação de capital ao cancelar
-
-- A conciliação de um `CANCELED`/`EXPIRED` já dispara liberação de margem (`MarginReleaseBuilder`, `PortfolioStrategyRunnerOrderUpdateListener`). O cancelamento por TTL deve passar pelo **mesmo** `ConciliationOrderUpdateExecutor`, garantindo que a liberação de capital reuse o caminho idempotente existente (`ConciliationOrderUpdateIdempotencyTest`).
-
-### Estados elegíveis
-
-| Estado | Hoje | Com T31 |
-|---|---|---|
-| `PENDING` sem `exchangeOrderId` | TTL só no boot | TTL também em runtime (reusa lógica de `PortfolioReservationTtlUseCase`) |
-| `SUBMITTED`/`NEW` aberto na exchange | nunca encerrado em runtime | cancela na exchange após idade > TTL |
-| `PARTIAL` | watchdog reconcilia | cancelar **apenas o remanescente** após TTL (decisão explícita — ver risco) |
+1. **Reserva órfã em runtime:** o caso A só é limpo no boot. Falta um tick de runtime.
+2. **Verbo de cancelamento no domínio:** o transporte sabe cancelar, mas não há porta de saída agnóstica no core para a T32 (e futuras políticas) dispararem cancelamento sem conhecer a exchange.
 
 ---
 
 ## Solução proposta
 
-### 1. Porta outbound de cancelamento no core
+### Parte 1 — Faxina de reserva órfã em runtime
 
-Hoje `OrderDispatchPort` só tem `dispatch` (submit fire-and-forget). Adicionar a capacidade de cancelamento como contrato de domínio, espelhando o estilo fire-and-forget:
+Levar a lógica do `PortfolioReservationTtlUseCase` (hoje só boot) para runtime, **sem mudar a semântica**: expira apenas `PENDING` **sem `exchangeOrderId`** mais velhos que o cutoff.
+
+- Criar `RuntimeOrphanReservationWatchdog` no Spring, espelhando `RunnerTransactionRecoveryWatchdog` (`@Scheduled`, `fixedDelayString`).
+- Reusar a expiração sintética existente (`buildSyntheticExpired`) — idealmente **extrair para um helper compartilhado** entre o TTL de boot e o de runtime, evitando duplicação.
+- A expiração passa pelo `ConciliationOrderUpdateExecutor` idempotente, que libera a reserva via `MarginReleaseBuilder` pelo caminho canônico.
+- **Não toca** em ordens com `exchangeOrderId` (Caso B). Essas seguem sob responsabilidade do recovery watchdog (limbo técnico) e da estratégia (decisão de negócio).
+
+> Por que isso é seguro e universal: uma reserva sem ordem na exchange não representa nenhuma intenção de mercado viva — é capital comprometido com algo que não existe. Expirá-la nunca contraria uma estratégia.
+
+### Parte 2 — Verbo de cancelamento no `OrderDispatchPort` (fundação da T32)
+
+Adicionar a capacidade de cancelamento como contrato de domínio, espelhando o estilo fire-and-forget de `dispatch`:
 
 ```java
 public interface OrderDispatchPort {
@@ -57,33 +72,9 @@ public interface OrderDispatchPort {
 }
 ```
 
-`OrderCancelCommand`: record no core (`dto/runner/`) com `clientOrderId`, `runnerId`, `symbol`, `exchangeId`. O adapter Spring traduz para `SendCancelOrderRequest` (mesmo padrão de `OrderDispatchAdapter` → `OrderDispatchCommand`). Nenhum DTO de exchange entra no core.
-
-### 2. Use case de TTL de ordem em runtime
-
-Criar `RuntimeOrderTtlUseCase` no core (pacote `usecase/runner`), no mesmo espírito do `RecoverStaleTransactionsUseCase`:
-
-- Busca transações em estados elegíveis com `requestedAt`/`updatedAt` anterior ao cutoff (`findByStatusesUpdatedBefore`, já existe).
-- Para `PENDING` sem `exchangeOrderId`: aplica expiração sintética **local** (reusa `buildSyntheticExpired` de `PortfolioReservationTtlUseCase` — considerar extrair para um helper compartilhado para evitar duplicação).
-- Para `SUBMITTED`/`PARTIAL` com `exchangeOrderId`: emite `orderDispatch.cancel(...)`. O `CANCELED` real chega de forma assíncrona via User Data Stream e é conciliado pelo caminho normal — **não** marcar terminal localmente de forma otimista (evita divergência se o cancel for rejeitado por fill simultâneo).
-- Idempotência: não reenviar cancel para uma transação que já tem cancel em trânsito (marcar `cancelRequestedAt` na `Transaction` ou checar janela mínima entre tentativas).
-
-### 3. Scheduler no Spring
-
-Criar `RuntimeOrderTtlWatchdog` espelhando `RunnerTransactionRecoveryWatchdog`:
-
-```java
-@Scheduled(
-    fixedDelayString = "${runner.order-ttl.interval-ms:60000}",
-    initialDelayString = "${runner.order-ttl.interval-ms:60000}")
-public void scheduledTick() { ... }
-```
-
-Propriedades em `RuntimeOrderTtlProperties` (espelhar `RunnerTransactionRecoveryProperties`): `enabled`, `ttlMs`, `maxPerRun`.
-
-### 4. (Opcional, fase 2 da task) Cancel-replace / reprice
-
-Após cancelar por TTL, opcionalmente reemitir a ordem ao preço de mercado corrente. **Recomendação: deixar fora do MVP** — cancelar e liberar capital já resolve o risco principal. Reprice automático reintroduz a ordem e pode criar loop de cancel/replace; tratar como evolução separada se houver demanda.
+- `OrderCancelCommand`: record no core (`dto/runner/`) com `clientOrderId`, `runnerId`, `symbol`, `exchangeId`. Agnóstico — nenhum DTO de exchange entra no core.
+- O adapter Spring (`OrderDispatchAdapter`) implementa `cancel(...)` traduzindo para `SendCancelOrderRequest` (mesmo padrão de `dispatch` → `OrderDispatchCommand`).
+- **Nesta task não há nenhum gatilho automático ligado a esse verbo para ordens vivas.** Ele é entregue como mecanismo; o primeiro consumidor real é a T32. (A faxina da Parte 1 não usa `cancel` — ela expira localmente reserva sem ordem na exchange.)
 
 ---
 
@@ -91,12 +82,14 @@ Após cancelar por TTL, opcionalmente reemitir a ordem ao preço de mercado corr
 
 ```yaml
 runner:
-  order-ttl:
+  orphan-reservation:
     enabled: true
-    interval-ms: 60000        # frequência do watchdog
-    ttl-ms: 900000            # 15 min — idade máxima de ordem limite aberta
+    interval-ms: 60000        # frequência do watchdog de runtime
+    ttl-ms: 900000            # idade máxima de uma reserva PENDING sem ordem na exchange
     max-per-run: 50
 ```
+
+> Observação: este TTL governa **apenas reserva órfã** (Caso A). Não existe configuração global que cancele ordem viva — isso é intencional.
 
 ---
 
@@ -106,32 +99,39 @@ runner:
 |---|---|
 | `core/.../ports/outbound/exchange/OrderDispatchPort.java` | Adicionar `cancel(OrderCancelCommand)` |
 | `core/.../dto/runner/OrderCancelCommand.java` | Novo — comando de cancelamento agnóstico |
-| `core/.../usecase/runner/RuntimeOrderTtlUseCase.java` | Novo — política de TTL em runtime |
-| `core/.../usecase/runner/...` (helper de expiração sintética) | Extrair `buildSyntheticExpired` compartilhado entre boot TTL e runtime TTL |
-| `core/.../domain/runner/Transaction.java` | Possível campo `cancelRequestedAt` para idempotência de cancel |
+| `core/.../usecase/.../OrphanReservationCleanup*.java` | Extrair/compartilhar a expiração sintética entre boot TTL e runtime |
+| `core/.../usecase/boot/phase2/PortfolioReservationTtlUseCase.java` | Reusar o helper compartilhado (sem mudar comportamento de boot) |
 | `spring-application/.../infrastructure/exchange/OrderDispatchAdapter.java` | Implementar `cancel(...)` → `SendCancelOrderRequest` |
-| `spring-application/.../bootstrap/RuntimeOrderTtlWatchdog.java` | Novo — scheduler |
-| `spring-application/.../bootstrap/RuntimeOrderTtlProperties.java` | Novo — propriedades |
-| `spring-application/src/main/resources/application.yml` | Configuração do TTL |
-| `spring-application/.../config/core/RunnerConfig.java` | Wiring do novo use case |
+| `spring-application/.../bootstrap/RuntimeOrphanReservationWatchdog.java` | Novo — scheduler de runtime |
+| `spring-application/.../bootstrap/RuntimeOrphanReservationProperties.java` | Novo — propriedades |
+| `spring-application/src/main/resources/application.yml` | Configuração da faxina de reserva órfã |
+| `spring-application/.../config/core/RunnerConfig.java` | Wiring |
+
+---
+
+## Fora de escopo (explicitamente)
+
+- **Cancelar ordem viva por idade/TTL global.** Removido. Anula intenção de estratégia. Decisão de cancelar ordem viva é da T32.
+- **Cancel-replace / reprice automático.** Reintroduz ordem e pode criar loop; só faria sentido como política opt-in por runner, em task futura.
+- **Qualquer leitura de estado da exchange.** A faxina é puramente local (reserva sem `exchangeOrderId`); não consulta a exchange (isso é do recovery watchdog).
 
 ---
 
 ## Riscos / pontos de atenção
 
-- **Corrida cancel × fill:** o cancel pode chegar à exchange no exato momento em que a ordem enche. Não marcar `CANCELED` localmente de forma otimista; deixar a conciliação idempotente decidir com o evento real (`ConciliationOrderUpdate`). O adapter deve tolerar resposta "ordem já não cancelável".
-- **`PARTIAL`:** cancelar uma ordem parcialmente executada encerra apenas o remanescente. Garantir que a parte já executada permaneça contabilizada (lote/posição) e que só o saldo não preenchido libere reserva.
-- **Liberação de capital:** deve fluir exclusivamente pelo `ConciliationOrderUpdateExecutor`, nunca por liberação direta — caso contrário diverge do invariante de conciliação.
-- **Boot vs runtime:** garantir que o TTL de boot (`PortfolioReservationTtlUseCase`) e o de runtime não conflitem; idealmente compartilham a mesma lógica de expiração sintética.
+- **Não confundir com o recovery watchdog:** este watchdog age sobre `PENDING` órfão (local); o recovery age sobre `SUBMITTED`/`PARTIAL` (consulta exchange). Os dois não devem competir pela mesma transação.
+- **Boot vs runtime:** garantir que a faxina de boot e a de runtime compartilhem a mesma lógica de expiração, para não divergirem.
+- **Liberação de capital:** deve fluir exclusivamente pelo `ConciliationOrderUpdateExecutor` idempotente, nunca por liberação direta.
+- **Verbo `cancel` sem consumidor:** entregar `OrderDispatchPort.cancel` sem gatilho automático é proposital. Cobrir com teste de unidade do adapter, mas o uso end-to-end é validado na T32.
 
 ---
 
 ## Critérios de aceitação
 
-1. Uma ordem `PENDING` sem `exchangeOrderId` mais velha que `ttl-ms` é expirada em runtime (não só no boot), liberando o capital reservado.
-2. Uma ordem `SUBMITTED`/`NEW` aberta na exchange mais velha que `ttl-ms` recebe `cancel` despachado para a exchange.
-3. O `CANCELED` resultante chega via stream e é conciliado pelo caminho idempotente existente, liberando a margem via `MarginReleaseBuilder`.
-4. Cancel não é reenviado em ciclos consecutivos para a mesma transação (idempotência).
-5. Ordem `PARTIAL` cancelada preserva a quantidade já executada e libera apenas o remanescente.
-6. `runner.order-ttl.enabled: false` desabilita o watchdog sem afetar boot TTL nem o recovery watchdog.
-7. Nenhuma regra de exchange ou DTO de provider vaza para o `core` (porta `cancel` recebe `OrderCancelCommand` agnóstico).
+1. Uma transação `PENDING` **sem `exchangeOrderId`** mais velha que `ttl-ms` é expirada **em runtime** (não só no boot), liberando o capital reservado via conciliação.
+2. Nenhuma ordem com `exchangeOrderId` (viva na exchange) é tocada por esta task.
+3. Não existe configuração global que cancele ordem viva por idade.
+4. `OrderDispatchPort.cancel(OrderCancelCommand)` existe, é implementado pelo adapter e traduz para `SendCancelOrderRequest` sem vazar tipo de provider para o core.
+5. A lógica de expiração de reserva órfã é compartilhada entre boot (`PortfolioReservationTtlUseCase`) e runtime, sem duplicação divergente.
+6. `runner.orphan-reservation.enabled: false` desabilita o watchdog de runtime sem afetar o boot TTL nem o recovery watchdog.
+7. Boot, recovery e reconciliação existentes continuam sem regressão.

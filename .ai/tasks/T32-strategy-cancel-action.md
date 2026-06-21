@@ -111,7 +111,7 @@ Atualizar/estender a estratégia de exemplo (ou criar variante) para exercitar o
 - **Fronteira arquitetural:** `SHOULD_CANCEL` deve permanecer uma **decisão**; toda a tradução para a exchange fica no adapter via `OrderDispatchPort.cancel`. Nenhum detalhe de provider entra em `strategy/` ou no contrato da estratégia.
 - **Contexto defasado:** a estratégia decide sobre `pendingOrders` montado no início do tick; a ordem pode ter enchido nesse meio-tempo. O `CancelSignalHandler` deve validar o estado atual e tratar "não mais cancelável" como no-op logado, não como erro.
 - **Corrida cancel × fill:** mesma da T31 — sem marcação terminal otimista; conciliação idempotente decide.
-- **Não duplicar com T31:** TTL (idade) é responsabilidade da T31 (execução); `SHOULD_CANCEL` é decisão de alpha. Não implementar timeout de ordem dentro da estratégia — isso é da T31.
+- **Fronteira com T31:** a T31 entrega o verbo `OrderDispatchPort.cancel` e só limpa **reserva órfã** (`PENDING` sem ordem na exchange); ela **não** cancela ordem viva. Cancelar ordem viva é responsabilidade desta task (decisão de alpha). Se um dia houver TTL de execução para ordem viva, deve ser opt-in por runner (default desligado) — nunca um default global que anule a estratégia.
 - **Compatibilidade do enum:** adicionar valor a `TradingAction` exige revisar todo `switch`/`if` sobre a enum (ex.: `StrategySignalEvaluator`, mapeadores) para tratar o novo caso explicitamente.
 
 ---
