@@ -116,8 +116,8 @@ T29  Consulta de saldo                T30  Consulta de histórico de trades
 ## Ordem de execução — Ciclo de vida de ordem limite aberta
 
 ```
-T31  Limpeza de reserva órfã em runtime        ← capital comprometido com nada (PENDING sem ordem)
-       + fundação OrderDispatchPort.cancel        — neutra em relação à estratégia
+T31  Limpeza de zombie em runtime (query-before-expire)  ← consulta exchange antes de liberar capital
+       + fundação OrderDispatchPort.cancel                  — neutra em relação à estratégia
        ↓
 T32  Ação SHOULD_CANCEL na estratégia          ← decisão de negócio: puxar ordem VIVA antes do fill
    (reusa o verbo de cancelamento entregue pela T31)
@@ -125,10 +125,12 @@ T32  Ação SHOULD_CANCEL na estratégia          ← decisão de negócio: puxa
 
 > Separação de responsabilidades: para uma ordem **viva** na exchange, o capital reservado está
 > *comprometido* (correto), não preso — cancelá-la é decisão de alpha e pertence à T32. O único
-> capital genuinamente preso é a **reserva órfã** (`PENDING` sem `exchangeOrderId`): hoje só é
-> limpa no boot (`PortfolioReservationTtlUseCase`); T31 leva isso para runtime. T31 **não** cancela
-> ordem viva por TTL global — isso anularia estratégias de horizonte longo. O recovery watchdog (T1)
-> cobre apenas limbo técnico (`SUBMITTED`/`PARTIAL` reconciliados com a exchange).
+> capital potencialmente preso é a **reserva órfã / zombie** (`PENDING` sem `exchangeOrderId`).
+> T31 cobre isso em runtime com **query-before-expire**: consulta a exchange por `clientOrderId`
+> antes de expirar — se a ordem estiver viva (ACK perdido), reconcilia; só libera capital se a
+> exchange não a conhecer. Difere do boot (`step3ExpireZombies`), que expira local porque tem
+> carência de TTL + varredura única; em runtime nada mais consulta um zombie (o recovery watchdog T1
+> só cobre `SUBMITTED`/`PARTIAL`). T31 **não** cancela ordem viva por TTL global.
 
 > Tasks de correção/refino já entregues fora da trilha principal: T19 (striped lock na
 > conciliação) e T20 (`executed_at` no boot recovery). TD1 permanece como débito técnico
