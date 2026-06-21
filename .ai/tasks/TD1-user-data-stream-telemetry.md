@@ -3,7 +3,8 @@
 **Tipo:** Débito técnico  
 **Origem:** T4 — User Data Stream (PR #89)  
 **Complexidade:** Baixa  
-**Impacto:** Observabilidade (não bloqueia funcionalidade)
+**Impacto:** Observabilidade (não bloqueia funcionalidade)  
+**Status:** Concluído — resolvido em `70b16a9 fix(T4): record USER_DATA message stats in ProcessUserMessageHandler`. O handler resolve `ConnectionKey.userStream(exchangeName)` e chama `onMessageReceived()`/`onMessageError()`.
 
 ---
 

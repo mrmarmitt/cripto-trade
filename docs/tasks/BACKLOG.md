@@ -38,7 +38,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T30 | Implementar consulta de histórico de trades na exchange         | Média | Claude | Concluído |
 | T31 | TTL / Cancelamento de ordem limite aberta em runtime            | Alta  | Claude | Pendente  |
 | T32 | Ação `SHOULD_CANCEL` no contrato da estratégia                  | Alta  | Claude | Pendente  |
-| TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Pendente  |
+| TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 
 ## Ordem de execução
 
