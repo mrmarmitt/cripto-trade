@@ -4,6 +4,7 @@ import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
 import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
+import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
@@ -145,6 +146,159 @@ class RunnerTransactionRecoveryWatchdogIntegrationTest extends AbstractIntegrati
     }
 
     @Test
+    void watchdogShouldExpirePendingZombieNotFoundOnExchangeWithoutDlq() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        BigDecimal quantity = new BigDecimal("0.00150000");
+        BigDecimal price = new BigDecimal("60000.00000000");
+        BigDecimal reservedAmount = quantity.multiply(price);
+
+        // PENDING sem exchangeOrderId (zombie) — nunca confirmado pela exchange.
+        Transaction pendingBuy = newTransaction(runner, TransactionType.BUY, quantity, price, reservedAmount);
+        strategyRunnerRepository.saveTransaction(pendingBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+        markTransactionStale(pendingBuy.getId(), Duration.ofHours(2));
+
+        RecoverStaleTransactionsResponse response = watchdog.runRecoveryCycle();
+
+        // query-before-expire: nao encontrado -> EXPIRED via terminal fallback, sem DLQ.
+        Transaction expired = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.EXPIRED, WAIT_TIMEOUT);
+        assertNotNull(expired);
+        assertEquals(1, response.scanned());
+        assertEquals(1, response.recovered());
+        assertEquals(0, response.routedToDlq());
+        assertEquals(0, response.failed());
+        assertTrue(deadLetterEntryRepository.findUnresolved(portfolioId, runner.getId(), 10).isEmpty(),
+                "Zombie not-found must not create a DLQ entry");
+    }
+
+    @Test
+    void watchdogShouldNotLetConfirmedBacklogStarvePendingCleanup() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        properties.setMaxPerRun(1);
+
+        // Confirmado faltante consome todo o budget de confirmados (=1) e PERMANECE SUBMITTED
+        // (vai para DLQ a cada ciclo) — simula um backlog persistente.
+        Transaction submittedMissing = newSubmittedTransaction(runner, "EX_BACKLOG_MISSING");
+        strategyRunnerRepository.saveTransaction(submittedMissing);
+        markTransactionStale(submittedMissing.getId(), Duration.ofHours(2));
+
+        // Reserva orfa PENDING que precisa ser limpa mesmo com o backlog de confirmados.
+        BigDecimal quantity = new BigDecimal("0.00150000");
+        BigDecimal price = new BigDecimal("60000.00000000");
+        BigDecimal reservedAmount = quantity.multiply(price);
+        Transaction pendingZombie = newTransaction(runner, TransactionType.BUY, quantity, price, reservedAmount);
+        strategyRunnerRepository.saveTransaction(pendingZombie);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+        markTransactionStale(pendingZombie.getId(), Duration.ofHours(2));
+
+        RecoverStaleTransactionsResponse response = watchdog.runRecoveryCycle();
+
+        // Budget independente: o PENDING e expirado apesar de o confirmado ter consumido o seu.
+        Transaction expired = awaitTransactionStatus(pendingZombie.getId(), TransactionStatus.EXPIRED, WAIT_TIMEOUT);
+        assertNotNull(expired);
+        Transaction stillSubmitted = strategyRunnerRepository.findTransactionById(submittedMissing.getId())
+                .orElseThrow(() -> new IllegalStateException("Submitted not found"));
+        assertEquals(TransactionStatus.SUBMITTED, stillSubmitted.getStatus());
+        assertEquals(2, response.scanned());
+        assertEquals(1, response.routedToDlq());
+        assertEquals(1, response.recovered());
+    }
+
+    @Test
+    void watchdogShouldExpirePendingSellWithoutReleasingUnrelatedReservedCapital() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+
+        // Reserva de um BUY nao relacionado (capital legitimamente comprometido).
+        BigDecimal unrelatedReserved = new BigDecimal("100.00000000");
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, unrelatedReserved));
+
+        // PENDING SELL orfa: SELLs nao reservam quote (bloqueiam uma Position).
+        Transaction pendingSell = newTransaction(runner, TransactionType.SELL,
+                new BigDecimal("0.00150000"), new BigDecimal("60000.00000000"), new BigDecimal("90.00000000"));
+        strategyRunnerRepository.saveTransaction(pendingSell);
+        markTransactionStale(pendingSell.getId(), Duration.ofHours(2));
+
+        RecoverStaleTransactionsResponse response = watchdog.runRecoveryCycle();
+
+        // A SELL orfa e saneada (query-verify -> EXPIRED), mas o release type-aware NAO libera quote:
+        // o reservado do BUY alheio fica intacto.
+        Transaction expired = awaitTransactionStatus(pendingSell.getId(), TransactionStatus.EXPIRED, WAIT_TIMEOUT);
+        assertNotNull(expired);
+        assertEquals(1, response.scanned());
+        assertEquals(1, response.recovered());
+        GlobalBalance balance = globalBalanceRepository.findByPortfolioId(portfolioId)
+                .orElseThrow(() -> new IllegalStateException("Balance not found"));
+        assertEquals(0, balance.getReservedBalance().compareTo(unrelatedReserved));
+    }
+
+    @Test
+    void watchdogShouldNotExpirePendingWithinDispatchGrace() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        BigDecimal quantity = new BigDecimal("0.00150000");
+        BigDecimal price = new BigDecimal("60000.00000000");
+        BigDecimal reservedAmount = quantity.multiply(price);
+
+        Transaction pendingBuy = newTransaction(runner, TransactionType.BUY, quantity, price, reservedAmount);
+        strategyRunnerRepository.saveTransaction(pendingBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+        // Passa do stale-threshold (30s) mas esta DENTRO da carencia de PENDING (default 10min):
+        // o dispatch ainda poderia estar em voo, entao nao pode ser expirado.
+        markTransactionStale(pendingBuy.getId(), Duration.ofMinutes(1));
+
+        RecoverStaleTransactionsResponse response = watchdog.runRecoveryCycle();
+
+        Transaction stillPending = strategyRunnerRepository.findTransactionById(pendingBuy.getId())
+                .orElseThrow(() -> new IllegalStateException("Transaction not found"));
+        assertEquals(TransactionStatus.PENDING, stillPending.getStatus());
+        assertEquals(0, response.scanned());
+    }
+
+    @Test
+    void watchdogShouldReconcilePendingZombieFoundAliveOnExchange() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        BigDecimal quantity = new BigDecimal("0.00150000");
+        BigDecimal price = new BigDecimal("60000.00000000");
+        BigDecimal reservedAmount = quantity.multiply(price);
+
+        Transaction pendingBuy = newTransaction(runner, TransactionType.BUY, quantity, price, reservedAmount);
+        strategyRunnerRepository.saveTransaction(pendingBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+        markTransactionStale(pendingBuy.getId(), Duration.ofHours(2));
+
+        getMockExchangeAdapter().seedQueriedOrderSnapshot(new OrderDataDto(
+                "EX_PENDING_ALIVE_RUNTIME",
+                pendingBuy.getClientOrderId(),
+                Symbol.of(SYMBOL),
+                OrderDataDto.OrderSide.BUY,
+                OrderDataDto.OrderType.LIMIT,
+                quantity,
+                BigDecimal.ZERO,
+                price,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.NEW,
+                null,
+                Instant.now()
+        ));
+
+        RecoverStaleTransactionsResponse response = watchdog.runRecoveryCycle();
+
+        // ordem viva (ACK perdido) -> reconciliada PENDING->SUBMITTED, sem DLQ, capital comprometido.
+        Transaction submitted = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.SUBMITTED, WAIT_TIMEOUT);
+        assertNotNull(submitted);
+        assertEquals(1, response.scanned());
+        assertEquals(1, response.recovered());
+        assertEquals(0, response.routedToDlq());
+        assertEquals(0, response.failed());
+        assertTrue(deadLetterEntryRepository.findUnresolved(portfolioId, runner.getId(), 10).isEmpty());
+    }
+
+    @Test
     void watchdogShouldRecoverStalePartialOrderFoundAsFilled() {
         UUID portfolioId = createPortfolio();
         StrategyRunner runner = createAndActivateRunner(portfolioId);
@@ -279,10 +433,16 @@ class RunnerTransactionRecoveryWatchdogIntegrationTest extends AbstractIntegrati
         doAnswer(invocation -> {
             @SuppressWarnings("unchecked")
             List<Transaction> candidates = (List<Transaction>) invocation.callRealMethod();
-            Transaction reloaded = strategyRunnerRepository.findTransactionById(submitted.getId())
-                    .orElseThrow(() -> new IllegalStateException("Transaction not found before skip simulation"));
-            reloaded.expire();
-            strategyRunnerRepository.saveTransaction(reloaded);
+            // O lote consulta confirmados e PENDING em selecoes separadas; so simula a corrida
+            // (terminal apos a selecao) quando o candidato confirmado foi de fato selecionado.
+            if (!candidates.isEmpty()) {
+                Transaction reloaded = strategyRunnerRepository.findTransactionById(submitted.getId())
+                        .orElseThrow(() -> new IllegalStateException("Transaction not found before skip simulation"));
+                if (reloaded.getStatus() == TransactionStatus.SUBMITTED) {
+                    reloaded.expire();
+                    strategyRunnerRepository.saveTransaction(reloaded);
+                }
+            }
             return candidates;
         }).when(strategyRunnerRepository).findByStatusesUpdatedBefore(any(), any(), anyInt());
 

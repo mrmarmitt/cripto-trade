@@ -1,6 +1,5 @@
 package com.marmitt.application.spring.config.core;
 
-import com.marmitt.application.spring.bootstrap.PortfolioReservationTtlProperties;
 import com.marmitt.application.spring.bootstrap.RunnerBootPhase3Properties;
 import com.marmitt.core.application.usecase.runner.CreateRunnerUseCase;
 import com.marmitt.core.application.usecase.runner.HaltRunnerUseCase;
@@ -212,9 +211,7 @@ public class RunnerConfig {
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             ExchangeAdapterRepositoryPort exchangeAdapterRepository,
             DeadLetterEntryRepositoryPort deadLetterEntryRepository,
-            ConciliationOrderUpdateExecutor conciliationOrderUpdateExecutor,
             RecoverTransactionStatusUseCase recoverTransactionStatusUseCase,
-            PortfolioReservationTtlProperties reservationTtlProperties,
             RunnerBootPhase3Properties phase3Properties,
             @Qualifier("bootRecoveryQueryExecutor") Executor bootRecoveryQueryExecutor
     ) {
@@ -222,9 +219,8 @@ public class RunnerConfig {
                 strategyRunnerRepository,
                 exchangeAdapterRepository,
                 deadLetterEntryRepository,
-                conciliationOrderUpdateExecutor,
                 recoverTransactionStatusUseCase,
-                reservationTtlProperties.getTtlMs(),
+                phase3Properties.getPendingGraceMs(),
                 phase3Properties.getExchangeQueryTimeoutMs(),
                 phase3Properties.getExchangeQueryMaxAttempts(),
                 phase3Properties.getExchangeQueryInitialBackoffMs(),

@@ -198,6 +198,42 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
         return switch (request.missingOrderPolicy()) {
             case APPLY_TERMINAL_FALLBACK -> applyTerminalFallback(transaction, exchangeId, statusBefore);
             case REGISTER_DLQ -> routeMissingOrderToDlq(transaction, runner, exchangeId, statusBefore);
+            case DERIVE_FROM_STATUS -> resolveDerivedMissingOrder(transaction, runner, exchangeId);
+        };
+    }
+
+    /**
+     * Resolve a politica de not-found relendo o status ATUAL da transacao, evitando TOCTOU:
+     * entre a captura de {@code statusBefore} e este ponto a query pode ter demorado e um evento
+     * USER_DATA/conciliacao pode ter promovido {@code PENDING -> SUBMITTED/PARTIAL}. So aplica
+     * terminal fallback se ainda {@code PENDING} (orfao nunca confirmado); se ja confirmado, e
+     * conflito -> DLQ; se ja terminal, no-op (resolvido concorrentemente).
+     */
+    private RecoverTransactionStatusResponse resolveDerivedMissingOrder(Transaction transaction,
+                                                                        StrategyRunner runner,
+                                                                        String exchangeId) {
+        // Relê a ENTIDADE atual (nao so o status): se a linha foi promovida durante a query,
+        // o exchangeOrderId fresco precisa ir para a identidade da DLQ — senao um ciclo posterior
+        // criaria uma segunda DLQ para a mesma ordem com o exchangeOrderId real.
+        //
+        // Residuo de corrida ACEITO (P2): este re-read ocorre FORA do striped lock da conciliacao.
+        // Uma promocao PENDING->SUBMITTED na janela (re-read .. aquisicao do lock) ainda poderia
+        // expirar uma ordem confirmada. A janela e de ~ms e exige a exchange responder not-found na
+        // query E entregar um fill no mesmo instante (estados contraditorios), apos a carencia de
+        // ~10 min de silencio do PENDING — praticamente impossivel. Bound por tres camadas:
+        // carencia + este re-read + conciliacao idempotente sob lock (fonte da verdade). Tornar
+        // 100% atomico exigiria um caminho de terminacao condicional dentro do lock; adiado.
+        Transaction current = strategyRunnerRepository.findTransactionById(transaction.getId())
+                .orElse(transaction);
+        return switch (current.getStatus()) {
+            case PENDING -> applyTerminalFallback(current, exchangeId, current.getStatus());
+            case SUBMITTED, PARTIAL -> routeMissingOrderToDlq(current, runner, exchangeId, current.getStatus());
+            default -> RecoverTransactionStatusResponse.skipped(
+                    current.getId(),
+                    current.getRunnerId(),
+                    exchangeId,
+                    current.getStatus(),
+                    "Transaction resolved concurrently before terminal fallback (status=" + current.getStatus() + ").");
         };
     }
 

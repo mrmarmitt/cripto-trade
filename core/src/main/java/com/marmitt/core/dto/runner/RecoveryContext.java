@@ -15,7 +15,6 @@ public class RecoveryContext {
 
     private boolean hasErrors;
     private List<Transaction> inFlight = List.of();
-    private List<Transaction> zombies = List.of();
     private List<Transaction> limbo = List.of();
     private ExchangeOrderQueryPort orderQuery;
     private int remainingInFlight;
@@ -29,14 +28,12 @@ public class RecoveryContext {
     public String exchangeId() { return runner.getExchangeId(); }
     public boolean hasErrors() { return hasErrors; }
     public List<Transaction> inFlight() { return inFlight; }
-    public List<Transaction> zombies() { return zombies; }
     public List<Transaction> limbo() { return limbo; }
     public ExchangeOrderQueryPort orderQuery() { return orderQuery; }
     public int remainingInFlight() { return remainingInFlight; }
     public List<String> notes() { return List.copyOf(notes); }
 
     public void inFlight(List<Transaction> inFlight) { this.inFlight = inFlight; }
-    public void zombies(List<Transaction> zombies) { this.zombies = zombies; }
     public void limbo(List<Transaction> limbo) { this.limbo = limbo; }
     public void orderQuery(ExchangeOrderQueryPort orderQuery) { this.orderQuery = orderQuery; }
     public void remainingInFlight(int remainingInFlight) { this.remainingInFlight = remainingInFlight; }

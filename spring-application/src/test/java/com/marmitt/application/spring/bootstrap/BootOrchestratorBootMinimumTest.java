@@ -2,7 +2,6 @@ package com.marmitt.application.spring.bootstrap;
 
 import com.marmitt.core.application.usecase.boot.RunBootSequenceUseCase;
 import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
-import com.marmitt.core.application.usecase.boot.phase2.PortfolioReservationTtlUseCase;
 import com.marmitt.core.application.usecase.boot.phase2.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.domain.portfolio.Portfolio;
@@ -154,7 +153,6 @@ class BootOrchestratorBootMinimumTest {
         StrategyRunnerRepositoryPort strategyRunnerRepository = mock(StrategyRunnerRepositoryPort.class);
         ExchangeAdapterRepositoryPort exchangeAdapterRepository = mock(ExchangeAdapterRepositoryPort.class);
         PortfolioBootSanityUseCase portfolioBootSanityUseCase = mock(PortfolioBootSanityUseCase.class);
-        PortfolioReservationTtlUseCase portfolioReservationTtlUseCase = mock(PortfolioReservationTtlUseCase.class);
         PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase = mock(PortfolioZombieDetectionUseCase.class);
         RunnerBootRecoveryUseCase runnerBootRecoveryUseCase = mock(RunnerBootRecoveryUseCase.class);
         BootMetricsRecorder bootMetricsRecorder = mock(BootMetricsRecorder.class);
@@ -176,9 +174,6 @@ class BootOrchestratorBootMinimumTest {
         PortfolioSanityCheckProperties sanityProperties = new PortfolioSanityCheckProperties();
         sanityProperties.setEnabled(false);
 
-        PortfolioReservationTtlProperties ttlProperties = new PortfolioReservationTtlProperties();
-        ttlProperties.setEnabled(false);
-
         PortfolioZombieDetectionProperties zombieProperties = new PortfolioZombieDetectionProperties();
         zombieProperties.setEnabled(true);
 
@@ -190,7 +185,6 @@ class BootOrchestratorBootMinimumTest {
                 strategyRunnerRepository,
                 exchangeAdapterRepository,
                 portfolioBootSanityUseCase,
-                portfolioReservationTtlUseCase,
                 portfolioZombieDetectionUseCase,
                 deadLetterRepository,
                 runnerBootRecoveryUseCase
@@ -201,7 +195,6 @@ class BootOrchestratorBootMinimumTest {
                 phase2Properties,
                 phase3Properties,
                 sanityProperties,
-                ttlProperties,
                 zombieProperties,
                 cutoffProperties,
                 runBootSequence,

@@ -2924,7 +2924,7 @@ Métricas para monitoramento de locks:
 
 ## 10. Reconciliação e Boot Sequence
 
-Esta seção detalha **como implementar** a reconciliação holística do sistema ao reiniciar, indo além do fluxo individual por Transaction (Seção 6.6) para cobrir: validação de integridade financeira (Sanity Check), detecção de ordens externas (Zumbis da Exchange), corte temporal, TTL de reservas e o protocolo de intervenção manual via DLQ.
+Esta seção detalha **como implementar** a reconciliação holística do sistema ao reiniciar, indo além do fluxo individual por Transaction (Seção 6.6) para cobrir: validação de integridade financeira (Sanity Check), detecção de ordens externas (Zumbis da Exchange), corte temporal, saneamento de reservas órfãs (PENDING) via query-before-expire e o protocolo de intervenção manual via DLQ.
 
 > **Referência:** Blueprint Seção 6.D (Boot Sequence), Seção 10.3 (Filosofia de Reconciliação e Fonte da Verdade).
 > **Notas de Implementação absorvidas:** #8 (Sanity Check no Boot), #9 (Identificação de Zumbis da Exchange), #10 (Timestamp de Corte).
@@ -3329,8 +3329,6 @@ AssetReconciliation (Portfolio, após Phase 3):
 |-----------------------------------------------|--------------|-------------------------------------------------------------------------|
 | `portfolio.sanity-check.threshold`            | `1e-8`       | Margem de desvio aceitável no Sanity Check                              |
 | `portfolio.sanity-check.fail-on-deficit`      | `true`       | Ativar Circuit Breaker se Exchange tem menos saldo que o local          |
-| `portfolio.reservation-ttl.ttl-ms`            | `300000`     | TTL máximo para reservas PENDING sem `exchangeOrderId` (5 min)          |
-| `portfolio.reservation-ttl.check-interval-ms` | `60000`      | Frequência do Worker de TTL                                             |
 | `portfolio.zombie-detection.enabled`          | `true`       | Habilitar detecção de zumbis da Exchange no boot                        |
 | `portfolio.asset-reconciliation.enabled`      | `true`       | Habilitar cross-check de ativos pós-reconciliação                       |
 | `runner.reconciliation.cutoff-strategy`       | `CREATED_AT` | Estratégia de timestamp de corte: `CREATED_AT` ou `LAST_RECONCILIATION` |
@@ -3344,7 +3342,7 @@ AssetReconciliation (Portfolio, após Phase 3):
 | DB local = autoridade de intenção                         | Ordens PENDING sem correspondência na exchange são descartadas                     | Perde oportunidade de trade (custo aceitável vs custo de capital bloqueado)                                    |
 | Zumbis da Exchange → DLQ (nunca cancelar automaticamente) | Ordens desconhecidas podem ser intencionais — decisão humana obrigatória           | Requer monitoramento manual da DLQ                                                                             |
 | Timestamp de corte por Runner                             | Evita processar ordens de sessões anteriores ou outros sistemas                    | Ordens legítimas anteriores ao cutoff são ignoradas (mitigado pelo cutoff conservador)                         |
-| TTL de reservas independente do Runner                    | Protege contra Runner inativo que não executa boot                                 | Pode expirar reserva legítima se TTL muito curto (mitigado pelo escopo restrito a PENDING sem exchangeOrderId) |
+| Reserva órfã (PENDING) resolvida por query-before-expire  | Boot (phase3) e watchdog de runtime consultam a exchange antes de expirar          | Exige capacidade de order query; sem ela, o PENDING segue o mesmo halt do limbo (T31)                          |
 | Cross-check informativo (não bloqueante)                  | Divergências pequenas são comuns (dust) — bloquear seria excessivo                 | Divergências grandes passam despercebidas se não houver monitoramento                                          |
 | Boot descentralizado (cada Runner se reconcilia)          | Paralelismo natural; um Runner travado não impede os outros                        | Portfolio precisa aguardar todos os Runners para confirmar sistema operacional                                 |
 | DLQ bloqueia o Runner (não o Portfolio)                   | Isola o impacto — outros Runners continuam operando                                | Runner afetado fica inoperante até intervenção manual                                                          |

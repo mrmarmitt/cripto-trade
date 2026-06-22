@@ -49,11 +49,9 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
     private static final String SYMBOL = "BTCUSDT";
     private static final BigDecimal INITIAL_CAPITAL = new BigDecimal("1000.00000000");
     private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(8);
-    private static final long ZOMBIE_TTL_MS = 300_000L;
 
     @DynamicPropertySource
     static void registerRecoveryProperties(DynamicPropertyRegistry registry) {
-        registry.add("runner.boot.phase2.portfolio.reservation-ttl.ttl-ms", () -> ZOMBIE_TTL_MS);
         registry.add("runner.boot.phase3.exchange-query-timeout-ms", () -> 500L);
         registry.add("runner.boot.phase3.exchange-query-max-attempts", () -> 3);
         registry.add("runner.boot.phase3.exchange-query-initial-backoff-ms", () -> 10L);
@@ -93,7 +91,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void recoveryShouldExpireZombiePendingBuyAndRestoreBalance() {
+    void recoveryShouldQueryVerifyAndExpirePendingBuyNotFoundOnExchange() {
         UUID portfolioId = createPortfolio();
         StrategyRunner runner = createAndActivateRunner(portfolioId);
         BigDecimal reservedAmount = new BigDecimal("150.00000000");
@@ -108,7 +106,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         strategyRunnerRepository.saveTransaction(pendingBuy);
         assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
 
-        // Force "zombie" age without depending on TTL property timings.
+        // Age is no longer required (boot query-verifies regardless of age); kept for realism.
         jdbcTemplate.update(
                 "UPDATE transactions SET requested_at = ? WHERE id = ?",
                 Timestamp.from(Instant.now().minus(Duration.ofHours(2))),
@@ -117,11 +115,12 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
 
         RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
 
+        // PENDING (sem exchangeOrderId) agora e consultado na exchange (nao encontrado) e
+        // expirado pelo mesmo caminho do limbo — sem expiracao local cega.
         Transaction expired = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.EXPIRED, WAIT_TIMEOUT);
         assertNotNull(expired);
         assertEquals(1, summary.inFlightCount());
-        assertEquals(1, summary.zombiesCount());
-        assertEquals(0, summary.limboCount());
+        assertEquals(1, summary.limboCount());
 
         awaitBalance(portfolioId, INITIAL_CAPITAL, BigDecimal.ZERO, WAIT_TIMEOUT);
 
@@ -132,36 +131,54 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void recoveryShouldKeepZombiePendingWithinTtlAndPreserveReservedBalance() {
+    void recoveryShouldReconcilePendingBuyFoundAliveOnExchangeAndKeepReserve() {
         UUID portfolioId = createPortfolio();
         StrategyRunner runner = createAndActivateRunner(portfolioId);
-        BigDecimal reservedAmount = new BigDecimal("120.00000000");
+        BigDecimal quantity = new BigDecimal("0.00150000");
+        BigDecimal price = new BigDecimal("60000.00000000");
+        BigDecimal reservedAmount = quantity.multiply(price);
 
+        // PENDING sem exchangeOrderId (ACK perdido), porem a ordem esta VIVA na exchange.
         Transaction pendingBuy = newTransaction(
                 runner,
                 TransactionType.BUY,
-                new BigDecimal("0.00200000"),
-                new BigDecimal("60000.00000000"),
+                quantity,
+                price,
                 reservedAmount
         );
         strategyRunnerRepository.saveTransaction(pendingBuy);
         assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
 
+        // Velho o suficiente para passar da carencia de reconciliacao de PENDING no boot.
         jdbcTemplate.update(
                 "UPDATE transactions SET requested_at = ? WHERE id = ?",
-                Timestamp.from(Instant.now().minusMillis(ZOMBIE_TTL_MS / 2)),
+                Timestamp.from(Instant.now().minus(Duration.ofHours(2))),
                 pendingBuy.getId()
         );
 
+        getMockExchangeAdapter().seedQueriedOrderSnapshot(new OrderDataDto(
+                "EX_PENDING_ALIVE",
+                pendingBuy.getClientOrderId(),
+                Symbol.of(SYMBOL),
+                OrderDataDto.OrderSide.BUY,
+                OrderDataDto.OrderType.LIMIT,
+                quantity,
+                BigDecimal.ZERO,
+                price,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.NEW,
+                null,
+                Instant.now()
+        ));
+
         RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
 
-        Transaction stillPending = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.PENDING, WAIT_TIMEOUT);
-        assertNotNull(stillPending);
+        // Query-before-expire: ordem viva e reconciliada (PENDING->SUBMITTED); capital NAO liberado.
+        Transaction submitted = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.SUBMITTED, WAIT_TIMEOUT);
+        assertNotNull(submitted);
         assertEquals(1, summary.inFlightCount());
-        assertEquals(1, summary.zombiesCount());
-        assertEquals(0, summary.limboCount());
-        assertTrue(summary.notes().stream().anyMatch(note -> note.contains("zombie within TTL")),
-                "Recovery summary should record that the zombie stayed pending within TTL");
+        assertEquals(1, summary.limboCount());
 
         awaitBalance(portfolioId, INITIAL_CAPITAL.subtract(reservedAmount), reservedAmount, WAIT_TIMEOUT);
 
@@ -172,7 +189,37 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
-    void recoveryShouldBeIdempotentWhenExpiringTheSameZombieTwice() {
+    void recoveryShouldDeferYoungPendingWithoutExpiringIt() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        BigDecimal quantity = new BigDecimal("0.00150000");
+        BigDecimal price = new BigDecimal("60000.00000000");
+        BigDecimal reservedAmount = quantity.multiply(price);
+
+        // PENDING recem-criado (jovem): a ordem pode ter sido enviada logo antes do crash e ainda
+        // nao estar visivel na query da exchange — nao deve ser expirada no boot.
+        Transaction youngPending = newTransaction(runner, TransactionType.BUY, quantity, price, reservedAmount);
+        strategyRunnerRepository.saveTransaction(youngPending);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+
+        // Deferido: continua PENDING, fora do limbo; capital reservado preservado; runner ativa.
+        Transaction stillPending = strategyRunnerRepository.findTransactionById(youngPending.getId())
+                .orElseThrow(() -> new IllegalStateException("Transaction not found"));
+        assertEquals(TransactionStatus.PENDING, stillPending.getStatus());
+        assertEquals(1, summary.inFlightCount());
+        assertEquals(0, summary.limboCount());
+        awaitBalance(portfolioId, INITIAL_CAPITAL.subtract(reservedAmount), reservedAmount, WAIT_TIMEOUT);
+
+        StrategyRunner latestRunner = strategyRunnerRepository.findById(runner.getId())
+                .orElseThrow(() -> new IllegalStateException("Runner not found after recovery"));
+        assertEquals(com.marmitt.core.enums.RunnerStatus.ACTIVE, latestRunner.getStatus());
+        assertFalse(latestRunner.isReconciling());
+    }
+
+    @Test
+    void recoveryShouldBeIdempotentWhenExpiringTheSamePendingTwice() {
         UUID portfolioId = createPortfolio();
         StrategyRunner runner = createAndActivateRunner(portfolioId);
         BigDecimal reservedAmount = new BigDecimal("140.00000000");
@@ -203,10 +250,8 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         Transaction expiredAgain = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.EXPIRED, WAIT_TIMEOUT);
         assertNotNull(expiredAgain);
         assertEquals(1, first.inFlightCount());
-        assertEquals(1, first.zombiesCount());
-        assertEquals(0, first.limboCount());
+        assertEquals(1, first.limboCount());
         assertEquals(0, second.inFlightCount());
-        assertEquals(0, second.zombiesCount());
         assertEquals(0, second.limboCount());
         awaitBalance(portfolioId, INITIAL_CAPITAL, BigDecimal.ZERO, WAIT_TIMEOUT);
 
@@ -238,7 +283,6 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         Transaction expired = awaitTransactionStatus(submittedBuy.getId(), TransactionStatus.EXPIRED, WAIT_TIMEOUT);
         assertNotNull(expired);
         assertEquals(1, summary.inFlightCount());
-        assertEquals(0, summary.zombiesCount());
         assertEquals(1, summary.limboCount());
 
         awaitBalance(portfolioId, INITIAL_CAPITAL, BigDecimal.ZERO, WAIT_TIMEOUT);
@@ -246,7 +290,6 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         RunnerBootRecoveryUseCase.RecoverySummary second = runnerBootRecoveryUseCase.recoverRunner(runner);
 
         assertEquals(0, second.inFlightCount());
-        assertEquals(0, second.zombiesCount());
         assertEquals(0, second.limboCount());
 
         Transaction expiredAgain = strategyRunnerRepository.findTransactionById(submittedBuy.getId())
@@ -292,7 +335,6 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         Transaction canceled = awaitTransactionStatus(partialBuy.getId(), TransactionStatus.CANCELED, WAIT_TIMEOUT);
         assertNotNull(canceled);
         assertEquals(1, summary.inFlightCount());
-        assertEquals(0, summary.zombiesCount());
         assertEquals(1, summary.limboCount());
 
         Position position = strategyRunnerRepository.findPositionByOpenedByTransactionId(partialBuy.getId())
@@ -306,7 +348,6 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         RunnerBootRecoveryUseCase.RecoverySummary second = runnerBootRecoveryUseCase.recoverRunner(runner);
 
         assertEquals(0, second.inFlightCount());
-        assertEquals(0, second.zombiesCount());
         assertEquals(0, second.limboCount());
 
         Transaction canceledAgain = strategyRunnerRepository.findTransactionById(partialBuy.getId())
@@ -351,7 +392,6 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         Transaction stillSubmitted = awaitTransactionStatus(submittedBuy.getId(), TransactionStatus.SUBMITTED, WAIT_TIMEOUT);
         assertNotNull(stillSubmitted);
         assertEquals(1, summary.inFlightCount());
-        assertEquals(0, summary.zombiesCount());
         assertEquals(1, summary.limboCount());
         assertTrue(summary.notes().stream().anyMatch(note -> note.contains("Step 2 ERROR")),
                 "Recovery summary should record missing query capability");
@@ -410,7 +450,6 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         Transaction filled = awaitTransactionStatus(submittedBuy.getId(), TransactionStatus.FILLED, WAIT_TIMEOUT);
         assertNotNull(filled);
         assertEquals(1, summary.inFlightCount());
-        assertEquals(0, summary.zombiesCount());
         assertEquals(1, summary.limboCount());
         assertTrue(summary.notes().stream().anyMatch(note -> note.contains("transient query failure")),
                 "Recovery summary should record the transient query failure");
@@ -470,7 +509,6 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         Transaction stillSubmitted = awaitTransactionStatus(submittedBuy.getId(), TransactionStatus.SUBMITTED, WAIT_TIMEOUT);
         assertNotNull(stillSubmitted);
         assertEquals(1, summary.inFlightCount());
-        assertEquals(0, summary.zombiesCount());
         assertEquals(1, summary.limboCount());
         assertTrue(summary.notes().stream().anyMatch(note -> note.contains("transient query failure")),
                 "Recovery summary should record transient query failures");
@@ -525,7 +563,6 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         Transaction filled = awaitTransactionStatus(submittedBuy.getId(), TransactionStatus.FILLED, WAIT_TIMEOUT);
         assertNotNull(filled);
         assertEquals(1, summary.inFlightCount());
-        assertEquals(0, summary.zombiesCount());
         assertEquals(1, summary.limboCount());
 
         Position position = strategyRunnerRepository.findPositionByOpenedByTransactionId(submittedBuy.getId())
@@ -587,7 +624,6 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         Transaction filled = awaitTransactionStatus(partialBuy.getId(), TransactionStatus.FILLED, WAIT_TIMEOUT);
         assertNotNull(filled);
         assertEquals(1, summary.inFlightCount());
-        assertEquals(0, summary.zombiesCount());
         assertEquals(1, summary.limboCount());
         assertEquals(0, filled.getEffectiveExecutedQuantity().compareTo(totalQuantity));
         assertEquals(0, filled.getEffectiveExecutedPrice().compareTo(finalExecutedPrice));
@@ -608,7 +644,6 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         RunnerBootRecoveryUseCase.RecoverySummary second = runnerBootRecoveryUseCase.recoverRunner(runner);
 
         assertEquals(0, second.inFlightCount());
-        assertEquals(0, second.zombiesCount());
         assertEquals(0, second.limboCount());
 
         Transaction filledAgain = strategyRunnerRepository.findTransactionById(partialBuy.getId())
@@ -645,7 +680,6 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
 
         assertEquals(0, summary.inFlightCount());
-        assertEquals(0, summary.zombiesCount());
         assertEquals(0, summary.limboCount());
 
         StrategyRunner latestRunner = strategyRunnerRepository.findById(runner.getId())

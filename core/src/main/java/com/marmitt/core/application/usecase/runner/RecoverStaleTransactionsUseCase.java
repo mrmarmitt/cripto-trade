@@ -10,14 +10,21 @@ import com.marmitt.core.ports.inbound.runner.RecoverStaleTransactionsPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
 public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactionsPort {
 
-    private static final List<TransactionStatus> ELIGIBLE_STATUSES = List.of(
+    // Confirmados (ja tem exchangeOrderId) usam o stale-threshold normal.
+    private static final List<TransactionStatus> CONFIRMED_STATUSES = List.of(
             TransactionStatus.SUBMITTED,
             TransactionStatus.PARTIAL
+    );
+    // PENDING (reserva orfa) usa uma carencia maior (pendingUpdatedBefore): nao pode ser
+    // selecionado enquanto o dispatch+ACK ainda pode estar em voo (persist-first).
+    private static final List<TransactionStatus> PENDING_STATUSES = List.of(
+            TransactionStatus.PENDING
     );
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
@@ -35,11 +42,25 @@ public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactions
             return new RecoverStaleTransactionsResponse(0, 0, 0, 0, 0);
         }
 
-        List<Transaction> candidates = strategyRunnerRepository.findByStatusesUpdatedBefore(
-                ELIGIBLE_STATUSES,
+        // Dois cutoffs com budgets INDEPENDENTES (cada um ate maxPerRun): confirmados pelo
+        // stale-threshold; PENDING por uma carencia maior. Budget separado e proposital — um
+        // backlog de confirmados (que permanecem no mesmo status apos DLQ e sao re-selecionados
+        // a cada ciclo, ordenados por updated_at) nao pode starvar a limpeza de reserva orfa
+        // (PENDING), senao o capital ficaria preso indefinidamente.
+        List<Transaction> confirmed = strategyRunnerRepository.findByStatusesUpdatedBefore(
+                CONFIRMED_STATUSES,
                 request.updatedBefore(),
                 request.maxPerRun()
         );
+        List<Transaction> pending = strategyRunnerRepository.findByStatusesUpdatedBefore(
+                PENDING_STATUSES,
+                request.pendingUpdatedBefore(),
+                request.maxPerRun()
+        );
+
+        List<Transaction> candidates = new ArrayList<>(confirmed.size() + pending.size());
+        candidates.addAll(confirmed);
+        candidates.addAll(pending);
 
         int recovered = 0;
         int routedToDlq = 0;
@@ -48,9 +69,12 @@ public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactions
 
         for (Transaction candidate : candidates) {
             try {
+                // A politica de not-found e resolvida dentro do engine pelo status RECARREGADO
+                // (forRuntimeWatchdog -> DERIVE_FROM_STATUS), nunca pelo status do snapshot do lote:
+                // se a linha virou SUBMITTED/PARTIAL entre a selecao e o execute, o not-found vira
+                // DLQ (e nao expiracao indevida de ordem ja confirmada).
                 RecoverTransactionStatusResponse response = recoverTransactionStatusUseCase.execute(
-                        RecoverTransactionStatusRequest.forRuntimeWatchdog(candidate.getId())
-                );
+                        RecoverTransactionStatusRequest.forRuntimeWatchdog(candidate.getId()));
 
                 if (response.outcome() == RecoverTransactionStatusResponse.RecoveryOutcome.RECOVERED) {
                     if (response.action() == RecoverTransactionStatusResponse.RecoveryAction.ROUTED_TO_DLQ) {

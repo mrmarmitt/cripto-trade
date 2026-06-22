@@ -30,7 +30,6 @@ public class BootOrchestrator {
     private final RunnerBootPhase2Properties phase2Properties;
     private final RunnerBootPhase3Properties phase3Properties;
     private final PortfolioSanityCheckProperties portfolioSanityCheckProperties;
-    private final PortfolioReservationTtlProperties portfolioReservationTtlProperties;
     private final PortfolioZombieDetectionProperties portfolioZombieDetectionProperties;
     private final PortfolioCutoffProperties portfolioCutoffProperties;
     private final RunBootSequencePort runBootSequence;
@@ -48,8 +47,6 @@ public class BootOrchestrator {
                 portfolioSanityCheckProperties.getThreshold(),
                 portfolioZombieDetectionProperties.isEnabled(),
                 portfolioCutoffProperties.isEnabled(),
-                portfolioReservationTtlProperties.isEnabled(),
-                portfolioReservationTtlProperties.getTtlMs(),
                 phase2Properties.getMode(),
                 phase2Properties.getAccountQueryPolicy()
         );
