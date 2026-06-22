@@ -212,18 +212,20 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
     private RecoverTransactionStatusResponse resolveDerivedMissingOrder(Transaction transaction,
                                                                         StrategyRunner runner,
                                                                         String exchangeId) {
-        TransactionStatus current = strategyRunnerRepository.findTransactionById(transaction.getId())
-                .map(Transaction::getStatus)
-                .orElse(transaction.getStatus());
-        return switch (current) {
-            case PENDING -> applyTerminalFallback(transaction, exchangeId, current);
-            case SUBMITTED, PARTIAL -> routeMissingOrderToDlq(transaction, runner, exchangeId, current);
+        // Relê a ENTIDADE atual (nao so o status): se a linha foi promovida durante a query,
+        // o exchangeOrderId fresco precisa ir para a identidade da DLQ — senao um ciclo posterior
+        // criaria uma segunda DLQ para a mesma ordem com o exchangeOrderId real.
+        Transaction current = strategyRunnerRepository.findTransactionById(transaction.getId())
+                .orElse(transaction);
+        return switch (current.getStatus()) {
+            case PENDING -> applyTerminalFallback(current, exchangeId, current.getStatus());
+            case SUBMITTED, PARTIAL -> routeMissingOrderToDlq(current, runner, exchangeId, current.getStatus());
             default -> RecoverTransactionStatusResponse.skipped(
-                    transaction.getId(),
-                    transaction.getRunnerId(),
+                    current.getId(),
+                    current.getRunnerId(),
                     exchangeId,
-                    current,
-                    "Transaction resolved concurrently before terminal fallback (status=" + current + ").");
+                    current.getStatus(),
+                    "Transaction resolved concurrently before terminal fallback (status=" + current.getStatus() + ").");
         };
     }
 

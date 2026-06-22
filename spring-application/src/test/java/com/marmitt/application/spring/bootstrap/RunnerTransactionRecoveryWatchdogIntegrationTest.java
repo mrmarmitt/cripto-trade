@@ -172,6 +172,40 @@ class RunnerTransactionRecoveryWatchdogIntegrationTest extends AbstractIntegrati
     }
 
     @Test
+    void watchdogShouldNotLetConfirmedBacklogStarvePendingCleanup() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        properties.setMaxPerRun(1);
+
+        // Confirmado faltante consome todo o budget de confirmados (=1) e PERMANECE SUBMITTED
+        // (vai para DLQ a cada ciclo) — simula um backlog persistente.
+        Transaction submittedMissing = newSubmittedTransaction(runner, "EX_BACKLOG_MISSING");
+        strategyRunnerRepository.saveTransaction(submittedMissing);
+        markTransactionStale(submittedMissing.getId(), Duration.ofHours(2));
+
+        // Reserva orfa PENDING que precisa ser limpa mesmo com o backlog de confirmados.
+        BigDecimal quantity = new BigDecimal("0.00150000");
+        BigDecimal price = new BigDecimal("60000.00000000");
+        BigDecimal reservedAmount = quantity.multiply(price);
+        Transaction pendingZombie = newTransaction(runner, TransactionType.BUY, quantity, price, reservedAmount);
+        strategyRunnerRepository.saveTransaction(pendingZombie);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+        markTransactionStale(pendingZombie.getId(), Duration.ofHours(2));
+
+        RecoverStaleTransactionsResponse response = watchdog.runRecoveryCycle();
+
+        // Budget independente: o PENDING e expirado apesar de o confirmado ter consumido o seu.
+        Transaction expired = awaitTransactionStatus(pendingZombie.getId(), TransactionStatus.EXPIRED, WAIT_TIMEOUT);
+        assertNotNull(expired);
+        Transaction stillSubmitted = strategyRunnerRepository.findTransactionById(submittedMissing.getId())
+                .orElseThrow(() -> new IllegalStateException("Submitted not found"));
+        assertEquals(TransactionStatus.SUBMITTED, stillSubmitted.getStatus());
+        assertEquals(2, response.scanned());
+        assertEquals(1, response.routedToDlq());
+        assertEquals(1, response.recovered());
+    }
+
+    @Test
     void watchdogShouldNotExpirePendingWithinDispatchGrace() {
         UUID portfolioId = createPortfolio();
         StrategyRunner runner = createAndActivateRunner(portfolioId);

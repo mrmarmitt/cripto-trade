@@ -42,19 +42,21 @@ public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactions
             return new RecoverStaleTransactionsResponse(0, 0, 0, 0, 0);
         }
 
-        // Dois cutoffs: confirmados pelo stale-threshold; PENDING por uma carencia maior.
+        // Dois cutoffs com budgets INDEPENDENTES (cada um ate maxPerRun): confirmados pelo
+        // stale-threshold; PENDING por uma carencia maior. Budget separado e proposital — um
+        // backlog de confirmados (que permanecem no mesmo status apos DLQ e sao re-selecionados
+        // a cada ciclo, ordenados por updated_at) nao pode starvar a limpeza de reserva orfa
+        // (PENDING), senao o capital ficaria preso indefinidamente.
         List<Transaction> confirmed = strategyRunnerRepository.findByStatusesUpdatedBefore(
                 CONFIRMED_STATUSES,
                 request.updatedBefore(),
                 request.maxPerRun()
         );
-        int pendingBudget = request.maxPerRun() - confirmed.size();
-        List<Transaction> pending = pendingBudget > 0
-                ? strategyRunnerRepository.findByStatusesUpdatedBefore(
-                        PENDING_STATUSES,
-                        request.pendingUpdatedBefore(),
-                        pendingBudget)
-                : List.of();
+        List<Transaction> pending = strategyRunnerRepository.findByStatusesUpdatedBefore(
+                PENDING_STATUSES,
+                request.pendingUpdatedBefore(),
+                request.maxPerRun()
+        );
 
         List<Transaction> candidates = new ArrayList<>(confirmed.size() + pending.size());
         candidates.addAll(confirmed);

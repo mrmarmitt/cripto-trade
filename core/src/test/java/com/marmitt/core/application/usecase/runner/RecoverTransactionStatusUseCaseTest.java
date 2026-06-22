@@ -3,6 +3,7 @@ package com.marmitt.core.application.usecase.runner;
 import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdate;
 import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
 import com.marmitt.core.domain.Symbol;
+import com.marmitt.core.domain.portfolio.DeadLetterEntry;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
@@ -23,6 +24,7 @@ import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -213,21 +215,31 @@ class RecoverTransactionStatusUseCaseTest {
         DeadLetterEntryRepositoryPort deadLetterRepository = mock(DeadLetterEntryRepositoryPort.class);
         ExchangeOrderQueryPort orderQueryPort = mock(ExchangeOrderQueryPort.class);
 
-        Transaction transaction = newBuyTransaction(); // PENDING
+        Transaction transaction = newBuyTransaction(); // PENDING, exchangeOrderId == null
         StrategyRunner runner = newRunner(transaction.getRunnerId(), "BINANCE");
 
-        // findTransactionById: 1a chamada (inicio do execute) retorna PENDING; 2a chamada
-        // (re-read antes do fallback) simula promocao concorrente PENDING->SUBMITTED por um
-        // evento USER_DATA que chegou durante a query.
-        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
-        when(repository.findTransactionById(transaction.getId())).thenAnswer(inv -> {
-            if (calls.getAndIncrement() == 1) {
-                transaction.submit("EX_PROMOTED_DURING_QUERY");
-            }
-            return Optional.of(transaction);
-        });
+        // Twin recarregado: mesma id/clientOrderId, ja promovida a SUBMITTED com o exchangeOrderId
+        // real — simula um evento USER_DATA que confirmou a ordem durante a query.
+        Transaction promoted = Transaction.reconstitute()
+                .id(transaction.getId())
+                .runnerId(transaction.getRunnerId())
+                .clientOrderId(transaction.getClientOrderId())
+                .exchangeOrderId("EX_PROMOTED_DURING_QUERY")
+                .status(TransactionStatus.SUBMITTED)
+                .type(transaction.getType())
+                .symbol(transaction.getSymbol())
+                .quantity(transaction.getQuantity())
+                .price(transaction.getPrice())
+                .total(transaction.getTotal())
+                .requestedAt(transaction.getRequestedAt())
+                .updatedAt(Instant.now())
+                .build();
+
+        // 1a chamada (inicio do execute) PENDING; 2a chamada (re-read antes do fallback) o twin promovido.
+        when(repository.findTransactionById(transaction.getId()))
+                .thenReturn(Optional.of(transaction))
+                .thenReturn(Optional.of(promoted));
         when(repository.findById(transaction.getRunnerId())).thenReturn(Optional.of(runner));
-        when(repository.findTransactionByClientOrderId(transaction.getClientOrderId())).thenReturn(Optional.of(transaction));
         stubOrderQuery(exchangeRepository, orderQueryPort);
         when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
                 .thenReturn(Optional.empty());
@@ -245,8 +257,11 @@ class RecoverTransactionStatusUseCaseTest {
         // Promovida durante a query -> not-found vira CONFLITO (DLQ), nunca expiracao da ordem confirmada.
         assertEquals(RecoverTransactionStatusResponse.RecoveryOutcome.RECOVERED, response.outcome());
         assertEquals(RecoverTransactionStatusResponse.RecoveryAction.ROUTED_TO_DLQ, response.action());
-        assertEquals(TransactionStatus.SUBMITTED, transaction.getStatus());
-        verify(deadLetterRepository).save(any());
+
+        // A DLQ deve carregar o exchangeOrderId RECARREGADO (nao o objeto pre-query com id nulo).
+        ArgumentCaptor<DeadLetterEntry> captor = ArgumentCaptor.forClass(DeadLetterEntry.class);
+        verify(deadLetterRepository).save(captor.capture());
+        assertEquals("EX_PROMOTED_DURING_QUERY", captor.getValue().getExchangeOrderId());
     }
 
     @Test
