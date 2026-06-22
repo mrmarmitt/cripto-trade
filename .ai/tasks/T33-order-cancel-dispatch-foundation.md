@@ -3,7 +3,7 @@
 **Complexidade:** Baixa  
 **Responsável:** Claude  
 **Dependências:** Nenhuma  
-**Status:** Pendente
+**Status:** Concluído — verbo `OrderDispatchPort.cancel(OrderCancelCommand)` + impl no adapter (via `orderExecution().cancelOrder`, fire-and-forget). Primeiro consumidor: T32.
 
 ---
 

@@ -1,5 +1,6 @@
 package com.marmitt.core.ports.outbound.exchange;
 
+import com.marmitt.core.dto.runner.OrderCancelCommand;
 import com.marmitt.core.dto.runner.OrderDispatchCommand;
 
 /**
@@ -25,4 +26,15 @@ public interface OrderDispatchPort {
      * @throws RuntimeException      se o envio falhar por razão técnica
      */
     void dispatch(OrderDispatchCommand command);
+
+    /**
+     * Cancela uma ordem viva na exchange via canal de saída.
+     * <p>
+     * Fire-and-forget, como {@link #dispatch}: envia o cancelamento e retorna. O {@code CANCELED}
+     * (e a eventual liberação de capital) chega de forma assíncrona via stream e é conciliado pelo
+     * caminho idempotente. Não marca a transação como terminal de forma otimista.
+     *
+     * @param command alvo do cancelamento (agnóstico de provider)
+     */
+    void cancel(OrderCancelCommand command);
 }

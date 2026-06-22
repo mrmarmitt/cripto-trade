@@ -2,13 +2,16 @@ package com.marmitt.application.spring.infrastructure.exchange;
 
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.dto.exchange.OrderSubmissionResult;
+import com.marmitt.core.dto.runner.OrderCancelCommand;
 import com.marmitt.core.dto.runner.OrderDispatchCommand;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.enums.OrderSide;
 import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
+import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.exchange.ExchangeOrderPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
@@ -59,6 +62,28 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
 
         log.debug("dispatch: order sent — clientOrderId={} exchange={} symbol={} type={}",
                 command.clientOrderId(), command.exchangeId(), command.symbol(), command.type());
+    }
+
+    @Override
+    public void cancel(OrderCancelCommand command) {
+        ExchangeAdapterDescriptor adapter = exchangeAdapterRepository
+                .findAdapter(command.exchangeId())
+                .orElseThrow(() -> new IllegalStateException(
+                        "No adapter registered for exchangeId: " + command.exchangeId()));
+
+        if (!adapter.hasOrderExecution()) {
+            log.warn("cancel: order execution capability not available exchange={} clientOrderId={} — skipping",
+                    command.exchangeId(), command.clientOrderId());
+            return;
+        }
+
+        // Fire-and-forget: envia o cancelamento; o CANCELED real (e a liberacao de capital) chega
+        // pelo stream e e conciliado pelo caminho idempotente. Sem marcacao terminal otimista.
+        adapter.orderExecution().cancelOrder(
+                new SendCancelOrderRequest(command.exchangeId(), command.clientOrderId(), command.symbol()));
+
+        log.debug("cancel: cancel sent — clientOrderId={} exchange={} symbol={} — awaits CANCELED via stream",
+                command.clientOrderId(), command.exchangeId(), command.symbol());
     }
 
     private SendOrderRequest toSendOrderRequest(OrderDispatchCommand command, String exchangeName) {
