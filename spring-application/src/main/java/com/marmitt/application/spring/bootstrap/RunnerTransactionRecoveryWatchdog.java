@@ -36,21 +36,27 @@ public class RunnerTransactionRecoveryWatchdog {
         }
 
         long staleThresholdMs = Math.max(0L, properties.getStaleThresholdMs());
-        Instant updatedBefore = Instant.now().minusMillis(staleThresholdMs);
+        // PENDING (reserva orfa) exige carencia maior que o stale-threshold dos confirmados:
+        // nao pode ser selecionado enquanto o dispatch+ACK ainda pode estar em voo.
+        long pendingGraceMs = Math.max(staleThresholdMs, properties.getPendingGraceMs());
+        Instant now = Instant.now();
+        Instant updatedBefore = now.minusMillis(staleThresholdMs);
+        Instant pendingUpdatedBefore = now.minusMillis(pendingGraceMs);
         int maxPerRun = Math.max(0, properties.getMaxPerRun());
 
         RecoverStaleTransactionsResponse response = recoverStaleTransactionsPort.execute(
-                new RecoverStaleTransactionsRequest(updatedBefore, maxPerRun)
+                new RecoverStaleTransactionsRequest(updatedBefore, pendingUpdatedBefore, maxPerRun)
         );
 
         if (response.scanned() > 0 || response.failed() > 0) {
-            log.info("runtimeRecoveryWatchdog: scanned={} recovered={} dlq={} skipped={} failed={} cutoff={}",
+            log.info("runtimeRecoveryWatchdog: scanned={} recovered={} dlq={} skipped={} failed={} cutoff={} pendingCutoff={}",
                     response.scanned(),
                     response.recovered(),
                     response.routedToDlq(),
                     response.skipped(),
                     response.failed(),
-                    updatedBefore);
+                    updatedBefore,
+                    pendingUpdatedBefore);
         }
 
         return response;

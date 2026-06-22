@@ -172,6 +172,29 @@ class RunnerTransactionRecoveryWatchdogIntegrationTest extends AbstractIntegrati
     }
 
     @Test
+    void watchdogShouldNotExpirePendingWithinDispatchGrace() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        BigDecimal quantity = new BigDecimal("0.00150000");
+        BigDecimal price = new BigDecimal("60000.00000000");
+        BigDecimal reservedAmount = quantity.multiply(price);
+
+        Transaction pendingBuy = newTransaction(runner, TransactionType.BUY, quantity, price, reservedAmount);
+        strategyRunnerRepository.saveTransaction(pendingBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+        // Passa do stale-threshold (30s) mas esta DENTRO da carencia de PENDING (default 10min):
+        // o dispatch ainda poderia estar em voo, entao nao pode ser expirado.
+        markTransactionStale(pendingBuy.getId(), Duration.ofMinutes(1));
+
+        RecoverStaleTransactionsResponse response = watchdog.runRecoveryCycle();
+
+        Transaction stillPending = strategyRunnerRepository.findTransactionById(pendingBuy.getId())
+                .orElseThrow(() -> new IllegalStateException("Transaction not found"));
+        assertEquals(TransactionStatus.PENDING, stillPending.getStatus());
+        assertEquals(0, response.scanned());
+    }
+
+    @Test
     void watchdogShouldReconcilePendingZombieFoundAliveOnExchange() {
         UUID portfolioId = createPortfolio();
         StrategyRunner runner = createAndActivateRunner(portfolioId);
@@ -347,10 +370,16 @@ class RunnerTransactionRecoveryWatchdogIntegrationTest extends AbstractIntegrati
         doAnswer(invocation -> {
             @SuppressWarnings("unchecked")
             List<Transaction> candidates = (List<Transaction>) invocation.callRealMethod();
-            Transaction reloaded = strategyRunnerRepository.findTransactionById(submitted.getId())
-                    .orElseThrow(() -> new IllegalStateException("Transaction not found before skip simulation"));
-            reloaded.expire();
-            strategyRunnerRepository.saveTransaction(reloaded);
+            // O lote consulta confirmados e PENDING em selecoes separadas; so simula a corrida
+            // (terminal apos a selecao) quando o candidato confirmado foi de fato selecionado.
+            if (!candidates.isEmpty()) {
+                Transaction reloaded = strategyRunnerRepository.findTransactionById(submitted.getId())
+                        .orElseThrow(() -> new IllegalStateException("Transaction not found before skip simulation"));
+                if (reloaded.getStatus() == TransactionStatus.SUBMITTED) {
+                    reloaded.expire();
+                    strategyRunnerRepository.saveTransaction(reloaded);
+                }
+            }
             return candidates;
         }).when(strategyRunnerRepository).findByStatusesUpdatedBefore(any(), any(), anyInt());
 

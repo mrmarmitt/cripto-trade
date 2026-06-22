@@ -19,12 +19,13 @@ O motor por-transação (`RecoverTransactionStatusUseCase`) já fazia "consulta-
 
 ### 1. Runtime — `RecoverStaleTransactionsUseCase` passa a cobrir `PENDING`
 
-- `ELIGIBLE_STATUSES` agora é `[PENDING, SUBMITTED, PARTIAL]`.
-- O lote passa **um único** request (`forRuntimeWatchdog` = `MissingOrderPolicy.DERIVE_FROM_STATUS`); a política de not-found é **resolvida dentro do engine pelo status RECARREGADO** da transação:
+- O lote seleciona em **dois cutoffs** (sem watchdog/use case novos):
+  - confirmados `[SUBMITTED, PARTIAL]` pelo `stale-threshold-ms` (30s);
+  - `[PENDING]` por uma **carência maior** `pending-grace-ms` (default **10 min**). Isso evita expirar um `PENDING` ainda em **dispatch**: o persist-first comita o `PENDING` antes do `orderDispatch.dispatch(...)`, e o timeout REST é ~30s — reusar 30s para `PENDING` poderia expirar uma ordem que ainda vai ser enviada/confirmada. *(Corrige Codex P1: "keep a dispatch grace period".)*
+- Todos passam `forRuntimeWatchdog` = `MissingOrderPolicy.DERIVE_FROM_STATUS`; a política de not-found é **resolvida dentro do engine** (`RecoverTransactionStatusUseCase`):
   - `PENDING` (nunca confirmado) → terminal fallback (`EXPIRED`/`CANCELED`, **sem DLQ**);
   - `SUBMITTED`/`PARTIAL` (confirmado) → `REGISTER_DLQ`.
-- Resolver no engine (e não no snapshot do lote) **elimina a corrida**: se a linha virar `SUBMITTED`/`PARTIAL` entre a seleção e o `execute`, o not-found vira DLQ, não expiração indevida de ordem confirmada.
-- **Cutoff único reutilizado** (`runner.recovery.transaction.stale-threshold-ms`). Não foi criado watchdog, properties nem use case dedicado.
+- O engine **relê o status atual** imediatamente antes do fallback (não usa o status do snapshot do lote nem o `statusBefore` pré-query). Se um evento USER_DATA promoveu `PENDING → SUBMITTED/PARTIAL` durante a query (que pode levar até 30s), o not-found vira **DLQ**, nunca expiração de ordem já confirmada; se já virou terminal, é no-op. *(Corrige Codex P1: "recheck status before derived fallback".)*
 
 ### 2. Boot — `RunnerBootRecoveryUseCase` deixa de tratar zombie separadamente
 
@@ -64,8 +65,11 @@ Boot e runtime compartilham o **mesmo motor** (`RecoverTransactionStatusUseCase`
 | Arquivo | Mudança |
 |---|---|
 | `core/.../dto/runner/request/RecoverTransactionStatusRequest.java` | `forRuntimeWatchdog` → `DERIVE_FROM_STATUS`; novo valor de enum `DERIVE_FROM_STATUS` |
-| `core/.../usecase/runner/RecoverTransactionStatusUseCase.java` | not-found resolve `DERIVE_FROM_STATUS` pelo `statusBefore` recarregado |
-| `core/.../usecase/runner/RecoverStaleTransactionsUseCase.java` | `PENDING` elegível; request único (sem branching de status no lote) |
+| `core/.../usecase/runner/RecoverTransactionStatusUseCase.java` | not-found `DERIVE_FROM_STATUS` **relê** o status atual antes do fallback (PENDING→fallback; confirmado→DLQ; terminal→no-op) |
+| `core/.../usecase/runner/RecoverStaleTransactionsUseCase.java` | `PENDING` elegível; **dois cutoffs** (confirmados vs PENDING) com budget de `maxPerRun` |
+| `core/.../dto/runner/request/RecoverStaleTransactionsRequest.java` | + `pendingUpdatedBefore` |
+| `spring-application/.../bootstrap/RunnerTransactionRecoveryWatchdog.java` | calcula `pendingUpdatedBefore` (carência maior) |
+| `spring-application/.../bootstrap/RunnerTransactionRecoveryProperties.java` (+`application.yml`) | + `pending-grace-ms` (default 600000) |
 | `core/.../usecase/runner/RunnerBootRecoveryUseCase.java` | Remoção do Step 3 e da trilha de zombie; `PENDING` reconciliado junto do limbo; remoção de código morto |
 | `core/.../dto/runner/RecoveryContext.java` | Removido bucket `zombies` |
 | `core/.../usecase/boot/RunBootSequenceUseCase.java` | Log sem `zombies={}`; **removida a fase `phase2.reservation_ttl`** |
@@ -81,8 +85,8 @@ Boot e runtime compartilham o **mesmo motor** (`RecoverTransactionStatusUseCase`
 
 | Arquivo | Mudança |
 |---|---|
-| `RecoverTransactionStatusUseCaseTest` | + `executeMarksPendingTransactionExpiredWhenExchangeDoesNotFindOrderInRuntimeMode` (cobre `DERIVE_FROM_STATUS` para `PENDING`) |
-| `RunnerTransactionRecoveryWatchdogIntegrationTest` | + `watchdogShouldExpirePendingZombieNotFoundOnExchangeWithoutDlq`, + `watchdogShouldReconcilePendingZombieFoundAliveOnExchange` |
+| `RecoverTransactionStatusUseCaseTest` | + `executeMarksPendingTransactionExpiredWhenExchangeDoesNotFindOrderInRuntimeMode`; + `executeRoutesToDlqWhenPendingGetsConfirmedDuringQueryInRuntimeMode` (guarda da corrida) |
+| `RunnerTransactionRecoveryWatchdogIntegrationTest` | + `watchdogShouldExpirePendingZombieNotFoundOnExchangeWithoutDlq`, + `watchdogShouldReconcilePendingZombieFoundAliveOnExchange`, + `watchdogShouldNotExpirePendingWithinDispatchGrace`; ajuste do stub de corrida para o lote em dois cutoffs |
 | `RunnerBootRecoveryIntegrationTest` | `recoveryShouldExpireZombie...` → `recoveryShouldQueryVerifyAndExpirePendingBuyNotFoundOnExchange`; + `recoveryShouldReconcilePendingBuyFoundAliveOnExchangeAndKeepReserve`; removido o teste de TTL-grace; removidos asserts de `zombiesCount` e o registro da property `reservation-ttl` |
 | `BootOrchestrator{Observability,DlqOperational,BootMinimum}Test` | Removido o mock `PortfolioReservationTtlUseCase` e a property `ttlProperties` da composição |
 
@@ -103,7 +107,7 @@ Validação: `:core:test` e `:spring-application:test` (suíte completa) — tod
 
 - **Política por status é invariante de segurança:** `PENDING`→terminal fallback, `SUBMITTED`/`PARTIAL`→DLQ no runtime. Inverter geraria falso conflito (zombie nunca-enviado na DLQ) ou perda de sinal (ordem confirmada sumindo sem DLQ).
 - **Boot passou a exigir capacidade de order query também quando só há `PENDING`** (antes o zombie expirava local sem query). Em exchange sem order query, `PENDING` inflight leva ao mesmo halt que o limbo — consistente com "não expirar sem verificar".
-- **Corrida query × fill tardio:** decidida pela conciliação idempotente (`ConciliationOrderUpdateExecutor`), nunca fora dela.
+- **Corrida query × fill tardio:** mitigada em três camadas — (1) carência generosa de `PENDING` (10 min) torna improvável um fill após tanto silêncio; (2) re-leitura do status no engine antes do fallback; (3) a mutação final passa pela conciliação idempotente sob *striped lock* por `clientOrderId`. Janela residual (fill entre a re-leitura e o lock) é desprezível com a carência.
 - **Liberação de capital:** sempre via conciliação, nunca direta.
 
 ---
@@ -116,6 +120,7 @@ Validação: `:core:test` e `:spring-application:test` (suíte completa) — tod
 4. ✅ `SUBMITTED`/`PARTIAL` not-found continua indo para **DLQ** no runtime (sem regressão).
 5. ✅ Não existe `RuntimeZombieCleanupUseCase`/watchdog/properties dedicados; cobertura de zombie é extensão do recovery.
 6. ✅ Boot não tem mais **nenhuma** expiração-cega: phase3 sem Step 3 **e** phase2 `reservation_ttl` removido; `PENDING` tratado só por query-before-expire (phase3) + watchdog de runtime.
-7. ✅ A política de not-found do runtime é resolvida no engine pelo status **recarregado** (`DERIVE_FROM_STATUS`), sem corrida com a seleção do lote.
-8. ⏳ **Adiado** — métrica distinguindo `reconciled_live` de `expired_orphan` com alerta ativo.
-9. ✅ Boot, recovery (`SUBMITTED`/`PARTIAL`) e reconciliação existentes seguem sem regressão (suíte completa verde).
+7. ✅ A política de not-found do runtime é resolvida no engine pelo status **relido imediatamente antes do fallback** (`DERIVE_FROM_STATUS`); promoção concorrente `PENDING→SUBMITTED/PARTIAL` durante a query vira DLQ, não expiração.
+8. ✅ `PENDING` só é elegível no watchdog após `pending-grace-ms` (default 10 min), evitando expirar ordem ainda em dispatch.
+9. ⏳ **Adiado** — métrica distinguindo `reconciled_live` de `expired_orphan` com alerta ativo.
+10. ✅ Boot, recovery (`SUBMITTED`/`PARTIAL`) e reconciliação existentes seguem sem regressão (suíte completa verde).

@@ -10,15 +10,21 @@ import com.marmitt.core.ports.inbound.runner.RecoverStaleTransactionsPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
+import java.util.ArrayList;
 import java.util.List;
 
 @Slf4j
 public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactionsPort {
 
-    private static final List<TransactionStatus> ELIGIBLE_STATUSES = List.of(
-            TransactionStatus.PENDING,
+    // Confirmados (ja tem exchangeOrderId) usam o stale-threshold normal.
+    private static final List<TransactionStatus> CONFIRMED_STATUSES = List.of(
             TransactionStatus.SUBMITTED,
             TransactionStatus.PARTIAL
+    );
+    // PENDING (reserva orfa) usa uma carencia maior (pendingUpdatedBefore): nao pode ser
+    // selecionado enquanto o dispatch+ACK ainda pode estar em voo (persist-first).
+    private static final List<TransactionStatus> PENDING_STATUSES = List.of(
+            TransactionStatus.PENDING
     );
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
@@ -36,11 +42,23 @@ public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactions
             return new RecoverStaleTransactionsResponse(0, 0, 0, 0, 0);
         }
 
-        List<Transaction> candidates = strategyRunnerRepository.findByStatusesUpdatedBefore(
-                ELIGIBLE_STATUSES,
+        // Dois cutoffs: confirmados pelo stale-threshold; PENDING por uma carencia maior.
+        List<Transaction> confirmed = strategyRunnerRepository.findByStatusesUpdatedBefore(
+                CONFIRMED_STATUSES,
                 request.updatedBefore(),
                 request.maxPerRun()
         );
+        int pendingBudget = request.maxPerRun() - confirmed.size();
+        List<Transaction> pending = pendingBudget > 0
+                ? strategyRunnerRepository.findByStatusesUpdatedBefore(
+                        PENDING_STATUSES,
+                        request.pendingUpdatedBefore(),
+                        pendingBudget)
+                : List.of();
+
+        List<Transaction> candidates = new ArrayList<>(confirmed.size() + pending.size());
+        candidates.addAll(confirmed);
+        candidates.addAll(pending);
 
         int recovered = 0;
         int routedToDlq = 0;

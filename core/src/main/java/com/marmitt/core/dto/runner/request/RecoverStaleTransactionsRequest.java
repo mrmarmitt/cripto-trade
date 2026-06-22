@@ -5,11 +5,13 @@ import java.util.Objects;
 
 public record RecoverStaleTransactionsRequest(
         Instant updatedBefore,
+        Instant pendingUpdatedBefore,
         int maxPerRun
 ) {
 
     public RecoverStaleTransactionsRequest {
         Objects.requireNonNull(updatedBefore, "updatedBefore cannot be null");
+        Objects.requireNonNull(pendingUpdatedBefore, "pendingUpdatedBefore cannot be null");
         if (maxPerRun < 0) {
             throw new IllegalArgumentException("maxPerRun cannot be negative");
         }

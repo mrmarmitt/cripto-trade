@@ -207,6 +207,49 @@ class RecoverTransactionStatusUseCaseTest {
     }
 
     @Test
+    void executeRoutesToDlqWhenPendingGetsConfirmedDuringQueryInRuntimeMode() {
+        StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
+        ExchangeAdapterRepositoryPort exchangeRepository = mock(ExchangeAdapterRepositoryPort.class);
+        DeadLetterEntryRepositoryPort deadLetterRepository = mock(DeadLetterEntryRepositoryPort.class);
+        ExchangeOrderQueryPort orderQueryPort = mock(ExchangeOrderQueryPort.class);
+
+        Transaction transaction = newBuyTransaction(); // PENDING
+        StrategyRunner runner = newRunner(transaction.getRunnerId(), "BINANCE");
+
+        // findTransactionById: 1a chamada (inicio do execute) retorna PENDING; 2a chamada
+        // (re-read antes do fallback) simula promocao concorrente PENDING->SUBMITTED por um
+        // evento USER_DATA que chegou durante a query.
+        java.util.concurrent.atomic.AtomicInteger calls = new java.util.concurrent.atomic.AtomicInteger();
+        when(repository.findTransactionById(transaction.getId())).thenAnswer(inv -> {
+            if (calls.getAndIncrement() == 1) {
+                transaction.submit("EX_PROMOTED_DURING_QUERY");
+            }
+            return Optional.of(transaction);
+        });
+        when(repository.findById(transaction.getRunnerId())).thenReturn(Optional.of(runner));
+        when(repository.findTransactionByClientOrderId(transaction.getClientOrderId())).thenReturn(Optional.of(transaction));
+        stubOrderQuery(exchangeRepository, orderQueryPort);
+        when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
+                .thenReturn(Optional.empty());
+
+        RecoverTransactionStatusUseCase useCase = new RecoverTransactionStatusUseCase(
+                repository,
+                exchangeRepository,
+                deadLetterRepository,
+                newExecutor(repository)
+        );
+
+        RecoverTransactionStatusResponse response = useCase.execute(
+                RecoverTransactionStatusRequest.forRuntimeWatchdog(transaction.getId()));
+
+        // Promovida durante a query -> not-found vira CONFLITO (DLQ), nunca expiracao da ordem confirmada.
+        assertEquals(RecoverTransactionStatusResponse.RecoveryOutcome.RECOVERED, response.outcome());
+        assertEquals(RecoverTransactionStatusResponse.RecoveryAction.ROUTED_TO_DLQ, response.action());
+        assertEquals(TransactionStatus.SUBMITTED, transaction.getStatus());
+        verify(deadLetterRepository).save(any());
+    }
+
+    @Test
     void executeReturnsFailureWhenOrderQueryIsUnsupported() {
         StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
         ExchangeAdapterRepositoryPort exchangeRepository = mock(ExchangeAdapterRepositoryPort.class);

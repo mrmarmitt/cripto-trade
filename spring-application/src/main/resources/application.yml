@@ -98,6 +98,7 @@ runner:
       enabled: true
       interval-ms: 60000
       stale-threshold-ms: 30000
+      pending-grace-ms: 600000   # carencia maior p/ PENDING (reserva orfa) — > dispatch+ACK
       max-per-run: 50
 
 admin:

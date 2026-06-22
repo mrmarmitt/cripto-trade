@@ -198,12 +198,32 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
         return switch (request.missingOrderPolicy()) {
             case APPLY_TERMINAL_FALLBACK -> applyTerminalFallback(transaction, exchangeId, statusBefore);
             case REGISTER_DLQ -> routeMissingOrderToDlq(transaction, runner, exchangeId, statusBefore);
-            // Resolvido pelo status RECARREGADO (statusBefore): um PENDING nunca foi confirmado,
-            // entao not-found e orfao limpo -> terminal fallback; SUBMITTED/PARTIAL ja tinham
-            // confirmacao, entao not-found e conflito -> DLQ. Evita a corrida do lote de runtime.
-            case DERIVE_FROM_STATUS -> statusBefore == TransactionStatus.PENDING
-                    ? applyTerminalFallback(transaction, exchangeId, statusBefore)
-                    : routeMissingOrderToDlq(transaction, runner, exchangeId, statusBefore);
+            case DERIVE_FROM_STATUS -> resolveDerivedMissingOrder(transaction, runner, exchangeId);
+        };
+    }
+
+    /**
+     * Resolve a politica de not-found relendo o status ATUAL da transacao, evitando TOCTOU:
+     * entre a captura de {@code statusBefore} e este ponto a query pode ter demorado e um evento
+     * USER_DATA/conciliacao pode ter promovido {@code PENDING -> SUBMITTED/PARTIAL}. So aplica
+     * terminal fallback se ainda {@code PENDING} (orfao nunca confirmado); se ja confirmado, e
+     * conflito -> DLQ; se ja terminal, no-op (resolvido concorrentemente).
+     */
+    private RecoverTransactionStatusResponse resolveDerivedMissingOrder(Transaction transaction,
+                                                                        StrategyRunner runner,
+                                                                        String exchangeId) {
+        TransactionStatus current = strategyRunnerRepository.findTransactionById(transaction.getId())
+                .map(Transaction::getStatus)
+                .orElse(transaction.getStatus());
+        return switch (current) {
+            case PENDING -> applyTerminalFallback(transaction, exchangeId, current);
+            case SUBMITTED, PARTIAL -> routeMissingOrderToDlq(transaction, runner, exchangeId, current);
+            default -> RecoverTransactionStatusResponse.skipped(
+                    transaction.getId(),
+                    transaction.getRunnerId(),
+                    exchangeId,
+                    current,
+                    "Transaction resolved concurrently before terminal fallback (status=" + current + ").");
         };
     }
 
