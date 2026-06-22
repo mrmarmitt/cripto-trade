@@ -1,7 +1,6 @@
 package com.marmitt.core.application.usecase.boot;
 
 import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
-import com.marmitt.core.application.usecase.boot.phase2.PortfolioReservationTtlUseCase;
 import com.marmitt.core.application.usecase.boot.phase2.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
@@ -11,12 +10,10 @@ import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.boot.BootExecutionCommand;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
 import com.marmitt.core.dto.portfolio.PortfolioBootSanityResult;
-import com.marmitt.core.dto.portfolio.PortfolioReservationTtlResult;
 import com.marmitt.core.dto.portfolio.PortfolioZombieCandidate;
 import com.marmitt.core.dto.portfolio.PortfolioZombieDetectionResult;
 import com.marmitt.core.enums.BootAccountQueryPolicy;
 import com.marmitt.core.enums.BootFailureMode;
-import com.marmitt.core.enums.PortfolioReservationTtlStatus;
 import com.marmitt.core.enums.PortfolioSanityStatus;
 import com.marmitt.core.enums.PortfolioZombieDetectionStatus;
 import com.marmitt.core.enums.RunnerStatus;
@@ -43,7 +40,6 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
     private final PortfolioBootSanityUseCase portfolioBootSanityUseCase;
-    private final PortfolioReservationTtlUseCase portfolioReservationTtlUseCase;
     private final PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase;
     private final DeadLetterEntryRepositoryPort deadLetterEntryRepository;
     private final RunnerBootRecoveryUseCase runnerBootRecoveryUseCase;
@@ -52,7 +48,6 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
                                   StrategyRunnerRepositoryPort strategyRunnerRepository,
                                   ExchangeAdapterRepositoryPort exchangeAdapterRepository,
                                   PortfolioBootSanityUseCase portfolioBootSanityUseCase,
-                                  PortfolioReservationTtlUseCase portfolioReservationTtlUseCase,
                                   PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase,
                                   DeadLetterEntryRepositoryPort deadLetterEntryRepository,
                                   RunnerBootRecoveryUseCase runnerBootRecoveryUseCase) {
@@ -60,7 +55,6 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.exchangeAdapterRepository = exchangeAdapterRepository;
         this.portfolioBootSanityUseCase = portfolioBootSanityUseCase;
-        this.portfolioReservationTtlUseCase = portfolioReservationTtlUseCase;
         this.portfolioZombieDetectionUseCase = portfolioZombieDetectionUseCase;
         this.deadLetterEntryRepository = deadLetterEntryRepository;
         this.runnerBootRecoveryUseCase = runnerBootRecoveryUseCase;
@@ -90,9 +84,6 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
                     observer);
             executePhase("phase2.zombie", phase2Enabled && command.zombieEnabled(),
                     () -> runPhase2ZombieDetection(runId, portfolios, eligibleRunners, command, observer),
-                    observer);
-            executePhase("phase2.reservation_ttl", phase2Enabled && command.ttlEnabled(),
-                    () -> runPhase2ReservationTtl(runId, portfolios, eligibleRunners, command, observer),
                     observer);
 
             List<RunnerBootRecoveryUseCase.RecoverySummary> summaries = new ArrayList<>();
@@ -267,76 +258,6 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
         }
 
         log.info("bootSequence.phase2.zombie: completed runId={} zombies={}", runId, zombiesTotal);
-    }
-
-    private void runPhase2ReservationTtl(String runId,
-                                         List<Portfolio> portfolios,
-                                         List<StrategyRunner> eligibleRunners,
-                                         BootExecutionCommand command,
-                                         BootExecutionObserverPort observer) {
-        long ttlMs = command.ttlMs();
-        BootFailureMode mode = command.failureMode();
-        log.info("bootSequence.phase2.ttl: start portfolios={} mode={} ttlMs={}", portfolios.size(), mode, ttlMs);
-
-        int expiredTotal = 0;
-        for (Portfolio portfolio : portfolios) {
-            Set<String> exchanges = resolvePortfolioExchanges(portfolio, eligibleRunners);
-            if (exchanges.isEmpty()) {
-                continue;
-            }
-
-            for (String exchange : exchanges) {
-                List<StrategyRunner> scopedRunners = eligibleRunners.stream()
-                        .filter(runner -> runner.getPortfolioId().equals(portfolio.getId()))
-                        .filter(runner -> exchange.equalsIgnoreCase(runner.getExchangeId()))
-                        .toList();
-
-                long startedNs = System.nanoTime();
-                PortfolioReservationTtlResult result =
-                        portfolioReservationTtlUseCase.execute(portfolio.getId(), exchange, ttlMs, scopedRunners);
-                long durationMs = (System.nanoTime() - startedNs) / 1_000_000L;
-                expiredTotal += result.expiredCount();
-                observer.onPortfolioPhaseEvaluated("phase2.reservation_ttl", result.status().name(), exchange, mode.name(), durationMs);
-
-                switch (result.status()) {
-                    case CLEAN -> log.info(
-                            "bootSequence.phase2.ttl: portfolio={} exchange={} status={} ttlMs={} scannedPending={} eligibleNoExchangeOrderId={} expired={} fresh={} errors={}",
-                            result.portfolioId(), result.exchangeId(), result.status(), result.ttlMs(),
-                            result.scannedPendingCount(), result.eligibleNoExchangeOrderIdCount(),
-                            result.expiredCount(), result.freshCount(), result.errorCount());
-                    case EXPIRED -> {
-                        log.warn(
-                                "bootSequence.phase2.ttl: portfolio={} exchange={} status={} code={} ttlMs={} scannedPending={} eligibleNoExchangeOrderId={} expired={} fresh={} errors={}",
-                                result.portfolioId(), result.exchangeId(), result.status(), result.code(), result.ttlMs(),
-                                result.scannedPendingCount(), result.eligibleNoExchangeOrderIdCount(),
-                                result.expiredCount(), result.freshCount(), result.errorCount());
-                        result.samples().forEach(transactionId -> log.warn(
-                                "bootSequence.phase2.ttl: expiredSample portfolio={} exchange={} transactionId={}",
-                                result.portfolioId(), result.exchangeId(), transactionId));
-                    }
-                    case SKIPPED -> log.warn(
-                            "bootSequence.phase2.ttl: portfolio={} exchange={} status={} code={} message={} ttlMs={}",
-                            result.portfolioId(), result.exchangeId(), result.status(), result.code(),
-                            result.message(), result.ttlMs());
-                    case FAILED -> log.error(
-                            "bootSequence.phase2.ttl: portfolio={} exchange={} status={} code={} message={} ttlMs={} scannedPending={} eligibleNoExchangeOrderId={} expired={} fresh={} errors={}",
-                            result.portfolioId(), result.exchangeId(), result.status(), result.code(), result.message(), result.ttlMs(),
-                            result.scannedPendingCount(), result.eligibleNoExchangeOrderIdCount(),
-                            result.expiredCount(), result.freshCount(), result.errorCount());
-                }
-
-                boolean criticalFailure = result.status() == PortfolioReservationTtlStatus.FAILED;
-                if (criticalFailure && mode == BootFailureMode.FAIL_FAST) {
-                    throw triggerFailFast(runId, "phase2.reservation_ttl", result.code(),
-                            "Phase2 reservation TTL failed portfolio=" + result.portfolioId()
-                                    + " exchange=" + result.exchangeId()
-                                    + " message=" + result.message(),
-                            observer);
-                }
-            }
-        }
-
-        log.info("bootSequence.phase2.ttl: completed runId={} expired={}", runId, expiredTotal);
     }
 
     private void executePhase(String phase, boolean enabled, Runnable action, BootExecutionObserverPort observer) {

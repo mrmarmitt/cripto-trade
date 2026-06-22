@@ -49,11 +49,9 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
     private static final String SYMBOL = "BTCUSDT";
     private static final BigDecimal INITIAL_CAPITAL = new BigDecimal("1000.00000000");
     private static final Duration WAIT_TIMEOUT = Duration.ofSeconds(8);
-    private static final long RESERVATION_TTL_MS = 300_000L;
 
     @DynamicPropertySource
     static void registerRecoveryProperties(DynamicPropertyRegistry registry) {
-        registry.add("runner.boot.phase2.portfolio.reservation-ttl.ttl-ms", () -> RESERVATION_TTL_MS);
         registry.add("runner.boot.phase3.exchange-query-timeout-ms", () -> 500L);
         registry.add("runner.boot.phase3.exchange-query-max-attempts", () -> 3);
         registry.add("runner.boot.phase3.exchange-query-initial-backoff-ms", () -> 10L);

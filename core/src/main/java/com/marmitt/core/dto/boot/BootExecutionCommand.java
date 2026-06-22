@@ -13,8 +13,6 @@ public record BootExecutionCommand(
         BigDecimal sanityThreshold,
         boolean zombieEnabled,
         boolean cutoffEnabled,
-        boolean ttlEnabled,
-        long ttlMs,
         BootFailureMode failureMode,
         BootAccountQueryPolicy accountQueryPolicy
 ) {

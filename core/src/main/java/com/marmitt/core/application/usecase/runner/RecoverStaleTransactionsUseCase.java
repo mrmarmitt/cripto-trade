@@ -49,13 +49,12 @@ public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactions
 
         for (Transaction candidate : candidates) {
             try {
-                // Politica derivada do status: PENDING nunca foi confirmado pela exchange,
-                // entao um not-found e orfao limpo -> terminacao local (EXPIRED/CANCELED).
-                // SUBMITTED/PARTIAL ja tinham confirmacao, entao um not-found e conflito -> DLQ.
-                RecoverTransactionStatusRequest recoverRequest = candidate.getStatus() == TransactionStatus.PENDING
-                        ? RecoverTransactionStatusRequest.forRuntimeOrphanCleanup(candidate.getId())
-                        : RecoverTransactionStatusRequest.forRuntimeWatchdog(candidate.getId());
-                RecoverTransactionStatusResponse response = recoverTransactionStatusUseCase.execute(recoverRequest);
+                // A politica de not-found e resolvida dentro do engine pelo status RECARREGADO
+                // (forRuntimeWatchdog -> DERIVE_FROM_STATUS), nunca pelo status do snapshot do lote:
+                // se a linha virou SUBMITTED/PARTIAL entre a selecao e o execute, o not-found vira
+                // DLQ (e nao expiracao indevida de ordem ja confirmada).
+                RecoverTransactionStatusResponse response = recoverTransactionStatusUseCase.execute(
+                        RecoverTransactionStatusRequest.forRuntimeWatchdog(candidate.getId()));
 
                 if (response.outcome() == RecoverTransactionStatusResponse.RecoveryOutcome.RECOVERED) {
                     if (response.action() == RecoverTransactionStatusResponse.RecoveryAction.ROUTED_TO_DLQ) {

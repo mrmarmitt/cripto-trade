@@ -84,9 +84,6 @@ runner:
           threshold: 0.00000001
         cutoff:
           enabled: true
-        reservation-ttl:
-          enabled: true
-          ttl-ms: 300000
         zombie-detection:
           enabled: true
     phase3:

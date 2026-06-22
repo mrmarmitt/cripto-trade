@@ -21,21 +21,20 @@ public record RecoverTransactionStatusRequest(
         return new RecoverTransactionStatusRequest(transactionId, MissingOrderPolicy.APPLY_TERMINAL_FALLBACK);
     }
 
-    public static RecoverTransactionStatusRequest forRuntimeWatchdog(UUID transactionId) {
-        return new RecoverTransactionStatusRequest(transactionId, MissingOrderPolicy.REGISTER_DLQ);
-    }
-
     /**
-     * Limpeza de reserva orfa (zombie) em runtime: PENDING nunca confirmado pela exchange.
-     * Quando a exchange nao conhece a ordem, o desfecho e terminacao local (EXPIRED/CANCELED),
-     * nunca DLQ — um zombie nunca-enviado nao e conflito de reconciliacao.
+     * Recovery de runtime: a politica de not-found e resolvida pelo engine a partir do
+     * status <b>recarregado</b> da transacao (evita corrida com USER_DATA entre a selecao
+     * do lote e o execute) — {@code PENDING} (nunca confirmado) vira terminal fallback;
+     * {@code SUBMITTED}/{@code PARTIAL} (confirmado) vira DLQ.
      */
-    public static RecoverTransactionStatusRequest forRuntimeOrphanCleanup(UUID transactionId) {
-        return new RecoverTransactionStatusRequest(transactionId, MissingOrderPolicy.APPLY_TERMINAL_FALLBACK);
+    public static RecoverTransactionStatusRequest forRuntimeWatchdog(UUID transactionId) {
+        return new RecoverTransactionStatusRequest(transactionId, MissingOrderPolicy.DERIVE_FROM_STATUS);
     }
 
     public enum MissingOrderPolicy {
         APPLY_TERMINAL_FALLBACK,
-        REGISTER_DLQ
+        REGISTER_DLQ,
+        /** Resolve no engine pelo status recarregado: PENDING -> terminal fallback; senao -> DLQ. */
+        DERIVE_FROM_STATUS
     }
 }

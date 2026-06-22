@@ -2,10 +2,8 @@ package com.marmitt.application.spring.config.core;
 
 import com.marmitt.core.application.usecase.boot.RunBootSequenceUseCase;
 import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
-import com.marmitt.core.application.usecase.boot.phase2.PortfolioReservationTtlUseCase;
 import com.marmitt.core.application.usecase.boot.phase2.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
-import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
 import com.marmitt.core.ports.inbound.boot.RunBootSequencePort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
@@ -35,20 +33,11 @@ public class BootConfig {
     }
 
     @Bean
-    public PortfolioReservationTtlUseCase portfolioReservationTtlUseCase(
-            StrategyRunnerRepositoryPort strategyRunnerRepository,
-            ConciliationOrderUpdateExecutor conciliationOrderUpdate
-    ) {
-        return new PortfolioReservationTtlUseCase(strategyRunnerRepository, conciliationOrderUpdate);
-    }
-
-    @Bean
     public RunBootSequencePort runBootSequence(
             PortfolioRepositoryPort portfolioRepository,
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             ExchangeAdapterRepositoryPort exchangeAdapterRepository,
             PortfolioBootSanityUseCase portfolioBootSanityUseCase,
-            PortfolioReservationTtlUseCase portfolioReservationTtlUseCase,
             PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase,
             DeadLetterEntryRepositoryPort deadLetterEntryRepository,
             RunnerBootRecoveryUseCase runnerBootRecoveryUseCase
@@ -58,7 +47,6 @@ public class BootConfig {
                 strategyRunnerRepository,
                 exchangeAdapterRepository,
                 portfolioBootSanityUseCase,
-                portfolioReservationTtlUseCase,
                 portfolioZombieDetectionUseCase,
                 deadLetterEntryRepository,
                 runnerBootRecoveryUseCase

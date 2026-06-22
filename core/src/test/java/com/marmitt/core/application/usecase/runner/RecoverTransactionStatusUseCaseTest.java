@@ -178,6 +178,35 @@ class RecoverTransactionStatusUseCaseTest {
     }
 
     @Test
+    void executeMarksPendingTransactionExpiredWhenExchangeDoesNotFindOrderInRuntimeMode() {
+        StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
+        ExchangeAdapterRepositoryPort exchangeRepository = mock(ExchangeAdapterRepositoryPort.class);
+        ExchangeOrderQueryPort orderQueryPort = mock(ExchangeOrderQueryPort.class);
+
+        // PENDING (zombie) — nunca submetido, sem exchangeOrderId.
+        Transaction transaction = newBuyTransaction();
+        StrategyRunner runner = newRunner(transaction.getRunnerId(), "BINANCE");
+
+        when(repository.findTransactionById(transaction.getId())).thenReturn(Optional.of(transaction));
+        when(repository.findById(transaction.getRunnerId())).thenReturn(Optional.of(runner));
+        when(repository.findTransactionByClientOrderId(transaction.getClientOrderId())).thenReturn(Optional.of(transaction));
+        stubOrderQuery(exchangeRepository, orderQueryPort);
+        when(orderQueryPort.queryOrderByClientOrderId(transaction.getSymbol(), transaction.getClientOrderId()))
+                .thenReturn(Optional.empty());
+
+        RecoverTransactionStatusUseCase useCase = newUseCase(repository, exchangeRepository);
+
+        // forRuntimeWatchdog -> DERIVE_FROM_STATUS: PENDING resolve para terminal fallback (EXPIRED), sem DLQ.
+        RecoverTransactionStatusResponse response = useCase.execute(
+                RecoverTransactionStatusRequest.forRuntimeWatchdog(transaction.getId()));
+
+        assertEquals(RecoverTransactionStatusResponse.RecoveryOutcome.RECOVERED, response.outcome());
+        assertEquals(RecoverTransactionStatusResponse.RecoveryAction.MARKED_EXPIRED, response.action());
+        assertEquals(TransactionStatus.EXPIRED, response.statusAfter());
+        assertEquals(TransactionStatus.EXPIRED, transaction.getStatus());
+    }
+
+    @Test
     void executeReturnsFailureWhenOrderQueryIsUnsupported() {
         StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
         ExchangeAdapterRepositoryPort exchangeRepository = mock(ExchangeAdapterRepositoryPort.class);
