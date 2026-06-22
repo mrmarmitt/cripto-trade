@@ -36,8 +36,9 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T28 | Camada agnóstica de adapter p/ consulta de saldo e histórico    | Média | Claude | Concluído |
 | T29 | Implementar consulta de saldo na exchange                       | Média | Claude | Concluído |
 | T30 | Implementar consulta de histórico de trades na exchange         | Média | Claude | Concluído |
-| T31 | Limpeza de reserva órfã em runtime + fundação de cancelamento   | Média | Claude | Pendente  |
+| T31 | Unificação do recovery de runtime: cobertura de zombies (`PENDING`) | Baixa | Claude | Pendente  |
 | T32 | Ação `SHOULD_CANCEL` no contrato da estratégia                  | Alta  | Claude | Pendente  |
+| T33 | Fundação de cancelamento outbound (`OrderDispatchPort.cancel`)  | Baixa | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 
 ## Ordem de execução
@@ -116,21 +117,26 @@ T29  Consulta de saldo                T30  Consulta de histórico de trades
 ## Ordem de execução — Ciclo de vida de ordem limite aberta
 
 ```
-T31  Limpeza de zombie em runtime (query-before-expire)  ← consulta exchange antes de liberar capital
-       + fundação OrderDispatchPort.cancel                  — neutra em relação à estratégia
+T31  Unificação do recovery de runtime (zombie PENDING via query-before-expire)   ← independente
+       (estende RecoverStaleTransactions; não cria fluxo paralelo)
+
+T33  Fundação OrderDispatchPort.cancel (verbo outbound, sem gatilho)   ← independente
        ↓
 T32  Ação SHOULD_CANCEL na estratégia          ← decisão de negócio: puxar ordem VIVA antes do fill
-   (reusa o verbo de cancelamento entregue pela T31)
+   (reusa o verbo de cancelamento entregue pela T33)
 ```
 
-> Separação de responsabilidades: para uma ordem **viva** na exchange, o capital reservado está
-> *comprometido* (correto), não preso — cancelá-la é decisão de alpha e pertence à T32. O único
-> capital potencialmente preso é a **reserva órfã / zombie** (`PENDING` sem `exchangeOrderId`).
-> T31 cobre isso em runtime com **query-before-expire**: consulta a exchange por `clientOrderId`
-> antes de expirar — se a ordem estiver viva (ACK perdido), reconcilia; só libera capital se a
-> exchange não a conhecer. Difere do boot (`step3ExpireZombies`), que expira local porque tem
-> carência de TTL + varredura única; em runtime nada mais consulta um zombie (o recovery watchdog T1
-> só cobre `SUBMITTED`/`PARTIAL`). T31 **não** cancela ordem viva por TTL global.
+> Separação de responsabilidades em três eixos:
+> - **T31 (recovery/zombie)** — o único capital potencialmente preso é a **reserva órfã / zombie**
+>   (`PENDING` sem `exchangeOrderId`). T31 cobre isso em runtime com **query-before-expire**: consulta
+>   por `clientOrderId` antes de expirar — se a ordem estiver viva (ACK perdido), reconcilia; só libera
+>   capital se a exchange não a conhecer. **Não cria fluxo novo**: o motor `RecoverTransactionStatusUseCase`
+>   já aceita `PENDING`; basta estender o lote `RecoverStaleTransactions` (hoje só `SUBMITTED`/`PARTIAL`),
+>   com a `MissingOrderPolicy` derivada do status (`PENDING`→`APPLY_TERMINAL_FALLBACK`, demais→`REGISTER_DLQ`).
+>   Difere do boot (`step3ExpireZombies`), que expira local por ter carência de TTL + varredura única.
+> - **T33 (verbo de cancelamento)** — só o mecanismo outbound `OrderDispatchPort.cancel`, sem gatilho.
+> - **T32 (alpha)** — para uma ordem **viva**, o capital está *comprometido* (correto), não preso;
+>   cancelá-la é decisão de estratégia. Nunca um TTL global que anule estratégias de horizonte longo.
 
 > Tasks de correção/refino já entregues fora da trilha principal: T19 (striped lock na
 > conciliação) e T20 (`executed_at` no boot recovery). TD1 permanece como débito técnico
