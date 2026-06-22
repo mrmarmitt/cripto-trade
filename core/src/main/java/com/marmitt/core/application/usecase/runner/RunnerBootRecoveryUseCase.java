@@ -164,24 +164,33 @@ public class RunnerBootRecoveryUseCase {
                 ctx.runnerId(), BOOT_RELEVANT_STATUSES);
         ctx.inFlight(inFlight);
 
-        // SUBMITTED/PARTIAL (confirmados) sao sempre reconciliados via query-before-expire.
-        // Um PENDING so e reconciliado se for mais velho que a carencia: um PENDING jovem (ordem
-        // possivelmente enviada logo antes do crash, ainda nao visivel na query da exchange) e
-        // DEFERIDO — mantido PENDING para nao ser expirado prematuramente; o watchdog de runtime
-        // o trata depois (com sua propria carencia).
-        Instant graceCutoff = pendingReconcileGraceMs > 0
-                ? Instant.now().minusMillis(pendingReconcileGraceMs)
-                : Instant.EPOCH;
-        List<Transaction> toReconcile = inFlight.stream()
-                .filter(tx -> tx.getStatus() != TransactionStatus.PENDING
-                        || tx.getRequestedAt() == null
-                        || !tx.getRequestedAt().isAfter(graceCutoff))
-                .toList();
+        List<Transaction> toReconcile = selectForReconciliation(
+                inFlight, pendingReconcileGraceMs, Instant.now());
         ctx.limbo(toReconcile);
 
         int deferred = inFlight.size() - toReconcile.size();
         ctx.note("Step 1: loaded inFlight=" + inFlight.size()
                 + " reconciling=" + toReconcile.size() + " deferredYoungPending=" + deferred);
+    }
+
+    /**
+     * Seleciona o que sera reconciliado no Step 4. {@code SUBMITTED}/{@code PARTIAL} (confirmados)
+     * sempre entram; um {@code PENDING} so entra se for mais velho que a carencia — um PENDING jovem
+     * (ordem possivelmente enviada logo antes do crash, ainda nao visivel na query da exchange) e
+     * DEFERIDO para nao ser expirado prematuramente; o watchdog de runtime o trata depois.
+     *
+     * <p>Carencia {@code <= 0} significa "sem carencia" -> todos os PENDING reconciliam
+     * (cutoff = {@link Instant#MAX}, nunca "isAfter").
+     */
+    static List<Transaction> selectForReconciliation(List<Transaction> inFlight,
+                                                     long pendingGraceMs,
+                                                     Instant now) {
+        Instant graceCutoff = pendingGraceMs > 0 ? now.minusMillis(pendingGraceMs) : Instant.MAX;
+        return inFlight.stream()
+                .filter(tx -> tx.getStatus() != TransactionStatus.PENDING
+                        || tx.getRequestedAt() == null
+                        || !tx.getRequestedAt().isAfter(graceCutoff))
+                .toList();
     }
 
     private void step2ResolveOrderQueryCapability(RecoveryContext ctx) {
