@@ -153,6 +153,39 @@ class OrderDispatchAdapterTest {
         assertTrue(conciliation.received.isEmpty());
     }
 
+    @Test
+    void cancel_deDupesRepeatedSendsForSameOrderWithinCooldown() {
+        RecordingOrderExecutionPort execution = new RecordingOrderExecutionPort();
+        StubAdapterRepository adapterRepo = new StubAdapterRepository(
+                new StubOrderPort(OrderSubmissionResult.dispatched()), execution);
+        OrderDispatchAdapter adapter = new OrderDispatchAdapter(adapterRepo, new RecordingConciliationPort());
+
+        OrderCancelCommand command = new OrderCancelCommand("t01-BUY-001", UUID.randomUUID(), SYMBOL, EXCHANGE);
+        adapter.cancel(command);
+        adapter.cancel(command); // mesmo clientOrderId dentro do cooldown
+
+        assertEquals(1, execution.canceled.size(), "duplicate cancel for same order within cooldown must be suppressed");
+    }
+
+    @Test
+    void cancel_doesNotConsumeDeDupSlot_whenBlocked() {
+        java.util.concurrent.atomic.AtomicBoolean blocked = new java.util.concurrent.atomic.AtomicBoolean(true);
+        RecordingOrderExecutionPort execution = new RecordingOrderExecutionPort();
+        StubAdapterRepository adapterRepo = new StubAdapterRepository(
+                new StubOrderPort(OrderSubmissionResult.dispatched()), execution) {
+            @Override public boolean isDispatchBlocked(String exchangeName) { return blocked.get(); }
+        };
+        OrderDispatchAdapter adapter = new OrderDispatchAdapter(adapterRepo, new RecordingConciliationPort());
+        OrderCancelCommand command = new OrderCancelCommand("t01-BUY-001", UUID.randomUUID(), SYMBOL, EXCHANGE);
+
+        adapter.cancel(command); // blocked -> no-op, NAO marca o cooldown
+        assertTrue(execution.canceled.isEmpty());
+
+        blocked.set(false);
+        adapter.cancel(command); // mesma ordem -> envia, pois o no-op nao consumiu o slot
+        assertEquals(1, execution.canceled.size(), "blocked no-op must not consume the de-dup slot");
+    }
+
     // ---- stubs ----
 
     static class RecordingConciliationPort implements OrderConciliationPort {

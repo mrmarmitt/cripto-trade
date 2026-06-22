@@ -9,12 +9,8 @@ import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
-import java.time.Duration;
-import java.time.Instant;
 import java.util.List;
-import java.util.Map;
 import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Executa o ramo {@code SHOULD_CANCEL} do pipeline de sinais: valida o alvo e despacha o
@@ -37,17 +33,8 @@ class CancelSignalHandler {
             TransactionStatus.PARTIAL
     );
 
-    /**
-     * Janela de de-dup: enquanto o {@code CANCELED} async nao chega, a ordem segue cancelavel em
-     * {@code pendingOrders} e uma estrategia deterministica reemitiria {@code SHOULD_CANCEL} a cada
-     * tick. Suprimimos reenvios para o mesmo {@code transactionId} dentro desta janela (evita
-     * rate-limit de cancel). Apos a janela, um reenvio e permitido (caso o cancel anterior se perca).
-     */
-    private static final Duration CANCEL_COOLDOWN = Duration.ofSeconds(30);
-
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final OrderDispatchPort orderDispatch;
-    private final Map<UUID, Instant> recentCancelByTransaction = new ConcurrentHashMap<>();
 
     CancelSignalHandler(StrategyRunnerRepositoryPort strategyRunnerRepository, OrderDispatchPort orderDispatch) {
         this.strategyRunnerRepository = strategyRunnerRepository;
@@ -81,16 +68,9 @@ class CancelSignalHandler {
             return;
         }
 
-        // De-dup: nao reenvia cancel para a mesma transacao dentro da janela de cooldown.
-        Instant now = Instant.now();
-        recentCancelByTransaction.entrySet().removeIf(
-                e -> Duration.between(e.getValue(), now).compareTo(CANCEL_COOLDOWN) >= 0);
-        if (recentCancelByTransaction.putIfAbsent(targetTransactionId, now) != null) {
-            log.debug("processCancelSignal: cancel already in-flight for transactionId={} (cooldown) - skipping duplicate",
-                    targetTransactionId);
-            return;
-        }
-
+        // De-dup de reenvios (estrategia deterministica reemite SHOULD_CANCEL a cada tick enquanto o
+        // CANCELED async nao chega) e tratado no OrderDispatchAdapter, que marca o cooldown apenas
+        // apos um envio REAL (blocked/unsupported nao consomem a janela).
         orderDispatch.cancel(new OrderCancelCommand(
                 transaction.getClientOrderId(), runner.getId(), runner.getSymbol(), runner.getExchangeId()));
 

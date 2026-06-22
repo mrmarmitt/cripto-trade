@@ -17,7 +17,10 @@ import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
@@ -25,8 +28,17 @@ import org.springframework.stereotype.Component;
 @Component
 public class OrderDispatchAdapter implements OrderDispatchPort {
 
+    /**
+     * Janela de de-dup de cancel: uma estrategia deterministica reemite SHOULD_CANCEL a cada tick
+     * enquanto o CANCELED async nao chega. Suprimimos reenvios do mesmo clientOrderId dentro desta
+     * janela (evita rate-limit). A marca e gravada APENAS apos um envio real — blocked/unsupported
+     * nao consomem a janela, para nao bloquear um retry legitimo apos um no-op.
+     */
+    private static final Duration CANCEL_COOLDOWN = Duration.ofSeconds(30);
+
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
     private final OrderConciliationPort orderConciliation;
+    private final Map<String, Instant> recentCancelByClientOrderId = new ConcurrentHashMap<>();
 
     public OrderDispatchAdapter(ExchangeAdapterRepositoryPort exchangeAdapterRepository,
                                 OrderConciliationPort orderConciliation) {
@@ -86,6 +98,16 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
             return;
         }
 
+        // De-dup: nao reenvia o mesmo cancel dentro da janela de cooldown (marca gravada so apos envio real).
+        Instant now = Instant.now();
+        recentCancelByClientOrderId.entrySet().removeIf(
+                e -> Duration.between(e.getValue(), now).compareTo(CANCEL_COOLDOWN) >= 0);
+        if (recentCancelByClientOrderId.containsKey(command.clientOrderId())) {
+            log.debug("cancel: already sent recently for clientOrderId={} (cooldown) — skipping duplicate",
+                    command.clientOrderId());
+            return;
+        }
+
         // Fire-and-forget: envia o cancelamento; o CANCELED real (e a liberacao de capital) chega
         // pelo stream e e conciliado pelo caminho idempotente. Sem marcacao terminal otimista.
         // A capability pode estar anunciada mas o verbo de cancel ser nao suportado (ex.: Coinbase):
@@ -99,6 +121,8 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
             return;
         }
 
+        // Marca o cooldown APENAS apos o envio real bem-sucedido.
+        recentCancelByClientOrderId.put(command.clientOrderId(), now);
         log.debug("cancel: cancel sent — clientOrderId={} exchange={} symbol={} — awaits CANCELED via stream",
                 command.clientOrderId(), command.exchangeId(), command.symbol());
     }
