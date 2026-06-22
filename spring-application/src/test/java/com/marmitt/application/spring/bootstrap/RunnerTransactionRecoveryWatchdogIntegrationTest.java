@@ -145,6 +145,74 @@ class RunnerTransactionRecoveryWatchdogIntegrationTest extends AbstractIntegrati
     }
 
     @Test
+    void watchdogShouldExpirePendingZombieNotFoundOnExchangeWithoutDlq() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        BigDecimal quantity = new BigDecimal("0.00150000");
+        BigDecimal price = new BigDecimal("60000.00000000");
+        BigDecimal reservedAmount = quantity.multiply(price);
+
+        // PENDING sem exchangeOrderId (zombie) — nunca confirmado pela exchange.
+        Transaction pendingBuy = newTransaction(runner, TransactionType.BUY, quantity, price, reservedAmount);
+        strategyRunnerRepository.saveTransaction(pendingBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+        markTransactionStale(pendingBuy.getId(), Duration.ofHours(2));
+
+        RecoverStaleTransactionsResponse response = watchdog.runRecoveryCycle();
+
+        // query-before-expire: nao encontrado -> EXPIRED via terminal fallback, sem DLQ.
+        Transaction expired = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.EXPIRED, WAIT_TIMEOUT);
+        assertNotNull(expired);
+        assertEquals(1, response.scanned());
+        assertEquals(1, response.recovered());
+        assertEquals(0, response.routedToDlq());
+        assertEquals(0, response.failed());
+        assertTrue(deadLetterEntryRepository.findUnresolved(portfolioId, runner.getId(), 10).isEmpty(),
+                "Zombie not-found must not create a DLQ entry");
+    }
+
+    @Test
+    void watchdogShouldReconcilePendingZombieFoundAliveOnExchange() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        BigDecimal quantity = new BigDecimal("0.00150000");
+        BigDecimal price = new BigDecimal("60000.00000000");
+        BigDecimal reservedAmount = quantity.multiply(price);
+
+        Transaction pendingBuy = newTransaction(runner, TransactionType.BUY, quantity, price, reservedAmount);
+        strategyRunnerRepository.saveTransaction(pendingBuy);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+        markTransactionStale(pendingBuy.getId(), Duration.ofHours(2));
+
+        getMockExchangeAdapter().seedQueriedOrderSnapshot(new OrderDataDto(
+                "EX_PENDING_ALIVE_RUNTIME",
+                pendingBuy.getClientOrderId(),
+                Symbol.of(SYMBOL),
+                OrderDataDto.OrderSide.BUY,
+                OrderDataDto.OrderType.LIMIT,
+                quantity,
+                BigDecimal.ZERO,
+                price,
+                BigDecimal.ZERO,
+                BigDecimal.ZERO,
+                OrderDataDto.OrderStatus.NEW,
+                null,
+                Instant.now()
+        ));
+
+        RecoverStaleTransactionsResponse response = watchdog.runRecoveryCycle();
+
+        // ordem viva (ACK perdido) -> reconciliada PENDING->SUBMITTED, sem DLQ, capital comprometido.
+        Transaction submitted = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.SUBMITTED, WAIT_TIMEOUT);
+        assertNotNull(submitted);
+        assertEquals(1, response.scanned());
+        assertEquals(1, response.recovered());
+        assertEquals(0, response.routedToDlq());
+        assertEquals(0, response.failed());
+        assertTrue(deadLetterEntryRepository.findUnresolved(portfolioId, runner.getId(), 10).isEmpty());
+    }
+
+    @Test
     void watchdogShouldRecoverStalePartialOrderFoundAsFilled() {
         UUID portfolioId = createPortfolio();
         StrategyRunner runner = createAndActivateRunner(portfolioId);

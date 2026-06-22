@@ -25,6 +25,15 @@ public record RecoverTransactionStatusRequest(
         return new RecoverTransactionStatusRequest(transactionId, MissingOrderPolicy.REGISTER_DLQ);
     }
 
+    /**
+     * Limpeza de reserva orfa (zombie) em runtime: PENDING nunca confirmado pela exchange.
+     * Quando a exchange nao conhece a ordem, o desfecho e terminacao local (EXPIRED/CANCELED),
+     * nunca DLQ — um zombie nunca-enviado nao e conflito de reconciliacao.
+     */
+    public static RecoverTransactionStatusRequest forRuntimeOrphanCleanup(UUID transactionId) {
+        return new RecoverTransactionStatusRequest(transactionId, MissingOrderPolicy.APPLY_TERMINAL_FALLBACK);
+    }
+
     public enum MissingOrderPolicy {
         APPLY_TERMINAL_FALLBACK,
         REGISTER_DLQ

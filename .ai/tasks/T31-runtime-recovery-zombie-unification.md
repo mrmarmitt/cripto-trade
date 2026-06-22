@@ -3,158 +3,101 @@
 **Complexidade:** Baixa  
 **Responsável:** Claude  
 **Dependências:** Nenhuma  
-**Status:** Pendente
+**Status:** Implementado (Opção 1 + dedup do boot). Observabilidade dedicada **adiada** (ver "Fora de escopo / Adiado").
 
 ---
 
 ## Descrição
 
-Esta task fecha **um único furo**: em runtime, uma reserva órfã (`PENDING` sem `exchangeOrderId` — "zombie") não tem nenhuma rede de segurança. Ela resolve isso **sem criar um fluxo novo** — estende o recovery de runtime que já existe para também cobrir `PENDING`, com **query-before-expire**.
+Fecha o furo da reserva órfã (`PENDING` sem `exchangeOrderId`, "zombie") em runtime **sem criar fluxo novo**: estende o recovery de runtime existente para cobrir `PENDING` com **query-before-expire**, e **remove a expiração-cega de zombie do boot** (que duplicava o terminal-fallback do engine).
 
-> **Reescopo (dedup).** A versão anterior propunha um `RuntimeZombieCleanupUseCase` + watchdog + properties dedicados. Isso era **duplicação**: o motor por-transação (`RecoverTransactionStatusUseCase`) já faz exatamente "consulta-e-concilia" e **já aceita `PENDING`** como status elegível. O único lugar que não enxerga zombie é o **seletor de lote** (`RecoverStaleTransactionsUseCase`), que filtra só `SUBMITTED`/`PARTIAL`. A correção é estender esse seletor, não criar um motor paralelo.
->
-> O verbo de cancelamento outbound (`OrderDispatchPort.cancel`), que era a "Parte 2" desta task, foi **extraído para a T33** — é mecanismo de cancelamento, não recovery.
+O motor por-transação (`RecoverTransactionStatusUseCase`) já fazia "consulta-e-concilia" e já aceitava `PENDING`; o único gap era o seletor de lote (`RecoverStaleTransactionsUseCase`), que filtrava só `SUBMITTED`/`PARTIAL`.
 
 ---
 
-## A estrutura que já existe (duas camadas)
+## O que foi implementado (Opção 1)
 
-Não há dois motores de recovery; há um, parametrizado:
+### 1. Runtime — `RecoverStaleTransactionsUseCase` passa a cobrir `PENDING`
 
-**Motor (por transação) — `RecoverTransactionStatusUseCase`**
-- Elegíveis: **`[PENDING, SUBMITTED, PARTIAL]`** (já inclui `PENDING`).
-- Fluxo: carrega tx → checa elegibilidade → carrega runner/adapter → **`queryOrderByClientOrderId`** → se achou: valida + normaliza + concilia (`ConciliationOrderUpdateExecutor`); se **não** achou: decide pela `MissingOrderPolicy`.
-- `MissingOrderPolicy.APPLY_TERMINAL_FALLBACK` → `PARTIAL`→`CANCELED`, senão→`EXPIRED`.
-- `MissingOrderPolicy.REGISTER_DLQ` → cria `DeadLetterEntry` (`RECONCILIATION_CONFLICT`).
+- `ELIGIBLE_STATUSES` agora é `[PENDING, SUBMITTED, PARTIAL]`.
+- **Política derivada do status**, no loop do lote:
+  - `PENDING` → `RecoverTransactionStatusRequest.forRuntimeOrphanCleanup(id)` = `APPLY_TERMINAL_FALLBACK` (not-found → `EXPIRED`/`CANCELED`, **sem DLQ**);
+  - `SUBMITTED`/`PARTIAL` → `forRuntimeWatchdog(id)` = `REGISTER_DLQ` (comportamento atual mantido).
+- **Cutoff único reutilizado** (`runner.recovery.transaction.stale-threshold-ms`). Não foi criado watchdog, properties nem use case dedicado.
+- Nova factory `RecoverTransactionStatusRequest.forRuntimeOrphanCleanup(UUID)` (intenção explícita; mesma política que `forBoot`, nome distinto por call-site).
 
-**Seletor de lote — `RecoverStaleTransactionsUseCase`**
-- `findByStatusesUpdatedBefore([SUBMITTED, PARTIAL], updatedBefore, maxPerRun)` → loop chamando o motor com `forRuntimeWatchdog(id)` (= `REGISTER_DLQ`) → agrega contadores.
-- É disparado pelo `RunnerTransactionRecoveryWatchdog` (`@Scheduled`).
+### 2. Boot — `RunnerBootRecoveryUseCase` deixa de tratar zombie separadamente
 
-O "recovery" é só **seletor + motor**. O zombie de runtime é o **mesmo** motor sobre `PENDING`.
-
----
-
-## Premissa: "capital preso" vs "capital comprometido" (mantida)
-
-| Caso | Situação | Capital | É problema? |
-|---|---|---|---|
-| **A — Reserva órfã (zombie)** | `PENDING` que reservou capital mas **nunca foi confirmado** (sem `exchangeOrderId`) | Comprometido com **nada** (se a ordem realmente não existe) | **Sim** — se confirmado órfão |
-| **B — Ordem viva** | `SUBMITTED`/`PARTIAL` aberta na exchange esperando preço | **Corretamente comprometido** | **Não** — é a estratégia operando |
-
-Cancelar ordem viva (Caso B) é decisão de alpha → **T32**. Esta task atua **só** no Caso A, e **confirma** que é o Caso A (query) antes de liberar capital.
+- Removido o **Step 3 (`step3ExpireZombies`)** e a classificação zombie/limbo do **Step 1**.
+- `PENDING` agora entra no **mesmo caminho de reconciliação** do antigo limbo (Step 4), via `RecoverTransactionStatusUseCase.forBoot` → **query-before-expire** também no boot (não há mais expiração local cega nem carência de TTL).
+- Código removido por ser usado **apenas** pelo zombie:
+  - método `buildSyntheticTerminalOrder` (duplicava o `applyTerminalFallback` do engine);
+  - campo/param `pendingWithoutExchangeOrderIdTtlMs` (vinha de `PortfolioReservationTtlProperties.getTtlMs()`);
+  - campo/param/import `ConciliationOrderUpdateExecutor conciliationOrderUpdate` (só o Step 3 usava);
+  - bucket `zombies` em `RecoveryContext` e `zombiesCount` em `RecoverySummary`.
+- `PortfolioReservationTtlProperties` **permanece** — é usada pelo `BootOrchestrator` (TTL de reserva de portfolio / phase2), não era zombie-only.
 
 ---
 
-## A única diferença real entre "recovery" e "zombie": dois parâmetros
+## Comportamento resultante
 
-| | Recovery (stale) | Zombie cleanup |
-|---|---|---|
-| **Filtro de status** | `[SUBMITTED, PARTIAL]` | `[PENDING]` |
-| **MissingOrderPolicy** | `REGISTER_DLQ` | `APPLY_TERMINAL_FALLBACK` |
+| Origem | Caminho (boot **e** runtime) | Exchange conhece? | Desfecho | DLQ? |
+|---|---|---|---|---|
+| `PENDING` (zombie) | query por `clientOrderId` | **sim** (ACK perdido, viva) | reconcilia `PENDING→SUBMITTED/FILLED`; capital **não** liberado | não |
+| `PENDING` (zombie) | query por `clientOrderId` | **não** (nunca enviada) | `EXPIRED` via terminal fallback; capital liberado | **não** |
+| `SUBMITTED`/`PARTIAL` | query por `clientOrderId` | não | runtime: **DLQ** · boot: terminal fallback | runtime sim |
 
-E a segunda diferença é **derivável** da primeira:
-
-- `SUBMITTED`/`PARTIAL` not-found → a ordem **teve confirmação** (tem `exchangeOrderId`); sumir é **divergência real** → `REGISTER_DLQ`.
-- `PENDING` not-found → a ordem **nunca foi confirmada**; é **órfão limpo** (nunca saiu) → `APPLY_TERMINAL_FALLBACK` (`EXPIRED`). DLQ aqui seria ruído/falso conflito.
-
-A `MissingOrderPolicy` já é a costura que prova que o design antecipou isso: `forBoot(txId)` **já** = `APPLY_TERMINAL_FALLBACK` (exatamente o que o zombie precisa em runtime).
+Boot e runtime compartilham o **mesmo motor** (`RecoverTransactionStatusUseCase`); diferem só na política de not-found (boot sempre terminal-fallback; runtime DLQ para ordem confirmada).
 
 ---
 
-## Solução proposta
-
-Estender o recovery de runtime para cobrir `PENDING`. Duas formas, em ordem de preferência:
-
-### Opção 1 — Política derivada do status (preferida)
-
-No `RecoverStaleTransactionsUseCase`:
-
-- Selecionar `[PENDING, SUBMITTED, PARTIAL]` (um único `findByStatusesUpdatedBefore`).
-- No loop, escolher a request por `candidate.getStatus()`:
-  - `PENDING` → `APPLY_TERMINAL_FALLBACK` (query-before-expire);
-  - `SUBMITTED`/`PARTIAL` → `REGISTER_DLQ` (comportamento atual).
-
-Um seletor, um loop, **zero motor novo, zero watchdog novo**. As "duas flows" viram uma de verdade.
-
-### Opção 2 — Request parametrizada (só se quiser cutoff/cadência independentes)
-
-`RecoverStaleTransactionsRequest` passa a carregar o conjunto de status + política; **dois gatilhos** finos no watchdog (um para `[SUBMITTED,PARTIAL]`/`REGISTER_DLQ`, outro para `[PENDING]`/`APPLY_TERMINAL_FALLBACK`) chamam o **mesmo** use case com requests diferentes. Um motor, um lote, duas configs.
-
-> **Cutoff:** o zombie merece um cutoff **generoso** (carência para ACK atrasado / reconexão do USER_DATA antes de declarar órfão). Se um cutoff único generoso servir aos dois (provável), fica a Opção 1. Se quiser afinar separado, Opção 2.
-
----
-
-## Observabilidade e diagnóstico (não silenciar)
-
-Um zombie é **impressão digital de uma falha anterior** (crash entre persist e dispatch; exceção no envio; ACK perdido). Expirar é a **resolução** contábil correta, mas não pode ser **silenciosa** — senão se perde o health-signal do caminho persist→dispatch.
-
-- Contador por desfecho: `reconciled_live` (Caso 3 — a query achou a ordem **viva**) vs `expired_orphan` (não achou → `EXPIRED`).
-- `reconciled_live` é **quase-vazamento de capital + USER_DATA não confiável** → alerta ativo (gancho com **T21**), severidade maior que um órfão de rotina.
-- Taxa de zombie sustentada alimenta o **Safe Mode automático (T25)**: se o dispatch quebra repetidamente, talvez não se deva continuar abrindo ordens.
-- **DLQ continua sendo o canal de *conflito*** (`SUBMITTED`/`PARTIAL` not-found), nunca do zombie órfão (`PENDING` not-found) — evita falso conflito.
-
----
-
-## Configuração (application.yml)
-
-Reusa o namespace de recovery já existente. Na Opção 2, um sub-bloco para o cutoff do zombie:
-
-```yaml
-runner:
-  recovery:
-    transaction:
-      enabled: true
-      interval-ms: 60000
-      stale-threshold-ms: 120000     # cutoff para SUBMITTED/PARTIAL (já existe)
-      # Opção 2 — cutoff dedicado do zombie (carência de ACK):
-      zombie-cutoff-ms: 1800000      # 30 min, generoso
-      max-per-run: 50
-```
-
----
-
-## Arquivos a modificar / criar
+## Arquivos alterados
 
 | Arquivo | Mudança |
 |---|---|
-| `core/.../usecase/runner/RecoverStaleTransactionsUseCase.java` | Incluir `PENDING` na seleção e derivar `MissingOrderPolicy` por status (Opção 1) **ou** receber status+política via request (Opção 2) |
-| `core/.../dto/runner/request/RecoverStaleTransactionsRequest.java` | (Opção 2) campos status-set + política |
-| `core/.../dto/runner/request/RecoverTransactionStatusRequest.java` | Renomear/alias para deixar a intenção clara (`forBoot` já encapsula `APPLY_TERMINAL_FALLBACK`; expor algo como `withTerminalFallback`/`forOrphanCleanup`) |
-| `spring-application/.../bootstrap/RunnerTransactionRecoveryWatchdog.java` | (Opção 2) segundo tick/gatilho com cutoff do zombie; (Opção 1) inalterado |
-| `spring-application/.../bootstrap/RunnerTransactionRecoveryProperties.java` | (Opção 2) `zombieCutoffMs` |
-| Métricas/log | Contador `reconciled_live` / `expired_orphan`; WARN estruturado |
-| Testes em `core/.../runner/` | `PENDING` reconciliado (vivo) não libera capital; `PENDING` not-found → `EXPIRED` sem DLQ; `SUBMITTED` not-found → DLQ (sem regressão) |
+| `core/.../dto/runner/request/RecoverTransactionStatusRequest.java` | Nova factory `forRuntimeOrphanCleanup` (`APPLY_TERMINAL_FALLBACK`) |
+| `core/.../usecase/runner/RecoverStaleTransactionsUseCase.java` | `PENDING` elegível + política derivada do status |
+| `core/.../usecase/runner/RunnerBootRecoveryUseCase.java` | Remoção do Step 3 e da trilha de zombie; `PENDING` reconciliado junto do limbo; remoção de código morto |
+| `core/.../dto/runner/RecoveryContext.java` | Removido bucket `zombies` |
+| `core/.../usecase/boot/RunBootSequenceUseCase.java` | Log sem `zombies={}` |
+| `spring-application/.../config/core/RunnerConfig.java` | Boot bean sem `reservationTtlProperties` nem `conciliationOrderUpdateExecutor` |
 
-> **Não** criar `RuntimeZombieCleanupUseCase`, `RuntimeZombieCleanupWatchdog` nem `RuntimeZombieCleanupProperties` — era a duplicação.
+### Testes
+
+| Arquivo | Mudança |
+|---|---|
+| `RunnerTransactionRecoveryWatchdogIntegrationTest` | + `watchdogShouldExpirePendingZombieNotFoundOnExchangeWithoutDlq`, + `watchdogShouldReconcilePendingZombieFoundAliveOnExchange` |
+| `RunnerBootRecoveryIntegrationTest` | `recoveryShouldExpireZombie...` → `recoveryShouldQueryVerifyAndExpirePendingBuyNotFoundOnExchange`; + `recoveryShouldReconcilePendingBuyFoundAliveOnExchangeAndKeepReserve`; removido o teste de TTL-grace (premissa eliminada); removidos asserts de `zombiesCount` |
+
+Validação: `:core:test`, `:spring-application:test` (RunnerBootRecoveryIntegrationTest, RunnerTransactionRecoveryWatchdogIntegrationTest, BootOrchestrator*) — todos verdes.
 
 ---
 
-## Fora de escopo (explicitamente)
+## Fora de escopo / Adiado
 
-- **Cancelar ordem viva por idade/TTL global.** Anula intenção de estratégia. É da **T32** (opt-in por runner, default off).
-- **Verbo de cancelamento `OrderDispatchPort.cancel`.** Extraído para a **T33**.
-- **Expiração local cega de zombie em runtime.** Substituída por query-before-expire (runtime não tem o backstop do boot).
-- **Boot (`step3ExpireZombies`).** Permanece como está — expira local porque tem carência de TTL + varredura única. Esta task **não** altera o boot; só cobre o runtime, mais exposto.
+- **Observabilidade dedicada do zombie** (contador `reconciled_live` vs `expired_orphan`, alerta ativo do caso "viva", gancho com T21/T25): **não implementada nesta entrega**. Hoje os desfechos aparecem nos contadores genéricos do recovery (`recovered`/`routedToDlq`) e nos logs. Fica como follow-up.
+- **Cancelar ordem viva por idade/TTL global** — anula estratégia; é da **T32** (opt-in por runner, default off).
+- **Verbo `OrderDispatchPort.cancel`** — **T33**.
+- **Carência de TTL para `PENDING` recém-criado** — removida; runtime/boot consultam a exchange antes de expirar (mais correto que a expiração cega). O cutoff do watchdog continua dando folga para ACK atrasado antes da seleção.
 
 ---
 
 ## Riscos / pontos de atenção
 
-- **Não competir por estado:** após a extensão, o lote cobre `[PENDING, SUBMITTED, PARTIAL]` num único seletor — sem dois processos disputando a mesma transação.
-- **Política por status é invariante de segurança:** `PENDING`→`APPLY_TERMINAL_FALLBACK`, `SUBMITTED`/`PARTIAL`→`REGISTER_DLQ`. Inverter geraria falso conflito (zombie nunca-enviado na DLQ) ou perda de sinal (ordem confirmada sumindo sem DLQ).
-- **Corrida query × fill tardio:** a conciliação idempotente (`ConciliationOrderUpdateExecutor`) é a fonte da verdade; não decidir fora dela.
-- **Custo de query:** uma chamada por candidato velho, incl. casos nunca-enviados (desperdiçada-mas-inofensiva). Mitigado por cutoff generoso + `maxPerRun`. Combina com o circuit breaker da **T24**.
-- **Liberação de capital:** sempre via `ConciliationOrderUpdateExecutor`, nunca direta.
+- **Política por status é invariante de segurança:** `PENDING`→terminal fallback, `SUBMITTED`/`PARTIAL`→DLQ no runtime. Inverter geraria falso conflito (zombie nunca-enviado na DLQ) ou perda de sinal (ordem confirmada sumindo sem DLQ).
+- **Boot passou a exigir capacidade de order query também quando só há `PENDING`** (antes o zombie expirava local sem query). Em exchange sem order query, `PENDING` inflight leva ao mesmo halt que o limbo — consistente com "não expirar sem verificar".
+- **Corrida query × fill tardio:** decidida pela conciliação idempotente (`ConciliationOrderUpdateExecutor`), nunca fora dela.
+- **Liberação de capital:** sempre via conciliação, nunca direta.
 
 ---
 
 ## Critérios de aceitação
 
-1. Um `PENDING` (zombie) mais velho que o cutoff é **consultado por `clientOrderId`** antes de qualquer expiração, em runtime, pelo **mesmo** caminho de recovery (sem use case paralelo).
-2. Se a exchange conhece a ordem (Caso 3 — viva), ela é **reconciliada** e o capital **não** é liberado.
-3. Se a exchange não conhece (casos 1/2), vira **`EXPIRED`** via conciliação — **sem** entrada de DLQ.
-4. `SUBMITTED`/`PARTIAL` not-found continua indo para **DLQ** (sem regressão do recovery atual).
-5. Não existe `RuntimeZombieCleanupUseCase`/watchdog/properties dedicados — a cobertura de zombie é uma extensão do recovery existente.
-6. Métrica distingue `reconciled_live` de `expired_orphan`; o primeiro emite alerta ativo.
-7. Boot, recovery (`SUBMITTED`/`PARTIAL`) e reconciliação existentes seguem sem regressão.
+1. ✅ Um `PENDING` (zombie) velho é **consultado por `clientOrderId`** antes de expirar, em runtime, pelo mesmo recovery (sem use case paralelo).
+2. ✅ `PENDING` viva (caso 3) é **reconciliada** (`SUBMITTED`); capital **não** liberado.
+3. ✅ `PENDING` não encontrada vira **`EXPIRED`** via conciliação — **sem** DLQ.
+4. ✅ `SUBMITTED`/`PARTIAL` not-found continua indo para **DLQ** no runtime (sem regressão).
+5. ✅ Não existe `RuntimeZombieCleanupUseCase`/watchdog/properties dedicados; cobertura de zombie é extensão do recovery.
+6. ✅ Boot não tem mais expiração-cega de zombie; `PENDING` reconciliado via query-before-expire junto do limbo; código zombie-only removido.
+7. ⏳ **Adiado** — métrica distinguindo `reconciled_live` de `expired_orphan` com alerta ativo.
+8. ✅ Boot, recovery (`SUBMITTED`/`PARTIAL`) e reconciliação existentes seguem sem regressão (testes verdes).

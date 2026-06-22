@@ -16,6 +16,7 @@ import java.util.List;
 public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactionsPort {
 
     private static final List<TransactionStatus> ELIGIBLE_STATUSES = List.of(
+            TransactionStatus.PENDING,
             TransactionStatus.SUBMITTED,
             TransactionStatus.PARTIAL
     );
@@ -48,9 +49,13 @@ public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactions
 
         for (Transaction candidate : candidates) {
             try {
-                RecoverTransactionStatusResponse response = recoverTransactionStatusUseCase.execute(
-                        RecoverTransactionStatusRequest.forRuntimeWatchdog(candidate.getId())
-                );
+                // Politica derivada do status: PENDING nunca foi confirmado pela exchange,
+                // entao um not-found e orfao limpo -> terminacao local (EXPIRED/CANCELED).
+                // SUBMITTED/PARTIAL ja tinham confirmacao, entao um not-found e conflito -> DLQ.
+                RecoverTransactionStatusRequest recoverRequest = candidate.getStatus() == TransactionStatus.PENDING
+                        ? RecoverTransactionStatusRequest.forRuntimeOrphanCleanup(candidate.getId())
+                        : RecoverTransactionStatusRequest.forRuntimeWatchdog(candidate.getId());
+                RecoverTransactionStatusResponse response = recoverTransactionStatusUseCase.execute(recoverRequest);
 
                 if (response.outcome() == RecoverTransactionStatusResponse.RecoveryOutcome.RECOVERED) {
                     if (response.action() == RecoverTransactionStatusResponse.RecoveryAction.ROUTED_TO_DLQ) {

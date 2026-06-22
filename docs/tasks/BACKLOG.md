@@ -36,7 +36,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T28 | Camada agnóstica de adapter p/ consulta de saldo e histórico    | Média | Claude | Concluído |
 | T29 | Implementar consulta de saldo na exchange                       | Média | Claude | Concluído |
 | T30 | Implementar consulta de histórico de trades na exchange         | Média | Claude | Concluído |
-| T31 | Unificação do recovery de runtime: cobertura de zombies (`PENDING`) | Baixa | Claude | Pendente  |
+| T31 | Unificação do recovery de runtime: cobertura de zombies (`PENDING`) | Baixa | Claude | Concluído |
 | T32 | Ação `SHOULD_CANCEL` no contrato da estratégia                  | Alta  | Claude | Pendente  |
 | T33 | Fundação de cancelamento outbound (`OrderDispatchPort.cancel`)  | Baixa | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |

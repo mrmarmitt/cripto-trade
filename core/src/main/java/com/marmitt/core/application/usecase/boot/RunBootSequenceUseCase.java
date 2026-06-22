@@ -448,8 +448,8 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
     private RunnerBootRecoveryUseCase.RecoverySummary recoverRunner(StrategyRunner runner) {
         RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
 
-        log.info("bootSequence: runner={} inFlight={} zombies={} limbo={}",
-                summary.runnerId(), summary.inFlightCount(), summary.zombiesCount(), summary.limboCount());
+        log.info("bootSequence: runner={} inFlight={} limbo={}",
+                summary.runnerId(), summary.inFlightCount(), summary.limboCount());
 
         if (log.isDebugEnabled()) {
             summary.notes().forEach(note ->

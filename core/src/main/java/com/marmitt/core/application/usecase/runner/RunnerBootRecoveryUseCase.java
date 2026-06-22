@@ -1,7 +1,5 @@
 package com.marmitt.core.application.usecase.runner;
 
-import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
-import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.runner.RecoveryContext;
@@ -19,11 +17,8 @@ import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
-import java.math.BigDecimal;
-import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
-import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
@@ -37,18 +32,23 @@ import java.util.concurrent.TimeoutException;
  * <p>Fluxo linear e explicito (IG 6.6 / 9.6):
  * <ul>
  *   <li>Step 0: snapshot de conta (observabilidade)</li>
- *   <li>Step 1: carregar transacoes em voo e classificar zombies/limbo</li>
- *   <li>Step 2: resolver capacidade de query na exchange (quando houver limbo)</li>
- *   <li>Step 3: saneamento de zombies</li>
- *   <li>Step 4: reconciliacao do limbo com a exchange</li>
+ *   <li>Step 1: carregar transacoes em voo (inflight a reconciliar)</li>
+ *   <li>Step 2: resolver capacidade de query na exchange</li>
+ *   <li>Step 4: reconciliacao do inflight com a exchange (query-before-expire;
+ *       cobre PENDING/SUBMITTED/PARTIAL pelo mesmo caminho)</li>
  *   <li>Step 5: validacao final de inflight remanescente</li>
  *   <li>Step 6: concluir reconcilicao ou halting por erro</li>
  * </ul>
  *
+ * <p>O antigo Step 3 (expiracao local cega de zombie) foi removido: um PENDING sem
+ * {@code exchangeOrderId} agora e consultado na exchange antes de expirar, pelo mesmo
+ * {@link RecoverTransactionStatusUseCase} usado para o limbo. A limpeza de zombie em
+ * runtime vive no {@link RecoverStaleTransactionsUseCase} (T31).
+ *
  * <p>Dependencia entre passos:
- * Step 2 depende de Step 1 (limbo identificado).
- * Steps 3/4 dependem de Step 1 e Step 2.
- * Steps 5/6 dependem da execucao completa de 3/4.
+ * Step 2 depende de Step 1 (inflight identificado).
+ * Step 4 depende de Step 1 e Step 2.
+ * Steps 5/6 dependem da execucao completa de Step 4.
  */
 @Slf4j
 public class RunnerBootRecoveryUseCase {
@@ -62,9 +62,7 @@ public class RunnerBootRecoveryUseCase {
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
     private final DeadLetterEntryRepositoryPort deadLetterEntryRepository;
-    private final ConciliationOrderUpdateExecutor conciliationOrderUpdate;
     private final RecoverTransactionStatusUseCase recoverTransactionStatusUseCase;
-    private final long pendingWithoutExchangeOrderIdTtlMs;
     private final long exchangeQueryTimeoutMs;
     private final int exchangeQueryMaxAttempts;
     private final long exchangeQueryInitialBackoffMs;
@@ -75,9 +73,7 @@ public class RunnerBootRecoveryUseCase {
     public RunnerBootRecoveryUseCase(StrategyRunnerRepositoryPort strategyRunnerRepository,
                                      ExchangeAdapterRepositoryPort exchangeAdapterRepository,
                                      DeadLetterEntryRepositoryPort deadLetterEntryRepository,
-                                     ConciliationOrderUpdateExecutor conciliationOrderUpdate,
                                      RecoverTransactionStatusUseCase recoverTransactionStatusUseCase,
-                                     long pendingWithoutExchangeOrderIdTtlMs,
                                      long exchangeQueryTimeoutMs,
                                      int exchangeQueryMaxAttempts,
                                      long exchangeQueryInitialBackoffMs,
@@ -87,9 +83,7 @@ public class RunnerBootRecoveryUseCase {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.exchangeAdapterRepository = exchangeAdapterRepository;
         this.deadLetterEntryRepository = deadLetterEntryRepository;
-        this.conciliationOrderUpdate = conciliationOrderUpdate;
         this.recoverTransactionStatusUseCase = recoverTransactionStatusUseCase;
-        this.pendingWithoutExchangeOrderIdTtlMs = pendingWithoutExchangeOrderIdTtlMs;
         this.exchangeQueryTimeoutMs = Math.max(0L, exchangeQueryTimeoutMs);
         this.exchangeQueryMaxAttempts = Math.max(1, exchangeQueryMaxAttempts);
         this.exchangeQueryInitialBackoffMs = Math.max(0L, exchangeQueryInitialBackoffMs);
@@ -108,17 +102,15 @@ public class RunnerBootRecoveryUseCase {
 
         stepAEnterReconciliation(ctx);
         step0CaptureAccountSnapshot(ctx);
-        step1LoadAndClassifyInFlight(ctx);
+        step1LoadInFlight(ctx);
         step2ResolveOrderQueryCapability(ctx);
-        step3ExpireZombies(ctx);
         step4ReconcileLimbo(ctx);
         step5ValidateRemainingInFlight(ctx);
         step6FinalizeRunnerState(ctx);
 
-        log.info("bootRecovery: completed runnerId={} inFlight={} zombies={} limbo={} remaining={} hasErrors={}",
+        log.info("bootRecovery: completed runnerId={} inFlight={} limbo={} remaining={} hasErrors={}",
                 ctx.runnerId(),
                 ctx.inFlight().size(),
-                ctx.zombies().size(),
                 ctx.limbo().size(),
                 ctx.remainingInFlight(),
                 ctx.hasErrors());
@@ -126,7 +118,6 @@ public class RunnerBootRecoveryUseCase {
         return new RecoverySummary(
                 ctx.runnerId(),
                 ctx.inFlight().size(),
-                ctx.zombies().size(),
                 ctx.limbo().size(),
                 ctx.notes()
         );
@@ -164,28 +155,15 @@ public class RunnerBootRecoveryUseCase {
         }
     }
 
-    private void step1LoadAndClassifyInFlight(RecoveryContext ctx) {
+    private void step1LoadInFlight(RecoveryContext ctx) {
         List<Transaction> inFlight = strategyRunnerRepository.findByRunnerIdAndStatuses(
                 ctx.runnerId(), BOOT_RELEVANT_STATUSES);
         ctx.inFlight(inFlight);
+        // PENDING (sem exchangeOrderId), SUBMITTED e PARTIAL seguem o mesmo caminho de
+        // reconciliacao com query-before-expire. Nao ha mais classificacao/expiracao de zombie.
+        ctx.limbo(inFlight);
 
-        List<Transaction> zombies = inFlight.stream()
-                .filter(tx -> tx.getStatus() == TransactionStatus.PENDING)
-                .filter(tx -> tx.getExchangeOrderId() == null || tx.getExchangeOrderId().isBlank())
-                .toList();
-        ctx.zombies(zombies);
-
-        Set<UUID> zombieIds = zombies.stream()
-                .map(Transaction::getId)
-                .collect(java.util.stream.Collectors.toSet());
-
-        List<Transaction> limbo = inFlight.stream()
-                .filter(tx -> !zombieIds.contains(tx.getId()))
-                .toList();
-        ctx.limbo(limbo);
-
-        ctx.note("Step 1: classified inFlight=" + inFlight.size()
-                + " zombies=" + zombies.size() + " limbo=" + limbo.size());
+        ctx.note("Step 1: loaded inFlight=" + inFlight.size() + " (all routed to reconciliation)");
     }
 
     private void step2ResolveOrderQueryCapability(RecoveryContext ctx) {
@@ -204,32 +182,6 @@ public class RunnerBootRecoveryUseCase {
 
         ctx.orderQuery(adapterForQuery.get().orderQuery());
         ctx.note("Step 2: order query capability resolved for exchange=" + ctx.exchangeId());
-    }
-
-    private void step3ExpireZombies(RecoveryContext ctx) {
-        Instant cutoff = pendingWithoutExchangeOrderIdTtlMs > 0
-                ? Instant.now().minusMillis(pendingWithoutExchangeOrderIdTtlMs)
-                : Instant.EPOCH;
-
-        for (Transaction tx : ctx.zombies()) {
-            if (pendingWithoutExchangeOrderIdTtlMs > 0
-                    && tx.getRequestedAt() != null
-                    && tx.getRequestedAt().isAfter(cutoff)) {
-                ctx.note("Step 3: zombie within TTL - keeping pending transactionId=" + tx.getId());
-                continue;
-            }
-
-            try {
-                OrderDataDto syntheticExpired = buildSyntheticTerminalOrder(
-                        tx, OrderDataDto.OrderStatus.EXPIRED, "BOOT_ZOMBIE_PENDING_WITHOUT_EXCHANGE_ORDER_ID");
-                conciliationOrderUpdate.execute(syntheticExpired);
-                ctx.note("Step 3: zombie expired transactionId=" + tx.getId());
-            } catch (Exception e) {
-                ctx.error("Step 3 ERROR: zombie transactionId=" + tx.getId() + " reason=" + e.getMessage());
-                log.error("bootRecovery: failed to expire zombie transactionId={} runnerId={}",
-                        tx.getId(), ctx.runnerId(), e);
-            }
-        }
     }
 
     private void step4ReconcileLimbo(RecoveryContext ctx) {
@@ -399,26 +351,6 @@ public class RunnerBootRecoveryUseCase {
                 : bounded;
     }
 
-    private OrderDataDto buildSyntheticTerminalOrder(Transaction tx,
-                                                     OrderDataDto.OrderStatus status,
-                                                     String reason) {
-        return new OrderDataDto(
-                tx.getExchangeOrderId() != null ? tx.getExchangeOrderId() : "BOOT_" + tx.getId(),
-                tx.getClientOrderId(),
-                Symbol.of(tx.getSymbol()),
-                tx.isBuy() ? OrderDataDto.OrderSide.BUY : OrderDataDto.OrderSide.SELL,
-                OrderDataDto.OrderType.LIMIT,
-                tx.getQuantity(),
-                tx.getEffectiveExecutedQuantity(),
-                tx.getPrice(),
-                tx.getEffectiveExecutedPrice(),
-                BigDecimal.ZERO,
-                status,
-                reason,
-                Instant.now()
-        );
-    }
-
     private void step5ValidateRemainingInFlight(RecoveryContext ctx) {
         int remaining = strategyRunnerRepository
                 .findByRunnerIdAndStatuses(ctx.runnerId(), BOOT_RELEVANT_STATUSES)
@@ -473,7 +405,6 @@ public class RunnerBootRecoveryUseCase {
     public record RecoverySummary(
             UUID runnerId,
             int inFlightCount,
-            int zombiesCount,
             int limboCount,
             List<String> notes
     ) {}
