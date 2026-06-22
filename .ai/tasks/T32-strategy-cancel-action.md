@@ -3,7 +3,7 @@
 **Complexidade:** Alta  
 **Responsável:** Claude  
 **Dependências:** T33 (caminho outbound de cancelamento — `OrderDispatchPort.cancel`)  
-**Status:** Pendente
+**Status:** Concluído — `TradingAction.SHOULD_CANCEL` + `StrategyOutputDto.cancel/targetTransactionId/shouldCancel`, `CancelSignalHandler` (ownership + estado cancelável) e roteamento em `ProcessTradeSignalUseCase` (antes do pipeline de trade). Coberto por unit tests (contrato + handler). **Follow-up:** estratégia de referência emitindo `SHOULD_CANCEL` + teste de integração end-to-end (cancel → CANCELED via stream → conciliação libera capital).
 
 ---
 
