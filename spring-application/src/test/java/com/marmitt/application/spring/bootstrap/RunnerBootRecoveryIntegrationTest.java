@@ -149,6 +149,13 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         strategyRunnerRepository.saveTransaction(pendingBuy);
         assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
 
+        // Velho o suficiente para passar da carencia de reconciliacao de PENDING no boot.
+        jdbcTemplate.update(
+                "UPDATE transactions SET requested_at = ? WHERE id = ?",
+                Timestamp.from(Instant.now().minus(Duration.ofHours(2))),
+                pendingBuy.getId()
+        );
+
         getMockExchangeAdapter().seedQueriedOrderSnapshot(new OrderDataDto(
                 "EX_PENDING_ALIVE",
                 pendingBuy.getClientOrderId(),
@@ -173,6 +180,36 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         assertEquals(1, summary.inFlightCount());
         assertEquals(1, summary.limboCount());
 
+        awaitBalance(portfolioId, INITIAL_CAPITAL.subtract(reservedAmount), reservedAmount, WAIT_TIMEOUT);
+
+        StrategyRunner latestRunner = strategyRunnerRepository.findById(runner.getId())
+                .orElseThrow(() -> new IllegalStateException("Runner not found after recovery"));
+        assertEquals(com.marmitt.core.enums.RunnerStatus.ACTIVE, latestRunner.getStatus());
+        assertFalse(latestRunner.isReconciling());
+    }
+
+    @Test
+    void recoveryShouldDeferYoungPendingWithoutExpiringIt() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+        BigDecimal quantity = new BigDecimal("0.00150000");
+        BigDecimal price = new BigDecimal("60000.00000000");
+        BigDecimal reservedAmount = quantity.multiply(price);
+
+        // PENDING recem-criado (jovem): a ordem pode ter sido enviada logo antes do crash e ainda
+        // nao estar visivel na query da exchange — nao deve ser expirada no boot.
+        Transaction youngPending = newTransaction(runner, TransactionType.BUY, quantity, price, reservedAmount);
+        strategyRunnerRepository.saveTransaction(youngPending);
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
+
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+
+        // Deferido: continua PENDING, fora do limbo; capital reservado preservado; runner ativa.
+        Transaction stillPending = strategyRunnerRepository.findTransactionById(youngPending.getId())
+                .orElseThrow(() -> new IllegalStateException("Transaction not found"));
+        assertEquals(TransactionStatus.PENDING, stillPending.getStatus());
+        assertEquals(1, summary.inFlightCount());
+        assertEquals(0, summary.limboCount());
         awaitBalance(portfolioId, INITIAL_CAPITAL.subtract(reservedAmount), reservedAmount, WAIT_TIMEOUT);
 
         StrategyRunner latestRunner = strategyRunnerRepository.findById(runner.getId())

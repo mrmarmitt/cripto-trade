@@ -32,7 +32,8 @@ O motor por-transação (`RecoverTransactionStatusUseCase`) já fazia "consulta-
 ### 2. Boot — `RunnerBootRecoveryUseCase` deixa de tratar zombie separadamente
 
 - Removido o **Step 3 (`step3ExpireZombies`)** e a classificação zombie/limbo do **Step 1**.
-- `PENDING` agora entra no **mesmo caminho de reconciliação** do antigo limbo (Step 4), via `RecoverTransactionStatusUseCase.forBoot` → **query-before-expire** também no boot (não há mais expiração local cega nem carência de TTL).
+- `PENDING` agora entra no **mesmo caminho de reconciliação** do antigo limbo (Step 4), via `RecoverTransactionStatusUseCase.forBoot` → **query-before-expire** também no boot (não há mais expiração local cega).
+- **Carência de reconciliação para PENDING no boot** (`runner.boot.phase3.pending-grace-ms`, default 10 min): um `PENDING` mais novo que a carência é **deferido** (mantido PENDING, fora do Step 4) em vez de consultado/expirado — evita expirar uma ordem enviada logo antes do crash mas ainda não visível na query da exchange; o watchdog de runtime o trata depois. `SUBMITTED`/`PARTIAL` (confirmados) são sempre reconciliados, sem carência. *(Corrige Codex P1: "preserve boot grace before expiring PENDING orders". A carência foi separada da expiração-cega — esta saiu, aquela voltou sobre o query-before-expire.)*
 - Código removido por ser usado **apenas** pelo zombie:
   - método `buildSyntheticTerminalOrder` (duplicava o `applyTerminalFallback` do engine);
   - campo/param `pendingWithoutExchangeOrderIdTtlMs` (vinha de `PortfolioReservationTtlProperties.getTtlMs()`);
@@ -74,7 +75,8 @@ Boot e runtime compartilham o **mesmo motor** (`RecoverTransactionStatusUseCase`
 | `core/.../dto/runner/request/RecoverStaleTransactionsRequest.java` | + `pendingUpdatedBefore` |
 | `spring-application/.../bootstrap/RunnerTransactionRecoveryWatchdog.java` | calcula `pendingUpdatedBefore` (carência maior) |
 | `spring-application/.../bootstrap/RunnerTransactionRecoveryProperties.java` (+`application.yml`) | + `pending-grace-ms` (default 600000) |
-| `core/.../usecase/runner/RunnerBootRecoveryUseCase.java` | Remoção do Step 3 e da trilha de zombie; `PENDING` reconciliado junto do limbo; remoção de código morto |
+| `core/.../usecase/runner/RunnerBootRecoveryUseCase.java` | Remoção do Step 3 e da trilha de zombie; `PENDING` reconciliado junto do limbo; **defere PENDING jovem** (carência de boot) |
+| `spring-application/.../bootstrap/RunnerBootPhase3Properties.java` (+`application.yml` phase3, +`RunnerConfig`) | + `pending-grace-ms` (default 600000) para o boot |
 | `core/.../dto/runner/RecoveryContext.java` | Removido bucket `zombies` |
 | `core/.../usecase/boot/RunBootSequenceUseCase.java` | Log sem `zombies={}`; **removida a fase `phase2.reservation_ttl`** |
 | `core/.../dto/boot/BootExecutionCommand.java` | Removidos `ttlEnabled`/`ttlMs` |
@@ -92,7 +94,7 @@ Boot e runtime compartilham o **mesmo motor** (`RecoverTransactionStatusUseCase`
 | `RecoverTransactionStatusUseCaseTest` | + `executeMarksPendingTransactionExpiredWhenExchangeDoesNotFindOrderInRuntimeMode`; + `executeRoutesToDlqWhenPendingGetsConfirmedDuringQueryInRuntimeMode` (guarda da corrida; assert DLQ com `exchangeOrderId` recarregado) |
 | `MarginReleaseBuilderTest` (novo) | SELL EXPIRED/CANCELED → sem release; BUY EXPIRED → release total (regressão) |
 | `RunnerTransactionRecoveryWatchdogIntegrationTest` | + `...NotFoundOnExchangeWithoutDlq`, `...FoundAliveOnExchange`, `...NotExpirePendingWithinDispatchGrace`, `...NotLetConfirmedBacklogStarvePendingCleanup`, `...ExpirePendingSellWithoutReleasingUnrelatedReservedCapital`; stub de corrida ajustado para o lote em dois cutoffs |
-| `RunnerBootRecoveryIntegrationTest` | `recoveryShouldExpireZombie...` → `recoveryShouldQueryVerifyAndExpirePendingBuyNotFoundOnExchange`; + `recoveryShouldReconcilePendingBuyFoundAliveOnExchangeAndKeepReserve`; removido o teste de TTL-grace; removidos asserts de `zombiesCount` e o registro da property `reservation-ttl` |
+| `RunnerBootRecoveryIntegrationTest` | `recoveryShouldExpireZombie...` → `...QueryVerifyAndExpirePendingBuyNotFoundOnExchange`; + `...ReconcilePendingBuyFoundAliveOnExchangeAndKeepReserve`, + `...DeferYoungPendingWithoutExpiringIt`; removidos asserts de `zombiesCount` e a property `reservation-ttl` |
 | `BootOrchestrator{Observability,DlqOperational,BootMinimum}Test` | Removido o mock `PortfolioReservationTtlUseCase` e a property `ttlProperties` da composição |
 
 Validação: `:core:test` e `:spring-application:test` (suíte completa) — todos verdes.
@@ -124,7 +126,7 @@ Validação: `:core:test` e `:spring-application:test` (suíte completa) — tod
 3. ✅ `PENDING` não encontrada vira **`EXPIRED`** via conciliação — **sem** DLQ.
 4. ✅ `SUBMITTED`/`PARTIAL` not-found continua indo para **DLQ** no runtime (sem regressão).
 5. ✅ Não existe `RuntimeZombieCleanupUseCase`/watchdog/properties dedicados; cobertura de zombie é extensão do recovery.
-6. ✅ Boot não tem mais **nenhuma** expiração-cega: phase3 sem Step 3 **e** phase2 `reservation_ttl` removido; `PENDING` tratado só por query-before-expire (phase3) + watchdog de runtime.
+6. ✅ Boot não tem mais **nenhuma** expiração-cega: phase3 sem Step 3 **e** phase2 `reservation_ttl` removido; `PENDING` tratado só por query-before-expire (phase3) + watchdog de runtime. No boot, `PENDING` **jovem** (< `pending-grace-ms`) é **deferido**, nunca expirado prematuramente.
 7. ✅ A política de not-found do runtime é resolvida no engine pelo status **relido imediatamente antes do fallback** (`DERIVE_FROM_STATUS`); promoção concorrente `PENDING→SUBMITTED/PARTIAL` durante a query vira DLQ, não expiração.
 8. ✅ `PENDING` só é elegível no watchdog após `pending-grace-ms` (default 10 min), evitando expirar ordem ainda em dispatch; tem **budget independente** do backlog de confirmados; e o **release de margem é type-aware** (SELL terminada só desbloqueia a Position, não libera quote — boot, runtime e conciliação normal).
 9. ⏳ **Adiado** — métrica distinguindo `reconciled_live` de `expired_orphan` com alerta ativo.

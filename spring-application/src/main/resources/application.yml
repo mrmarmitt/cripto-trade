@@ -88,6 +88,7 @@ runner:
           enabled: true
     phase3:
       enabled: true
+      pending-grace-ms: 600000   # PENDING mais novo que isto e deferido (nao expirado) no boot
       exchange-query-timeout-ms: 10000
       exchange-query-max-attempts: 3
       exchange-query-initial-backoff-ms: 300

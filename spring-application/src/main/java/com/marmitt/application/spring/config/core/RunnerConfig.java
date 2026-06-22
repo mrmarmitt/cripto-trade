@@ -220,6 +220,7 @@ public class RunnerConfig {
                 exchangeAdapterRepository,
                 deadLetterEntryRepository,
                 recoverTransactionStatusUseCase,
+                phase3Properties.getPendingGraceMs(),
                 phase3Properties.getExchangeQueryTimeoutMs(),
                 phase3Properties.getExchangeQueryMaxAttempts(),
                 phase3Properties.getExchangeQueryInitialBackoffMs(),

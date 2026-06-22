@@ -17,6 +17,7 @@ import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -63,6 +64,7 @@ public class RunnerBootRecoveryUseCase {
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
     private final DeadLetterEntryRepositoryPort deadLetterEntryRepository;
     private final RecoverTransactionStatusUseCase recoverTransactionStatusUseCase;
+    private final long pendingReconcileGraceMs;
     private final long exchangeQueryTimeoutMs;
     private final int exchangeQueryMaxAttempts;
     private final long exchangeQueryInitialBackoffMs;
@@ -74,6 +76,7 @@ public class RunnerBootRecoveryUseCase {
                                      ExchangeAdapterRepositoryPort exchangeAdapterRepository,
                                      DeadLetterEntryRepositoryPort deadLetterEntryRepository,
                                      RecoverTransactionStatusUseCase recoverTransactionStatusUseCase,
+                                     long pendingReconcileGraceMs,
                                      long exchangeQueryTimeoutMs,
                                      int exchangeQueryMaxAttempts,
                                      long exchangeQueryInitialBackoffMs,
@@ -84,6 +87,7 @@ public class RunnerBootRecoveryUseCase {
         this.exchangeAdapterRepository = exchangeAdapterRepository;
         this.deadLetterEntryRepository = deadLetterEntryRepository;
         this.recoverTransactionStatusUseCase = recoverTransactionStatusUseCase;
+        this.pendingReconcileGraceMs = Math.max(0L, pendingReconcileGraceMs);
         this.exchangeQueryTimeoutMs = Math.max(0L, exchangeQueryTimeoutMs);
         this.exchangeQueryMaxAttempts = Math.max(1, exchangeQueryMaxAttempts);
         this.exchangeQueryInitialBackoffMs = Math.max(0L, exchangeQueryInitialBackoffMs);
@@ -159,11 +163,25 @@ public class RunnerBootRecoveryUseCase {
         List<Transaction> inFlight = strategyRunnerRepository.findByRunnerIdAndStatuses(
                 ctx.runnerId(), BOOT_RELEVANT_STATUSES);
         ctx.inFlight(inFlight);
-        // PENDING (sem exchangeOrderId), SUBMITTED e PARTIAL seguem o mesmo caminho de
-        // reconciliacao com query-before-expire. Nao ha mais classificacao/expiracao de zombie.
-        ctx.limbo(inFlight);
 
-        ctx.note("Step 1: loaded inFlight=" + inFlight.size() + " (all routed to reconciliation)");
+        // SUBMITTED/PARTIAL (confirmados) sao sempre reconciliados via query-before-expire.
+        // Um PENDING so e reconciliado se for mais velho que a carencia: um PENDING jovem (ordem
+        // possivelmente enviada logo antes do crash, ainda nao visivel na query da exchange) e
+        // DEFERIDO — mantido PENDING para nao ser expirado prematuramente; o watchdog de runtime
+        // o trata depois (com sua propria carencia).
+        Instant graceCutoff = pendingReconcileGraceMs > 0
+                ? Instant.now().minusMillis(pendingReconcileGraceMs)
+                : Instant.EPOCH;
+        List<Transaction> toReconcile = inFlight.stream()
+                .filter(tx -> tx.getStatus() != TransactionStatus.PENDING
+                        || tx.getRequestedAt() == null
+                        || !tx.getRequestedAt().isAfter(graceCutoff))
+                .toList();
+        ctx.limbo(toReconcile);
+
+        int deferred = inFlight.size() - toReconcile.size();
+        ctx.note("Step 1: loaded inFlight=" + inFlight.size()
+                + " reconciling=" + toReconcile.size() + " deferredYoungPending=" + deferred);
     }
 
     private void step2ResolveOrderQueryCapability(RecoveryContext ctx) {

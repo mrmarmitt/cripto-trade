@@ -8,6 +8,13 @@ import org.springframework.stereotype.Component;
 public class RunnerBootPhase3Properties {
 
     private boolean enabled = true;
+    /**
+     * Carencia para reconciliar PENDING no boot. Um PENDING mais novo que isto e DEFERIDO
+     * (mantido PENDING) em vez de consultado/expirado, evitando expirar uma ordem que foi
+     * enviada logo antes do crash mas ainda nao esta visivel na query da exchange. O watchdog
+     * de runtime cuida dele depois (com sua propria carencia). Default 10 min.
+     */
+    private long pendingGraceMs = 600_000L;
     private long exchangeQueryTimeoutMs = 10_000L;
     private int exchangeQueryMaxAttempts = 3;
     private long exchangeQueryInitialBackoffMs = 300L;
@@ -20,6 +27,14 @@ public class RunnerBootPhase3Properties {
 
     public void setEnabled(boolean enabled) {
         this.enabled = enabled;
+    }
+
+    public long getPendingGraceMs() {
+        return pendingGraceMs;
+    }
+
+    public void setPendingGraceMs(long pendingGraceMs) {
+        this.pendingGraceMs = pendingGraceMs;
     }
 
     public long getExchangeQueryTimeoutMs() {
