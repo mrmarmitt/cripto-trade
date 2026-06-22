@@ -60,6 +60,19 @@ class CancelSignalHandlerTest {
     }
 
     @Test
+    void deDupesRepeatedCancelForSameTransactionWithinCooldown() {
+        Transaction tx = tx(runnerId, TransactionStatus.SUBMITTED);
+        when(repository.findTransactionById(tx.getId())).thenReturn(Optional.of(tx));
+        StrategyRunner runner = runner(runnerId);
+
+        StrategyOutputDto cancel = StrategyOutputDto.cancel("s", tx.getId(), "thesis changed");
+        handler.handle(runner, cancel);
+        handler.handle(runner, cancel); // mesmo alvo, dentro do cooldown
+
+        verify(orderDispatch, org.mockito.Mockito.times(1)).cancel(any());
+    }
+
+    @Test
     void ignoresWhenTargetNotFound() {
         UUID targetId = UUID.randomUUID();
         when(repository.findTransactionById(targetId)).thenReturn(Optional.empty());

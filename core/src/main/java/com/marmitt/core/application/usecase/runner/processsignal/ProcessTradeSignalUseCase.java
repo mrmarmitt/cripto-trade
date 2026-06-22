@@ -270,6 +270,10 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         if (strategyOutput.shouldCancel()) {
             log.debug("priceUpdate: routing SHOULD_CANCEL runner={} target={}",
                     runner.getId(), strategyOutput.targetTransactionId());
+            // Re-le o status do runner: o kill-switch/reconciliacao pode ter halted o runner entre
+            // canProcessRunner e o retorno da estrategia. Lanca RunnerHaltedException (capturada em
+            // execute) — mesma semantica de seguranca dos ramos BUY/SELL antes do dispatch.
+            checkRunnerNotHalted(runner.getId());
             cancelSignalHandler.handle(runner, strategyOutput);
             return;
         }
