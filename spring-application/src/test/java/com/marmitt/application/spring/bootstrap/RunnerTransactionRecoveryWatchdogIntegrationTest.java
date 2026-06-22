@@ -4,6 +4,7 @@ import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
 import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
+import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
@@ -203,6 +204,33 @@ class RunnerTransactionRecoveryWatchdogIntegrationTest extends AbstractIntegrati
         assertEquals(2, response.scanned());
         assertEquals(1, response.routedToDlq());
         assertEquals(1, response.recovered());
+    }
+
+    @Test
+    void watchdogShouldNotExpirePendingSellNorReleaseUnrelatedReservedCapital() {
+        UUID portfolioId = createPortfolio();
+        StrategyRunner runner = createAndActivateRunner(portfolioId);
+
+        // Reserva de um BUY nao relacionado (capital legitimamente comprometido).
+        BigDecimal unrelatedReserved = new BigDecimal("100.00000000");
+        assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, unrelatedReserved));
+
+        // PENDING SELL orfa: SELLs nao reservam quote; expira-la pelo fallback liberaria margem indevida.
+        Transaction pendingSell = newTransaction(runner, TransactionType.SELL,
+                new BigDecimal("0.00150000"), new BigDecimal("60000.00000000"), new BigDecimal("90.00000000"));
+        strategyRunnerRepository.saveTransaction(pendingSell);
+        markTransactionStale(pendingSell.getId(), Duration.ofHours(2));
+
+        RecoverStaleTransactionsResponse response = watchdog.runRecoveryCycle();
+
+        // O watchdog so limpa reserva orfa (BUY): a SELL fica intacta e o reservado do BUY nao e tocado.
+        Transaction stillPending = strategyRunnerRepository.findTransactionById(pendingSell.getId())
+                .orElseThrow(() -> new IllegalStateException("Sell not found"));
+        assertEquals(TransactionStatus.PENDING, stillPending.getStatus());
+        assertEquals(0, response.scanned());
+        GlobalBalance balance = globalBalanceRepository.findByPortfolioId(portfolioId)
+                .orElseThrow(() -> new IllegalStateException("Balance not found"));
+        assertEquals(0, balance.getReservedBalance().compareTo(unrelatedReserved));
     }
 
     @Test

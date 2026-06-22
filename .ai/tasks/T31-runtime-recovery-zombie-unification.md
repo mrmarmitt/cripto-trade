@@ -23,6 +23,7 @@ O motor por-transação (`RecoverTransactionStatusUseCase`) já fazia "consulta-
   - confirmados `[SUBMITTED, PARTIAL]` pelo `stale-threshold-ms` (30s);
   - `[PENDING]` por uma **carência maior** `pending-grace-ms` (default **10 min**). Isso evita expirar um `PENDING` ainda em **dispatch**: o persist-first comita o `PENDING` antes do `orderDispatch.dispatch(...)`, e o timeout REST é ~30s — reusar 30s para `PENDING` poderia expirar uma ordem que ainda vai ser enviada/confirmada. *(Corrige Codex P1: "keep a dispatch grace period".)*
   - Budget **separado** é proposital: um confirmado faltante vai para DLQ mas **permanece** no status e é re-selecionado a cada ciclo; com budget compartilhado, um backlog de confirmados starvaria a limpeza de `PENDING` e o capital ficaria preso. *(Corrige Codex P2: "preserve a pending recovery budget".)*
+- A limpeza de `PENDING` em runtime é **restrita a BUY**: reserva órfã é conceito de BUY (SELL não reserva quote, bloqueia uma `Position`). Expirar um `PENDING` SELL pelo terminal fallback genérico emitiria um `MarginRelease(getTotal())` que poderia liberar reserva de **BUYs não relacionados** (`GlobalBalance.release` subtrai cego do reserved). *(Corrige Codex P1: "avoid expiring PENDING SELLs with margin release".)* Ver "Fora de escopo".
 - Todos passam `forRuntimeWatchdog` = `MissingOrderPolicy.DERIVE_FROM_STATUS`; a política de not-found é **resolvida dentro do engine** (`RecoverTransactionStatusUseCase`):
   - `PENDING` (nunca confirmado) → terminal fallback (`EXPIRED`/`CANCELED`, **sem DLQ**);
   - `SUBMITTED`/`PARTIAL` (confirmado) → `REGISTER_DLQ`.
@@ -87,7 +88,7 @@ Boot e runtime compartilham o **mesmo motor** (`RecoverTransactionStatusUseCase`
 | Arquivo | Mudança |
 |---|---|
 | `RecoverTransactionStatusUseCaseTest` | + `executeMarksPendingTransactionExpiredWhenExchangeDoesNotFindOrderInRuntimeMode`; + `executeRoutesToDlqWhenPendingGetsConfirmedDuringQueryInRuntimeMode` (guarda da corrida; assert DLQ com `exchangeOrderId` recarregado) |
-| `RunnerTransactionRecoveryWatchdogIntegrationTest` | + `...NotFoundOnExchangeWithoutDlq`, `...FoundAliveOnExchange`, `...NotExpirePendingWithinDispatchGrace`, `...NotLetConfirmedBacklogStarvePendingCleanup`; stub de corrida ajustado para o lote em dois cutoffs |
+| `RunnerTransactionRecoveryWatchdogIntegrationTest` | + `...NotFoundOnExchangeWithoutDlq`, `...FoundAliveOnExchange`, `...NotExpirePendingWithinDispatchGrace`, `...NotLetConfirmedBacklogStarvePendingCleanup`, `...NotExpirePendingSellNorReleaseUnrelatedReservedCapital`; stub de corrida ajustado para o lote em dois cutoffs |
 | `RunnerBootRecoveryIntegrationTest` | `recoveryShouldExpireZombie...` → `recoveryShouldQueryVerifyAndExpirePendingBuyNotFoundOnExchange`; + `recoveryShouldReconcilePendingBuyFoundAliveOnExchangeAndKeepReserve`; removido o teste de TTL-grace; removidos asserts de `zombiesCount` e o registro da property `reservation-ttl` |
 | `BootOrchestrator{Observability,DlqOperational,BootMinimum}Test` | Removido o mock `PortfolioReservationTtlUseCase` e a property `ttlProperties` da composição |
 
@@ -101,6 +102,7 @@ Validação: `:core:test` e `:spring-application:test` (suíte completa) — tod
 - **Cancelar ordem viva por idade/TTL global** — anula estratégia; é da **T32** (opt-in por runner, default off).
 - **Verbo `OrderDispatchPort.cancel`** — **T33**.
 - **Carência de TTL para `PENDING` recém-criado** — removida; runtime/boot consultam a exchange antes de expirar (mais correto que a expiração cega). O cutoff do watchdog continua dando folga para ACK atrasado antes da seleção.
+- **Saneamento de `PENDING` SELL órfã (unlock de `Position`) e o release de margem de SELL terminada** — fora de escopo. Há um problema **pré-existente** (boot + conciliação normal): `MarginReleaseBuilder` emite `fullRelease(getTotal())` para qualquer EXPIRED/REJECTED sem distinguir BUY/SELL, e `GlobalBalance.release` subtrai cego do reserved — uma SELL terminada pode liberar reserva de BUYs alheios quando o portfolio tem reservas. T31 apenas **não introduz** esse gatilho em runtime (limpando só BUY); o conserto geral (release type-aware) é uma task própria de contabilidade de capital.
 
 ---
 
@@ -122,6 +124,6 @@ Validação: `:core:test` e `:spring-application:test` (suíte completa) — tod
 5. ✅ Não existe `RuntimeZombieCleanupUseCase`/watchdog/properties dedicados; cobertura de zombie é extensão do recovery.
 6. ✅ Boot não tem mais **nenhuma** expiração-cega: phase3 sem Step 3 **e** phase2 `reservation_ttl` removido; `PENDING` tratado só por query-before-expire (phase3) + watchdog de runtime.
 7. ✅ A política de not-found do runtime é resolvida no engine pelo status **relido imediatamente antes do fallback** (`DERIVE_FROM_STATUS`); promoção concorrente `PENDING→SUBMITTED/PARTIAL` durante a query vira DLQ, não expiração.
-8. ✅ `PENDING` só é elegível no watchdog após `pending-grace-ms` (default 10 min), evitando expirar ordem ainda em dispatch; e tem **budget independente** do backlog de confirmados (não é starvado).
+8. ✅ `PENDING` só é elegível no watchdog após `pending-grace-ms` (default 10 min), evitando expirar ordem ainda em dispatch; tem **budget independente** do backlog de confirmados; e a limpeza é **restrita a BUY** (não expira SELL nem libera margem de reserva alheia).
 9. ⏳ **Adiado** — métrica distinguindo `reconciled_live` de `expired_orphan` com alerta ativo.
 10. ✅ Boot, recovery (`SUBMITTED`/`PARTIAL`) e reconciliação existentes seguem sem regressão (suíte completa verde).
