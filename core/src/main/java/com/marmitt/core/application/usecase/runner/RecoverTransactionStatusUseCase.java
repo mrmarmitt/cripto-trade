@@ -215,6 +215,14 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
         // Relê a ENTIDADE atual (nao so o status): se a linha foi promovida durante a query,
         // o exchangeOrderId fresco precisa ir para a identidade da DLQ — senao um ciclo posterior
         // criaria uma segunda DLQ para a mesma ordem com o exchangeOrderId real.
+        //
+        // Residuo de corrida ACEITO (P2): este re-read ocorre FORA do striped lock da conciliacao.
+        // Uma promocao PENDING->SUBMITTED na janela (re-read .. aquisicao do lock) ainda poderia
+        // expirar uma ordem confirmada. A janela e de ~ms e exige a exchange responder not-found na
+        // query E entregar um fill no mesmo instante (estados contraditorios), apos a carencia de
+        // ~10 min de silencio do PENDING — praticamente impossivel. Bound por tres camadas:
+        // carencia + este re-read + conciliacao idempotente sob lock (fonte da verdade). Tornar
+        // 100% atomico exigiria um caminho de terminacao condicional dentro do lock; adiado.
         Transaction current = strategyRunnerRepository.findTransactionById(transaction.getId())
                 .orElse(transaction);
         return switch (current.getStatus()) {
