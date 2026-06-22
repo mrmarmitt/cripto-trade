@@ -113,6 +113,34 @@ class OrderDispatchAdapterTest {
     }
 
     @Test
+    void cancel_isSkipped_whenDispatchBlocked() {
+        RecordingOrderExecutionPort execution = new RecordingOrderExecutionPort();
+        StubAdapterRepository adapterRepo = new StubAdapterRepository(
+                new StubOrderPort(OrderSubmissionResult.dispatched()), execution) {
+            @Override public boolean isDispatchBlocked(String exchangeName) { return true; }
+        };
+
+        OrderCancelCommand command = new OrderCancelCommand("t01-BUY-001", UUID.randomUUID(), SYMBOL, EXCHANGE);
+        new OrderDispatchAdapter(adapterRepo, new RecordingConciliationPort()).cancel(command);
+
+        assertTrue(execution.canceled.isEmpty(), "blocked exchange must not receive a cancel");
+    }
+
+    @Test
+    void cancel_isNoOp_whenCancelUnsupported() {
+        ExchangeOrderExecutionPort throwing = new ExchangeOrderExecutionPort() {
+            @Override public OrderDataDto submitOrder(SendOrderRequest request) { throw new UnsupportedOperationException(); }
+            @Override public OrderDataDto cancelOrder(SendCancelOrderRequest request) { throw new UnsupportedOperationException(); }
+        };
+        StubAdapterRepository adapterRepo = new StubAdapterRepository(
+                new StubOrderPort(OrderSubmissionResult.dispatched()), throwing);
+
+        OrderCancelCommand command = new OrderCancelCommand("t01-BUY-001", UUID.randomUUID(), SYMBOL, EXCHANGE);
+        // capability anunciada mas cancel nao suportado -> no-op logado, sem propagar excecao.
+        assertDoesNotThrow(() -> new OrderDispatchAdapter(adapterRepo, new RecordingConciliationPort()).cancel(command));
+    }
+
+    @Test
     void cancel_isNoOp_whenOrderExecutionNotAvailable() {
         RecordingConciliationPort conciliation = new RecordingConciliationPort();
         StubAdapterRepository adapterRepo = new StubAdapterRepository(

@@ -66,6 +66,15 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
 
     @Override
     public void cancel(OrderCancelCommand command) {
+        if (exchangeAdapterRepository.isDispatchBlocked(command.exchangeId())) {
+            // Conexao perdida (MARKET/USER_DATA): nao envia o cancel. Com o USER_DATA fora, o
+            // CANCELED poderia nao chegar pelo stream e o estado local ficaria preso (capital/lock).
+            // A estrategia pode reemitir o cancel quando a conexao restabelecer.
+            log.warn("cancel: blocked — connection lost for exchange={} clientOrderId={} — skipping",
+                    command.exchangeId(), command.clientOrderId());
+            return;
+        }
+
         ExchangeAdapterDescriptor adapter = exchangeAdapterRepository
                 .findAdapter(command.exchangeId())
                 .orElseThrow(() -> new IllegalStateException(
@@ -79,8 +88,16 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
 
         // Fire-and-forget: envia o cancelamento; o CANCELED real (e a liberacao de capital) chega
         // pelo stream e e conciliado pelo caminho idempotente. Sem marcacao terminal otimista.
-        adapter.orderExecution().cancelOrder(
-                new SendCancelOrderRequest(command.exchangeId(), command.clientOrderId(), command.symbol()));
+        // A capability pode estar anunciada mas o verbo de cancel ser nao suportado (ex.: Coinbase):
+        // nesse caso, no-op logado em vez de propagar como erro de processamento do runner.
+        try {
+            adapter.orderExecution().cancelOrder(
+                    new SendCancelOrderRequest(command.exchangeId(), command.clientOrderId(), command.symbol()));
+        } catch (UnsupportedOperationException e) {
+            log.warn("cancel: not supported by exchange={} clientOrderId={} — skipping",
+                    command.exchangeId(), command.clientOrderId());
+            return;
+        }
 
         log.debug("cancel: cancel sent — clientOrderId={} exchange={} symbol={} — awaits CANCELED via stream",
                 command.clientOrderId(), command.exchangeId(), command.symbol());
