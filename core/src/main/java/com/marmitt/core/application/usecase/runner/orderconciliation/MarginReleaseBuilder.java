@@ -46,6 +46,13 @@ class MarginReleaseBuilder {
                     "releaseMargin requires a failed terminal status, got: " + status);
         }
 
+        // SELL nao reserva quote (bloqueia uma Position; o capital ja estava no BUY). Terminar
+        // uma SELL deve apenas desbloquear a Position (no TerminationHandler), NUNCA liberar quote
+        // — senao subtrairia do reservedBalance, que pertence a BUYs nao relacionados.
+        if (transaction.isSell()) {
+            return Optional.empty();
+        }
+
         BigDecimal reserved = transaction.getTotal();
 
         if (status == TransactionStatus.REJECTED || status == TransactionStatus.EXPIRED) {

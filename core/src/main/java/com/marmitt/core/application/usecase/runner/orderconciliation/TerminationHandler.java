@@ -29,8 +29,10 @@ import java.util.Optional;
  *       capital que havia sido reservado no momento do BUY.</li>
  * </ol>
  *
- * <p>Transacoes SELL nao tem capital reservado proprio (o capital ja estava na posicao BUY),
- * mas o evento de liberacao ainda e relevante para contabilidade de margem bloqueada.
+ * <p>Transacoes SELL nao tem capital reservado proprio (o capital ja estava na posicao BUY):
+ * o encerramento de uma SELL apenas desbloqueia a Position e <b>nao</b> emite liberacao de
+ * margem (o {@link MarginReleaseBuilder} retorna vazio para SELL), pois subtrair do
+ * reservedBalance liberaria reserva de BUYs nao relacionados.
  *
  * @see MarginReleaseBuilder
  */

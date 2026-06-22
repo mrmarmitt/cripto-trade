@@ -52,19 +52,11 @@ public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactions
                 request.updatedBefore(),
                 request.maxPerRun()
         );
-        // A limpeza de PENDING em runtime tem como objetivo liberar RESERVA ORFA — um conceito
-        // exclusivo de BUY (SELL nao reserva quote; bloqueia uma Position). Expirar um PENDING SELL
-        // pelo terminal fallback generico emitiria um MarginRelease de getTotal() que poderia
-        // liberar reserva de BUYs nao relacionados (GlobalBalance.release subtrai cego do reserved).
-        // Por isso, em runtime, so limpamos PENDING BUY. (Saneamento de SELL orfa — unlock de
-        // Position — fica fora do escopo desta task; o boot ainda o cobre.)
         List<Transaction> pending = strategyRunnerRepository.findByStatusesUpdatedBefore(
                 PENDING_STATUSES,
                 request.pendingUpdatedBefore(),
                 request.maxPerRun()
-        ).stream()
-                .filter(Transaction::isBuy)
-                .toList();
+        );
 
         List<Transaction> candidates = new ArrayList<>(confirmed.size() + pending.size());
         candidates.addAll(confirmed);
