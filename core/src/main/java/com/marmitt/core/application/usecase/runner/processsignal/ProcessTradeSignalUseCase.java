@@ -76,6 +76,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     private final OrderNormalizer orderNormalizer;
     private final BuySignalHandler buySignalHandler;
     private final SellSignalHandler sellSignalHandler;
+    private final CancelSignalHandler cancelSignalHandler;
     private final RunnerExposureService runnerExposureService;
     private final CapitalReservationPolicy capitalReservationPolicy;
 
@@ -97,6 +98,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         this.orderNormalizer = new OrderNormalizer(orderNormalizers);
         this.buySignalHandler = new BuySignalHandler(this.tradeIntentFactory, orderDispatch);
         this.sellSignalHandler = new SellSignalHandler(strategyRunnerRepository, this.tradeIntentFactory, orderDispatch);
+        this.cancelSignalHandler = new CancelSignalHandler(strategyRunnerRepository, orderDispatch);
         this.runnerExposureService = new RunnerExposureService(strategyRunnerRepository);
         this.capitalReservationPolicy = new CapitalReservationPolicy(
                 portfolioRepository, globalBalanceRepository, this.runnerExposureService);
@@ -260,6 +262,19 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         StrategyOutputDto strategyOutput = signalEvaluator.evaluate(runner, activeStrategy.get(), input, context);
         if (signalEvaluator.isHold(strategyOutput)) {
             log.debug("priceUpdate: HOLD signal for runner={} - no action", runner.getId());
+            return;
+        }
+
+        // SHOULD_CANCEL e roteado ANTES do pipeline de trade: nao reserva capital, nao normaliza
+        // quantidade e nao passa pelas guardas BUY/SELL — apenas puxa uma ordem em transito.
+        if (strategyOutput.shouldCancel()) {
+            log.debug("priceUpdate: routing SHOULD_CANCEL runner={} target={}",
+                    runner.getId(), strategyOutput.targetTransactionId());
+            // Re-le o status do runner: o kill-switch/reconciliacao pode ter halted o runner entre
+            // canProcessRunner e o retorno da estrategia. Lanca RunnerHaltedException (capturada em
+            // execute) — mesma semantica de seguranca dos ramos BUY/SELL antes do dispatch.
+            checkRunnerNotHalted(runner.getId());
+            cancelSignalHandler.handle(runner, strategyOutput);
             return;
         }
 

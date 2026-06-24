@@ -6,6 +6,7 @@ import lombok.Builder;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Map;
+import java.util.Objects;
 import java.util.UUID;
 
 @Builder
@@ -15,6 +16,7 @@ public record StrategyOutputDto(
         BigDecimal confidence,    // 0.0 - 1.0
         BigDecimal quantity,      // Quantidade absoluta a ser executada (ex: 0.05 BTC)
         UUID targetLotId,         // null = FIFO, UUID = lot especifico
+        UUID targetTransactionId, // ordem em transito a cancelar (somente SHOULD_CANCEL)
         String reasoning,
         Instant timestamp,
         Map<String, Object> metadata
@@ -22,7 +24,7 @@ public record StrategyOutputDto(
 
     public static StrategyOutputDto hold(String strategyName, String reasoning) {
         return new StrategyOutputDto(strategyName, TradingAction.SHOULD_HOLD,
-                                 BigDecimal.ZERO, BigDecimal.ZERO, null, reasoning,
+                                 BigDecimal.ZERO, BigDecimal.ZERO, null, null, reasoning,
                                  Instant.now(), Map.of());
     }
 
@@ -30,7 +32,7 @@ public record StrategyOutputDto(
                                         BigDecimal quantity, String reasoning) {
         validateTradeParams(confidence, quantity);
         return new StrategyOutputDto(strategyName, TradingAction.SHOULD_BUY,
-                                 confidence, quantity, null, reasoning,
+                                 confidence, quantity, null, null, reasoning,
                                  Instant.now(), Map.of());
     }
 
@@ -38,7 +40,7 @@ public record StrategyOutputDto(
                                          BigDecimal quantity, String reasoning) {
         validateTradeParams(confidence, quantity);
         return new StrategyOutputDto(strategyName, TradingAction.SHOULD_SELL,
-                                 confidence, quantity, null, reasoning,
+                                 confidence, quantity, null, null, reasoning,
                                  Instant.now(), Map.of());
     }
 
@@ -46,7 +48,18 @@ public record StrategyOutputDto(
                                             BigDecimal quantity, UUID targetLotId, String reasoning) {
         validateTradeParams(confidence, quantity);
         return new StrategyOutputDto(strategyName, TradingAction.SHOULD_SELL,
-                                 confidence, quantity, targetLotId, reasoning,
+                                 confidence, quantity, targetLotId, null, reasoning,
+                                 Instant.now(), Map.of());
+    }
+
+    /**
+     * Decisao de cancelar uma ordem em transito. Nao reserva capital nem normaliza quantidade —
+     * apenas identifica o alvo pelo {@code targetTransactionId} (de {@link PendingOrderDto#transactionId}).
+     */
+    public static StrategyOutputDto cancel(String strategyName, UUID targetTransactionId, String reasoning) {
+        Objects.requireNonNull(targetTransactionId, "targetTransactionId required for cancel");
+        return new StrategyOutputDto(strategyName, TradingAction.SHOULD_CANCEL,
+                                 BigDecimal.ZERO, BigDecimal.ZERO, null, targetTransactionId, reasoning,
                                  Instant.now(), Map.of());
     }
 
@@ -65,6 +78,10 @@ public record StrategyOutputDto(
 
     public boolean shouldHold() {
         return decision == TradingAction.SHOULD_HOLD;
+    }
+
+    public boolean shouldCancel() {
+        return decision == TradingAction.SHOULD_CANCEL;
     }
 
     public boolean isHighConfidence() {
