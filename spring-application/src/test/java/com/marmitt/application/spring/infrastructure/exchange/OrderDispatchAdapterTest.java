@@ -186,6 +186,29 @@ class OrderDispatchAdapterTest {
         assertEquals(1, execution.canceled.size(), "blocked no-op must not consume the de-dup slot");
     }
 
+    @Test
+    void cancel_releasesDeDupSlot_whenCancelUnsupported() {
+        List<SendCancelOrderRequest> sent = new ArrayList<>();
+        int[] calls = {0};
+        ExchangeOrderExecutionPort flaky = new ExchangeOrderExecutionPort() {
+            @Override public OrderDataDto submitOrder(SendOrderRequest request) { throw new UnsupportedOperationException(); }
+            @Override public OrderDataDto cancelOrder(SendCancelOrderRequest request) {
+                if (calls[0]++ == 0) { throw new UnsupportedOperationException(); }
+                sent.add(request);
+                return null;
+            }
+        };
+        StubAdapterRepository adapterRepo = new StubAdapterRepository(
+                new StubOrderPort(OrderSubmissionResult.dispatched()), flaky);
+        OrderDispatchAdapter adapter = new OrderDispatchAdapter(adapterRepo, new RecordingConciliationPort());
+        OrderCancelCommand command = new OrderCancelCommand("t01-BUY-001", UUID.randomUUID(), SYMBOL, EXCHANGE);
+
+        adapter.cancel(command); // unsupported -> reserva e LIBERA o slot
+        adapter.cancel(command); // mesma ordem -> tenta de novo (slot livre) e envia
+
+        assertEquals(1, sent.size(), "unsupported no-op must release the de-dup slot for retry");
+    }
+
     // ---- stubs ----
 
     static class RecordingConciliationPort implements OrderConciliationPort {

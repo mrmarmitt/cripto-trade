@@ -98,12 +98,14 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
             return;
         }
 
-        // De-dup: nao reenvia o mesmo cancel dentro da janela de cooldown (marca gravada so apos envio real).
+        // De-dup ATOMICO: reserva a janela ANTES do envio (putIfAbsent), para que dois ticks
+        // concorrentes da mesma ordem nao enviem ambos. A reserva e LIBERADA se o envio nao
+        // ocorrer (unsupported/falha tecnica), para nao bloquear um retry legitimo apos um no-op.
         Instant now = Instant.now();
         recentCancelByClientOrderId.entrySet().removeIf(
                 e -> Duration.between(e.getValue(), now).compareTo(CANCEL_COOLDOWN) >= 0);
-        if (recentCancelByClientOrderId.containsKey(command.clientOrderId())) {
-            log.debug("cancel: already sent recently for clientOrderId={} (cooldown) — skipping duplicate",
+        if (recentCancelByClientOrderId.putIfAbsent(command.clientOrderId(), now) != null) {
+            log.debug("cancel: already in-flight for clientOrderId={} (cooldown) — skipping duplicate",
                     command.clientOrderId());
             return;
         }
@@ -111,18 +113,20 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
         // Fire-and-forget: envia o cancelamento; o CANCELED real (e a liberacao de capital) chega
         // pelo stream e e conciliado pelo caminho idempotente. Sem marcacao terminal otimista.
         // A capability pode estar anunciada mas o verbo de cancel ser nao suportado (ex.: Coinbase):
-        // nesse caso, no-op logado em vez de propagar como erro de processamento do runner.
+        // nesse caso, no-op logado e a reserva e liberada (sem propagar como erro de runner).
         try {
             adapter.orderExecution().cancelOrder(
                     new SendCancelOrderRequest(command.exchangeId(), command.clientOrderId(), command.symbol()));
         } catch (UnsupportedOperationException e) {
+            recentCancelByClientOrderId.remove(command.clientOrderId(), now);
             log.warn("cancel: not supported by exchange={} clientOrderId={} — skipping",
                     command.exchangeId(), command.clientOrderId());
             return;
+        } catch (RuntimeException e) {
+            recentCancelByClientOrderId.remove(command.clientOrderId(), now);
+            throw e;
         }
 
-        // Marca o cooldown APENAS apos o envio real bem-sucedido.
-        recentCancelByClientOrderId.put(command.clientOrderId(), now);
         log.debug("cancel: cancel sent — clientOrderId={} exchange={} symbol={} — awaits CANCELED via stream",
                 command.clientOrderId(), command.exchangeId(), command.symbol());
     }
