@@ -34,7 +34,7 @@ public class MarginReleasedReaction {
     public void handle(MarginReleaseEvent event) {
         MarginRelease release = event.release();
         if (!idempotencyPort.tryRegisterMarginRelease(release.transactionId())) {
-            log.debug("marginReleasedReaction: duplicate event ignored transactionId={}", release.transactionId());
+            log.info("marginReleasedReaction: duplicate ignored transactionId={}", release.transactionId());
             return;
         }
 

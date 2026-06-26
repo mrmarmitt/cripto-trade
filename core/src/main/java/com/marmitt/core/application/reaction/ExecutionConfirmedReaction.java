@@ -51,7 +51,7 @@ public class ExecutionConfirmedReaction {
         ExecutionConfirmation confirmation = event.confirmation();
 
         if (!idempotencyPort.tryRegisterExecutionConfirmed(confirmation.matchId())) {
-            log.debug("executionConfirmedReaction: duplicate event ignored matchId={} transactionId={}",
+            log.info("executionConfirmedReaction: duplicate ignored matchId={} transactionId={}",
                     confirmation.matchId(), confirmation.transactionId());
             return;
         }

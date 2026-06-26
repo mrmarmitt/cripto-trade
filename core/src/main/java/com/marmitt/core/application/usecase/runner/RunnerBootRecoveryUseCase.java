@@ -400,6 +400,8 @@ public class RunnerBootRecoveryUseCase {
             ctx.error("Step 6 ERROR: unresolved DLQ entries found for runner/portfolio"
                     + " runnerId=" + ctx.runnerId()
                     + " portfolioId=" + latestRunner.getPortfolioId());
+            log.warn("bootRecovery: runner halted runnerId={} reason=DLQ_PENDING portfolioId={}",
+                    ctx.runnerId(), latestRunner.getPortfolioId());
         }
 
         if (!ctx.hasErrors()) {

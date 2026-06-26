@@ -24,6 +24,7 @@ import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.exchange.rest.OrderQuantityNormalizerPort;
+import com.marmitt.core.ports.outbound.metrics.SignalMetricsPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
@@ -128,7 +129,8 @@ public class RunnerConfig {
             PortfolioRepositoryPort portfolioRepository,
             OrderDispatchPort orderDispatch,
             OrderConciliationPort orderConciliation,
-            List<OrderQuantityNormalizerPort> orderNormalizers) {
+            List<OrderQuantityNormalizerPort> orderNormalizers,
+            SignalMetricsPort signalMetrics) {
 
         return new ProcessTradeSignalUseCase(
                 strategyRunnerRepository,
@@ -137,7 +139,8 @@ public class RunnerConfig {
                 portfolioRepository,
                 orderDispatch,
                 orderConciliation,
-                orderNormalizers) {
+                orderNormalizers,
+                signalMetrics) {
 
             @Override
             public void transactionalPersistBuyAndReserve(BuyExecutionContext context) {

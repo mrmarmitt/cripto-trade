@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.handler;
 
+import com.marmitt.application.spring.metrics.WebSocketConnectionStateGauge;
 import com.marmitt.core.application.handler.connection.ConnectionLostOrderDispatchGuard;
 import com.marmitt.core.dto.events.*;
 import com.marmitt.core.dto.exchange.command.PostConnectionCommandResult;
@@ -24,6 +25,7 @@ public class ConnectionStateEventListener {
     private final ConnectionDisconnectedPort handleConnectionDisconnectedPort;
     private final ConnectionLostOrderDispatchGuard dispatchGuard;
     private final ApplicationEventPublisher eventPublisher;
+    private final WebSocketConnectionStateGauge connectionStateGauge;
 
     public ConnectionStateEventListener(
             ConnectionEstablishedPort handleConnectionEstablishedPort,
@@ -34,7 +36,8 @@ public class ConnectionStateEventListener {
             ConnectionClosingPort handleConnectionClosingPort,
             ConnectionDisconnectedPort handleConnectionDisconnectedPort,
             ConnectionLostOrderDispatchGuard dispatchGuard,
-            ApplicationEventPublisher eventPublisher) {
+            ApplicationEventPublisher eventPublisher,
+            WebSocketConnectionStateGauge connectionStateGauge) {
 
         this.handleConnectionEstablishedPort = handleConnectionEstablishedPort;
         this.handlePostConnectionEstablishedPort = handlePostConnectionEstablishedPort;
@@ -45,10 +48,12 @@ public class ConnectionStateEventListener {
         this.handleConnectionDisconnectedPort = handleConnectionDisconnectedPort;
         this.dispatchGuard = dispatchGuard;
         this.eventPublisher = eventPublisher;
+        this.connectionStateGauge = connectionStateGauge;
     }
 
     @EventListener
     public void handleConnectionEstablished(WebSocketConnectedEvent event) {
+        connectionStateGauge.markConnected(event.exchange(), event.channel());
         handleConnectionEstablishedPort.execute(event);
         PostConnectionCommandResult result = handlePostConnectionEstablishedPort.execute(event);
         if (!result.success() && event.channel() == StreamChannel.USER_DATA) {
@@ -67,6 +72,7 @@ public class ConnectionStateEventListener {
 
     @EventListener
     public void handleConnectionFailed(WebSocketFailedEvent event) {
+        connectionStateGauge.markDisconnected(event.exchange(), event.channel());
         dispatchGuard.onConnectionFailed(event);
         if (event.isCritical()) {
             handleCriticalConnectionFailedPort.execute(event);
@@ -77,6 +83,7 @@ public class ConnectionStateEventListener {
 
     @EventListener
     public void handleConnectionClosed(WebSocketClosedEvent event) {
+        connectionStateGauge.markDisconnected(event.exchange(), event.channel());
         handleConnectionClosedPort.execute(event);
         dispatchGuard.onConnectionClosed(event);
     }
@@ -88,6 +95,7 @@ public class ConnectionStateEventListener {
 
     @EventListener
     public void handleConnectionDisconnected(WebSocketDisconnectedEvent event) {
+        connectionStateGauge.markDisconnected(event.exchange(), event.channel());
         handleConnectionDisconnectedPort.execute(event);
     }
 }
