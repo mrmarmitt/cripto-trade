@@ -40,6 +40,11 @@ out/
 ### Aplication ###
 logs
 
+### Secrets / env ###
+.env
+.env.*
+!.env.example
+
 ### IA ###
 nul
 .claude/settings.local.json
