@@ -109,10 +109,13 @@ Para distinguir despacho de rejeicao sem efeito colateral escondido, `BuySignalH
 orquestrador. Catalogo de indicadores/alertas em `/.ai/monitoring-spec.md`.
 
 **Rastreamento end-to-end (T26):** ao materializar a transacao, o orquestrador ancora o
-`transactionId` no MDC e emite `signal: transaction created transactionId={} correlationId={}
-runnerId={} side={}`. O `correlationId` (do tick, herdado do MDC) cria o "join" tick→transacao;
-o `transactionId` no MDC propaga para as linhas de capital/dispatch e e o eixo da query
-`{app="ctrade"} | json | transactionId="X"` no Loki.
+`transactionId` no MDC (escopo cobre todo o handler) e, **apenas quando a transacao e
+persistida e despachada** (outcome `DISPATCHED`), emite `signal: transaction created
+transactionId={} correlationId={} runnerId={} side={}`. Sinais descartados antes do commit
+(BUY recusado por capital, SELL sem posicao, falha de lock com rollback) nao emitem o log de
+criacao — evita transacao fantasma na query do Loki. O `correlationId` (do tick, herdado do
+MDC) cria o "join" tick→transacao; o `transactionId` e o eixo da query
+`{app="ctrade"} | json | transactionId="X"`.
 
 ## Validacao
 

@@ -166,8 +166,12 @@ Divergências e decisões confirmadas no momento da entrega:
   desacoplamento real.
 - **Log de criação centralizado:** o log `signal: transaction created ... correlationId=...`
   ficou no `ProcessTradeSignalUseCase` (não em `Buy/SellSignalHandler`, como sugeria a spec).
-  É o ponto único que conhece o `side`, dispara para toda transação materializada (inclusive
-  BUY recusado por capital) e ancora o `transactionId` no MDC para as linhas de capital/dispatch.
+  É o ponto único que conhece o `side` e ancora o `transactionId` no MDC para as linhas de
+  capital/dispatch. O log de criação só é emitido no **outcome `DISPATCHED`** (transação
+  persistida e ordem despachada) — sinais descartados antes do commit (BUY recusado por capital,
+  SELL sem posição, falha de lock que faz rollback do `TransactionTemplate`) **não** emitem o log,
+  para a query do Loki não retornar transações fantasma (ajuste de review do PR #131). O escopo do
+  MDC, porém, cobre todo o handler, então os logs de rejeição permanecem rastreáveis pelo id.
 - **Acessores reais dos eventos:** a spec usa `event.transactionId()`; os eventos expõem o id
   via `confirmation().transactionId()` (`ExecutionConfirmedEvent`) e `release().transactionId()`
   (`MarginReleaseEvent`).

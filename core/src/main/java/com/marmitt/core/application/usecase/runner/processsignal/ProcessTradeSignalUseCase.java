@@ -316,17 +316,14 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         Transaction transaction = tradeIntentFactory.buildTransaction(
                 runner, signal, normalized.quantity(), normalized.price());
 
-        // T26: ancora transactionId no MDC a partir da materializacao da transacao, para que TODOS
-        // os logs desta operacao (criacao, capital reserved, dispatch) sejam recuperaveis no Loki via
-        // `| json | transactionId="X"`. O log de criacao registra o correlationId do tick (do MDC),
-        // criando o "join" tick -> transacao que reconstroi a historia ponta a ponta.
-        // Ponto de entrada de topo (vem do tick, sem transactionId previo no MDC): put/remove simples.
+        // T26: ancora transactionId no MDC a partir da materializacao da transacao, para que os logs
+        // desta operacao sejam recuperaveis no Loki via `| json | transactionId="X"`. O escopo do MDC
+        // cobre todo o handler (inclusive caminhos de rejeicao) para diagnostico; mas o log de CRIACAO
+        // so e emitido quando a transacao foi de fato persistida e despachada (outcome DISPATCHED) —
+        // senao anunciaria uma transacao fantasma para sinais descartados antes do commit (BUY recusado
+        // por capital, SELL sem posicao, falha de lock que faz rollback do TransactionTemplate).
         MDC.put("transactionId", transaction.getId().toString());
         try {
-            log.info("signal: transaction created transactionId={} correlationId={} runnerId={} side={}",
-                    transaction.getId(), MDC.get("correlationId"), runner.getId(),
-                    transaction.isBuy() ? "BUY" : "SELL");
-
             if (transaction.isBuy()) {
                 BigDecimal precomputedExposure = exposureSnapshot != null
                         ? exposureSnapshot.inFlightExposure()
@@ -336,6 +333,9 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                 BuySignalHandler.BuyOutcome outcome = buySignalHandler.handle(buyContext,
                         this::transactionalPersistBuyAndReserve,
                         this::checkRunnerNotHalted, this::expirePendingBuy);
+                if (outcome == BuySignalHandler.BuyOutcome.DISPATCHED) {
+                    logTransactionCreated(transaction, runner);
+                }
                 signalMetrics.recordSignalEvaluated(runner.getId(),
                         outcome == BuySignalHandler.BuyOutcome.DISPATCHED
                                 ? SignalDecision.BUY
@@ -344,6 +344,9 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                 SellSignalHandler.SellOutcome outcome = sellSignalHandler.handle(runner, signal, transaction,
                         this::transactionalPersistSellAndLockPosition, this::checkRunnerNotHalted,
                         this::expirePendingSell);
+                if (outcome == SellSignalHandler.SellOutcome.DISPATCHED) {
+                    logTransactionCreated(transaction, runner);
+                }
                 // NO_OPEN_POSITION tambem e registrado (REJECTED_NO_POSITION): um runner que recebe
                 // ticks e tenta vender sem inventario nao pode parecer "avaliacao parada" no monitoramento.
                 signalMetrics.recordSignalEvaluated(runner.getId(),
@@ -354,6 +357,17 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         } finally {
             MDC.remove("transactionId");
         }
+    }
+
+    /**
+     * Emite o log sentinel de criacao de transacao (T26), que registra o {@code correlationId} do
+     * tick (do MDC) ao lado do {@code transactionId} — o "join" tick -> transacao para o Loki.
+     * Chamado apenas no caminho de sucesso (transacao persistida e ordem despachada).
+     */
+    private void logTransactionCreated(Transaction transaction, StrategyRunner runner) {
+        log.info("signal: transaction created transactionId={} correlationId={} runnerId={} side={}",
+                transaction.getId(), MDC.get("correlationId"), runner.getId(),
+                transaction.isBuy() ? "BUY" : "SELL");
     }
 
 }
