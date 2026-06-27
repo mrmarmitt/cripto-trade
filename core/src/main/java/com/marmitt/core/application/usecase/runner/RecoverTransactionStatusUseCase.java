@@ -18,6 +18,7 @@ import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -57,6 +58,20 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
 
     RecoverTransactionStatusResponse execute(RecoverTransactionStatusRequest request,
                                              OrderQueryOperation orderQueryOperation) {
+        // T26: ancora o transactionId no MDC durante todo o recovery de uma transacao. Watchdog
+        // (RecoverStaleTransactionsUseCase) e boot (RunnerBootRecoveryUseCase.step4ReconcileLimbo)
+        // passam por este metodo, e a conciliacao chamada abaixo herda o escopo — ponto unico
+        // por-transacao, sem duplicar a logica de MDC nos dois loops chamadores.
+        MDC.put("transactionId", request.transactionId().toString());
+        try {
+            return doExecute(request, orderQueryOperation);
+        } finally {
+            MDC.remove("transactionId");
+        }
+    }
+
+    private RecoverTransactionStatusResponse doExecute(RecoverTransactionStatusRequest request,
+                                                       OrderQueryOperation orderQueryOperation) {
         Transaction transaction = strategyRunnerRepository.findTransactionById(request.transactionId()).orElse(null);
         if (transaction == null) {
             return RecoverTransactionStatusResponse.failed(

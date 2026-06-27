@@ -136,7 +136,7 @@ Retorna o tick original que originou o sinal.
 | Arquivo | Mudança |
 |---|---|
 | `spring-application/.../handler/CapitalEventListener.java` | MDC `transactionId` no consumo de `ExecutionConfirmedEvent` e `MarginReleaseEvent` |
-| `core/.../usecase/runner/RecoverStaleTransactionsUseCase.java` | MDC `transactionId` por transação no loop do watchdog |
+| `core/.../usecase/runner/RecoverTransactionStatusUseCase.java` | MDC `transactionId` no `execute` (engine por-transação compartilhado por watchdog e boot) |
 | `core/.../usecase/runner/processsignal/BuySignalHandler.java` | Log de criação inclui `correlationId` do MDC |
 | `core/.../usecase/runner/processsignal/SellSignalHandler.java` | Log de criação inclui `correlationId` do MDC |
 | `spring-application/.../config/logback/ConditionalMDCConverter.java` | Adicionar `transactionId` ao padrão de log |
@@ -175,9 +175,18 @@ Divergências e decisões confirmadas no momento da entrega:
 - **Acessores reais dos eventos:** a spec usa `event.transactionId()`; os eventos expõem o id
   via `confirmation().transactionId()` (`ExecutionConfirmedEvent`) e `release().transactionId()`
   (`MarginReleaseEvent`).
-- **Save/restore do MDC:** onde a conciliação pode rodar aninhada (watchdog→recover), o
+- **MDC do recovery no engine, não nos loops:** em vez de setar o MDC no loop do watchdog
+  (`RecoverStaleTransactionsUseCase`) e duplicar no loop do boot
+  (`RunnerBootRecoveryUseCase.step4ReconcileLimbo`), o `transactionId` é ancorado dentro de
+  `RecoverTransactionStatusUseCase.execute` — a unidade por-transação por onde **ambos** os loops
+  passam. Um ponto só, consistente entre runtime e boot, cobrindo o recovery e a conciliação de
+  cada transação. Trade-off: os logs de *resumo de falha* emitidos no loop, após o `execute`
+  retornar (`runtimeRecoveryBatch: failed ...`, `bootRecovery: failed to reconcile limbo ...`),
+  ficam fora do escopo do MDC, mas já carregam `transactionId` no texto da mensagem.
+- **Save/restore do MDC:** onde a conciliação pode rodar aninhada (sob o engine de recovery), o
   `transactionId` é salvo e restaurado em vez de simplesmente removido, evitando perder o
-  vínculo do escopo externo.
+  vínculo do escopo externo. A conciliação também é chamada direto pelo callback WebSocket
+  (sem escopo externo), onde o save/restore equivale a um remove simples.
 - **Item 5 (DLQ):** `CAPITAL_DLQ_PERSISTED` passou a carregar `transactionId` automaticamente —
   o caminho `@Recover` agora seta o MDC, então o id vira campo JSON no Loki sem mudar a mensagem.
 - **Testes:** o test runtime do `:core` ganhou binding `logback-classic` (sem binding o

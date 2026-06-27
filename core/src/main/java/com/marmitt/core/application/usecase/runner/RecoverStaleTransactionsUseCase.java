@@ -9,7 +9,6 @@ import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.ports.inbound.runner.RecoverStaleTransactionsPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -69,14 +68,13 @@ public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactions
         int failed = 0;
 
         for (Transaction candidate : candidates) {
-            // T26: ancora os logs desta transacao (e do engine de recovery chamado abaixo) ao
-            // transactionId no MDC, para rastreamento end-to-end via Loki.
-            MDC.put("transactionId", candidate.getId().toString());
             try {
                 // A politica de not-found e resolvida dentro do engine pelo status RECARREGADO
                 // (forRuntimeWatchdog -> DERIVE_FROM_STATUS), nunca pelo status do snapshot do lote:
                 // se a linha virou SUBMITTED/PARTIAL entre a selecao e o execute, o not-found vira
                 // DLQ (e nao expiracao indevida de ordem ja confirmada).
+                // O escopo de MDC transactionId (T26) vive dentro de RecoverTransactionStatusUseCase,
+                // cobrindo o recovery e a conciliacao de cada transacao tanto aqui quanto no boot.
                 RecoverTransactionStatusResponse response = recoverTransactionStatusUseCase.execute(
                         RecoverTransactionStatusRequest.forRuntimeWatchdog(candidate.getId()));
 
@@ -100,8 +98,6 @@ public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactions
             } catch (RuntimeException e) {
                 failed++;
                 log.error("runtimeRecoveryBatch: unexpected failure transactionId={}", candidate.getId(), e);
-            } finally {
-                MDC.remove("transactionId");
             }
         }
 
