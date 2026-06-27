@@ -327,9 +327,12 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
             SellSignalHandler.SellOutcome outcome = sellSignalHandler.handle(runner, signal, transaction,
                     this::transactionalPersistSellAndLockPosition, this::checkRunnerNotHalted,
                     this::expirePendingSell);
-            if (outcome == SellSignalHandler.SellOutcome.DISPATCHED) {
-                signalMetrics.recordSignalEvaluated(runner.getId(), SignalDecision.SELL);
-            }
+            // NO_OPEN_POSITION tambem e registrado (REJECTED_NO_POSITION): um runner que recebe
+            // ticks e tenta vender sem inventario nao pode parecer "avaliacao parada" no monitoramento.
+            signalMetrics.recordSignalEvaluated(runner.getId(),
+                    outcome == SellSignalHandler.SellOutcome.DISPATCHED
+                            ? SignalDecision.SELL
+                            : SignalDecision.REJECTED_NO_POSITION);
         }
     }
 

@@ -396,12 +396,11 @@ public class RunnerBootRecoveryUseCase {
         boolean hasRunnerScopedDlq = deadLetterEntryRepository.existsUnresolvedByRunnerId(ctx.runnerId());
         boolean hasPortfolioUnscopedDlq = deadLetterEntryRepository
                 .existsUnresolvedByPortfolioIdAndRunnerIsNull(latestRunner.getPortfolioId());
-        if (hasRunnerScopedDlq || hasPortfolioUnscopedDlq) {
+        boolean dlqPending = hasRunnerScopedDlq || hasPortfolioUnscopedDlq;
+        if (dlqPending) {
             ctx.error("Step 6 ERROR: unresolved DLQ entries found for runner/portfolio"
                     + " runnerId=" + ctx.runnerId()
                     + " portfolioId=" + latestRunner.getPortfolioId());
-            log.warn("bootRecovery: runner halted runnerId={} reason=DLQ_PENDING portfolioId={}",
-                    ctx.runnerId(), latestRunner.getPortfolioId());
         }
 
         if (!ctx.hasErrors()) {
@@ -425,6 +424,13 @@ public class RunnerBootRecoveryUseCase {
             latestRunner.halt();
             strategyRunnerRepository.save(latestRunner);
             ctx.note("Step 6: runner moved ACTIVE->HALTED due to reconciliation errors.");
+            // Sentinel emitido apenas quando este step de fato halta o runner por DLQ pendente,
+            // para o alerta #alerts-error nao disparar em runners nao-ACTIVE (CREATED/INITIALIZING)
+            // ou em halts motivados por outros erros de reconciliacao.
+            if (dlqPending) {
+                log.warn("bootRecovery: runner halted runnerId={} reason=DLQ_PENDING portfolioId={}",
+                        ctx.runnerId(), latestRunner.getPortfolioId());
+            }
             return;
         }
 

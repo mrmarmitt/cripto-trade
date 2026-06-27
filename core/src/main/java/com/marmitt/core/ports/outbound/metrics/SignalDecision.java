@@ -14,5 +14,6 @@ public enum SignalDecision {
     SELL,
     CANCEL,
     REJECTED_CAPITAL,
-    REJECTED_LOCK
+    REJECTED_LOCK,
+    REJECTED_NO_POSITION
 }
