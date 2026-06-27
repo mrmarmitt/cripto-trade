@@ -112,10 +112,10 @@ Logs sentinel relevantes (T23 G3/G4):
 
 Catalogo completo de indicadores/alertas em `/.ai/monitoring-spec.md`.
 
-**Rastreamento end-to-end (T26):** o recovery por transacao do `step4ReconcileLimbo` passa pelo
-`RecoverTransactionStatusUseCase.execute`, que ancora o `transactionId` no MDC durante toda a
-operacao (mesma unidade compartilhada com o watchdog de runtime). Assim, os logs de recovery e a
-conciliacao de cada transacao no boot ficam recuperaveis via `| json | transactionId="X"` no Loki.
+**Rastreamento end-to-end (T26):** o loop de `step4ReconcileLimbo` ancora o `transactionId` no MDC
+por transacao processada (simetrico ao watchdog de runtime). Cobre o recovery e a conciliacao
+chamados abaixo **e** os logs de erro do proprio loop (`bootRecovery: failed to reconcile limbo
+...`), que rodam apos o engine retornar — deixando-os recuperaveis via `| json | transactionId="X"`.
 
 ## Componentes Principais
 

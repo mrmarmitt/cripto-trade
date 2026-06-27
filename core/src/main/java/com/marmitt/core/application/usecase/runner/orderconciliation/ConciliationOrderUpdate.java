@@ -111,6 +111,14 @@ public class ConciliationOrderUpdate {
                 default -> log.warn("orderConciliation: unexpected status={} for clientOrderId={}",
                         orderData.status(), clientOrderId);
             }
+        } catch (RuntimeException e) {
+            // T26: loga a falha AINDA dentro do escopo do transactionId. Os chamadores externos
+            // (ex.: ProcessMessageHandler "Error notifying OrderUpdateListener") so conhecem o
+            // clientOrderId — sem este log, a falha de conciliacao ficaria fora da query
+            // `| json | transactionId="X"`.
+            log.error("orderConciliation: failed transactionId={} clientOrderId={} status={} - {}",
+                    transaction.getId(), clientOrderId, orderData.status(), e.getMessage(), e);
+            throw e;
         } finally {
             restoreTransactionId(previousTransactionId);
         }

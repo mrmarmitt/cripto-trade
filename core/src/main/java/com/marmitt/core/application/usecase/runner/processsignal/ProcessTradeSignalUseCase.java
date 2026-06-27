@@ -255,6 +255,11 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
             } catch (Exception e) {
                 log.error("priceUpdate: error processing runner={} symbol={} - {}",
                         runner.getId(), symbol, e.getMessage(), e);
+            } finally {
+                // T26: limpa o transactionId por-runner. Mantê-lo setado ate aqui garante que os
+                // catches acima (ex.: falha de dispatch apos o commit da transacao) carreguem o
+                // transactionId no log de erro — eles rodam fora do escopo de processTradeSignal.
+                MDC.remove("transactionId");
             }
         }
     }
@@ -316,46 +321,43 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         Transaction transaction = tradeIntentFactory.buildTransaction(
                 runner, signal, normalized.quantity(), normalized.price());
 
-        // T26: ancora transactionId no MDC a partir da materializacao da transacao, para que os logs
-        // desta operacao sejam recuperaveis no Loki via `| json | transactionId="X"`. O escopo do MDC
-        // cobre todo o handler (inclusive caminhos de rejeicao) para diagnostico; mas o log de CRIACAO
-        // so e emitido quando a transacao foi de fato persistida e despachada (outcome DISPATCHED) —
-        // senao anunciaria uma transacao fantasma para sinais descartados antes do commit (BUY recusado
-        // por capital, SELL sem posicao, falha de lock que faz rollback do TransactionTemplate).
+        // T26: ancora transactionId no MDC ao materializar a transacao, para que os logs desta
+        // operacao sejam recuperaveis no Loki via `| json | transactionId="X"`. A limpeza (remove)
+        // ocorre no finally por-runner de execute() — assim, um erro tardio (ex.: falha de dispatch
+        // apos o commit) capturado la fora ainda carrega o transactionId. O log de CRIACAO so e
+        // emitido quando a transacao foi de fato persistida e despachada (outcome DISPATCHED) — senao
+        // anunciaria uma transacao fantasma para sinais descartados antes do commit (BUY recusado por
+        // capital, SELL sem posicao, falha de lock que faz rollback do TransactionTemplate).
         MDC.put("transactionId", transaction.getId().toString());
-        try {
-            if (transaction.isBuy()) {
-                BigDecimal precomputedExposure = exposureSnapshot != null
-                        ? exposureSnapshot.inFlightExposure()
-                        : null;
-                BuyExecutionContext buyContext = tradeIntentFactory
-                        .buildBuyExecutionContext(runner, transaction, precomputedExposure);
-                BuySignalHandler.BuyOutcome outcome = buySignalHandler.handle(buyContext,
-                        this::transactionalPersistBuyAndReserve,
-                        this::checkRunnerNotHalted, this::expirePendingBuy);
-                if (outcome == BuySignalHandler.BuyOutcome.DISPATCHED) {
-                    logTransactionCreated(transaction, runner);
-                }
-                signalMetrics.recordSignalEvaluated(runner.getId(),
-                        outcome == BuySignalHandler.BuyOutcome.DISPATCHED
-                                ? SignalDecision.BUY
-                                : SignalDecision.REJECTED_CAPITAL);
-            } else {
-                SellSignalHandler.SellOutcome outcome = sellSignalHandler.handle(runner, signal, transaction,
-                        this::transactionalPersistSellAndLockPosition, this::checkRunnerNotHalted,
-                        this::expirePendingSell);
-                if (outcome == SellSignalHandler.SellOutcome.DISPATCHED) {
-                    logTransactionCreated(transaction, runner);
-                }
-                // NO_OPEN_POSITION tambem e registrado (REJECTED_NO_POSITION): um runner que recebe
-                // ticks e tenta vender sem inventario nao pode parecer "avaliacao parada" no monitoramento.
-                signalMetrics.recordSignalEvaluated(runner.getId(),
-                        outcome == SellSignalHandler.SellOutcome.DISPATCHED
-                                ? SignalDecision.SELL
-                                : SignalDecision.REJECTED_NO_POSITION);
+        if (transaction.isBuy()) {
+            BigDecimal precomputedExposure = exposureSnapshot != null
+                    ? exposureSnapshot.inFlightExposure()
+                    : null;
+            BuyExecutionContext buyContext = tradeIntentFactory
+                    .buildBuyExecutionContext(runner, transaction, precomputedExposure);
+            BuySignalHandler.BuyOutcome outcome = buySignalHandler.handle(buyContext,
+                    this::transactionalPersistBuyAndReserve,
+                    this::checkRunnerNotHalted, this::expirePendingBuy);
+            if (outcome == BuySignalHandler.BuyOutcome.DISPATCHED) {
+                logTransactionCreated(transaction, runner);
             }
-        } finally {
-            MDC.remove("transactionId");
+            signalMetrics.recordSignalEvaluated(runner.getId(),
+                    outcome == BuySignalHandler.BuyOutcome.DISPATCHED
+                            ? SignalDecision.BUY
+                            : SignalDecision.REJECTED_CAPITAL);
+        } else {
+            SellSignalHandler.SellOutcome outcome = sellSignalHandler.handle(runner, signal, transaction,
+                    this::transactionalPersistSellAndLockPosition, this::checkRunnerNotHalted,
+                    this::expirePendingSell);
+            if (outcome == SellSignalHandler.SellOutcome.DISPATCHED) {
+                logTransactionCreated(transaction, runner);
+            }
+            // NO_OPEN_POSITION tambem e registrado (REJECTED_NO_POSITION): um runner que recebe
+            // ticks e tenta vender sem inventario nao pode parecer "avaliacao parada" no monitoramento.
+            signalMetrics.recordSignalEvaluated(runner.getId(),
+                    outcome == SellSignalHandler.SellOutcome.DISPATCHED
+                            ? SignalDecision.SELL
+                            : SignalDecision.REJECTED_NO_POSITION);
         }
     }
 

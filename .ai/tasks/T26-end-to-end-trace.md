@@ -136,7 +136,8 @@ Retorna o tick original que originou o sinal.
 | Arquivo | Mudança |
 |---|---|
 | `spring-application/.../handler/CapitalEventListener.java` | MDC `transactionId` no consumo de `ExecutionConfirmedEvent` e `MarginReleaseEvent` |
-| `core/.../usecase/runner/RecoverTransactionStatusUseCase.java` | MDC `transactionId` no `execute` (engine por-transação compartilhado por watchdog e boot) |
+| `core/.../usecase/runner/RecoverStaleTransactionsUseCase.java` | MDC `transactionId` por candidato no loop do watchdog |
+| `core/.../usecase/runner/RunnerBootRecoveryUseCase.java` | MDC `transactionId` por candidato no loop do boot (`step4ReconcileLimbo`) |
 | `core/.../usecase/runner/processsignal/BuySignalHandler.java` | Log de criação inclui `correlationId` do MDC |
 | `core/.../usecase/runner/processsignal/SellSignalHandler.java` | Log de criação inclui `correlationId` do MDC |
 | `spring-application/.../config/logback/ConditionalMDCConverter.java` | Adicionar `transactionId` ao padrão de log |
@@ -175,18 +176,24 @@ Divergências e decisões confirmadas no momento da entrega:
 - **Acessores reais dos eventos:** a spec usa `event.transactionId()`; os eventos expõem o id
   via `confirmation().transactionId()` (`ExecutionConfirmedEvent`) e `release().transactionId()`
   (`MarginReleaseEvent`).
-- **MDC do recovery no engine, não nos loops:** em vez de setar o MDC no loop do watchdog
-  (`RecoverStaleTransactionsUseCase`) e duplicar no loop do boot
-  (`RunnerBootRecoveryUseCase.step4ReconcileLimbo`), o `transactionId` é ancorado dentro de
-  `RecoverTransactionStatusUseCase.execute` — a unidade por-transação por onde **ambos** os loops
-  passam. Um ponto só, consistente entre runtime e boot, cobrindo o recovery e a conciliação de
-  cada transação. Trade-off: os logs de *resumo de falha* emitidos no loop, após o `execute`
-  retornar (`runtimeRecoveryBatch: failed ...`, `bootRecovery: failed to reconcile limbo ...`),
-  ficam fora do escopo do MDC, mas já carregam `transactionId` no texto da mensagem.
-- **Save/restore do MDC:** onde a conciliação pode rodar aninhada (sob o engine de recovery), o
-  `transactionId` é salvo e restaurado em vez de simplesmente removido, evitando perder o
-  vínculo do escopo externo. A conciliação também é chamada direto pelo callback WebSocket
-  (sem escopo externo), onde o save/restore equivale a um remove simples.
+- **MDC do recovery nos loops chamadores, não no engine:** o `transactionId` é ancorado nos loops
+  do watchdog (`RecoverStaleTransactionsUseCase`) **e** do boot
+  (`RunnerBootRecoveryUseCase.step4ReconcileLimbo`), não dentro de `RecoverTransactionStatusUseCase`.
+  Motivo (review do PR #131): os logs de *resumo/falha* desses recoveries são emitidos **no loop,
+  após** o `execute` retornar (ex.: `runtimeRecoveryBatch: failed ...`, `bootRecovery: failed to
+  reconcile limbo ...`) — para uma resposta `FAILED` que o engine não loga internamente
+  (RUNNER_NOT_FOUND, capability ausente etc.), só o loop loga. O escopo precisa cobrir o loop, senão
+  justamente as falhas ficariam fora da query `| json | transactionId="X"`. Cada loop é dono do seu
+  escopo (put/remove simples); o engine e a conciliação herdam o escopo por reentrância.
+- **Save/restore do MDC e log de falha in-scope na conciliação:** a conciliação salva/restaura o
+  `transactionId` (segura aninhada sob os loops de recovery; equivale a remove no callback WebSocket,
+  que não tem escopo externo) e **loga a própria falha dentro do escopo** antes de propagar — os
+  chamadores externos (`ProcessMessageHandler`) só conhecem o `clientOrderId`, então sem esse log a
+  falha de conciliação escaparia da query por `transactionId`.
+- **Limpeza do MDC de sinal no `finally` por-runner de `execute()`:** o `transactionId` é setado ao
+  materializar a transação em `processTradeSignal`, mas removido no `finally` por-runner de
+  `execute()` — assim, um erro tardio (ex.: falha de `orderDispatch.dispatch` após o commit)
+  capturado no `catch` de `execute()` ainda carrega o `transactionId` no log.
 - **Item 5 (DLQ):** `CAPITAL_DLQ_PERSISTED` passou a carregar `transactionId` automaticamente —
   o caminho `@Recover` agora seta o MDC, então o id vira campo JSON no Loki sem mudar a mensagem.
 - **Testes:** o test runtime do `:core` ganhou binding `logback-classic` (sem binding o

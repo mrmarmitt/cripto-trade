@@ -16,6 +16,7 @@ import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 
 import java.time.Instant;
 import java.util.List;
@@ -222,6 +223,11 @@ public class RunnerBootRecoveryUseCase {
         }
 
         for (Transaction tx : ctx.limbo()) {
+            // T26: ancora o transactionId no MDC durante a reconciliacao desta transacao, para que os
+            // logs de erro deste loop (bootRecovery: failed to reconcile limbo ...) e o recovery/
+            // conciliacao chamados abaixo fiquem recuperaveis via `| json | transactionId="X"` no Loki.
+            // Simetrico ao loop do watchdog (RecoverStaleTransactionsUseCase).
+            MDC.put("transactionId", tx.getId().toString());
             try {
                 RecoverTransactionStatusResponse response = recoverTransactionStatusUseCase.execute(
                         RecoverTransactionStatusRequest.forBoot(tx.getId()),
@@ -265,6 +271,8 @@ public class RunnerBootRecoveryUseCase {
                 ctx.error("Step 4 ERROR: transactionId=" + tx.getId() + " reason=" + e.getMessage());
                 log.error("bootRecovery: failed to reconcile limbo transactionId={} runnerId={}",
                         tx.getId(), ctx.runnerId(), e);
+            } finally {
+                MDC.remove("transactionId");
             }
         }
     }
