@@ -7,6 +7,7 @@ services:
     image: postgres:16-alpine
     container_name: ctrade-postgres
     restart: unless-stopped
+    profiles: [base]
     environment:
       POSTGRES_DB: ctrade
       POSTGRES_USER: ctrade
