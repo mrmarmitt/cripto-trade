@@ -219,6 +219,19 @@ public class RunnerBootRecoveryUseCase {
         }
         if (ctx.orderQuery() == null) {
             ctx.error("Step 4 ERROR: limbo exists but order query capability is unavailable.");
+            // T26: cada transacao em limbo fica sem reconciliacao aqui — registra a falha por
+            // transacao, com o transactionId no MDC, para que continuem recuperaveis via
+            // `| json | transactionId="X"` mesmo neste caminho de capability ausente.
+            for (Transaction tx : ctx.limbo()) {
+                MDC.put("transactionId", tx.getId().toString());
+                try {
+                    log.error("bootRecovery: limbo not reconciled - order query capability unavailable"
+                                    + " transactionId={} runnerId={} exchange={}",
+                            tx.getId(), ctx.runnerId(), ctx.exchangeId());
+                } finally {
+                    MDC.remove("transactionId");
+                }
+            }
             return;
         }
 
