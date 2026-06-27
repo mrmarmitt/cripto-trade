@@ -83,13 +83,16 @@ public class CapitalEventListener {
             )
     )
     public void onExecutionConfirmed(ExecutionConfirmedEvent event) {
-        handleExecutionConfirmed.handle(event);
+        withTransactionId(event.confirmation().transactionId(),
+                () -> handleExecutionConfirmed.handle(event));
     }
 
     @Recover
     public void recoverExecutionConfirmed(Exception ex, ExecutionConfirmedEvent event) {
-        String rawPayload = payloadCodec.encodeExecutionConfirmed(event, ex);
-        persistCapitalDlq("EXECUTION_CONFIRMED", event.confirmation().runnerId(), rawPayload, ex);
+        withTransactionId(event.confirmation().transactionId(), () -> {
+            String rawPayload = payloadCodec.encodeExecutionConfirmed(event, ex);
+            persistCapitalDlq("EXECUTION_CONFIRMED", event.confirmation().runnerId(), rawPayload, ex);
+        });
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -113,13 +116,38 @@ public class CapitalEventListener {
             )
     )
     public void onMarginRelease(MarginReleaseEvent event) {
-        handleMarginRelease.handle(event);
+        withTransactionId(event.release().transactionId(),
+                () -> handleMarginRelease.handle(event));
     }
 
     @Recover
     public void recoverMarginRelease(Exception ex, MarginReleaseEvent event) {
-        String rawPayload = payloadCodec.encodeMarginRelease(event, ex);
-        persistCapitalDlq("MARGIN_RELEASE", event.release().runnerId(), rawPayload, ex);
+        withTransactionId(event.release().transactionId(), () -> {
+            String rawPayload = payloadCodec.encodeMarginRelease(event, ex);
+            persistCapitalDlq("MARGIN_RELEASE", event.release().runnerId(), rawPayload, ex);
+        });
+    }
+
+    /**
+     * Executa {@code action} com o {@code transactionId} no MDC (T26), restaurando o valor
+     * anterior ao final. Garante que todos os logs do processamento do evento — incluindo
+     * retries e o caminho {@code @Recover}/DLQ — carreguem o transactionId para rastreamento
+     * end-to-end no Loki.
+     */
+    private void withTransactionId(UUID transactionId, Runnable action) {
+        String previous = MDC.get("transactionId");
+        if (transactionId != null) {
+            MDC.put("transactionId", transactionId.toString());
+        }
+        try {
+            action.run();
+        } finally {
+            if (previous != null) {
+                MDC.put("transactionId", previous);
+            } else {
+                MDC.remove("transactionId");
+            }
+        }
     }
 
     private void persistCapitalDlq(String eventType, UUID runnerId, String rawPayload, Exception originalFailure) {

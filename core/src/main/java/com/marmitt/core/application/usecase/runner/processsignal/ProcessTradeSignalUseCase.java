@@ -24,6 +24,7 @@ import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import com.marmitt.core.exceptions.ConcurrentPositionLockException;
 import com.marmitt.core.exceptions.RunnerHaltedException;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -314,29 +315,48 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
 
         Transaction transaction = tradeIntentFactory.buildTransaction(
                 runner, signal, normalized.quantity(), normalized.price());
-        if (transaction.isBuy()) {
-            BigDecimal precomputedExposure = exposureSnapshot != null
-                    ? exposureSnapshot.inFlightExposure()
-                    : null;
-            BuyExecutionContext buyContext = tradeIntentFactory
-                    .buildBuyExecutionContext(runner, transaction, precomputedExposure);
-            BuySignalHandler.BuyOutcome outcome = buySignalHandler.handle(buyContext,
-                    this::transactionalPersistBuyAndReserve,
-                    this::checkRunnerNotHalted, this::expirePendingBuy);
-            signalMetrics.recordSignalEvaluated(runner.getId(),
-                    outcome == BuySignalHandler.BuyOutcome.DISPATCHED
-                            ? SignalDecision.BUY
-                            : SignalDecision.REJECTED_CAPITAL);
-        } else {
-            SellSignalHandler.SellOutcome outcome = sellSignalHandler.handle(runner, signal, transaction,
-                    this::transactionalPersistSellAndLockPosition, this::checkRunnerNotHalted,
-                    this::expirePendingSell);
-            // NO_OPEN_POSITION tambem e registrado (REJECTED_NO_POSITION): um runner que recebe
-            // ticks e tenta vender sem inventario nao pode parecer "avaliacao parada" no monitoramento.
-            signalMetrics.recordSignalEvaluated(runner.getId(),
-                    outcome == SellSignalHandler.SellOutcome.DISPATCHED
-                            ? SignalDecision.SELL
-                            : SignalDecision.REJECTED_NO_POSITION);
+
+        // T26: ancora transactionId no MDC a partir da materializacao da transacao, para que TODOS
+        // os logs desta operacao (criacao, capital reserved, dispatch) sejam recuperaveis no Loki via
+        // `| json | transactionId="X"`. O log de criacao registra o correlationId do tick (do MDC),
+        // criando o "join" tick -> transacao que reconstroi a historia ponta a ponta.
+        String previousTransactionId = MDC.get("transactionId");
+        MDC.put("transactionId", transaction.getId().toString());
+        try {
+            log.info("signal: transaction created transactionId={} correlationId={} runnerId={} side={}",
+                    transaction.getId(), MDC.get("correlationId"), runner.getId(),
+                    transaction.isBuy() ? "BUY" : "SELL");
+
+            if (transaction.isBuy()) {
+                BigDecimal precomputedExposure = exposureSnapshot != null
+                        ? exposureSnapshot.inFlightExposure()
+                        : null;
+                BuyExecutionContext buyContext = tradeIntentFactory
+                        .buildBuyExecutionContext(runner, transaction, precomputedExposure);
+                BuySignalHandler.BuyOutcome outcome = buySignalHandler.handle(buyContext,
+                        this::transactionalPersistBuyAndReserve,
+                        this::checkRunnerNotHalted, this::expirePendingBuy);
+                signalMetrics.recordSignalEvaluated(runner.getId(),
+                        outcome == BuySignalHandler.BuyOutcome.DISPATCHED
+                                ? SignalDecision.BUY
+                                : SignalDecision.REJECTED_CAPITAL);
+            } else {
+                SellSignalHandler.SellOutcome outcome = sellSignalHandler.handle(runner, signal, transaction,
+                        this::transactionalPersistSellAndLockPosition, this::checkRunnerNotHalted,
+                        this::expirePendingSell);
+                // NO_OPEN_POSITION tambem e registrado (REJECTED_NO_POSITION): um runner que recebe
+                // ticks e tenta vender sem inventario nao pode parecer "avaliacao parada" no monitoramento.
+                signalMetrics.recordSignalEvaluated(runner.getId(),
+                        outcome == SellSignalHandler.SellOutcome.DISPATCHED
+                                ? SignalDecision.SELL
+                                : SignalDecision.REJECTED_NO_POSITION);
+            }
+        } finally {
+            if (previousTransactionId != null) {
+                MDC.put("transactionId", previousTransactionId);
+            } else {
+                MDC.remove("transactionId");
+            }
         }
     }
 

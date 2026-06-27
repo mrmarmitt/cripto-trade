@@ -6,6 +6,7 @@ import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
+import org.slf4j.MDC;
 
 import java.math.BigDecimal;
 
@@ -77,32 +78,49 @@ public class ConciliationOrderUpdate {
         log.debug("orderConciliation: routing clientOrderId={} transactionId={} status={}",
                 clientOrderId, transaction.getId(), orderData.status());
 
-        switch (orderData.status()) {
-            case NEW -> {
-                if (!transaction.isPending()) {
-                    log.debug("orderConciliation: duplicate NEW ignored transactionId={} status={}",
-                            transaction.getId(), transaction.getStatus());
-                    return;
+        // T26: ancora todas as linhas desta conciliacao ao transactionId no MDC, para que a
+        // query `| json | transactionId="X"` no Loki recupere o ciclo de vida completo. Save/restore
+        // mantem o vinculo correto quando a conciliacao roda aninhada (ex.: watchdog -> recover).
+        String previousTransactionId = MDC.get("transactionId");
+        MDC.put("transactionId", transaction.getId().toString());
+        try {
+            switch (orderData.status()) {
+                case NEW -> {
+                    if (!transaction.isPending()) {
+                        log.debug("orderConciliation: duplicate NEW ignored transactionId={} status={}",
+                                transaction.getId(), transaction.getStatus());
+                        return;
+                    }
+                    transaction.submit(orderData.orderId());
+                    submitAction.apply(transaction);
                 }
-                transaction.submit(orderData.orderId());
-                submitAction.apply(transaction);
+                case FILLED -> fillAction.apply(transaction, orderData, true);
+                case PARTIALLY_FILLED -> fillAction.apply(transaction, orderData, false);
+                case CANCELED -> {
+                    transaction.cancel();
+                    releaseAction.apply(transaction);
+                }
+                case EXPIRED -> {
+                    transaction.expire();
+                    releaseAction.apply(transaction);
+                }
+                case REJECTED -> {
+                    transaction.reject(orderData.rejectReason());
+                    releaseAction.apply(transaction);
+                }
+                default -> log.warn("orderConciliation: unexpected status={} for clientOrderId={}",
+                        orderData.status(), clientOrderId);
             }
-            case FILLED -> fillAction.apply(transaction, orderData, true);
-            case PARTIALLY_FILLED -> fillAction.apply(transaction, orderData, false);
-            case CANCELED -> {
-                transaction.cancel();
-                releaseAction.apply(transaction);
-            }
-            case EXPIRED -> {
-                transaction.expire();
-                releaseAction.apply(transaction);
-            }
-            case REJECTED -> {
-                transaction.reject(orderData.rejectReason());
-                releaseAction.apply(transaction);
-            }
-            default -> log.warn("orderConciliation: unexpected status={} for clientOrderId={}",
-                    orderData.status(), clientOrderId);
+        } finally {
+            restoreTransactionId(previousTransactionId);
+        }
+    }
+
+    private static void restoreTransactionId(String previousTransactionId) {
+        if (previousTransactionId != null) {
+            MDC.put("transactionId", previousTransactionId);
+        } else {
+            MDC.remove("transactionId");
         }
     }
 
