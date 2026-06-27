@@ -53,7 +53,7 @@ public class ConnectionStateEventListener {
 
     @EventListener
     public void handleConnectionEstablished(WebSocketConnectedEvent event) {
-        connectionStateGauge.markConnected(event.exchange(), event.channel());
+        connectionStateGauge.markConnected(event.exchange(), event.channel(), event.connectionId());
         handleConnectionEstablishedPort.execute(event);
         PostConnectionCommandResult result = handlePostConnectionEstablishedPort.execute(event);
         if (!result.success() && event.channel() == StreamChannel.USER_DATA) {
@@ -72,7 +72,7 @@ public class ConnectionStateEventListener {
 
     @EventListener
     public void handleConnectionFailed(WebSocketFailedEvent event) {
-        connectionStateGauge.markDisconnected(event.exchange(), event.channel());
+        connectionStateGauge.markDisconnected(event.exchange(), event.channel(), event.connectionId());
         dispatchGuard.onConnectionFailed(event);
         if (event.isCritical()) {
             handleCriticalConnectionFailedPort.execute(event);
@@ -83,7 +83,7 @@ public class ConnectionStateEventListener {
 
     @EventListener
     public void handleConnectionClosed(WebSocketClosedEvent event) {
-        connectionStateGauge.markDisconnected(event.exchange(), event.channel());
+        connectionStateGauge.markDisconnected(event.exchange(), event.channel(), event.connectionId());
         handleConnectionClosedPort.execute(event);
         dispatchGuard.onConnectionClosed(event);
     }
@@ -95,7 +95,7 @@ public class ConnectionStateEventListener {
 
     @EventListener
     public void handleConnectionDisconnected(WebSocketDisconnectedEvent event) {
-        connectionStateGauge.markDisconnected(event.exchange(), event.channel());
+        connectionStateGauge.markDisconnected(event.exchange(), event.channel(), event.connectionId());
         handleConnectionDisconnectedPort.execute(event);
     }
 }

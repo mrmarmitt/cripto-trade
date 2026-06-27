@@ -300,6 +300,10 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
             hasOpenOrInflight = exposureSnapshot.hasOpenOrInFlight();
         }
         if (!signalPolicy.canExecuteSignal(runner, signal, hasOpenOrInflight)) {
+            // Sinal avaliado mas barrado pela guarda de execução (sobretudo política SINGLE com
+            // posição/ordem já aberta): registra REJECTED_POLICY para o tick não parecer
+            // "avaliação parada" no monitoramento.
+            signalMetrics.recordSignalEvaluated(runner.getId(), SignalDecision.REJECTED_POLICY);
             return;
         }
 

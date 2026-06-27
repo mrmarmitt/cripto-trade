@@ -137,10 +137,12 @@ Divergências confirmadas entre esta spec e o código no momento da entrega:
   é o **pior status agregado** observado (ordem de severidade
   `PASS < WARN_SURPLUS < SKIPPED < FAILED < FAIL_DEFICIT`), ou `NONE` se nada foi avaliado.
 - **G2 / decisões:** além das 5 tags previstas (`HOLD/BUY/SELL/REJECTED_CAPITAL/REJECTED_LOCK`),
-  o counter inclui `CANCEL` (a ação `SHOULD_CANCEL` da T32 é posterior a esta spec) e
-  `REJECTED_NO_POSITION` (SELL sem inventário — senão um runner que tenta vender sem posição
-  ficaria indistinguível de "avaliação parada"; ajuste de review). As tags são **outcomes
-  mutuamente exclusivos**: um BUY recusado por capital conta como `REJECTED_CAPITAL`, nunca `BUY`.
+  o counter inclui `CANCEL` (a ação `SHOULD_CANCEL` da T32 é posterior a esta spec),
+  `REJECTED_NO_POSITION` (SELL sem inventário) e `REJECTED_POLICY` (sinal barrado pela guarda
+  de execução, sobretudo política SINGLE com posição/ordem já aberta) — senão um runner que
+  tenta vender sem posição ou que repete BUY bloqueado por política ficaria indistinguível de
+  "avaliação parada" (ajustes de review). As tags são **outcomes mutuamente exclusivos**: um
+  BUY recusado por capital conta como `REJECTED_CAPITAL`, nunca `BUY`.
 - **G2 / fronteira:** o `core` não depende de Micrometer. Foi criada a porta outbound
   `SignalMetricsPort` (+ enum `SignalDecision`) no core, com adapter `MicrometerSignalMetricsAdapter`
   no `spring-application`, espelhando o padrão `BootExecutionObserverPort`/`BootMetricsRecorder`.

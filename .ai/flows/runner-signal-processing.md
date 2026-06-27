@@ -101,6 +101,8 @@ As tags `decision` sao **outcomes mutuamente exclusivos**, nao a decisao bruta d
 - `REJECTED_CAPITAL` — BUY recusado na reserva de capital (engolido em `BuySignalHandler`).
 - `REJECTED_LOCK` — SELL perdeu o lock concorrente da posicao.
 - `REJECTED_NO_POSITION` — SELL sem posicao aberta para vender.
+- `REJECTED_POLICY` — sinal barrado pela guarda de execucao (sobretudo politica
+  SINGLE com posicao/ordem ja aberta) antes do pipeline de trade.
 
 Para distinguir despacho de rejeicao sem efeito colateral escondido, `BuySignalHandler` e
 `SellSignalHandler` retornam `BuyOutcome`/`SellOutcome`; o registro fica centralizado no

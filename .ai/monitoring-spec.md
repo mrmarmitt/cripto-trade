@@ -90,7 +90,7 @@
 - `capital reserved transactionId={} runnerId={} amount={} portfolioId={}` — qualidade alta (M10)
 
 **Gaps de instrumentação:**
-- ~~Nenhum sinal observável de "runner processando vs. parado"~~ — **✅ T23 (G2):** counter `signal.evaluated.total{runnerId,decision}` com decisões `HOLD/BUY/SELL/CANCEL/REJECTED_CAPITAL/REJECTED_LOCK/REJECTED_NO_POSITION` (outcomes mutuamente exclusivos; um BUY recusado por capital conta como `REJECTED_CAPITAL`, nunca `BUY`)
+- ~~Nenhum sinal observável de "runner processando vs. parado"~~ — **✅ T23 (G2):** counter `signal.evaluated.total{runnerId,decision}` com decisões `HOLD/BUY/SELL/CANCEL/REJECTED_CAPITAL/REJECTED_LOCK/REJECTED_NO_POSITION/REJECTED_POLICY` (outcomes mutuamente exclusivos; um BUY recusado por capital conta como `REJECTED_CAPITAL`, nunca `BUY`)
 - ~~Falhas silenciosas de reserva de capital~~ — **✅ T23 (G2):** tag `decision=REJECTED_CAPITAL`
 - ~~`ConcurrentPositionLockException` sem observabilidade~~ — **✅ T23 (G2):** tag `decision=REJECTED_LOCK`
 
