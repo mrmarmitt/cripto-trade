@@ -3,6 +3,13 @@
 **Gerado a partir de:** `/.ai/flows/` + análise de logs sentinel existentes (T21)  
 **Status:** Rascunho — calibrar thresholds em staging antes de ativar alertas
 
+> **Atualização T23 (2026-06-26):** os gaps de instrumentação críticos catalogados aqui
+> foram implementados em T23 (G1 `websocket.connection.state`, G2 `signal.evaluated.total`,
+> G3 log de runner HALTED por DLQ, G4 campos das fases 2 do boot, G5 log de idempotência de
+> capital). Entradas afetadas estão marcadas com **✅ T23** abaixo. A fase `phase2.ttl` deixou
+> de existir na T31; referências a ela permanecem apenas como histórico e estão marcadas como
+> obsoletas. Os novos alertas habilitados estão em `/.ai/tasks/T23-instrumentation-gaps.md`.
+
 ---
 
 ## Tabela Mestre de Monitoramento
@@ -40,14 +47,14 @@
 **Logs sentinel disponíveis:**
 - `bootSequence: completed runId={} portfolios={} runners={}` — qualidade alta (M1)
 - `bootRecovery: completed runnerId={} hasErrors={}` — qualidade alta, `hasErrors` é a chave (M2)
-- `bootSequence.phase2.sanity: completed` — **qualidade baixa, sem campos** (melhoria pendente)
-- `bootSequence.phase2.zombie: completed` — **qualidade baixa, sem campos** (melhoria pendente)
-- `bootSequence.phase2.ttl: completed` — **qualidade baixa, sem campos** (melhoria pendente)
+- `bootSequence.phase2.sanity: completed runId={} result={} portfolios={}` — **✅ T23 (G4)**, `result` agregado (pior status)
+- `bootSequence.phase2.zombie: completed runId={} detected={} mode={}` — **✅ T23 (G4)**
+- ~~`bootSequence.phase2.ttl: completed`~~ — **obsoleto:** fase removida na T31 (não há mais varredura TTL no boot)
 
 **Gaps de instrumentação:**
-- Resultado do sanity check (PASS/WARN_SURPLUS/FAIL_DEFICIT/SKIPPED/FAILED) não está no log de conclusão da fase
-- Contagem de zombies detectados em WARN_ONLY não está no log de conclusão da fase
-- Count de transações expiradas por TTL não está no log de conclusão da fase
+- ~~Resultado do sanity check no log de conclusão~~ — **✅ T23 (G4):** `result={PASS/WARN_SURPLUS/FAIL_DEFICIT/SKIPPED/FAILED}` agregado
+- ~~Contagem de zombies em WARN_ONLY no log de conclusão~~ — **✅ T23 (G4):** `detected={}` + `mode={WARN_ONLY/FAIL_FAST}`
+- ~~Count de transações expiradas por TTL~~ — **obsoleto:** fase TTL removida na T31
 
 ---
 
@@ -64,9 +71,9 @@
 - `Processing SUCCESS - type={}` — **qualidade baixa** (só tipo da classe, sem correlationId ou exchange) (melhoria pendente)
 
 **Gaps de instrumentação:**
-- Nenhum counter de mensagens processadas por exchange/canal — impossível detectar "conectado mas silencioso"
+- Nenhum counter de mensagens processadas por exchange/canal — impossível detectar "conectado mas silencioso" (parcial: o gauge abaixo cobre o estado da conexão, não o volume de mensagens)
 - Nenhum rate de erros por listener individual
-- Estado da conexão WebSocket (OPEN/CLOSED/RECONNECTING) não exposto como métrica
+- ~~Estado da conexão WebSocket não exposto como métrica~~ — **✅ T23 (G1):** gauge `websocket.connection.state{exchange,channel}` (1=conectado / 0=desconectado), atualizado em connected/failed/closed/disconnected via `ConnectionStateEventListener`
 
 ---
 
@@ -83,9 +90,9 @@
 - `capital reserved transactionId={} runnerId={} amount={} portfolioId={}` — qualidade alta (M10)
 
 **Gaps de instrumentação:**
-- Nenhum log para "sinal avaliado: HOLD" — impossível distinguir runner processando vs. parado
-- Nenhum log para "capital reservation rejected reason={}" — falhas silenciosas de reserva
-- Nenhum log para `ConcurrentPositionLockException` com contexto (runnerId, positionId)
+- ~~Nenhum sinal observável de "runner processando vs. parado"~~ — **✅ T23 (G2):** counter `signal.evaluated.total{runnerId,decision}` com decisões `HOLD/BUY/SELL/CANCEL/REJECTED_CAPITAL/REJECTED_LOCK/REJECTED_NO_POSITION/REJECTED_POLICY` (outcomes mutuamente exclusivos; um BUY recusado por capital conta como `REJECTED_CAPITAL`, nunca `BUY`)
+- ~~Falhas silenciosas de reserva de capital~~ — **✅ T23 (G2):** tag `decision=REJECTED_CAPITAL`
+- ~~`ConcurrentPositionLockException` sem observabilidade~~ — **✅ T23 (G2):** tag `decision=REJECTED_LOCK`
 
 ---
 
@@ -128,7 +135,7 @@
 **Gaps de instrumentação:**
 - `availableBalance`, `reservedBalance`, `realizedBalance` não expostos como gauge Micrometer — impossível alertar em drift de saldo
 - Retry count de `MarginReleaseEvent` não é observável externamente (loop silencioso)
-- Nenhum log para "capital event marked as duplicate (idempotency)" — útil para detectar replays inesperados
+- ~~Nenhum log para "capital event marked as duplicate (idempotency)"~~ — **✅ T23 (G5):** `executionConfirmedReaction: duplicate ignored ...` e `marginReleasedReaction: duplicate ignored ...` em nível `info` (antes `debug`, invisível no Loki)
 
 ---
 
@@ -168,7 +175,7 @@
 
 **Gaps de instrumentação:**
 - `dlq.unresolved.total` gauge ainda não existe (planejado em T21 Camada 1)
-- Nenhum log explícito quando boot recovery decide HALTAR um runner por DLQ pendente
+- ~~Nenhum log explícito quando boot recovery decide HALTAR um runner por DLQ pendente~~ — **✅ T23 (G3):** `bootRecovery: runner halted runnerId={} reason=DLQ_PENDING portfolioId={}`, emitido **apenas** quando o step de fato executa `ACTIVE→HALTED` por DLQ pendente (não dispara para runners não-ACTIVE nem para halts por outros erros)
 - Replay `applied=false` é logado internamente mas sem campo estruturado `applied` para query (melhoria pendente)
 
 ---
@@ -177,25 +184,25 @@
 
 ### Gaps de log (sem nova classe, só adicionar campo)
 
-| Arquivo | Log atual | Campo faltante | Impacto |
-|---|---|---|---|
-| `RunBootSequenceUseCase` | `bootSequence.phase2.sanity: completed` | `runId`, `result` (PASS/WARN/FAIL/SKIP) | Detectar sanity anômalo |
-| `RunBootSequenceUseCase` | `bootSequence.phase2.zombie: completed` | `runId`, `detected` (count), `mode` (FAIL_FAST/WARN_ONLY) | Detectar zombies em WARN_ONLY |
-| `RunBootSequenceUseCase` | `bootSequence.phase2.ttl: completed` | `runId`, `expired` (count) | Rastrear expiração de reservas |
-| `RunBootSequenceUseCase` | `bootSequence.phase1: completed exchanges={}` | `runId` | Correlacionar fases pelo mesmo boot |
-| `ProcessMessageEventListener` | `Processing SUCCESS - type={}` | `correlationId`, `exchange` | Detectar "conectado mas silencioso" por exchange |
-| `ManageDeadLetterUseCase` | DLQ replay internamente | `applied=true/false` como campo estruturado | Detectar replays não aplicados via LogQL (M13) |
-| `RunnerBootRecoveryUseCase` | Runner HALTED por DLQ | Log explícito `bootRecovery: runner halted runnerId={} reason=DLQ_PENDING` | Detectar runners parados |
+| Arquivo | Log atual | Campo faltante | Impacto | Status |
+|---|---|---|---|---|
+| `RunBootSequenceUseCase` | `bootSequence.phase2.sanity: completed` | `runId`, `result` (PASS/WARN/FAIL/SKIP) | Detectar sanity anômalo | ✅ T23 (G4) |
+| `RunBootSequenceUseCase` | `bootSequence.phase2.zombie: completed` | `runId`, `detected` (count), `mode` (FAIL_FAST/WARN_ONLY) | Detectar zombies em WARN_ONLY | ✅ T23 (G4) |
+| ~~`RunBootSequenceUseCase`~~ | ~~`bootSequence.phase2.ttl: completed`~~ | ~~`runId`, `expired`~~ | — | Obsoleto (fase removida na T31) |
+| `RunBootSequenceUseCase` | `bootSequence.phase1: completed exchanges={}` | `runId` | Correlacionar fases pelo mesmo boot | Já tinha `runId` (sem alteração) |
+| `ProcessMessageEventListener` | `Processing SUCCESS - type={}` | `correlationId`, `exchange` | Detectar "conectado mas silencioso" por exchange | Pendente |
+| `ManageDeadLetterUseCase` | DLQ replay internamente | `applied=true/false` como campo estruturado | Detectar replays não aplicados via LogQL (M13) | Pendente |
+| `RunnerBootRecoveryUseCase` | Runner HALTED por DLQ | Log explícito `bootRecovery: runner halted runnerId={} reason=DLQ_PENDING` | Detectar runners parados | ✅ T23 (G3) |
 
 ### Gaps de métrica (requerem Micrometer)
 
-| Métrica | Tipo | Onde registrar | Impacto |
-|---|---|---|---|
-| `dlq.unresolved.total` | Gauge | `JdbcDeadLetterEntryRepositoryAdapter` | Alertar em DLQ acumulada (M12) — planejado em T21 |
-| `capital.event.retry.count{eventType}` | Counter | `CapitalEventListener` retry intercept | Detectar retry loop silencioso de margem |
-| `websocket.connection.state{exchange,channel}` | Gauge (0/1) | `ConnectionStateEventListener` | Detectar "conectado mas silencioso" |
-| `portfolio.balance.available{portfolioId}` | Gauge | `ExecutionConfirmedReaction` / `MarginReleasedReaction` | Alertar em drift de saldo |
-| `signal.evaluated.total{runnerId,decision}` | Counter | `ProcessTradeSignalUseCase` | Detectar runner sempre em HOLD |
+| Métrica | Tipo | Onde registrar | Impacto | Status |
+|---|---|---|---|---|
+| `dlq.unresolved.total` | Gauge | `JdbcDeadLetterEntryRepositoryAdapter` | Alertar em DLQ acumulada (M12) — planejado em T21 | Pendente |
+| `capital.event.retry.count{eventType}` | Counter | `CapitalEventListener` retry intercept | Detectar retry loop silencioso de margem | Pendente |
+| `websocket.connection.state{exchange,channel}` | Gauge (0/1) | `ConnectionStateEventListener` → `WebSocketConnectionStateGauge` | Detectar "conectado mas silencioso" | ✅ T23 (G1) |
+| `portfolio.balance.available{portfolioId}` | Gauge | `ExecutionConfirmedReaction` / `MarginReleasedReaction` | Alertar em drift de saldo | Pendente |
+| `signal.evaluated.total{runnerId,decision}` | Counter | `ProcessTradeSignalUseCase` → `SignalMetricsPort` / `MicrometerSignalMetricsAdapter` | Detectar runner sempre em HOLD | ✅ T23 (G2) |
 
 ### Gaps de lógica de correlação (requerem código de monitoramento)
 
@@ -218,8 +225,17 @@
 - M7, M8, M9, M10 — Alertas de ausência (thresholds dependem do volume real observado)
 - M13 — Replay não aplicado (requer melhoria de log em `ManageDeadLetterUseCase`)
 
-### Requer task própria (gaps de instrumentação críticos)
-- `websocket.connection.state` gauge — detectar "conectado mas silencioso"
-- `signal.evaluated.total{decision=HOLD}` counter — detectar runner travado
-- Log de runner HALTED por DLQ no boot recovery
-- Campos estruturados nas fases 2 do boot (já listados em T21 Camada 3)
+### ✅ Entregue pela T23 (gaps de instrumentação críticos)
+- `websocket.connection.state` gauge (G1) — detectar "conectado mas silencioso"
+- `signal.evaluated.total{runnerId,decision}` counter (G2) — detectar runner travado / rejeições silenciosas
+- Log de runner HALTED por DLQ no boot recovery (G3)
+- Campos estruturados nas fases 2 do boot (G4)
+- Log de idempotência de capital event (G5)
+
+> Alertas habilitados após T23 (queries LogQL/PromQL) estão na seção
+> "Alertas habilitados após esta task" de `/.ai/tasks/T23-instrumentation-gaps.md`.
+
+### Ainda requer task própria
+- `portfolio.balance.available` gauge — alertar em drift de saldo
+- `capital.event.retry.count` counter — detectar retry loop silencioso de margem
+- Correlação `capital reserved` → `PENDING->SUBMITTED` (gap de lógica)

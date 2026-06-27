@@ -144,6 +144,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
         log.info("bootSequence.phase2.sanity: start portfolios={} mode={} accountQueryPolicy={} threshold={}",
                 portfolios.size(), mode, command.accountQueryPolicy(), command.sanityThreshold());
 
+        PortfolioSanityStatus aggregateResult = null;
         for (Portfolio portfolio : portfolios) {
             Set<String> exchanges = resolvePortfolioExchanges(portfolio, eligibleRunners);
 
@@ -159,6 +160,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
                         portfolioBootSanityUseCase.execute(portfolio.getId(), exchange, command.sanityThreshold());
                 long durationMs = (System.nanoTime() - startedNs) / 1_000_000L;
                 observer.onPortfolioPhaseEvaluated("phase2.sanity", result.status().name(), exchange, mode.name(), durationMs);
+                aggregateResult = mostSevereSanity(aggregateResult, result.status());
 
                 switch (result.status()) {
                     case PASS, WARN_SURPLUS -> log.info(
@@ -191,7 +193,29 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
             }
         }
 
-        log.info("bootSequence.phase2.sanity: completed runId={} portfolios={}", runId, portfolios.size());
+        log.info("bootSequence.phase2.sanity: completed runId={} result={} portfolios={}",
+                runId, aggregateResult != null ? aggregateResult.name() : "NONE", portfolios.size());
+    }
+
+    /**
+     * Pior status de sanity observado na fase, para um campo {@code result} agregado no log
+     * de conclusao (T23 G4). Ordem de severidade: PASS &lt; WARN_SURPLUS &lt; SKIPPED &lt; FAILED &lt; FAIL_DEFICIT.
+     */
+    private static PortfolioSanityStatus mostSevereSanity(PortfolioSanityStatus current, PortfolioSanityStatus candidate) {
+        if (current == null) {
+            return candidate;
+        }
+        return sanitySeverity(candidate) > sanitySeverity(current) ? candidate : current;
+    }
+
+    private static int sanitySeverity(PortfolioSanityStatus status) {
+        return switch (status) {
+            case PASS -> 0;
+            case WARN_SURPLUS -> 1;
+            case SKIPPED -> 2;
+            case FAILED -> 3;
+            case FAIL_DEFICIT -> 4;
+        };
     }
 
     private void runPhase2ZombieDetection(String runId,
@@ -257,7 +281,8 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
             }
         }
 
-        log.info("bootSequence.phase2.zombie: completed runId={} zombies={}", runId, zombiesTotal);
+        log.info("bootSequence.phase2.zombie: completed runId={} detected={} mode={}",
+                runId, zombiesTotal, mode.name());
     }
 
     private void executePhase(String phase, boolean enabled, Runnable action, BootExecutionObserverPort observer) {

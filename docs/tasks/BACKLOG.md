@@ -28,7 +28,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T20 | Preencher `executed_at` com timestamp da exchange no boot recovery | Baixa | Codex | Concluído |
 | T21 | Active Error Reporting via Discord                               | Média | Claude | Concluído |
 | T22 | Estudo e Desenho do Sistema de Monitoramento                    | Média | Claude | Concluído |
-| T23 | Instrumentação: Gaps Críticos de Observabilidade                | Média | Claude | Pendente  |
+| T23 | Instrumentação: Gaps Críticos de Observabilidade                | Média | Claude | Concluído |
 | T24 | Circuit Breaker nas Chamadas REST à Exchange                    | Média | Claude | Pendente  |
 | T25 | Safe Mode Automático                                            | Média | Claude | Pendente  |
 | T26 | Rastreamento End-to-End de um Sinal                             | Alta  | Claude | Pendente  |

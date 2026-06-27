@@ -83,6 +83,15 @@ acumula taxa convertida.
 5. Chama `release(amount)`.
 6. Salva o saldo.
 
+## Observabilidade
+
+Quando a idempotencia rejeita um evento duplicado (`matchId`/`transactionId` ja
+processado), ambas as reactions emitem log em nivel `info` (T23 G5):
+`executionConfirmedReaction: duplicate ignored ...` e
+`marginReleasedReaction: duplicate ignored ...`. Antes era `debug` (invisivel no
+Loki), o que escondia replays inesperados de eventos de capital. Catalogo de
+indicadores em `/.ai/monitoring-spec.md`.
+
 ## DLQ De Capital
 
 `CapitalEventListener` consome eventos apos commit em uma transacao nova. Quando

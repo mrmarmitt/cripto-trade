@@ -122,3 +122,32 @@ log.info("marginReleasedReaction: duplicate ignored transactionId={}", transacti
 4. Logs das fases 2 do boot contêm `runId` e campos de resultado consultáveis via LogQL.
 5. Evento de capital duplicado produz log `duplicate ignored` no Loki.
 6. Nenhum dos cambios acima altera comportamento funcional — só adiciona observabilidade.
+
+---
+
+## Notas de implementação (entregue — 2026-06-26)
+
+Divergências confirmadas entre esta spec e o código no momento da entrega:
+
+- **G4 / `phase2.ttl`:** a subfase de varredura TTL no boot **foi removida na T31**. Não há
+  log `bootSequence.phase2.ttl: completed` a enriquecer; a linha correspondente da spec foi
+  ignorada. As demais subfases (`phase2.sanity`, `phase2.zombie`) foram enriquecidas; `phase1`
+  já possuía `runId`.
+- **G4 / `sanity`:** a fase avalia N portfolios×exchanges. O campo `result` no log de conclusão
+  é o **pior status agregado** observado (ordem de severidade
+  `PASS < WARN_SURPLUS < SKIPPED < FAILED < FAIL_DEFICIT`), ou `NONE` se nada foi avaliado.
+- **G2 / decisões:** além das 5 tags previstas (`HOLD/BUY/SELL/REJECTED_CAPITAL/REJECTED_LOCK`),
+  o counter inclui `CANCEL` (a ação `SHOULD_CANCEL` da T32 é posterior a esta spec),
+  `REJECTED_NO_POSITION` (SELL sem inventário) e `REJECTED_POLICY` (sinal barrado pela guarda
+  de execução, sobretudo política SINGLE com posição/ordem já aberta) — senão um runner que
+  tenta vender sem posição ou que repete BUY bloqueado por política ficaria indistinguível de
+  "avaliação parada" (ajustes de review). As tags são **outcomes mutuamente exclusivos**: um
+  BUY recusado por capital conta como `REJECTED_CAPITAL`, nunca `BUY`.
+- **G2 / fronteira:** o `core` não depende de Micrometer. Foi criada a porta outbound
+  `SignalMetricsPort` (+ enum `SignalDecision`) no core, com adapter `MicrometerSignalMetricsAdapter`
+  no `spring-application`, espelhando o padrão `BootExecutionObserverPort`/`BootMetricsRecorder`.
+  Para o counter refletir o outcome real, `BuySignalHandler`/`SellSignalHandler` passaram a
+  retornar `BuyOutcome`/`SellOutcome` e o registro foi centralizado no `ProcessTradeSignalUseCase`.
+- **G3 / gatilho:** o sentinel `runner halted ... reason=DLQ_PENDING` é emitido **apenas** dentro
+  do branch que executa `ACTIVE→HALTED` e somente quando a DLQ pendente é a causa — não dispara
+  para runners não-ACTIVE nem para halts motivados por outros erros de reconciliação.

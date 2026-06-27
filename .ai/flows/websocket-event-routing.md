@@ -96,6 +96,12 @@ Eventos de conexao sao publicados pelo listener convertido:
 acionar reconnect por `ConnectionFailedHandler`, usando historico de request para
 market stream e nova sessao para user data stream.
 
+O mesmo listener atualiza o gauge `websocket.connection.state{exchange,channel}` via
+`WebSocketConnectionStateGauge` (T23 G1): `1` em `WebSocketConnectedEvent`, `0` em
+`WebSocketFailedEvent`/`WebSocketClosedEvent`/`WebSocketDisconnectedEvent`. Combinar
+gauge=1 com ausencia de mensagens detecta conexao "ghost" (OPEN mas silenciosa).
+Catalogo de indicadores/alertas em `/.ai/monitoring-spec.md`.
+
 ## Variacoes E Falhas
 
 - Adapter de streaming ausente: `ConnectMarketStreamUseCase` retorna falha.

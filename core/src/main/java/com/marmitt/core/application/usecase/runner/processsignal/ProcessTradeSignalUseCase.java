@@ -15,6 +15,8 @@ import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.strategy.TradingStrategy;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.exchange.rest.OrderQuantityNormalizerPort;
+import com.marmitt.core.ports.outbound.metrics.SignalDecision;
+import com.marmitt.core.ports.outbound.metrics.SignalMetricsPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
@@ -68,6 +70,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final OrderConciliationPort orderConciliation;
+    private final SignalMetricsPort signalMetrics;
 
     private final RunnerSignalPolicy signalPolicy;
     private final StrategySignalEvaluator signalEvaluator;
@@ -86,9 +89,11 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                                         PortfolioRepositoryPort portfolioRepository,
                                         OrderDispatchPort orderDispatch,
                                         OrderConciliationPort orderConciliation,
-                                        List<OrderQuantityNormalizerPort> orderNormalizers) {
+                                        List<OrderQuantityNormalizerPort> orderNormalizers,
+                                        SignalMetricsPort signalMetrics) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.orderConciliation = orderConciliation;
+        this.signalMetrics = signalMetrics;
 
         this.signalPolicy = new RunnerSignalPolicy();
         this.signalEvaluator = new StrategySignalEvaluator(strategyRepository);
@@ -243,6 +248,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                 log.warn("priceUpdate: signal discarded - runner halted mid-flight runnerId={} symbol={}",
                         runner.getId(), symbol);
             } catch (ConcurrentPositionLockException e) {
+                signalMetrics.recordSignalEvaluated(runner.getId(), SignalDecision.REJECTED_LOCK);
                 log.warn("priceUpdate: concurrent SELL conflict for runner={} symbol={} - tick discarded (position already locked by another thread)",
                         runner.getId(), symbol);
             } catch (Exception e) {
@@ -261,6 +267,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         StrategyContextDto context = contextAssembler.assemble(runner);
         StrategyOutputDto strategyOutput = signalEvaluator.evaluate(runner, activeStrategy.get(), input, context);
         if (signalEvaluator.isHold(strategyOutput)) {
+            signalMetrics.recordSignalEvaluated(runner.getId(), SignalDecision.HOLD);
             log.debug("priceUpdate: HOLD signal for runner={} - no action", runner.getId());
             return;
         }
@@ -275,6 +282,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
             // execute) — mesma semantica de seguranca dos ramos BUY/SELL antes do dispatch.
             checkRunnerNotHalted(runner.getId());
             cancelSignalHandler.handle(runner, strategyOutput);
+            signalMetrics.recordSignalEvaluated(runner.getId(), SignalDecision.CANCEL);
             return;
         }
 
@@ -292,6 +300,10 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
             hasOpenOrInflight = exposureSnapshot.hasOpenOrInFlight();
         }
         if (!signalPolicy.canExecuteSignal(runner, signal, hasOpenOrInflight)) {
+            // Sinal avaliado mas barrado pela guarda de execução (sobretudo política SINGLE com
+            // posição/ordem já aberta): registra REJECTED_POLICY para o tick não parecer
+            // "avaliação parada" no monitoramento.
+            signalMetrics.recordSignalEvaluated(runner.getId(), SignalDecision.REJECTED_POLICY);
             return;
         }
 
@@ -308,12 +320,23 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                     : null;
             BuyExecutionContext buyContext = tradeIntentFactory
                     .buildBuyExecutionContext(runner, transaction, precomputedExposure);
-            buySignalHandler.handle(buyContext, this::transactionalPersistBuyAndReserve,
+            BuySignalHandler.BuyOutcome outcome = buySignalHandler.handle(buyContext,
+                    this::transactionalPersistBuyAndReserve,
                     this::checkRunnerNotHalted, this::expirePendingBuy);
+            signalMetrics.recordSignalEvaluated(runner.getId(),
+                    outcome == BuySignalHandler.BuyOutcome.DISPATCHED
+                            ? SignalDecision.BUY
+                            : SignalDecision.REJECTED_CAPITAL);
         } else {
-            sellSignalHandler.handle(runner, signal, transaction,
+            SellSignalHandler.SellOutcome outcome = sellSignalHandler.handle(runner, signal, transaction,
                     this::transactionalPersistSellAndLockPosition, this::checkRunnerNotHalted,
                     this::expirePendingSell);
+            // NO_OPEN_POSITION tambem e registrado (REJECTED_NO_POSITION): um runner que recebe
+            // ticks e tenta vender sem inventario nao pode parecer "avaliacao parada" no monitoramento.
+            signalMetrics.recordSignalEvaluated(runner.getId(),
+                    outcome == SellSignalHandler.SellOutcome.DISPATCHED
+                            ? SignalDecision.SELL
+                            : SignalDecision.REJECTED_NO_POSITION);
         }
     }
 

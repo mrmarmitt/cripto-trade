@@ -37,17 +37,20 @@ class BuySignalHandler {
 
     /**
      * Persiste a transacao BUY dentro da fronteira transacional e despacha para a exchange.
-     * Se a reserva de capital for rejeitada, o metodo retorna sem dispatch — o sinal e
-     * descartado sem propagacao de excecao para o chamador.
+     * Se a reserva de capital for rejeitada, o metodo retorna {@link BuyOutcome#REJECTED_CAPITAL}
+     * sem dispatch — o sinal e descartado sem propagacao de excecao para o chamador.
+     *
+     * @return {@link BuyOutcome#DISPATCHED} quando a ordem foi enviada;
+     *         {@link BuyOutcome#REJECTED_CAPITAL} quando a reserva de capital foi recusada.
      */
-    public void handle(BuyExecutionContext context, BuyPersistenceAction persistenceAction,
-                       PreDispatchGuard preDispatchGuard, OnHaltAction onHaltAction) {
+    public BuyOutcome handle(BuyExecutionContext context, BuyPersistenceAction persistenceAction,
+                             PreDispatchGuard preDispatchGuard, OnHaltAction onHaltAction) {
         try {
             persistenceAction.persist(context);
         } catch (CapitalReservationRejectedException ex) {
             log.warn("processBuySignal: signal discarded - capital rejected transactionId={} reason={}",
                     ex.getTransactionId(), ex.getReason());
-            return;
+            return BuyOutcome.REJECTED_CAPITAL;
         }
 
         // Re-check runner status after the persist transaction commits to close the
@@ -66,6 +69,16 @@ class BuySignalHandler {
         orderDispatch.dispatch(intentFactory.buildDispatchCommand(context.runner(), context.transaction()));
         log.debug("dispatch: order sent - clientOrderId={} stays PENDING until exchange confirms",
                 context.transaction().getClientOrderId());
+        return BuyOutcome.DISPATCHED;
+    }
+
+    /**
+     * Desfecho observavel do ramo BUY. Nao cobre o caso de halt pos-persist,
+     * que continua propagando {@link RunnerHaltedException} para o chamador.
+     */
+    public enum BuyOutcome {
+        DISPATCHED,
+        REJECTED_CAPITAL
     }
 
     @FunctionalInterface

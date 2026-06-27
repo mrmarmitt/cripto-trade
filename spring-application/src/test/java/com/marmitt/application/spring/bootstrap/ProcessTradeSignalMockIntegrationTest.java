@@ -13,6 +13,8 @@ import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.search.MeterNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -57,6 +59,9 @@ class ProcessTradeSignalMockIntegrationTest extends AbstractIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
+    @Autowired
+    private MeterRegistry meterRegistry;
+
     @BeforeEach
     void cleanDatabase() {
         MockExchangeAdapter mock = (MockExchangeAdapter) exchangeAdapterRepository
@@ -88,6 +93,21 @@ class ProcessTradeSignalMockIntegrationTest extends AbstractIntegrationTest {
         assertNotNull(position, "Expected OPEN position after BUY fill");
         assertEquals(filled.id(), position.openedByTransactionId());
         assertTrue(position.quantity().compareTo(BigDecimal.ZERO) > 0);
+
+        // T23 G2: a BUY que resultou em ordem despachada deve incrementar signal.evaluated.total{decision=BUY}.
+        assertTrue(signalEvaluatedCount(runnerId, "BUY") >= 1.0,
+                "Expected signal.evaluated.total{decision=BUY} >= 1 for runner " + runnerId);
+    }
+
+    private double signalEvaluatedCount(UUID runnerId, String decision) {
+        try {
+            return meterRegistry.get("signal.evaluated.total")
+                    .tags("runnerId", runnerId.toString(), "decision", decision)
+                    .counter()
+                    .count();
+        } catch (MeterNotFoundException e) {
+            return 0.0;
+        }
     }
 
     @Test

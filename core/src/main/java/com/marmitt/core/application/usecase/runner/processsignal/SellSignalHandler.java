@@ -47,18 +47,21 @@ class SellSignalHandler {
     /**
      * Resolve o lote alvo, persiste o lock transacionalmente e despacha para a exchange.
      * Se nenhuma posicao aberta existir, o sinal e descartado sem propagacao de excecao.
+     *
+     * @return {@link SellOutcome#DISPATCHED} quando a ordem foi enviada;
+     *         {@link SellOutcome#NO_OPEN_POSITION} quando nao havia posicao aberta para vender.
      */
-    public void handle(StrategyRunner runner,
-                       StrategyOutputDto signal,
-                       Transaction transaction,
-                       SellPersistenceAction persistenceAction,
-                       BuySignalHandler.PreDispatchGuard preDispatchGuard,
-                       OnHaltAction onHaltAction) {
+    public SellOutcome handle(StrategyRunner runner,
+                              StrategyOutputDto signal,
+                              Transaction transaction,
+                              SellPersistenceAction persistenceAction,
+                              BuySignalHandler.PreDispatchGuard preDispatchGuard,
+                              OnHaltAction onHaltAction) {
         Optional<Position> targetPosition = findTargetPosition(runner, signal);
         if (targetPosition.isEmpty()) {
             log.warn("processSellSignal: SELL signal discarded - no open position for runner={} symbol={}",
                     runner.getId(), runner.getSymbol());
-            return;
+            return SellOutcome.NO_OPEN_POSITION;
         }
 
         persistenceAction.persist(transaction, targetPosition.get());
@@ -77,6 +80,17 @@ class SellSignalHandler {
         orderDispatch.dispatch(intentFactory.buildDispatchCommand(runner, transaction));
         log.debug("dispatch: order sent - clientOrderId={} stays PENDING until exchange confirms",
                 transaction.getClientOrderId());
+        return SellOutcome.DISPATCHED;
+    }
+
+    /**
+     * Desfecho observavel do ramo SELL. Conflito de lock concorrente continua propagando
+     * {@link com.marmitt.core.exceptions.ConcurrentPositionLockException}, e halt pos-persist
+     * continua propagando {@link RunnerHaltedException} para o chamador.
+     */
+    public enum SellOutcome {
+        DISPATCHED,
+        NO_OPEN_POSITION
     }
 
     private Optional<Position> findTargetPosition(StrategyRunner runner, StrategyOutputDto signal) {
