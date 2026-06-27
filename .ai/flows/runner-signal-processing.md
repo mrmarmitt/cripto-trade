@@ -108,6 +108,12 @@ Para distinguir despacho de rejeicao sem efeito colateral escondido, `BuySignalH
 `SellSignalHandler` retornam `BuyOutcome`/`SellOutcome`; o registro fica centralizado no
 orquestrador. Catalogo de indicadores/alertas em `/.ai/monitoring-spec.md`.
 
+**Rastreamento end-to-end (T26):** ao materializar a transacao, o orquestrador ancora o
+`transactionId` no MDC e emite `signal: transaction created transactionId={} correlationId={}
+runnerId={} side={}`. O `correlationId` (do tick, herdado do MDC) cria o "join" tick→transacao;
+o `transactionId` no MDC propaga para as linhas de capital/dispatch e e o eixo da query
+`{app="ctrade"} | json | transactionId="X"` no Loki.
+
 ## Validacao
 
 - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/ProcessTradeSignalMockIntegrationTest.java`

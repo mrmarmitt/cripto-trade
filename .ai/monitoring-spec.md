@@ -206,9 +206,16 @@
 
 ### Gaps de lógica de correlação (requerem código de monitoramento)
 
+> **T26:** o `transactionId` agora é propagado como campo MDC em todas as fronteiras assíncronas
+> (signal → conciliação → capital → watchdog). Como o Loki emite chaves MDC como campos JSON, a
+> história completa de uma operação é recuperável por `{app="ctrade"} | json | transactionId="X"`,
+> e o log `signal: transaction created ... correlationId=...` faz o join tick→transação. Isso
+> reduz a complexidade das correlações por transactionId abaixo (deixam de exigir join manual no
+> tempo). A correlação ponta-a-ponta do stream Binance (subscription→executionReport) permanece gap.
+
 | Correlação | Descrição | Complexidade |
 |---|---|---|
-| `capital reserved` → `PENDING->SUBMITTED` em < 2 min | Detectar ordem enviada mas sem callback NEW | Alta — requer join por transactionId com timeout |
+| `capital reserved` → `PENDING->SUBMITTED` em < 2 min | Detectar ordem enviada mas sem callback NEW | Reduzida com T26 — ambas as linhas carregam `transactionId` no MDC |
 | Subscription Binance confirmada → `executionReport` em < 60s após ordem | Detectar stream saudável por end-to-end | Alta — requer rastrear estado da sessão |
 
 ---

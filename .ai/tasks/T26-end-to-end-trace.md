@@ -3,7 +3,7 @@
 **Complexidade:** Alta  
 **Responsável:** Claude  
 **Dependências:** T17 (Loki), T23 (melhoria de logs)  
-**Status:** Pendente
+**Status:** Concluído (PR #131)
 
 ---
 
@@ -152,3 +152,29 @@ Retorna o tick original que originou o sinal.
 4. Logs do watchdog (`RecoverStaleTransactionsUseCase`) contêm `transactionId` por transação processada.
 5. `transactionId` aparece no formato de log do console (via `ConditionalMDCConverter`) apenas quando presente.
 6. Nenhum comportamento funcional alterado — apenas adição de contexto de rastreamento.
+
+---
+
+## Notas de implementação (entregue — PR #131)
+
+Divergências e decisões confirmadas no momento da entrega:
+
+- **MDC no core (decisão arquitetural):** este é o 1º uso de MDC no core (antes só no
+  `spring-application`). Optou-se por `org.slf4j.MDC` direto: `slf4j-api` já é dependência do
+  core (todo `@Slf4j`), e trace context é a mesma categoria de observabilidade que o core já
+  loga. Uma porta `TraceContextPort` só envolveria o MDC thread-local 1:1 — cerimônia sem
+  desacoplamento real.
+- **Log de criação centralizado:** o log `signal: transaction created ... correlationId=...`
+  ficou no `ProcessTradeSignalUseCase` (não em `Buy/SellSignalHandler`, como sugeria a spec).
+  É o ponto único que conhece o `side`, dispara para toda transação materializada (inclusive
+  BUY recusado por capital) e ancora o `transactionId` no MDC para as linhas de capital/dispatch.
+- **Acessores reais dos eventos:** a spec usa `event.transactionId()`; os eventos expõem o id
+  via `confirmation().transactionId()` (`ExecutionConfirmedEvent`) e `release().transactionId()`
+  (`MarginReleaseEvent`).
+- **Save/restore do MDC:** onde a conciliação pode rodar aninhada (watchdog→recover), o
+  `transactionId` é salvo e restaurado em vez de simplesmente removido, evitando perder o
+  vínculo do escopo externo.
+- **Item 5 (DLQ):** `CAPITAL_DLQ_PERSISTED` passou a carregar `transactionId` automaticamente —
+  o caminho `@Recover` agora seta o MDC, então o id vira campo JSON no Loki sem mudar a mensagem.
+- **Testes:** o test runtime do `:core` ganhou binding `logback-classic` (sem binding o
+  `MDCAdapter` do slf4j é NOP e o MDC não funciona em teste) + `logback-test.xml` silencioso.

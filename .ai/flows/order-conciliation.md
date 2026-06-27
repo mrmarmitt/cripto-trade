@@ -46,6 +46,12 @@ O mesmo executor atende o fluxo normal de eventos e os fluxos de boot/recovery.
 Fills podem submeter uma transacao ainda `PENDING` quando a exchange envia fill
 antes do evento `NEW`.
 
+**Rastreamento end-to-end (T26):** apos resolver a transacao por `clientOrderId`,
+`ConciliationOrderUpdate` ancora o `transactionId` no MDC durante todo o roteamento
+(save/restore, seguro contra aninhamento watchdog→recover). Assim, as linhas
+`PENDING->SUBMITTED`, `BUY fill`, `SELL match persisted` etc. ficam recuperaveis via
+`{app="ctrade"} | json | transactionId="X"` no Loki.
+
 ## BUY Fill
 
 `BuyFillHandler` aplica quantidade executada na posicao:
