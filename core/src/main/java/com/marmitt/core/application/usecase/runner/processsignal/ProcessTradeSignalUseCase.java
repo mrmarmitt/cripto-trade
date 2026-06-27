@@ -321,35 +321,49 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         // do commit (BUY recusado por capital, SELL sem posicao, falha de lock que faz rollback). O log
         // registra transactionId + correlationId (do tick, via MDC) no texto: o "join" tick->transacao.
         // O MDC estruturado por transactionId fica a cargo da conciliacao, nao deste fluxo de origem.
-        if (transaction.isBuy()) {
-            BigDecimal precomputedExposure = exposureSnapshot != null
-                    ? exposureSnapshot.inFlightExposure()
-                    : null;
-            BuyExecutionContext buyContext = tradeIntentFactory
-                    .buildBuyExecutionContext(runner, transaction, precomputedExposure);
-            BuySignalHandler.BuyOutcome outcome = buySignalHandler.handle(buyContext,
-                    this::transactionalPersistBuyAndReserve,
-                    this::checkRunnerNotHalted, this::expirePendingBuy);
-            if (outcome == BuySignalHandler.BuyOutcome.DISPATCHED) {
-                logTransactionCreated(transaction, runner);
+        try {
+            if (transaction.isBuy()) {
+                BigDecimal precomputedExposure = exposureSnapshot != null
+                        ? exposureSnapshot.inFlightExposure()
+                        : null;
+                BuyExecutionContext buyContext = tradeIntentFactory
+                        .buildBuyExecutionContext(runner, transaction, precomputedExposure);
+                BuySignalHandler.BuyOutcome outcome = buySignalHandler.handle(buyContext,
+                        this::transactionalPersistBuyAndReserve,
+                        this::checkRunnerNotHalted, this::expirePendingBuy);
+                if (outcome == BuySignalHandler.BuyOutcome.DISPATCHED) {
+                    logTransactionCreated(transaction, runner);
+                }
+                signalMetrics.recordSignalEvaluated(runner.getId(),
+                        outcome == BuySignalHandler.BuyOutcome.DISPATCHED
+                                ? SignalDecision.BUY
+                                : SignalDecision.REJECTED_CAPITAL);
+            } else {
+                SellSignalHandler.SellOutcome outcome = sellSignalHandler.handle(runner, signal, transaction,
+                        this::transactionalPersistSellAndLockPosition, this::checkRunnerNotHalted,
+                        this::expirePendingSell);
+                if (outcome == SellSignalHandler.SellOutcome.DISPATCHED) {
+                    logTransactionCreated(transaction, runner);
+                }
+                // NO_OPEN_POSITION tambem e registrado (REJECTED_NO_POSITION): um runner que recebe
+                // ticks e tenta vender sem inventario nao pode parecer "avaliacao parada" no monitoramento.
+                signalMetrics.recordSignalEvaluated(runner.getId(),
+                        outcome == SellSignalHandler.SellOutcome.DISPATCHED
+                                ? SignalDecision.SELL
+                                : SignalDecision.REJECTED_NO_POSITION);
             }
-            signalMetrics.recordSignalEvaluated(runner.getId(),
-                    outcome == BuySignalHandler.BuyOutcome.DISPATCHED
-                            ? SignalDecision.BUY
-                            : SignalDecision.REJECTED_CAPITAL);
-        } else {
-            SellSignalHandler.SellOutcome outcome = sellSignalHandler.handle(runner, signal, transaction,
-                    this::transactionalPersistSellAndLockPosition, this::checkRunnerNotHalted,
-                    this::expirePendingSell);
-            if (outcome == SellSignalHandler.SellOutcome.DISPATCHED) {
-                logTransactionCreated(transaction, runner);
-            }
-            // NO_OPEN_POSITION tambem e registrado (REJECTED_NO_POSITION): um runner que recebe
-            // ticks e tenta vender sem inventario nao pode parecer "avaliacao parada" no monitoramento.
-            signalMetrics.recordSignalEvaluated(runner.getId(),
-                    outcome == SellSignalHandler.SellOutcome.DISPATCHED
-                            ? SignalDecision.SELL
-                            : SignalDecision.REJECTED_NO_POSITION);
+        } catch (RunnerHaltedException | ConcurrentPositionLockException e) {
+            // Halt pos-persist: a transacao ja foi expirada/conciliada (rastreavel pelos logs da
+            // conciliacao). Lock concorrente: rollback no persist, a transacao nao foi commitada.
+            // Em ambos nao ha transacao "viva e orfa" a registrar aqui.
+            throw e;
+        } catch (RuntimeException e) {
+            // T26: falha de dispatch APOS o persist commitar (ex.: orderDispatch.dispatch lanca) deixa
+            // a transacao viva sem nenhum log que cite seu id ate o watchdog. Registra a falha com o
+            // transactionId no texto antes de propagar para o catch (por-runner) de execute().
+            log.error("signal: dispatch failed after persist transactionId={} runnerId={} side={} - {}",
+                    transaction.getId(), runner.getId(), transaction.isBuy() ? "BUY" : "SELL", e.getMessage(), e);
+            throw e;
         }
     }
 
