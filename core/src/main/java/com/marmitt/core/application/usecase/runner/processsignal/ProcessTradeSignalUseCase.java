@@ -320,7 +320,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         // os logs desta operacao (criacao, capital reserved, dispatch) sejam recuperaveis no Loki via
         // `| json | transactionId="X"`. O log de criacao registra o correlationId do tick (do MDC),
         // criando o "join" tick -> transacao que reconstroi a historia ponta a ponta.
-        String previousTransactionId = MDC.get("transactionId");
+        // Ponto de entrada de topo (vem do tick, sem transactionId previo no MDC): put/remove simples.
         MDC.put("transactionId", transaction.getId().toString());
         try {
             log.info("signal: transaction created transactionId={} correlationId={} runnerId={} side={}",
@@ -352,11 +352,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                                 : SignalDecision.REJECTED_NO_POSITION);
             }
         } finally {
-            if (previousTransactionId != null) {
-                MDC.put("transactionId", previousTransactionId);
-            } else {
-                MDC.remove("transactionId");
-            }
+            MDC.remove("transactionId");
         }
     }
 

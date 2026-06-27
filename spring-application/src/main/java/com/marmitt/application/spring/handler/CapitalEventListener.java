@@ -129,24 +129,21 @@ public class CapitalEventListener {
     }
 
     /**
-     * Executa {@code action} com o {@code transactionId} no MDC (T26), restaurando o valor
-     * anterior ao final. Garante que todos os logs do processamento do evento — incluindo
-     * retries e o caminho {@code @Recover}/DLQ — carreguem o transactionId para rastreamento
-     * end-to-end no Loki.
+     * Executa {@code action} com o {@code transactionId} no MDC (T26). Garante que todos os logs
+     * do processamento do evento — incluindo retries e o caminho {@code @Recover}/DLQ — carreguem
+     * o transactionId para rastreamento end-to-end no Loki.
+     *
+     * <p>Ponto de entrada de topo (consumidor de evento): nao ha transactionId previo no MDC,
+     * entao um {@code put}/{@code remove} simples basta.
      */
     private void withTransactionId(UUID transactionId, Runnable action) {
-        String previous = MDC.get("transactionId");
         if (transactionId != null) {
             MDC.put("transactionId", transactionId.toString());
         }
         try {
             action.run();
         } finally {
-            if (previous != null) {
-                MDC.put("transactionId", previous);
-            } else {
-                MDC.remove("transactionId");
-            }
+            MDC.remove("transactionId");
         }
     }
 
