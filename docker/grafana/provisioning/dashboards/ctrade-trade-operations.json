@@ -1,0 +1,236 @@
+{
+  "uid": "ctrade-trade-operations",
+  "title": "CTrade — Operações de Trade",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "timezone": "browser",
+  "tags": ["ctrade", "trading", "operations"],
+  "panels": [
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "% HOLD (30m)",
+      "description": "Fração dos sinais avaliados que resultaram em HOLD. Perto de 100% por muito tempo = estratégia ociosa/travada.",
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(signal_evaluated_total{decision=\"HOLD\"}[30m])) / sum(rate(signal_evaluated_total[30m]))",
+          "legendFormat": "% HOLD"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.9 },
+              { "color": "red", "value": 0.99 }
+            ]
+          }
+        }
+      },
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "% negadas por regra (30m)",
+      "description": "Fração dos sinais avaliados barrados por regra do core (REJECTED_CAPITAL/LOCK/NO_POSITION/POLICY). Alto = capital/política bloqueando.",
+      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(signal_evaluated_total{decision=~\"REJECTED_.+\"}[30m])) / sum(rate(signal_evaluated_total[30m]))",
+          "legendFormat": "% negadas"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 0.2 },
+              { "color": "red", "value": 0.5 }
+            ]
+          }
+        }
+      },
+      "options": { "colorMode": "background", "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Sinais avaliados /s (30m)",
+      "description": "Taxa total de sinais avaliados. Zero = nenhum tick chegando aos runners (mercado parado, WebSocket ghost ou estratégia inativa).",
+      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(signal_evaluated_total[30m]))",
+          "legendFormat": "sinais/s"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 3 } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Aberturas (BUY) /s (30m)",
+      "description": "Taxa de ordens de entrada (BUY) despachadas pela estratégia.",
+      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 4 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(signal_evaluated_total{decision=\"BUY\"}[30m]))",
+          "legendFormat": "BUY/s"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 3 } },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] } }
+    },
+    {
+      "id": 5,
+      "type": "timeseries",
+      "title": "Sinais por decisão — rate 30m",
+      "description": "Taxa de sinais avaliados por decisão (HOLD/BUY/SELL/CANCEL/REJECTED_*). Fonte: signal_evaluated_total (T23 G2).",
+      "gridPos": { "x": 0, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (decision) (rate(signal_evaluated_total[30m]))",
+          "legendFormat": "{{decision}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "fillOpacity": 20, "stacking": { "mode": "normal" } }
+        }
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"] } }
+    },
+    {
+      "id": 6,
+      "type": "timeseries",
+      "title": "Negadas por regra do core — rate 30m",
+      "description": "Sinais barrados antes de virar ordem: REJECTED_CAPITAL (reserva), REJECTED_LOCK (lock concorrente), REJECTED_NO_POSITION (SELL sem posição), REJECTED_POLICY (política SINGLE).",
+      "gridPos": { "x": 12, "y": 4, "w": 12, "h": 8 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (decision) (rate(signal_evaluated_total{decision=~\"REJECTED_.+\"}[30m]))",
+          "legendFormat": "{{decision}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "fillOpacity": 20, "stacking": { "mode": "normal" } }
+        }
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull", "max"] } }
+    },
+    {
+      "id": 7,
+      "type": "timeseries",
+      "title": "Aberturas (BUY) vs saídas (SELL) — rate 30m",
+      "description": "Despachos de entrada (BUY) vs saída (SELL). Divergência sustentada (BUY >> SELL) = posições acumulando sem a estratégia fechar.",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum(rate(signal_evaluated_total{decision=\"BUY\"}[30m]))",
+          "legendFormat": "aberturas (BUY)"
+        },
+        {
+          "expr": "sum(rate(signal_evaluated_total{decision=\"SELL\"}[30m]))",
+          "legendFormat": "saídas (SELL)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "fillOpacity": 10 }
+        }
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } }
+    },
+    {
+      "id": 8,
+      "type": "timeseries",
+      "title": "Execuções / fills — janela 30m (Loki)",
+      "description": "Fills de fato executados na exchange (logs da conciliação). 'BUY fill' = entrada executada; 'SELL match persisted' = saída executada. Contagem móvel dos últimos 30m.",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 8 },
+      "datasource": { "uid": "loki" },
+      "targets": [
+        {
+          "expr": "sum(count_over_time({app=\"ctrade\"} |= \"BUY fill\" [30m]))",
+          "legendFormat": "entradas executadas (BUY fill)"
+        },
+        {
+          "expr": "sum(count_over_time({app=\"ctrade\"} |= \"SELL match persisted\" [30m]))",
+          "legendFormat": "saídas executadas (SELL)"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "custom": { "drawStyle": "line", "fillOpacity": 10 }
+        }
+      },
+      "options": { "legend": { "displayMode": "list", "placement": "bottom" } }
+    },
+    {
+      "id": 9,
+      "type": "piechart",
+      "title": "Mix de decisões (no período)",
+      "description": "Distribuição acumulada das decisões da estratégia no intervalo selecionado.",
+      "gridPos": { "x": 0, "y": 20, "w": 8, "h": 8 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (decision) (increase(signal_evaluated_total[$__range]))",
+          "legendFormat": "{{decision}}"
+        }
+      ],
+      "options": {
+        "legend": { "displayMode": "table", "placement": "right", "values": ["value", "percent"] },
+        "pieType": "donut",
+        "reduceOptions": { "calcs": ["lastNotNull"] }
+      }
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "BUY/SELL por runner — rate 30m",
+      "description": "Atividade de trade por runner. Permite ver se um runner específico parou de operar enquanto os demais seguem.",
+      "gridPos": { "x": 8, "y": 20, "w": 16, "h": 8 },
+      "datasource": { "uid": "prometheus" },
+      "targets": [
+        {
+          "expr": "sum by (runnerId) (rate(signal_evaluated_total{decision=~\"BUY|SELL\"}[30m]))",
+          "legendFormat": "{{runnerId}}"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "custom": { "drawStyle": "line", "fillOpacity": 10 }
+        }
+      },
+      "options": { "legend": { "displayMode": "table", "placement": "right", "calcs": ["lastNotNull"] } }
+    }
+  ]
+}
