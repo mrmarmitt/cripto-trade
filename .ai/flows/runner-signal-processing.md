@@ -87,6 +87,25 @@ mesma posicao, o fluxo falha com `ConcurrentPositionLockException`.
   seguir.
 - O core nao deve depender de detalhes do adapter da exchange.
 
+## Observabilidade
+
+`ProcessTradeSignalUseCase` emite o counter `signal.evaluated.total{runnerId,decision}` via
+`SignalMetricsPort` (T23 G2; impl Micrometer `MicrometerSignalMetricsAdapter` no spring). O
+`core` nao depende de Micrometer — a porta espelha o padrao de `BootExecutionObserverPort`.
+
+As tags `decision` sao **outcomes mutuamente exclusivos**, nao a decisao bruta da estrategia:
+
+- `HOLD` — sinal HOLD.
+- `BUY` / `SELL` — ordem efetivamente despachada.
+- `CANCEL` — `SHOULD_CANCEL` roteado.
+- `REJECTED_CAPITAL` — BUY recusado na reserva de capital (engolido em `BuySignalHandler`).
+- `REJECTED_LOCK` — SELL perdeu o lock concorrente da posicao.
+- `REJECTED_NO_POSITION` — SELL sem posicao aberta para vender.
+
+Para distinguir despacho de rejeicao sem efeito colateral escondido, `BuySignalHandler` e
+`SellSignalHandler` retornam `BuyOutcome`/`SellOutcome`; o registro fica centralizado no
+orquestrador. Catalogo de indicadores/alertas em `/.ai/monitoring-spec.md`.
+
 ## Validacao
 
 - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/ProcessTradeSignalMockIntegrationTest.java`

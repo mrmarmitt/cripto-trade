@@ -94,6 +94,19 @@ contratos centrais de conciliacao quando precisa alterar estado local.
 e conclusao do run. Mudancas no boot devem preservar esses pontos de observacao,
 porque eles sao usados para diagnostico operacional e testes.
 
+Logs sentinel relevantes (T23 G3/G4):
+
+- `bootSequence.phase2.sanity: completed runId={} result={} portfolios={}` — `result`
+  e o pior status agregado da fase (`PASS/WARN_SURPLUS/SKIPPED/FAILED/FAIL_DEFICIT` ou `NONE`).
+- `bootSequence.phase2.zombie: completed runId={} detected={} mode={}` — `detected` e a
+  contagem de zombies; `mode` distingue `WARN_ONLY` de `FAIL_FAST`.
+- `bootRecovery: runner halted runnerId={} reason=DLQ_PENDING portfolioId={}` — emitido
+  **apenas** quando `RunnerBootRecoveryUseCase` de fato executa `ACTIVE→HALTED` por DLQ
+  pendente (alerta `#alerts-error`). Nao dispara para runners nao-ACTIVE nem para halts
+  por outros erros de reconciliacao.
+
+Catalogo completo de indicadores/alertas em `/.ai/monitoring-spec.md`.
+
 ## Componentes Principais
 
 | Componente | Papel |
