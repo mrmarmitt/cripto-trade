@@ -3,7 +3,7 @@
 **Complexidade:** Média  
 **Responsável:** Claude  
 **Dependências:** T21 (Discord + DLQ gauge), T22 (monitoring-spec.md como referência)  
-**Status:** Pendente
+**Status:** Concluído (PR #130, mergeado em develop — 2026-06-27)
 
 ---
 

@@ -12,7 +12,9 @@ seguras e expor observabilidade do processo.
 - Bugs em readiness de exchange.
 - Divergencias de saldo, ordens abertas, zombies ou transacoes antigas.
 - Alteracoes em `FAIL_FAST` ou `WARN_ONLY`.
-- Recuperacao de runners, TTL de reserva e DLQ operacional.
+- Recuperacao de runners e DLQ operacional.
+- Limpeza de transacoes `PENDING` antigas (a expiracao por TTL nao e mais uma fase
+  do boot desde a T31; vive em runtime no `RecoverStaleTransactionsUseCase`).
 
 ## Entradas E Saidas
 
@@ -31,9 +33,8 @@ seguras e expor observabilidade do processo.
 4. Executa Phase 1 de readiness por exchange.
 5. Executa Phase 2 de sanity check por portfolio.
 6. Executa Phase 2 de zombie detection.
-7. Executa Phase 2 de reservation TTL.
-8. Executa Phase 3 de runner recovery.
-9. Notifica conclusao ou falha pelo observer.
+7. Executa Phase 3 de runner recovery.
+8. Notifica conclusao ou falha pelo observer.
 
 ## Phase 1: Readiness
 
@@ -73,14 +74,18 @@ Classificacoes relevantes:
 Em `FAIL_FAST`, zombies detectados podem bloquear boot e persistir amostras em
 DLQ operacional. Em `WARN_ONLY`, deteccoes sao observadas sem bloquear.
 
-## Phase 2: Reservation TTL
+## Expiracao de PENDING antigas (não é mais fase de boot — T31)
 
-`PortfolioReservationTtlUseCase` procura transacoes `PENDING` antigas sem
-`exchangeOrderId`.
+A antiga "Phase 2: Reservation TTL" (`PortfolioReservationTtlUseCase`, expiracao
+local cega de `PENDING` por cutoff) **foi removida na T31** e nao faz parte da
+sequencia de boot. Duas coberturas a substituem:
 
-Quando uma transacao passa do cutoff, o fluxo cria um `OrderDataDto` sintetico
-com status `EXPIRED` e reaproveita `ConciliationOrderUpdateExecutor`. Assim, a
-transicao segue a mesma regra transacional da conciliacao normal.
+- **No boot:** um `PENDING` sem `exchangeOrderId` agora e *consultado na exchange
+  antes de expirar* (query-before-expire), pelo mesmo `RecoverTransactionStatusUseCase`
+  usado para o limbo em Phase 3 — so vira terminal local se a exchange nao conhecer
+  a ordem.
+- **Em runtime:** a limpeza de `PENDING`/zombie antigas vive no
+  `RecoverStaleTransactionsUseCase` (watchdog), tambem com query-before-expire.
 
 ## Phase 3: Runner Recovery
 
@@ -114,8 +119,8 @@ Catalogo completo de indicadores/alertas em `/.ai/monitoring-spec.md`.
 | `core/src/main/java/com/marmitt/core/application/usecase/boot/RunBootSequenceUseCase.java` | Orquestra as fases de boot. |
 | `core/src/main/java/com/marmitt/core/application/usecase/boot/phase2/PortfolioBootSanityUseCase.java` | Compara saldos locais e externos. |
 | `core/src/main/java/com/marmitt/core/application/usecase/boot/phase2/PortfolioZombieDetectionUseCase.java` | Detecta ordens abertas nao conciliadas. |
-| `core/src/main/java/com/marmitt/core/application/usecase/boot/phase2/PortfolioReservationTtlUseCase.java` | Expira reservas antigas sem ordem externa. |
-| `core/src/main/java/com/marmitt/core/application/usecase/runner/RunnerBootRecoveryUseCase.java` | Recupera runners individualmente. |
+| `core/src/main/java/com/marmitt/core/application/usecase/runner/RunnerBootRecoveryUseCase.java` | Recupera runners individualmente (query-before-expire para PENDING). |
+| `core/src/main/java/com/marmitt/core/application/usecase/runner/RecoverStaleTransactionsUseCase.java` | Watchdog de runtime: expira PENDING/zombie antigas com query-before-expire (T31). |
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/orderconciliation/ConciliationOrderUpdateExecutor.java` | Aplica recuperacoes pela mesma regra da conciliacao normal. |
 | `spring-application/src/main/java/com/marmitt/application/spring/config/core/RunnerConfig.java` | Wires do boot, executores e propriedades. |
 
@@ -124,8 +129,8 @@ Catalogo completo de indicadores/alertas em `/.ai/monitoring-spec.md`.
 - `WARN_ONLY` nao deve bloquear boot apenas por zombie detectado.
 - `FAIL_FAST` deve registrar a fase real que falhou.
 - Recuperacoes que mudam transacao devem usar o executor central de conciliacao.
-- Transacao `PENDING` antiga sem `exchangeOrderId` pode expirar por TTL; se ja
-  tem `exchangeOrderId`, nao deve ser expirada por esse caminho.
+- Transacao `PENDING` sem `exchangeOrderId` so pode virar terminal local depois de
+  consultada na exchange (query-before-expire); nunca por expiracao local cega.
 - Runners arquivados ou em terminacao nao entram no escopo operacional normal.
 
 ## Validacao
