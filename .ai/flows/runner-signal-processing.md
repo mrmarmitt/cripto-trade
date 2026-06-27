@@ -108,14 +108,13 @@ Para distinguir despacho de rejeicao sem efeito colateral escondido, `BuySignalH
 `SellSignalHandler` retornam `BuyOutcome`/`SellOutcome`; o registro fica centralizado no
 orquestrador. Catalogo de indicadores/alertas em `/.ai/monitoring-spec.md`.
 
-**Rastreamento end-to-end (T26):** ao materializar a transacao, o orquestrador ancora o
-`transactionId` no MDC (escopo cobre todo o handler) e, **apenas quando a transacao e
-persistida e despachada** (outcome `DISPATCHED`), emite `signal: transaction created
-transactionId={} correlationId={} runnerId={} side={}`. Sinais descartados antes do commit
-(BUY recusado por capital, SELL sem posicao, falha de lock com rollback) nao emitem o log de
-criacao — evita transacao fantasma na query do Loki. O `correlationId` (do tick, herdado do
-MDC) cria o "join" tick→transacao; o `transactionId` e o eixo da query
-`{app="ctrade"} | json | transactionId="X"`.
+**Rastreamento end-to-end (T26):** **apenas quando a transacao e persistida e despachada**
+(outcome `DISPATCHED`), o orquestrador emite `signal: transaction created transactionId={}
+correlationId={} runnerId={} side={}`. Sinais descartados antes do commit (BUY recusado por
+capital, SELL sem posicao, falha de lock com rollback) nao emitem o log — evita transacao
+fantasma. O `correlationId` (do tick, herdado do MDC) cria o "join" tick→transacao. Este fluxo
+**nao** gerencia MDC de `transactionId` (que vive so na conciliacao); seus logs carregam o id no
+texto da mensagem, recuperaveis por `{app="ctrade"} |= "transactionId=X"`.
 
 ## Validacao
 

@@ -9,7 +9,6 @@ import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.ports.inbound.runner.RecoverStaleTransactionsPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,11 +42,6 @@ public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactions
             return new RecoverStaleTransactionsResponse(0, 0, 0, 0, 0);
         }
 
-        // Dois cutoffs com budgets INDEPENDENTES (cada um ate maxPerRun): confirmados pelo
-        // stale-threshold; PENDING por uma carencia maior. Budget separado e proposital — um
-        // backlog de confirmados (que permanecem no mesmo status apos DLQ e sao re-selecionados
-        // a cada ciclo, ordenados por updated_at) nao pode starvar a limpeza de reserva orfa
-        // (PENDING), senao o capital ficaria preso indefinidamente.
         List<Transaction> confirmed = strategyRunnerRepository.findByStatusesUpdatedBefore(
                 CONFIRMED_STATUSES,
                 request.updatedBefore(),
@@ -69,15 +63,7 @@ public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactions
         int failed = 0;
 
         for (Transaction candidate : candidates) {
-            // T26: ancora o transactionId no MDC durante o processamento da transacao, para que os
-            // logs de resumo/falha deste loop (runtimeRecoveryBatch: ...) e o recovery/conciliacao
-            // chamados abaixo fiquem recuperaveis via `| json | transactionId="X"` no Loki.
-            MDC.put("transactionId", candidate.getId().toString());
             try {
-                // A politica de not-found e resolvida dentro do engine pelo status RECARREGADO
-                // (forRuntimeWatchdog -> DERIVE_FROM_STATUS), nunca pelo status do snapshot do lote:
-                // se a linha virou SUBMITTED/PARTIAL entre a selecao e o execute, o not-found vira
-                // DLQ (e nao expiracao indevida de ordem ja confirmada).
                 RecoverTransactionStatusResponse response = recoverTransactionStatusUseCase.execute(
                         RecoverTransactionStatusRequest.forRuntimeWatchdog(candidate.getId()));
 
@@ -97,12 +83,10 @@ public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactions
 
                 failed++;
                 log.warn("runtimeRecoveryBatch: failed transactionId={} reason={} failureReason={}",
-                        candidate.getId(), response.message(), response.failureReason());
+                        response.transactionId(), response.message(), response.failureReason());
             } catch (RuntimeException e) {
                 failed++;
                 log.error("runtimeRecoveryBatch: unexpected failure transactionId={}", candidate.getId(), e);
-            } finally {
-                MDC.remove("transactionId");
             }
         }
 

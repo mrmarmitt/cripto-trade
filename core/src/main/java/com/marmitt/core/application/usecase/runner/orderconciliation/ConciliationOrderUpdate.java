@@ -78,10 +78,6 @@ public class ConciliationOrderUpdate {
         log.debug("orderConciliation: routing clientOrderId={} transactionId={} status={}",
                 clientOrderId, transaction.getId(), orderData.status());
 
-        // T26: ancora todas as linhas desta conciliacao ao transactionId no MDC, para que a
-        // query `| json | transactionId="X"` no Loki recupere o ciclo de vida completo. Save/restore
-        // mantem o vinculo correto quando a conciliacao roda aninhada (ex.: watchdog -> recover).
-        String previousTransactionId = MDC.get("transactionId");
         MDC.put("transactionId", transaction.getId().toString());
         try {
             switch (orderData.status()) {
@@ -112,22 +108,10 @@ public class ConciliationOrderUpdate {
                         orderData.status(), clientOrderId);
             }
         } catch (RuntimeException e) {
-            // T26: loga a falha AINDA dentro do escopo do transactionId. Os chamadores externos
-            // (ex.: ProcessMessageHandler "Error notifying OrderUpdateListener") so conhecem o
-            // clientOrderId — sem este log, a falha de conciliacao ficaria fora da query
-            // `| json | transactionId="X"`.
             log.error("orderConciliation: failed transactionId={} clientOrderId={} status={} - {}",
                     transaction.getId(), clientOrderId, orderData.status(), e.getMessage(), e);
             throw e;
         } finally {
-            restoreTransactionId(previousTransactionId);
-        }
-    }
-
-    private static void restoreTransactionId(String previousTransactionId) {
-        if (previousTransactionId != null) {
-            MDC.put("transactionId", previousTransactionId);
-        } else {
             MDC.remove("transactionId");
         }
     }

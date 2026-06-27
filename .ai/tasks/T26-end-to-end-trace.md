@@ -135,24 +135,19 @@ Retorna o tick original que originou o sinal.
 
 | Arquivo | Mudança |
 |---|---|
-| `spring-application/.../handler/CapitalEventListener.java` | MDC `transactionId` no consumo de `ExecutionConfirmedEvent` e `MarginReleaseEvent` |
-| `core/.../usecase/runner/RecoverStaleTransactionsUseCase.java` | MDC `transactionId` por candidato no loop do watchdog |
-| `core/.../usecase/runner/RunnerBootRecoveryUseCase.java` | MDC `transactionId` por candidato no loop do boot (`step4ReconcileLimbo`) |
-| `core/.../usecase/runner/processsignal/BuySignalHandler.java` | Log de criação inclui `correlationId` do MDC |
-| `core/.../usecase/runner/processsignal/SellSignalHandler.java` | Log de criação inclui `correlationId` do MDC |
-| `spring-application/.../config/logback/ConditionalMDCConverter.java` | Adicionar `transactionId` ao padrão de log |
-| `spring-application/src/main/resources/logback-spring.xml` | Adicionar `%cMDC{transactionId,tx}` no pattern |
+| `core/.../usecase/runner/orderconciliation/ConciliationOrderUpdate.java` | **Único** site de `MDC.put/remove("transactionId")`: ancora o id durante o roteamento da conciliação e loga a própria falha in-scope |
+| `core/.../usecase/runner/processsignal/ProcessTradeSignalUseCase.java` | Log de criação `signal: transaction created transactionId={} correlationId={} ...` (apenas no outcome DISPATCHED); `correlationId` lido do MDC do tick |
+| `spring-application/src/main/resources/logback-spring.xml` | Adicionar `%cMDC{transactionId,tx}` no pattern do console |
 
 ---
 
 ## Critérios de aceitação
 
-1. Query `{app="ctrade"} | json | transactionId="X"` retorna logs de todas as fronteiras do ciclo de vida da transação X.
-2. Log de criação de transação BUY/SELL contém `correlationId` do tick que originou o sinal.
-3. Logs de `CapitalEventListener` (incluindo retries e recover) contêm `transactionId` no MDC.
-4. Logs do watchdog (`RecoverStaleTransactionsUseCase`) contêm `transactionId` por transação processada.
-5. `transactionId` aparece no formato de log do console (via `ConditionalMDCConverter`) apenas quando presente.
-6. Nenhum comportamento funcional alterado — apenas adição de contexto de rastreamento.
+1. Query `{app="ctrade"} | json | transactionId="X"` retorna os logs **da conciliação** da transação X (PENDING->SUBMITTED, fills, terminal, falha de conciliação) — onde o `transactionId` está no MDC.
+2. Demais fronteiras (criação do sinal, capital, recovery watchdog/boot) carregam `transactionId` **no texto da mensagem**, recuperáveis por filtro de linha `{app="ctrade"} |= "transactionId=X"`.
+3. Log de criação de transação BUY/SELL contém `correlationId` do tick que originou o sinal (o "join" tick→transação).
+4. `transactionId` aparece no formato de log do console (via `ConditionalMDCConverter`) apenas quando presente (i.e., durante a conciliação).
+5. Nenhum comportamento funcional alterado — apenas adição de contexto de rastreamento.
 
 ---
 
@@ -160,41 +155,29 @@ Retorna o tick original que originou o sinal.
 
 Divergências e decisões confirmadas no momento da entrega:
 
-- **MDC no core (decisão arquitetural):** este é o 1º uso de MDC no core (antes só no
-  `spring-application`). Optou-se por `org.slf4j.MDC` direto: `slf4j-api` já é dependência do
-  core (todo `@Slf4j`), e trace context é a mesma categoria de observabilidade que o core já
-  loga. Uma porta `TraceContextPort` só envolveria o MDC thread-local 1:1 — cerimônia sem
-  desacoplamento real.
-- **Log de criação centralizado:** o log `signal: transaction created ... correlationId=...`
-  ficou no `ProcessTradeSignalUseCase` (não em `Buy/SellSignalHandler`, como sugeria a spec).
-  É o ponto único que conhece o `side` e ancora o `transactionId` no MDC para as linhas de
-  capital/dispatch. O log de criação só é emitido no **outcome `DISPATCHED`** (transação
-  persistida e ordem despachada) — sinais descartados antes do commit (BUY recusado por capital,
-  SELL sem posição, falha de lock que faz rollback do `TransactionTemplate`) **não** emitem o log,
-  para a query do Loki não retornar transações fantasma (ajuste de review do PR #131). O escopo do
-  MDC, porém, cobre todo o handler, então os logs de rejeição permanecem rastreáveis pelo id.
+- **MDC `transactionId` centralizado na conciliação (decisão de design):** após iterações no
+  review, o `MDC.put/remove("transactionId")` ficou **só** em `ConciliationOrderUpdate` — a
+  classe que de fato *é* a conciliação. Os orquestradores que apenas *executam* uma conciliação
+  (watchdog `RecoverStaleTransactionsUseCase`, boot `RunnerBootRecoveryUseCase`, engine
+  `RecoverTransactionStatusUseCase`) e os fluxos de origem (`ProcessTradeSignalUseCase`,
+  `CapitalEventListener`) **não** gerenciam MDC. Motivo: gerenciar MDC espalhado por várias
+  classes (escopos cruzando métodos, save/restore para reentrância) tem alto risco de bug; o
+  ganho de rastreabilidade estruturada do "originador" é facilmente coberto por `transactionId`
+  no **texto** da mensagem. Resultado: um único site de MDC, simples (put/remove local).
+- **Consequência de tracing:** `| json | transactionId="X"` cobre a **conciliação** (estruturado);
+  criação de sinal, capital e recovery são recuperados por `|= "transactionId=X"` (filtro de linha),
+  pois carregam o id no texto. O 1º uso de MDC no core foi via `org.slf4j.MDC` direto (slf4j-api já
+  é dependência de todo `@Slf4j`); descartada uma porta `TraceContextPort` (envolveria o MDC 1:1).
+- **Log de falha in-scope na conciliação:** a `ConciliationOrderUpdate` loga a própria falha dentro
+  do escopo do MDC antes de propagar — os chamadores externos (`ProcessMessageHandler`) só conhecem
+  o `clientOrderId`, então sem esse log a falha de conciliação escaparia da query por `transactionId`.
+- **Log de criação no `ProcessTradeSignalUseCase`:** `signal: transaction created transactionId={}
+  correlationId={} ...` é emitido só no **outcome `DISPATCHED`** (transação persistida e despachada)
+  — sinais descartados antes do commit não emitem, para não anunciar transação fantasma. O
+  `correlationId` vem do MDC do **tick** (não do `transactionId`), então o join tick→transação
+  independe do MDC de transactionId.
 - **Acessores reais dos eventos:** a spec usa `event.transactionId()`; os eventos expõem o id
   via `confirmation().transactionId()` (`ExecutionConfirmedEvent`) e `release().transactionId()`
   (`MarginReleaseEvent`).
-- **MDC do recovery nos loops chamadores, não no engine:** o `transactionId` é ancorado nos loops
-  do watchdog (`RecoverStaleTransactionsUseCase`) **e** do boot
-  (`RunnerBootRecoveryUseCase.step4ReconcileLimbo`), não dentro de `RecoverTransactionStatusUseCase`.
-  Motivo (review do PR #131): os logs de *resumo/falha* desses recoveries são emitidos **no loop,
-  após** o `execute` retornar (ex.: `runtimeRecoveryBatch: failed ...`, `bootRecovery: failed to
-  reconcile limbo ...`) — para uma resposta `FAILED` que o engine não loga internamente
-  (RUNNER_NOT_FOUND, capability ausente etc.), só o loop loga. O escopo precisa cobrir o loop, senão
-  justamente as falhas ficariam fora da query `| json | transactionId="X"`. Cada loop é dono do seu
-  escopo (put/remove simples); o engine e a conciliação herdam o escopo por reentrância.
-- **Save/restore do MDC e log de falha in-scope na conciliação:** a conciliação salva/restaura o
-  `transactionId` (segura aninhada sob os loops de recovery; equivale a remove no callback WebSocket,
-  que não tem escopo externo) e **loga a própria falha dentro do escopo** antes de propagar — os
-  chamadores externos (`ProcessMessageHandler`) só conhecem o `clientOrderId`, então sem esse log a
-  falha de conciliação escaparia da query por `transactionId`.
-- **Limpeza do MDC de sinal no `finally` por-runner de `execute()`:** o `transactionId` é setado ao
-  materializar a transação em `processTradeSignal`, mas removido no `finally` por-runner de
-  `execute()` — assim, um erro tardio (ex.: falha de `orderDispatch.dispatch` após o commit)
-  capturado no `catch` de `execute()` ainda carrega o `transactionId` no log.
-- **Item 5 (DLQ):** `CAPITAL_DLQ_PERSISTED` passou a carregar `transactionId` automaticamente —
-  o caminho `@Recover` agora seta o MDC, então o id vira campo JSON no Loki sem mudar a mensagem.
 - **Testes:** o test runtime do `:core` ganhou binding `logback-classic` (sem binding o
   `MDCAdapter` do slf4j é NOP e o MDC não funciona em teste) + `logback-test.xml` silencioso.

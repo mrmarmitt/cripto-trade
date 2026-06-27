@@ -206,12 +206,13 @@
 
 ### Gaps de lógica de correlação (requerem código de monitoramento)
 
-> **T26:** o `transactionId` agora é propagado como campo MDC em todas as fronteiras assíncronas
-> (signal → conciliação → capital → watchdog). Como o Loki emite chaves MDC como campos JSON, a
-> história completa de uma operação é recuperável por `{app="ctrade"} | json | transactionId="X"`,
-> e o log `signal: transaction created ... correlationId=...` faz o join tick→transação. Isso
-> reduz a complexidade das correlações por transactionId abaixo (deixam de exigir join manual no
-> tempo). A correlação ponta-a-ponta do stream Binance (subscription→executionReport) permanece gap.
+> **T26:** o `transactionId` é campo MDC (campo JSON no Loki) na **conciliação**
+> (`ConciliationOrderUpdate`) — `| json | transactionId="X"` recupera o ciclo de conciliação. As
+> demais fronteiras (criação do sinal, capital, recovery watchdog/boot) carregam o `transactionId`
+> no **texto** da mensagem, recuperáveis por `|= "transactionId=X"`; o log
+> `signal: transaction created ... correlationId=...` faz o join tick→transação. O MDC ficou
+> concentrado na conciliação para reduzir complexidade/risco de bug (um único site). A correlação
+> ponta-a-ponta do stream Binance (subscription→executionReport) permanece gap.
 
 | Correlação | Descrição | Complexidade |
 |---|---|---|

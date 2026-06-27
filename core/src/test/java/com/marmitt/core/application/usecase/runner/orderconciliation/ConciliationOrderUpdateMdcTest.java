@@ -56,30 +56,6 @@ class ConciliationOrderUpdateMdcTest {
         assertNull(MDC.get("transactionId"), "MDC deve ser limpo quando nao havia valor anterior");
     }
 
-    @Test
-    void restoresPreviousTransactionIdAfterRouting() {
-        StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
-        EventPublisherPort publisher = mock(EventPublisherPort.class);
-        ConciliationOrderUpdate conciliation = new ConciliationOrderUpdate(repository, publisher);
-
-        Transaction transaction = newBuyTransaction();
-        when(repository.findTransactionByClientOrderId(transaction.getClientOrderId()))
-                .thenReturn(Optional.of(transaction));
-
-        MDC.put("transactionId", "OUTER");
-        AtomicReference<String> mdcDuringAction = new AtomicReference<>();
-        conciliation.execute(
-                orderData(transaction.getClientOrderId(), OrderDataDto.OrderStatus.NEW),
-                tx -> mdcDuringAction.set(MDC.get("transactionId")),
-                (tx, od, finalFill) -> { },
-                tx -> { }
-        );
-
-        assertEquals(transaction.getId().toString(), mdcDuringAction.get());
-        assertEquals("OUTER", MDC.get("transactionId"),
-                "o valor anterior do MDC deve ser restaurado apos a conciliacao aninhada");
-    }
-
     private static Transaction newBuyTransaction() {
         BigDecimal quantity = new BigDecimal("2.50000000");
         BigDecimal price = new BigDecimal("10.00000000");

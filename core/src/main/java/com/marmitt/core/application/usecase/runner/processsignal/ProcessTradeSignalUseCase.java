@@ -255,11 +255,6 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
             } catch (Exception e) {
                 log.error("priceUpdate: error processing runner={} symbol={} - {}",
                         runner.getId(), symbol, e.getMessage(), e);
-            } finally {
-                // T26: limpa o transactionId por-runner. Mantê-lo setado ate aqui garante que os
-                // catches acima (ex.: falha de dispatch apos o commit da transacao) carreguem o
-                // transactionId no log de erro — eles rodam fora do escopo de processTradeSignal.
-                MDC.remove("transactionId");
             }
         }
     }
@@ -321,14 +316,11 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         Transaction transaction = tradeIntentFactory.buildTransaction(
                 runner, signal, normalized.quantity(), normalized.price());
 
-        // T26: ancora transactionId no MDC ao materializar a transacao, para que os logs desta
-        // operacao sejam recuperaveis no Loki via `| json | transactionId="X"`. A limpeza (remove)
-        // ocorre no finally por-runner de execute() — assim, um erro tardio (ex.: falha de dispatch
-        // apos o commit) capturado la fora ainda carrega o transactionId. O log de CRIACAO so e
-        // emitido quando a transacao foi de fato persistida e despachada (outcome DISPATCHED) — senao
-        // anunciaria uma transacao fantasma para sinais descartados antes do commit (BUY recusado por
-        // capital, SELL sem posicao, falha de lock que faz rollback do TransactionTemplate).
-        MDC.put("transactionId", transaction.getId().toString());
+        // T26: o log de CRIACAO so e emitido quando a transacao foi de fato persistida e despachada
+        // (outcome DISPATCHED) — senao anunciaria uma transacao fantasma para sinais descartados antes
+        // do commit (BUY recusado por capital, SELL sem posicao, falha de lock que faz rollback). O log
+        // registra transactionId + correlationId (do tick, via MDC) no texto: o "join" tick->transacao.
+        // O MDC estruturado por transactionId fica a cargo da conciliacao, nao deste fluxo de origem.
         if (transaction.isBuy()) {
             BigDecimal precomputedExposure = exposureSnapshot != null
                     ? exposureSnapshot.inFlightExposure()

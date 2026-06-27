@@ -16,7 +16,6 @@ import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
-import org.slf4j.MDC;
 
 import java.time.Instant;
 import java.util.List;
@@ -219,28 +218,18 @@ public class RunnerBootRecoveryUseCase {
         }
         if (ctx.orderQuery() == null) {
             ctx.error("Step 4 ERROR: limbo exists but order query capability is unavailable.");
-            // T26: cada transacao em limbo fica sem reconciliacao aqui — registra a falha por
-            // transacao, com o transactionId no MDC, para que continuem recuperaveis via
-            // `| json | transactionId="X"` mesmo neste caminho de capability ausente.
+            // Cada transacao em limbo fica sem reconciliacao aqui — registra a falha por transacao
+            // (transactionId no texto da mensagem) para diagnostico. O rastreamento estruturado por
+            // MDC fica a cargo da conciliacao, nao deste orquestrador de boot.
             for (Transaction tx : ctx.limbo()) {
-                MDC.put("transactionId", tx.getId().toString());
-                try {
-                    log.error("bootRecovery: limbo not reconciled - order query capability unavailable"
-                                    + " transactionId={} runnerId={} exchange={}",
-                            tx.getId(), ctx.runnerId(), ctx.exchangeId());
-                } finally {
-                    MDC.remove("transactionId");
-                }
+                log.error("bootRecovery: limbo not reconciled - order query capability unavailable"
+                                + " transactionId={} runnerId={} exchange={}",
+                        tx.getId(), ctx.runnerId(), ctx.exchangeId());
             }
             return;
         }
 
         for (Transaction tx : ctx.limbo()) {
-            // T26: ancora o transactionId no MDC durante a reconciliacao desta transacao, para que os
-            // logs de erro deste loop (bootRecovery: failed to reconcile limbo ...) e o recovery/
-            // conciliacao chamados abaixo fiquem recuperaveis via `| json | transactionId="X"` no Loki.
-            // Simetrico ao loop do watchdog (RecoverStaleTransactionsUseCase).
-            MDC.put("transactionId", tx.getId().toString());
             try {
                 RecoverTransactionStatusResponse response = recoverTransactionStatusUseCase.execute(
                         RecoverTransactionStatusRequest.forBoot(tx.getId()),
@@ -284,8 +273,6 @@ public class RunnerBootRecoveryUseCase {
                 ctx.error("Step 4 ERROR: transactionId=" + tx.getId() + " reason=" + e.getMessage());
                 log.error("bootRecovery: failed to reconcile limbo transactionId={} runnerId={}",
                         tx.getId(), ctx.runnerId(), e);
-            } finally {
-                MDC.remove("transactionId");
             }
         }
     }

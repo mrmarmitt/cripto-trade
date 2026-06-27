@@ -92,10 +92,11 @@ processado), ambas as reactions emitem log em nivel `info` (T23 G5):
 Loki), o que escondia replays inesperados de eventos de capital. Catalogo de
 indicadores em `/.ai/monitoring-spec.md`.
 
-**Rastreamento end-to-end (T26):** o `CapitalEventListener` ancora o `transactionId` no MDC
-ao consumir `ExecutionConfirmedEvent`/`MarginReleaseEvent` — inclusive no caminho
-`@Recover`/DLQ — de modo que todos os logs do processamento (e retries) carreguem o id e
-sejam recuperaveis via `| json | transactionId="X"` no Loki.
+**Rastreamento end-to-end (T26):** os logs das reactions de capital
+(`executionConfirmedReaction: ... transactionId=...`, `marginReleasedReaction: ...`,
+`CAPITAL_DLQ_PERSISTED`) carregam o `transactionId` no **texto** da mensagem, recuperaveis por
+`{app="ctrade"} |= "transactionId=X"`. O `CapitalEventListener` **nao** gerencia MDC de
+`transactionId` — esse rastreamento estruturado (MDC) fica concentrado na `ConciliationOrderUpdate`.
 
 ## DLQ De Capital
 

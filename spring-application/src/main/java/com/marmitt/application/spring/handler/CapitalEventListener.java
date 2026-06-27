@@ -83,16 +83,13 @@ public class CapitalEventListener {
             )
     )
     public void onExecutionConfirmed(ExecutionConfirmedEvent event) {
-        withTransactionId(event.confirmation().transactionId(),
-                () -> handleExecutionConfirmed.handle(event));
+        handleExecutionConfirmed.handle(event);
     }
 
     @Recover
     public void recoverExecutionConfirmed(Exception ex, ExecutionConfirmedEvent event) {
-        withTransactionId(event.confirmation().transactionId(), () -> {
-            String rawPayload = payloadCodec.encodeExecutionConfirmed(event, ex);
-            persistCapitalDlq("EXECUTION_CONFIRMED", event.confirmation().runnerId(), rawPayload, ex);
-        });
+        String rawPayload = payloadCodec.encodeExecutionConfirmed(event, ex);
+        persistCapitalDlq("EXECUTION_CONFIRMED", event.confirmation().runnerId(), rawPayload, ex);
     }
 
     @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
@@ -116,35 +113,13 @@ public class CapitalEventListener {
             )
     )
     public void onMarginRelease(MarginReleaseEvent event) {
-        withTransactionId(event.release().transactionId(),
-                () -> handleMarginRelease.handle(event));
+        handleMarginRelease.handle(event);
     }
 
     @Recover
     public void recoverMarginRelease(Exception ex, MarginReleaseEvent event) {
-        withTransactionId(event.release().transactionId(), () -> {
-            String rawPayload = payloadCodec.encodeMarginRelease(event, ex);
-            persistCapitalDlq("MARGIN_RELEASE", event.release().runnerId(), rawPayload, ex);
-        });
-    }
-
-    /**
-     * Executa {@code action} com o {@code transactionId} no MDC (T26). Garante que todos os logs
-     * do processamento do evento — incluindo retries e o caminho {@code @Recover}/DLQ — carreguem
-     * o transactionId para rastreamento end-to-end no Loki.
-     *
-     * <p>Ponto de entrada de topo (consumidor de evento): nao ha transactionId previo no MDC,
-     * entao um {@code put}/{@code remove} simples basta.
-     */
-    private void withTransactionId(UUID transactionId, Runnable action) {
-        if (transactionId != null) {
-            MDC.put("transactionId", transactionId.toString());
-        }
-        try {
-            action.run();
-        } finally {
-            MDC.remove("transactionId");
-        }
+        String rawPayload = payloadCodec.encodeMarginRelease(event, ex);
+        persistCapitalDlq("MARGIN_RELEASE", event.release().runnerId(), rawPayload, ex);
     }
 
     private void persistCapitalDlq(String eventType, UUID runnerId, String rawPayload, Exception originalFailure) {
