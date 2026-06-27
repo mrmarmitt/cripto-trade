@@ -206,9 +206,17 @@
 
 ### Gaps de lógica de correlação (requerem código de monitoramento)
 
+> **T26:** o `transactionId` é campo MDC (campo JSON no Loki) na **conciliação**
+> (`ConciliationOrderUpdate`) — `| json | transactionId="X"` recupera o ciclo de conciliação. As
+> demais fronteiras (criação do sinal, capital, recovery watchdog/boot) carregam o `transactionId`
+> no **texto** da mensagem, recuperáveis por `|= "transactionId=X"`; o log
+> `signal: transaction created ... correlationId=...` faz o join tick→transação. O MDC ficou
+> concentrado na conciliação para reduzir complexidade/risco de bug (um único site). A correlação
+> ponta-a-ponta do stream Binance (subscription→executionReport) permanece gap.
+
 | Correlação | Descrição | Complexidade |
 |---|---|---|
-| `capital reserved` → `PENDING->SUBMITTED` em < 2 min | Detectar ordem enviada mas sem callback NEW | Alta — requer join por transactionId com timeout |
+| `capital reserved` → `PENDING->SUBMITTED` em < 2 min | Detectar ordem enviada mas sem callback NEW | Média — o join é por `transactionId`, mas as duas linhas estão em níveis diferentes: `capital reserved` (em `ProcessTradeSignalUseCase`) carrega o id só no **texto** (`\|= "transactionId=X"`); `PENDING->SUBMITTED` (na conciliação) carrega no **MDC** (`\| json`). Um monitor deve usar o filtro de linha para o lado da reserva |
 | Subscription Binance confirmada → `executionReport` em < 60s após ordem | Detectar stream saudável por end-to-end | Alta — requer rastrear estado da sessão |
 
 ---

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Binding logback nos testes do core existe so para habilitar o MDC real (T26).
+     Mantem o output limpo elevando o root para WARN. -->
+<configuration>
+    <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+        <encoder>
+            <pattern>%d{HH:mm:ss.SSS} %-5level [tx:%X{transactionId}] %logger{20} - %msg%n</pattern>
+        </encoder>
+    </appender>
+    <root level="WARN">
+        <appender-ref ref="CONSOLE"/>
+    </root>
+</configuration>

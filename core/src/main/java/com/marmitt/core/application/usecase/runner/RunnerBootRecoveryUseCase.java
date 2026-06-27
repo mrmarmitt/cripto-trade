@@ -99,77 +99,77 @@ public class RunnerBootRecoveryUseCase {
     }
 
     public RecoverySummary recoverRunner(StrategyRunner runner) {
-        RecoveryContext ctx = new RecoveryContext(runner);
+        RecoveryContext recovery = new RecoveryContext(runner);
 
         log.info("bootRecovery: start runnerId={} exchange={} status={} reconciling={}",
-                ctx.runnerId(), ctx.exchangeId(), ctx.runner().getStatus(), ctx.runner().isReconciling());
+                recovery.runnerId(), recovery.exchangeId(), recovery.runner().getStatus(), recovery.runner().isReconciling());
 
-        stepAEnterReconciliation(ctx);
-        step0CaptureAccountSnapshot(ctx);
-        step1LoadInFlight(ctx);
-        step2ResolveOrderQueryCapability(ctx);
-        step4ReconcileLimbo(ctx);
-        step5ValidateRemainingInFlight(ctx);
-        step6FinalizeRunnerState(ctx);
+        stepAEnterReconciliation(recovery);
+        step0CaptureAccountSnapshot(recovery);
+        step1LoadInFlight(recovery);
+        step2ResolveOrderQueryCapability(recovery);
+        step4ReconcileLimbo(recovery);
+        step5ValidateRemainingInFlight(recovery);
+        step6FinalizeRunnerState(recovery);
 
         log.info("bootRecovery: completed runnerId={} inFlight={} limbo={} remaining={} hasErrors={}",
-                ctx.runnerId(),
-                ctx.inFlight().size(),
-                ctx.limbo().size(),
-                ctx.remainingInFlight(),
-                ctx.hasErrors());
+                recovery.runnerId(),
+                recovery.inFlight().size(),
+                recovery.limbo().size(),
+                recovery.remainingInFlight(),
+                recovery.hasErrors());
 
         return new RecoverySummary(
-                ctx.runnerId(),
-                ctx.inFlight().size(),
-                ctx.limbo().size(),
-                ctx.notes()
+                recovery.runnerId(),
+                recovery.inFlight().size(),
+                recovery.limbo().size(),
+                recovery.notes()
         );
     }
 
-    private void stepAEnterReconciliation(RecoveryContext ctx) {
-        if (ctx.runner().isReconciling()) {
-            ctx.note("Step A: runner already in reconciliation.");
+    private void stepAEnterReconciliation(RecoveryContext recovery) {
+        if (recovery.runner().isReconciling()) {
+            recovery.note("Step A: runner already in reconciliation.");
             return;
         }
 
-        ctx.runner().beginReconciliation();
-        strategyRunnerRepository.save(ctx.runner());
-        ctx.note("Step A: runner set to reconciling=true.");
+        recovery.runner().beginReconciliation();
+        strategyRunnerRepository.save(recovery.runner());
+        recovery.note("Step A: runner set to reconciling=true.");
     }
 
-    private void step0CaptureAccountSnapshot(RecoveryContext ctx) {
-        Optional<ExchangeAdapterDescriptor> adapterOpt = exchangeAdapterRepository.findAdapter(ctx.exchangeId());
+    private void step0CaptureAccountSnapshot(RecoveryContext recovery) {
+        Optional<ExchangeAdapterDescriptor> adapterOpt = exchangeAdapterRepository.findAdapter(recovery.exchangeId());
         if (adapterOpt.isEmpty() || !adapterOpt.get().hasAccountQuery()) {
-            ctx.note("Step 0: account snapshot capability not available for exchange=" + ctx.exchangeId());
+            recovery.note("Step 0: account snapshot capability not available for exchange=" + recovery.exchangeId());
             return;
         }
 
         try {
             var account = adapterOpt.get().accountQuery().queryAccountSnapshot();
-            ctx.note("Step 0: account snapshot captured exchange=" + ctx.exchangeId()
+            recovery.note("Step 0: account snapshot captured exchange=" + recovery.exchangeId()
                     + " assets=" + account.balances().size());
         } catch (UnsupportedOperationException e) {
-            ctx.note("Step 0: account snapshot unsupported for exchange=" + ctx.exchangeId());
+            recovery.note("Step 0: account snapshot unsupported for exchange=" + recovery.exchangeId());
         } catch (Exception e) {
-            ctx.note("Step 0 WARN: account snapshot failed exchange=" + ctx.exchangeId()
+            recovery.note("Step 0 WARN: account snapshot failed exchange=" + recovery.exchangeId()
                     + " reason=" + e.getMessage());
             log.warn("bootRecovery: account snapshot failed exchange={} runnerId={} reason={}",
-                    ctx.exchangeId(), ctx.runnerId(), e.getMessage());
+                    recovery.exchangeId(), recovery.runnerId(), e.getMessage());
         }
     }
 
-    private void step1LoadInFlight(RecoveryContext ctx) {
+    private void step1LoadInFlight(RecoveryContext recovery) {
         List<Transaction> inFlight = strategyRunnerRepository.findByRunnerIdAndStatuses(
-                ctx.runnerId(), BOOT_RELEVANT_STATUSES);
-        ctx.inFlight(inFlight);
+                recovery.runnerId(), BOOT_RELEVANT_STATUSES);
+        recovery.inFlight(inFlight);
 
         List<Transaction> toReconcile = selectForReconciliation(
                 inFlight, pendingReconcileGraceMs, Instant.now());
-        ctx.limbo(toReconcile);
+        recovery.limbo(toReconcile);
 
         int deferred = inFlight.size() - toReconcile.size();
-        ctx.note("Step 1: loaded inFlight=" + inFlight.size()
+        recovery.note("Step 1: loaded inFlight=" + inFlight.size()
                 + " reconciling=" + toReconcile.size() + " deferredYoungPending=" + deferred);
     }
 
@@ -193,90 +193,105 @@ public class RunnerBootRecoveryUseCase {
                 .toList();
     }
 
-    private void step2ResolveOrderQueryCapability(RecoveryContext ctx) {
-        if (ctx.limbo().isEmpty()) {
-            ctx.note("Step 2: no limbo transactions - exchange query not required.");
+    private void step2ResolveOrderQueryCapability(RecoveryContext recovery) {
+        if (recovery.limbo().isEmpty()) {
+            recovery.note("Step 2: no limbo transactions - exchange query not required.");
             return;
         }
 
-        Optional<ExchangeAdapterDescriptor> adapterForQuery = exchangeAdapterRepository.findAdapter(ctx.exchangeId());
+        Optional<ExchangeAdapterDescriptor> adapterForQuery = exchangeAdapterRepository.findAdapter(recovery.exchangeId());
         if (adapterForQuery.isEmpty() || !adapterForQuery.get().hasOrderQuery()) {
-            ctx.error("Step 2 ERROR: exchange does not expose order query capability exchange=" + ctx.exchangeId());
+            recovery.error("Step 2 ERROR: exchange does not expose order query capability exchange=" + recovery.exchangeId());
             log.warn("bootRecovery: missing order query capability exchange={} runnerId={}",
-                    ctx.exchangeId(), ctx.runnerId());
+                    recovery.exchangeId(), recovery.runnerId());
             return;
         }
 
-        ctx.orderQuery(adapterForQuery.get().orderQuery());
-        ctx.note("Step 2: order query capability resolved for exchange=" + ctx.exchangeId());
+        recovery.orderQuery(adapterForQuery.get().orderQuery());
+        recovery.note("Step 2: order query capability resolved for exchange=" + recovery.exchangeId());
     }
 
-    private void step4ReconcileLimbo(RecoveryContext ctx) {
-        if (ctx.limbo().isEmpty()) {
-            ctx.note("Step 4: no limbo transactions to reconcile.");
+    private void step4ReconcileLimbo(RecoveryContext recovery) {
+        if (recovery.limbo().isEmpty()) {
+            recovery.note("Step 4: no limbo transactions to reconcile.");
             return;
         }
-        if (ctx.orderQuery() == null) {
-            ctx.error("Step 4 ERROR: limbo exists but order query capability is unavailable.");
+        if (recovery.orderQuery() == null) {
+            recovery.error("Step 4 ERROR: limbo exists but order query capability is unavailable.");
+            // Cada transacao em limbo fica sem reconciliacao aqui — registra a falha por transacao
+            // (transactionId no texto da mensagem) para diagnostico. O rastreamento estruturado por
+            // MDC fica a cargo da conciliacao, nao deste orquestrador de boot.
+            for (Transaction tx : recovery.limbo()) {
+                log.error("bootRecovery: limbo not reconciled - order query capability unavailable"
+                                + " transactionId={} runnerId={} exchange={}",
+                        tx.getId(), recovery.runnerId(), recovery.exchangeId());
+            }
             return;
         }
 
-        for (Transaction tx : ctx.limbo()) {
+        List<Transaction> limbo = recovery.limbo();
+        for (int limboIndex = 0; limboIndex < limbo.size(); limboIndex++) {
+            Transaction tx = limbo.get(limboIndex);
             try {
                 RecoverTransactionStatusResponse response = recoverTransactionStatusUseCase.execute(
                         RecoverTransactionStatusRequest.forBoot(tx.getId()),
-                        (orderQuery, transaction, runner) -> queryOrderByClientOrderIdWithRetry(ctx, transaction)
+                        (orderQuery, transaction, runner) -> queryOrderByClientOrderIdWithRetry(recovery, transaction)
                 );
 
                 if (response.outcome() == RecoverTransactionStatusResponse.RecoveryOutcome.RECOVERED) {
                     if (response.action() == RecoverTransactionStatusResponse.RecoveryAction.RECONCILED_FROM_EXCHANGE) {
-                        ctx.note("Step 4: reconciled from exchange transactionId=" + tx.getId()
+                        recovery.note("Step 4: reconciled from exchange transactionId=" + tx.getId()
                                 + " status=" + response.statusAfter());
                     } else if (response.action() == RecoverTransactionStatusResponse.RecoveryAction.MARKED_CANCELED
                             || response.action() == RecoverTransactionStatusResponse.RecoveryAction.MARKED_EXPIRED) {
                         String fallbackStatus = response.action() == RecoverTransactionStatusResponse.RecoveryAction.MARKED_CANCELED
                                 ? OrderDataDto.OrderStatus.CANCELED.name()
                                 : OrderDataDto.OrderStatus.EXPIRED.name();
-                        ctx.note("Step 4: exchange not found -> local " + fallbackStatus
+                        recovery.note("Step 4: exchange not found -> local " + fallbackStatus
                                 + " transactionId=" + tx.getId());
                     }
                     continue;
                 }
 
                 if (response.outcome() == RecoverTransactionStatusResponse.RecoveryOutcome.SKIPPED) {
-                    ctx.note("Step 4: skip transactionId=" + tx.getId()
+                    recovery.note("Step 4: skip transactionId=" + tx.getId()
                             + " status=" + response.statusAfter()
                             + " reason=" + response.message());
                     continue;
                 }
 
                 if (response.failureReason() == RecoverTransactionStatusResponse.FailureReason.ORDER_QUERY_UNSUPPORTED) {
-                    ctx.error("Step 4 ERROR: exchange query unsupported exchange=" + ctx.exchangeId()
-                            + " transactionId=" + tx.getId());
-                    log.warn("bootRecovery: order query unsupported exchange={} runnerId={} transactionId={}",
-                            ctx.exchangeId(), ctx.runnerId(), tx.getId());
+                    // order-query unsupported vale para a exchange/runner inteira: as transacoes de
+                    // limbo restantes nao serao reconciliadas. Loga cada uma com seu transactionId
+                    // (no texto) antes de interromper, para nenhuma ficar sem rastro de falha.
+                    for (Transaction unreconciled : limbo.subList(limboIndex, limbo.size())) {
+                        recovery.error("Step 4 ERROR: exchange query unsupported exchange=" + recovery.exchangeId()
+                                + " transactionId=" + unreconciled.getId());
+                        log.warn("bootRecovery: order query unsupported exchange={} runnerId={} transactionId={}",
+                                recovery.exchangeId(), recovery.runnerId(), unreconciled.getId());
+                    }
                     break;
                 }
 
-                ctx.error("Step 4 ERROR: transactionId=" + tx.getId() + " reason=" + response.message());
+                recovery.error("Step 4 ERROR: transactionId=" + tx.getId() + " reason=" + response.message());
                 log.error("bootRecovery: failed to reconcile limbo transactionId={} runnerId={} reason={}",
-                        tx.getId(), ctx.runnerId(), response.message());
+                        tx.getId(), recovery.runnerId(), response.message());
             } catch (Exception e) {
-                ctx.error("Step 4 ERROR: transactionId=" + tx.getId() + " reason=" + e.getMessage());
+                recovery.error("Step 4 ERROR: transactionId=" + tx.getId() + " reason=" + e.getMessage());
                 log.error("bootRecovery: failed to reconcile limbo transactionId={} runnerId={}",
-                        tx.getId(), ctx.runnerId(), e);
+                        tx.getId(), recovery.runnerId(), e);
             }
         }
     }
 
-    private Optional<OrderDataDto> queryOrderByClientOrderIdWithRetry(RecoveryContext ctx, Transaction tx) {
+    private Optional<OrderDataDto> queryOrderByClientOrderIdWithRetry(RecoveryContext recovery, Transaction tx) {
         long backoffMs = exchangeQueryInitialBackoffMs;
 
         for (int attempt = 1; attempt <= exchangeQueryMaxAttempts; attempt++) {
             try {
-                Optional<OrderDataDto> queried = queryOrderByClientOrderIdWithTimeout(ctx.orderQuery(), tx);
+                Optional<OrderDataDto> queried = queryOrderByClientOrderIdWithTimeout(recovery.orderQuery(), tx);
                 if (attempt > 1) {
-                    ctx.note("Step 4: exchange query recovered transactionId=" + tx.getId()
+                    recovery.note("Step 4: exchange query recovered transactionId=" + tx.getId()
                             + " attempt=" + attempt);
                 }
                 return queried;
@@ -291,8 +306,8 @@ public class RunnerBootRecoveryUseCase {
                 }
 
                 log.warn("bootRecovery: transient query failure exchange={} runnerId={} transactionId={} attempt={}/{} reason={}",
-                        ctx.exchangeId(), ctx.runnerId(), tx.getId(), attempt, exchangeQueryMaxAttempts, e.getMessage());
-                ctx.note("Step 4 WARN: transient query failure transactionId=" + tx.getId()
+                        recovery.exchangeId(), recovery.runnerId(), tx.getId(), attempt, exchangeQueryMaxAttempts, e.getMessage());
+                recovery.note("Step 4 WARN: transient query failure transactionId=" + tx.getId()
                         + " attempt=" + attempt + " reason=" + e.getMessage());
 
                 sleepBackoff(backoffMs);
@@ -378,43 +393,43 @@ public class RunnerBootRecoveryUseCase {
                 : bounded;
     }
 
-    private void step5ValidateRemainingInFlight(RecoveryContext ctx) {
+    private void step5ValidateRemainingInFlight(RecoveryContext recovery) {
         int remaining = strategyRunnerRepository
-                .findByRunnerIdAndStatuses(ctx.runnerId(), BOOT_RELEVANT_STATUSES)
+                .findByRunnerIdAndStatuses(recovery.runnerId(), BOOT_RELEVANT_STATUSES)
                 .size();
-        ctx.remainingInFlight(remaining);
-        ctx.note("Step 5: remainingInFlight=" + remaining);
+        recovery.remainingInFlight(remaining);
+        recovery.note("Step 5: remainingInFlight=" + remaining);
     }
 
-    private void step6FinalizeRunnerState(RecoveryContext ctx) {
-        StrategyRunner latestRunner = strategyRunnerRepository.findById(ctx.runnerId()).orElse(null);
+    private void step6FinalizeRunnerState(RecoveryContext recovery) {
+        StrategyRunner latestRunner = strategyRunnerRepository.findById(recovery.runnerId()).orElse(null);
         if (latestRunner == null) {
-            ctx.error("Step 6 ERROR: runner not found during finalization runnerId=" + ctx.runnerId());
+            recovery.error("Step 6 ERROR: runner not found during finalization runnerId=" + recovery.runnerId());
             return;
         }
 
-        boolean hasRunnerScopedDlq = deadLetterEntryRepository.existsUnresolvedByRunnerId(ctx.runnerId());
+        boolean hasRunnerScopedDlq = deadLetterEntryRepository.existsUnresolvedByRunnerId(recovery.runnerId());
         boolean hasPortfolioUnscopedDlq = deadLetterEntryRepository
                 .existsUnresolvedByPortfolioIdAndRunnerIsNull(latestRunner.getPortfolioId());
         boolean dlqPending = hasRunnerScopedDlq || hasPortfolioUnscopedDlq;
         if (dlqPending) {
-            ctx.error("Step 6 ERROR: unresolved DLQ entries found for runner/portfolio"
-                    + " runnerId=" + ctx.runnerId()
+            recovery.error("Step 6 ERROR: unresolved DLQ entries found for runner/portfolio"
+                    + " runnerId=" + recovery.runnerId()
                     + " portfolioId=" + latestRunner.getPortfolioId());
         }
 
-        if (!ctx.hasErrors()) {
+        if (!recovery.hasErrors()) {
             RunnerStatus currentStatus = latestRunner.getStatus();
             if (currentStatus == RunnerStatus.CREATED) {
                 latestRunner.startInitializing();
                 latestRunner.activate();
-                ctx.note("Step 6: runner activated CREATED->ACTIVE.");
+                recovery.note("Step 6: runner activated CREATED->ACTIVE.");
             } else if (currentStatus == RunnerStatus.INITIALIZING) {
                 latestRunner.activate();
-                ctx.note("Step 6: runner activated INITIALIZING->ACTIVE.");
+                recovery.note("Step 6: runner activated INITIALIZING->ACTIVE.");
             } else {
                 latestRunner.completeReconciliation();
-                ctx.note("Step 6: reconciliation completed and runner persisted.");
+                recovery.note("Step 6: reconciliation completed and runner persisted.");
             }
             strategyRunnerRepository.save(latestRunner);
             return;
@@ -423,18 +438,18 @@ public class RunnerBootRecoveryUseCase {
         if (latestRunner.getStatus() == RunnerStatus.ACTIVE) {
             latestRunner.halt();
             strategyRunnerRepository.save(latestRunner);
-            ctx.note("Step 6: runner moved ACTIVE->HALTED due to reconciliation errors.");
+            recovery.note("Step 6: runner moved ACTIVE->HALTED due to reconciliation errors.");
             // Sentinel emitido apenas quando este step de fato halta o runner por DLQ pendente,
             // para o alerta #alerts-error nao disparar em runners nao-ACTIVE (CREATED/INITIALIZING)
             // ou em halts motivados por outros erros de reconciliacao.
             if (dlqPending) {
                 log.warn("bootRecovery: runner halted runnerId={} reason=DLQ_PENDING portfolioId={}",
-                        ctx.runnerId(), latestRunner.getPortfolioId());
+                        recovery.runnerId(), latestRunner.getPortfolioId());
             }
             return;
         }
 
-        ctx.note("Step 6: reconciliation NOT completed due to previous errors.");
+        recovery.note("Step 6: reconciliation NOT completed due to previous errors.");
     }
 
     public record RecoverySummary(

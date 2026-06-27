@@ -112,6 +112,12 @@ Logs sentinel relevantes (T23 G3/G4):
 
 Catalogo completo de indicadores/alertas em `/.ai/monitoring-spec.md`.
 
+**Rastreamento end-to-end (T26):** o boot recovery **nao** gerencia MDC de `transactionId` (que
+vive so na `ConciliationOrderUpdate`). Os logs de recovery do `step4ReconcileLimbo`
+(`bootRecovery: ... transactionId=...`) carregam o id no texto da mensagem, recuperaveis por
+`{app="ctrade"} |= "transactionId=X"`; a conciliacao acionada por baixo emite seus proprios logs
+com o `transactionId` no MDC (campo JSON).
+
 ## Componentes Principais
 
 | Componente | Papel |
