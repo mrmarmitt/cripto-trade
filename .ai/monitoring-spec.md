@@ -216,7 +216,7 @@
 
 | Correlação | Descrição | Complexidade |
 |---|---|---|
-| `capital reserved` → `PENDING->SUBMITTED` em < 2 min | Detectar ordem enviada mas sem callback NEW | Reduzida com T26 — ambas as linhas carregam `transactionId` no MDC |
+| `capital reserved` → `PENDING->SUBMITTED` em < 2 min | Detectar ordem enviada mas sem callback NEW | Média — o join é por `transactionId`, mas as duas linhas estão em níveis diferentes: `capital reserved` (em `ProcessTradeSignalUseCase`) carrega o id só no **texto** (`\|= "transactionId=X"`); `PENDING->SUBMITTED` (na conciliação) carrega no **MDC** (`\| json`). Um monitor deve usar o filtro de linha para o lado da reserva |
 | Subscription Binance confirmada → `executionReport` em < 60s após ordem | Detectar stream saudável por end-to-end | Alta — requer rastrear estado da sessão |
 
 ---
