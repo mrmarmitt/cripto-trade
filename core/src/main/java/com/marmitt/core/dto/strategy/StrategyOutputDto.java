@@ -15,6 +15,7 @@ public record StrategyOutputDto(
         TradingAction decision,
         BigDecimal confidence,    // 0.0 - 1.0
         BigDecimal quantity,      // Quantidade absoluta a ser executada (ex: 0.05 BTC)
+        BigDecimal limitPrice,    // preço-limite da ordem; null = usar o preço de mercado do tick (comportamento default)
         UUID targetLotId,         // null = FIFO, UUID = lot especifico
         UUID targetTransactionId, // ordem em transito a cancelar (somente SHOULD_CANCEL)
         String reasoning,
@@ -24,7 +25,7 @@ public record StrategyOutputDto(
 
     public static StrategyOutputDto hold(String strategyName, String reasoning) {
         return new StrategyOutputDto(strategyName, TradingAction.SHOULD_HOLD,
-                                 BigDecimal.ZERO, BigDecimal.ZERO, null, null, reasoning,
+                                 BigDecimal.ZERO, BigDecimal.ZERO, null, null, null, reasoning,
                                  Instant.now(), Map.of());
     }
 
@@ -32,7 +33,20 @@ public record StrategyOutputDto(
                                         BigDecimal quantity, String reasoning) {
         validateTradeParams(confidence, quantity);
         return new StrategyOutputDto(strategyName, TradingAction.SHOULD_BUY,
-                                 confidence, quantity, null, null, reasoning,
+                                 confidence, quantity, null, null, null, reasoning,
+                                 Instant.now(), Map.of());
+    }
+
+    /**
+     * BUY com preço-limite explícito. O {@code limitPrice} (após normalização às regras de filtro
+     * da exchange) é o único valor que persiste, reserva capital e é enviado à exchange.
+     */
+    public static StrategyOutputDto buyAt(String strategyName, BigDecimal confidence,
+                                          BigDecimal quantity, BigDecimal limitPrice, String reasoning) {
+        validateTradeParams(confidence, quantity);
+        requirePositiveLimitPrice(limitPrice);
+        return new StrategyOutputDto(strategyName, TradingAction.SHOULD_BUY,
+                                 confidence, quantity, limitPrice, null, null, reasoning,
                                  Instant.now(), Map.of());
     }
 
@@ -40,7 +54,19 @@ public record StrategyOutputDto(
                                          BigDecimal quantity, String reasoning) {
         validateTradeParams(confidence, quantity);
         return new StrategyOutputDto(strategyName, TradingAction.SHOULD_SELL,
-                                 confidence, quantity, null, null, reasoning,
+                                 confidence, quantity, null, null, null, reasoning,
+                                 Instant.now(), Map.of());
+    }
+
+    /**
+     * SELL com preço-limite explícito. Mesma semântica de preço de {@link #buyAt}.
+     */
+    public static StrategyOutputDto sellAt(String strategyName, BigDecimal confidence,
+                                           BigDecimal quantity, BigDecimal limitPrice, String reasoning) {
+        validateTradeParams(confidence, quantity);
+        requirePositiveLimitPrice(limitPrice);
+        return new StrategyOutputDto(strategyName, TradingAction.SHOULD_SELL,
+                                 confidence, quantity, limitPrice, null, null, reasoning,
                                  Instant.now(), Map.of());
     }
 
@@ -48,7 +74,7 @@ public record StrategyOutputDto(
                                             BigDecimal quantity, UUID targetLotId, String reasoning) {
         validateTradeParams(confidence, quantity);
         return new StrategyOutputDto(strategyName, TradingAction.SHOULD_SELL,
-                                 confidence, quantity, targetLotId, null, reasoning,
+                                 confidence, quantity, null, targetLotId, null, reasoning,
                                  Instant.now(), Map.of());
     }
 
@@ -59,7 +85,7 @@ public record StrategyOutputDto(
     public static StrategyOutputDto cancel(String strategyName, UUID targetTransactionId, String reasoning) {
         Objects.requireNonNull(targetTransactionId, "targetTransactionId required for cancel");
         return new StrategyOutputDto(strategyName, TradingAction.SHOULD_CANCEL,
-                                 BigDecimal.ZERO, BigDecimal.ZERO, null, targetTransactionId, reasoning,
+                                 BigDecimal.ZERO, BigDecimal.ZERO, null, null, targetTransactionId, reasoning,
                                  Instant.now(), Map.of());
     }
 
@@ -69,6 +95,12 @@ public record StrategyOutputDto(
         }
         if (quantity != null && quantity.compareTo(BigDecimal.ZERO) <= 0) {
             throw new IllegalArgumentException("Quantity must be positive when specified");
+        }
+    }
+
+    private static void requirePositiveLimitPrice(BigDecimal limitPrice) {
+        if (limitPrice == null || limitPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("limitPrice must be positive");
         }
     }
 

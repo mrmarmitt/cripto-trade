@@ -39,7 +39,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T31 | Unificação do recovery de runtime: cobertura de zombies (`PENDING`) | Baixa | Claude | Concluído |
 | T32 | Ação `SHOULD_CANCEL` no contrato da estratégia                  | Alta  | Claude | Concluído |
 | T33 | Fundação de cancelamento outbound (`OrderDispatchPort.cancel`)  | Baixa | Claude | Concluído |
-| T34 | Preço de ordem dirigido pela estratégia (`limitPrice`)          | Média | Claude | Pendente  |
+| T34 | Preço de ordem dirigido pela estratégia (`limitPrice`)          | Média | Claude | Implementado (PR aberto) |
 | T35 | Estratégias de cenário para testnet                             | Média | Claude | Pendente  |
 | T36 | Safety buffer na reserva de capital (documentado vs. não implementado) | Média | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |

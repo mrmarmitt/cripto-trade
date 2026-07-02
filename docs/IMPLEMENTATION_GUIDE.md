@@ -42,8 +42,19 @@ O modelo atual utiliza um **único agregado** (Portfolio) que concentra responsa
 | **Asset** (VO)           | `domain.portfolio`          | — (embutido)          | `amount` (BigDecimal), `currency` (String), `type` (AssetType)                                                                                                                                                       |
 | **AccountingPolicy**     | `domain.portfolio.contrats` | — (interface)         | `calculatePosition()`, `matchOrder()`, `computeCost()`                                                                                                                                                               |
 | **FifoAccountingPolicy** | `domain.portfolio.contrats` | —                     | Implementação FIFO com `DUST_THRESHOLD = 1e-8`                                                                                                                                                                       |
-| **TradingDecision** (VO) | `domain.portfolio`          | —                     | `decision`, `symbol`, `quantity`, `price`, `targetLotId`, `reasoning`, `confidence`                                                                                                                                  |
+| **StrategyOutputDto** (record) ¹ | `core.dto.strategy`     | —                     | `strategyName`, `decision` (`TradingAction`), `confidence`, `quantity`, `limitPrice` (opcional), `targetLotId`, `targetTransactionId`, `reasoning`, `timestamp`, `metadata`                                          |
 | **TradingAssetsConfig**  | `domain.portfolio`          | —                     | Classificação de ativos (FIAT, STABLECOIN, CRYPTO)                                                                                                                                                                   |
+
+> ¹ **Nota de reconciliação (T34):** o design histórico chamava este contrato de `TradingDecision` (VO em
+> `domain.portfolio`) com campos `decision`, `symbol`, `quantity`, `price`, `targetLotId`, `reasoning`,
+> `confidence`. A implementação real é o **`StrategyOutputDto`** (record em `core.dto.strategy`). Diferenças
+> em relação ao design antigo:
+> - `price` → `limitPrice` **opcional** (T34): `null` usa o preço de mercado do tick; quando presente, é o
+>   preço-limite que persiste, reserva capital e é enviado à exchange.
+> - `symbol` **não existe e é intencional**: o runner é vinculado a um único símbolo (`runner.getSymbol()`),
+>   então ecoar o símbolo na saída da estratégia seria redundante e abriria risco de divergência.
+> - `targetTransactionId` (alvo de `SHOULD_CANCEL`, T32), `strategyName`, `timestamp` e `metadata` são campos
+>   operacionais adicionados além do design original.
 
 **Problemas identificados no modelo atual:**
 1. **God Aggregate:** Portfolio acumula gestão financeira (Balance), execução (Transaction/TransactionMatch), configuração de estratégia (`strategyId`, `symbol`) e posição calculada.
@@ -1703,8 +1714,8 @@ Capital_Requerido = Quantidade × Preço_Estimado × Safety_Buffer_Multiplier
 
 | Componente                 | Fonte                      | Notas                                  |
 |----------------------------|----------------------------|----------------------------------------|
-| `Quantidade`               | `TradingDecision.quantity` | Quantidade sugerida pela Strategy      |
-| `Preço_Estimado`           | `TradingDecision.price`    | Último preço de mercado ou preço limit |
+| `Quantidade`               | `StrategyOutputDto.quantity` | Quantidade sugerida pela Strategy    |
+| `Preço_Estimado`           | `StrategyOutputDto.limitPrice` (ou preço de mercado do tick quando `null`) | Preço-limite da estratégia (T34) ou último preço de mercado |
 | `Safety_Buffer_Multiplier` | Configuração               | Default: `1.005` (0.5% de buffer)      |
 
 **Justificativa do Safety Buffer:** Entre o momento do cálculo e a execução na exchange, o preço pode variar (slippage). O buffer de 0.5% cobre variações normais de mercado para ordens a mercado. Para ordens limit, o buffer pode ser reduzido (ex: `1.001`) pois o preço é fixo.

@@ -308,10 +308,15 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
             return;
         }
 
+        // Preço efetivo da ordem: a estratégia pode fixar um limitPrice (ex.: ordem que descansa
+        // longe do mercado ou limit marketable). Sem limitPrice, usa o preço de mercado do tick —
+        // comportamento default preservado.
+        BigDecimal effectivePrice = signal.limitPrice() != null ? signal.limitPrice() : currentPrice;
+
         // Normaliza quantidade e preço às regras de filtro da exchange ANTES de materializar
         // a transação, de modo que o valor persistido, reservado e enviado sejam idênticos.
         OrderNormalizer.NormalizedOrder normalized = orderNormalizer.normalize(
-                runner.getExchangeId(), runner.getSymbol(), signal.quantity(), currentPrice);
+                runner.getExchangeId(), runner.getSymbol(), signal.quantity(), effectivePrice);
 
         Transaction transaction = tradeIntentFactory.buildTransaction(
                 runner, signal, normalized.quantity(), normalized.price());
