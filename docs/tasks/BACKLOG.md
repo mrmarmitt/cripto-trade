@@ -39,6 +39,9 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T31 | Unificação do recovery de runtime: cobertura de zombies (`PENDING`) | Baixa | Claude | Concluído |
 | T32 | Ação `SHOULD_CANCEL` no contrato da estratégia                  | Alta  | Claude | Concluído |
 | T33 | Fundação de cancelamento outbound (`OrderDispatchPort.cancel`)  | Baixa | Claude | Concluído |
+| T34 | Preço de ordem dirigido pela estratégia (`limitPrice`)          | Média | Claude | Pendente  |
+| T35 | Estratégias de cenário para testnet                             | Média | Claude | Pendente  |
+| T36 | Safety buffer na reserva de capital (documentado vs. não implementado) | Média | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 
 ## Ordem de execução
@@ -141,6 +144,37 @@ T32  Ação SHOULD_CANCEL na estratégia          ← decisão de negócio: puxa
 > Tasks de correção/refino já entregues fora da trilha principal: T19 (striped lock na
 > conciliação) e T20 (`executed_at` no boot recovery). TD1 permanece como débito técnico
 > de telemetria do canal USER_DATA.
+
+## Ordem de execução — Estratégias de cenário para testnet
+
+```
+T34  Preço de ordem dirigido pela estratégia (limitPrice no contrato)   ← fundação
+       (habilita ordens que descansam / marketable de forma determinística)
+       ↓
+T35  Estratégias de cenário (resting-buy-cancel, filled-buy-resting-sell-cancel,
+     immediate-round-trip, over-allocation-reject)
+   (reusa SHOULD_CANCEL da T32; registro condicional por flag, isolado de produção)
+```
+
+> Objetivo: testes repetíveis em testnet cobrindo cada ramo de
+> `signal.evaluated.total{decision}` (BUY→CANCEL, fill→SELL→CANCEL, round-trip feliz,
+> REJECTED_CAPITAL). T34 é pré-requisito dos cenários com ordem descansando/marketable;
+> o cenário REJECTED_CAPITAL não depende de T34. Cenário de boot/recovery de ordem órfã
+> fica como procedimento operacional (runbook), sem código novo.
+
+## Débito — Divergência design vs. código no capital
+
+```
+T36  Safety buffer na reserva de capital   ← decisão de negócio pendente
+```
+
+> Divergência detectada ao especificar a T34: `docs/IMPLEMENTATION_GUIDE.md` §7.2.1–7.2.3 e o
+> Javadoc de `CapitalRequest` descrevem um safety buffer (`quantity × price × 1.005`/`1.001`) que
+> **não está implementado** — `TradeIntentFactory` reserva `quantity × price` sem multiplicador.
+> T36 exige decidir entre **implementar** o buffer (com a devolução do excedente §7.2.3) ou
+> **remover do design**; independente das estratégias, mas toca o mesmo `TradeIntentFactory` da T34.
+> A reconciliação documental de nomenclatura/campos do contrato (`TradingDecision` ↔
+> `StrategyOutputDto`) é entregável da própria T34, não uma task separada.
 
 ## Critério de pronto da trilha
 
