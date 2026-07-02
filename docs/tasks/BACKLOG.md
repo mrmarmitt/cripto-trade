@@ -42,6 +42,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T34 | Preço de ordem dirigido pela estratégia (`limitPrice`)          | Média | Claude | Implementado (PR aberto) |
 | T35 | Estratégias de cenário para testnet                             | Média | Claude | Pendente  |
 | T36 | Safety buffer na reserva de capital (documentado vs. não implementado) | Média | Claude | Pendente  |
+| T37 | Normalização de preço side-aware (BUY floor / SELL ceiling)     | Média | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 
 ## Ordem de execução
@@ -175,6 +176,11 @@ T36  Safety buffer na reserva de capital   ← decisão de negócio pendente
 > **remover do design**; independente das estratégias, mas toca o mesmo `TradeIntentFactory` da T34.
 > A reconciliação documental de nomenclatura/campos do contrato (`TradingDecision` ↔
 > `StrategyOutputDto`) é entregável da própria T34, não uma task separada.
+>
+> **T37** (normalização de preço side-aware) saiu do review do PR #132: `normalizePrice` usa HALF_UP
+> (side-agnostic), podendo deslocar um preço-limite até meio tick contra o trader. Correção correta é
+> BUY→floor / SELL→ceiling, mas exige propagar o lado ao port `OrderQuantityNormalizerPort` (afeta todas
+> as ordens), fora do escopo da T34. Não é regressão — o HALF_UP já existia para preço de mercado.
 
 ## Critério de pronto da trilha
 
