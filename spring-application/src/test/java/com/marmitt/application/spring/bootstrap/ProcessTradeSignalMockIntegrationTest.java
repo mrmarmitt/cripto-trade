@@ -7,12 +7,17 @@ import com.marmitt.core.dto.portfolio.request.CreatePortfolioRequest;
 import com.marmitt.core.dto.portfolio.response.CreatePortfolioResponse;
 import com.marmitt.core.dto.runner.request.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.response.CreateRunnerResponse;
+import com.marmitt.core.dto.strategy.StrategyContextDto;
+import com.marmitt.core.dto.strategy.StrategyInputDto;
+import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.dto.websocket.data.MarketDataDto;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
+import com.marmitt.core.ports.outbound.strategy.TradingStrategy;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.search.MeterNotFoundException;
 import org.junit.jupiter.api.BeforeEach;
@@ -52,6 +57,9 @@ class ProcessTradeSignalMockIntegrationTest extends AbstractIntegrationTest {
 
     @Autowired
     private StrategyRunnerRepositoryPort strategyRunnerRepository;
+
+    @Autowired
+    private StrategyRepositoryPort strategyRepository;
 
     @Autowired
     private ExchangeAdapterRepositoryPort exchangeAdapterRepository;
@@ -129,6 +137,39 @@ class ProcessTradeSignalMockIntegrationTest extends AbstractIntegrationTest {
                 "Expected multiple transaction updates (SUBMITTED/PARTIAL/FILLED). version=" + filled.version());
     }
 
+    @Test
+    void buyAtLimitPricePersistsTransactionAtStrategyPrice() {
+        UUID portfolioId = createPortfolio();
+        UUID strategyId = UUID.randomUUID();
+        BigDecimal limitPrice = new BigDecimal("64000.00"); // abaixo do mercado do tick (65000)
+        strategyRepository.registerStrategy(
+                new FixedBuyStrategy(strategyId, new BigDecimal("0.01"), limitPrice));
+        UUID runnerId = createAndActivateRunner(portfolioId, strategyId);
+
+        processTradeSignalPort.execute(newMarketData(new BigDecimal("65000.00"), Instant.now()));
+
+        BigDecimal persisted = awaitBuyTransactionPrice(runnerId, WAIT_TIMEOUT);
+        assertEquals(0, limitPrice.compareTo(persisted),
+                "BUY deve persistir com o limitPrice da estrategia (" + limitPrice
+                        + "), nao o preco de mercado do tick");
+    }
+
+    @Test
+    void buyWithoutLimitPricePersistsTransactionAtMarketPrice() {
+        UUID portfolioId = createPortfolio();
+        UUID strategyId = UUID.randomUUID();
+        BigDecimal marketPrice = new BigDecimal("65000.00");
+        strategyRepository.registerStrategy(
+                new FixedBuyStrategy(strategyId, new BigDecimal("0.01"), null)); // sem limitPrice
+        UUID runnerId = createAndActivateRunner(portfolioId, strategyId);
+
+        processTradeSignalPort.execute(newMarketData(marketPrice, Instant.now()));
+
+        BigDecimal persisted = awaitBuyTransactionPrice(runnerId, WAIT_TIMEOUT);
+        assertEquals(0, marketPrice.compareTo(persisted),
+                "Sem limitPrice, a BUY deve persistir com o preco de mercado do tick (" + marketPrice + ")");
+    }
+
     private UUID createPortfolio() {
         CreatePortfolioResponse response = createPortfolioPort.execute(
                 CreatePortfolioRequest.builder()
@@ -142,10 +183,14 @@ class ProcessTradeSignalMockIntegrationTest extends AbstractIntegrationTest {
     }
 
     private UUID createAndActivateRunner(UUID portfolioId) {
+        return createAndActivateRunner(portfolioId, SMA_STRATEGY_ID);
+    }
+
+    private UUID createAndActivateRunner(UUID portfolioId, UUID strategyId) {
         CreateRunnerResponse response = createRunnerPort.execute(
                 CreateRunnerRequest.builder()
                         .portfolioId(portfolioId)
-                        .strategyId(SMA_STRATEGY_ID)
+                        .strategyId(strategyId)
                         .symbol(SYMBOL)
                         .exchangeName("MOCK")
                         .allowedMarketDataSources(Set.of(MARKET_DATA_EXCHANGE))
@@ -206,6 +251,24 @@ class ProcessTradeSignalMockIntegrationTest extends AbstractIntegrationTest {
         }
 
         fail("Timeout waiting BUY lifecycle. Last tx=" + lastSeen + ", seenStatuses=" + seenStatuses);
+        return null;
+    }
+
+    private BigDecimal awaitBuyTransactionPrice(UUID runnerId, Duration timeout) {
+        Instant deadline = Instant.now().plus(timeout);
+        while (Instant.now().isBefore(deadline)) {
+            List<BigDecimal> prices = jdbcTemplate.query(
+                    "SELECT price FROM transactions WHERE runner_id = ? AND type = 'BUY' "
+                            + "ORDER BY requested_at DESC LIMIT 1",
+                    (rs, rowNum) -> rs.getBigDecimal("price"),
+                    runnerId
+            );
+            if (!prices.isEmpty()) {
+                return prices.getFirst();
+            }
+            sleep(60);
+        }
+        fail("Timeout waiting BUY transaction to be persisted for runner " + runnerId);
         return null;
     }
 
@@ -289,6 +352,61 @@ class ProcessTradeSignalMockIntegrationTest extends AbstractIntegrationTest {
 
     private record BuyLifecycleSnapshot(TransactionSnapshot transaction,
                                         Set<String> seenStatuses) {
+    }
+
+    /**
+     * Estrategia de teste deterministica: abre uma unica BUY (com ou sem limitPrice) enquanto nao
+     * houver posicao/ordem aberta; depois segura. Usada para provar o fluxo do limitPrice (T34) sem
+     * depender das estrategias de cenario da T35.
+     */
+    private static final class FixedBuyStrategy implements TradingStrategy {
+        private final UUID id;
+        private final BigDecimal quantity;
+        private final BigDecimal limitPrice; // null = usar preco de mercado
+        private boolean enabled = true;
+
+        FixedBuyStrategy(UUID id, BigDecimal quantity, BigDecimal limitPrice) {
+            this.id = id;
+            this.quantity = quantity;
+            this.limitPrice = limitPrice;
+        }
+
+        @Override
+        public UUID getStrategyId() {
+            return id;
+        }
+
+        @Override
+        public StrategyOutputDto executeStrategy(StrategyInputDto inputData, StrategyContextDto strategyContext) {
+            if (strategyContext.hasOpenLots() || strategyContext.hasPendingOrders()) {
+                return StrategyOutputDto.hold(getStrategyName(), "posicao/ordem ja aberta");
+            }
+            BigDecimal confidence = new BigDecimal("0.8");
+            if (limitPrice != null) {
+                return StrategyOutputDto.buyAt(getStrategyName(), confidence, quantity, limitPrice, "fixed limit buy");
+            }
+            return StrategyOutputDto.buy(getStrategyName(), confidence, quantity, "fixed market buy");
+        }
+
+        @Override
+        public String getStrategyName() {
+            return "FixedBuyStrategy-" + id;
+        }
+
+        @Override
+        public String getStrategyVersion() {
+            return "1.0.0";
+        }
+
+        @Override
+        public boolean isEnabled() {
+            return enabled;
+        }
+
+        @Override
+        public void setEnabled(boolean enabled) {
+            this.enabled = enabled;
+        }
     }
 }
 
