@@ -6,9 +6,12 @@ import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.util.List;
+import java.util.UUID;
 
 import static com.marmitt.strategy.impl.scenario.ScenarioTestFixtures.context;
 import static com.marmitt.strategy.impl.scenario.ScenarioTestFixtures.input;
+import static com.marmitt.strategy.impl.scenario.ScenarioTestFixtures.openLot;
+import static com.marmitt.strategy.impl.scenario.ScenarioTestFixtures.pending;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -53,6 +56,26 @@ class OverAllocationRejectStrategyTest {
 
         assertEquals(TradingAction.SHOULD_BUY, out.decision());
         assertTrue(out.quantity().compareTo(BigDecimal.ZERO) > 0, "quantidade deve ser positiva");
+    }
+
+    @Test
+    void waitsForCleanStateWithoutSpendingCycle() {
+        OverAllocationRejectStrategy bounded =
+                new OverAllocationRejectStrategy(ScenarioStrategyConfig.boundedConfig(1));
+        BigDecimal available = new BigDecimal("1000");
+
+        // ordem em transito de um estado anterior: aguarda (HOLD) sem consumir o ciclo
+        assertEquals(TradingAction.SHOULD_HOLD,
+                bounded.executeStrategy(input(MARKET),
+                        context(available, List.of(), List.of(pending(TradingAction.SHOULD_BUY, UUID.randomUUID())))).decision());
+        // posicao aberta de um estado anterior: idem
+        assertEquals(TradingAction.SHOULD_HOLD,
+                bounded.executeStrategy(input(MARKET),
+                        context(available, List.of(openLot(new BigDecimal("0.001"))), List.of())).decision());
+
+        // estado limpo: o unico ciclo ainda esta disponivel -> BUY que forca REJECTED_CAPITAL
+        assertEquals(TradingAction.SHOULD_BUY,
+                bounded.executeStrategy(input(MARKET), context(available, List.of(), List.of())).decision());
     }
 
     @Test

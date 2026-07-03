@@ -32,6 +32,14 @@ public class OverAllocationRejectStrategy extends AbstractScenarioStrategy {
 
     @Override
     public StrategyOutputDto executeStrategy(StrategyInputDto input, StrategyContextDto context) {
+        // Estado sujo (posicao/ordem em transito de um estado anterior ou recuperado) faria a BUY ser
+        // barrada pela RunnerSignalPolicy como REJECTED_POLICY em vez do REJECTED_CAPITAL pretendido, e
+        // gastaria um ciclo do orcamento a toa (com maxCycles=1, HOLD para sempre depois que limpar).
+        // Aguarda o estado limpar antes de consumir ciclo.
+        if (context.hasPendingOrders() || context.hasOpenLots()) {
+            return StrategyOutputDto.hold(NAME,
+                    "cenario over-allocation-reject: aguardando estado limpo antes de forcar REJECTED_CAPITAL");
+        }
         if (!tryStartCycle()) {
             return StrategyOutputDto.hold(NAME, "cenario over-allocation-reject: teto de ciclos atingido");
         }
