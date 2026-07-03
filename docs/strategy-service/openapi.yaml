@@ -1,0 +1,369 @@
+openapi: 3.0.3
+
+# =============================================================================
+# Strategy Service Contract (v1)
+#
+# Contrato neutro de linguagem para estrategias executadas fora do processo do
+# ctrade. Cada versao de estrategia sobe como uma app independente (Java, Node,
+# Python, ...) que implementa este contrato. O ctrade e o cliente; a app da
+# estrategia e o servidor.
+#
+# ESTE ARQUIVO E A FONTE DE VERDADE. Java, Node e Python geram/validam seus
+# stubs a partir daqui. As DTOs Java em core/dto/strategy sao o espelho interno
+# deste contrato — se divergirem, este spec e o CONTRACT.md prevalecem para a
+# fronteira de rede.
+#
+# Regras de convencao (ver CONTRACT.md, secao "Convencoes"):
+#   1. TODO valor decimal/monetario trafega como STRING, nunca como number JSON.
+#   2. Timestamps sao ISO-8601 em UTC (string date-time).
+#   3. UUIDs sao strings no formato uuid.
+# =============================================================================
+
+info:
+  title: CTrade Strategy Service Contract
+  version: 1.0.0
+  description: >
+    Superficie de rede de uma app de estrategia. Uma decisao pura por tick:
+    dado market data (input) e contexto operacional consolidado (context),
+    a app devolve uma decisao de trade. Sem I/O externo, sem efeito colateral
+    alem do warm-up de estado interno chaveado por strategyRef.
+
+servers:
+  - url: http://{host}:{port}/v1
+    variables:
+      host: { default: localhost }
+      port: { default: "8080" }
+
+paths:
+  /evaluate:
+    post:
+      operationId: evaluate
+      summary: Avalia um tick e retorna a decisao de trade
+      description: >
+        Chamado pelo ctrade a cada price update do runner. A resposta DEVE ser
+        sempre uma decisao valida. Falha de transporte, timeout ou erro 5xx sao
+        tratados pelo ctrade como HOLD implicito (ver CONTRACT.md); ainda assim
+        a app deve preferir devolver HOLD explicito a estourar erro.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/EvaluateRequest' }
+      responses:
+        '200':
+          description: Decisao de trade
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Decision' }
+        '400':
+          description: Payload invalido (nao conforme ao contrato)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  /health:
+    get:
+      operationId: health
+      summary: Liveness e readiness (warm-up)
+      description: >
+        readiness=true indica que o estado de warm-up (ex.: janela de historico
+        de uma media movel) ja esta preenchido e a estrategia pode ir para
+        ACTIVE. O portao de promocao do ctrade NAO deve virar o ponteiro do
+        runner para uma versao com readiness=false.
+      responses:
+        '200':
+          description: App viva
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+        '503':
+          description: App viva porem nao pronta (aquecendo)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Health' }
+
+  /meta:
+    get:
+      operationId: meta
+      summary: Identidade da estrategia servida por esta app
+      description: >
+        Usado pelo ctrade para popular/verificar o catalogo (strategy_catalog).
+        strategyId e imutavel por versao — V2 tem UUID proprio, distinto da V1.
+      responses:
+        '200':
+          description: Metadados de identidade
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Meta' }
+
+components:
+  schemas:
+
+    # ---- Tipos base de convencao -------------------------------------------
+
+    Decimal:
+      type: string
+      description: >
+        Numero decimal de precisao arbitraria transportado como string para
+        preservar precisao financeira entre linguagens. NUNCA usar number JSON.
+        A app DEVE (de)serializar com biblioteca decimal (BigDecimal / Python
+        decimal.Decimal / decimal.js|big.js), nunca float/Number nativo.
+      pattern: '^-?\d+(\.\d+)?$'
+      example: "64150.75000000"
+
+    Symbol:
+      type: string
+      description: Par de trading, ex. "BTCUSDT".
+      example: "BTCUSDT"
+
+    TradingAction:
+      type: string
+      enum: [SHOULD_BUY, SHOULD_SELL, SHOULD_HOLD, SHOULD_CANCEL]
+
+    TransactionStatus:
+      type: string
+      description: Status de uma ordem em transito visivel no contexto.
+      enum: [PENDING, SUBMITTED, PARTIAL, PARTIALLY_FILLED, FILLED, CANCELED, REJECTED, EXPIRED]
+
+    # ---- Envelope da requisicao --------------------------------------------
+
+    EvaluateRequest:
+      type: object
+      required: [strategyRef, input, context]
+      properties:
+        strategyRef:
+          type: string
+          format: uuid
+          description: >
+            Identidade da estrategia/versao alvo (== strategyId de /meta).
+            Permite uma unica app servir multiplas versoes e chaveia o estado
+            de warm-up interno.
+        input: { $ref: '#/components/schemas/MarketInput' }
+        context: { $ref: '#/components/schemas/StrategyContext' }
+
+    # ---- Market data (espelha StrategyInputDto) ----------------------------
+
+    MarketInput:
+      type: object
+      required: [symbol, currentPrice, timestamp]
+      description: >
+        Dados de mercado do tick. currentPrice e obrigatorio e positivo; os
+        demais precos sao opcionais. A validacao semantica rica (spread, faixa
+        diaria, idade do dado) e responsabilidade do ctrade — a app recebe o
+        dado ja aceito.
+      properties:
+        symbol: { $ref: '#/components/schemas/Symbol' }
+        currentPrice: { $ref: '#/components/schemas/Decimal' }
+        previousPrice:
+          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          nullable: true
+        bidPrice:
+          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          nullable: true
+        askPrice:
+          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          nullable: true
+        volume:
+          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          nullable: true
+        high24h:
+          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          nullable: true
+        low24h:
+          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          nullable: true
+        timestamp:
+          type: string
+          format: date-time
+          description: Instante do tick, ISO-8601 UTC.
+        additionalData:
+          type: object
+          additionalProperties: true
+          nullable: true
+          description: Extensao livre; chaves/valores opcionais fora do contrato tipado.
+
+    # ---- Contexto operacional (espelha StrategyContextDto) -----------------
+
+    StrategyContext:
+      type: object
+      required:
+        - runnerId
+        - portfolioId
+        - symbol
+        - positionContext
+        - openLots
+        - pendingOrders
+        - totalCapital
+        - availableCapital
+        - maxOperationAmount
+        - minOperationAmount
+        - maxOpenPositions
+        - currentOpenPositions
+        - realizedPnl
+        - unrealizedPnl
+      description: Estado operacional consolidado e read-only para a decisao.
+      properties:
+        runnerId: { type: string, format: uuid }
+        portfolioId: { type: string, format: uuid }
+        symbol: { $ref: '#/components/schemas/Symbol' }
+        positionContext: { $ref: '#/components/schemas/PositionContext' }
+        openLots:
+          type: array
+          items: { $ref: '#/components/schemas/OpenLot' }
+        pendingOrders:
+          type: array
+          items: { $ref: '#/components/schemas/PendingOrder' }
+        totalCapital: { $ref: '#/components/schemas/Decimal' }
+        availableCapital: { $ref: '#/components/schemas/Decimal' }
+        maxOperationAmount: { $ref: '#/components/schemas/Decimal' }
+        minOperationAmount: { $ref: '#/components/schemas/Decimal' }
+        maxOpenPositions: { type: integer }
+        currentOpenPositions: { type: integer }
+        realizedPnl: { $ref: '#/components/schemas/Decimal' }
+        unrealizedPnl: { $ref: '#/components/schemas/Decimal' }
+
+    PositionContext:
+      type: object
+      required: [symbol, quantity, averagePrice, currentPrice, unrealizedPnl, realizedPnl, openLots]
+      description: Posicao agregada do simbolo. positionId ausente/zero-qty = sem posicao aberta.
+      properties:
+        positionId:
+          type: string
+          format: uuid
+          nullable: true
+        symbol: { $ref: '#/components/schemas/Symbol' }
+        quantity: { $ref: '#/components/schemas/Decimal' }
+        averagePrice: { $ref: '#/components/schemas/Decimal' }
+        currentPrice: { $ref: '#/components/schemas/Decimal' }
+        unrealizedPnl: { $ref: '#/components/schemas/Decimal' }
+        realizedPnl: { $ref: '#/components/schemas/Decimal' }
+        openLots:
+          type: array
+          items: { $ref: '#/components/schemas/OpenLot' }
+
+    OpenLot:
+      type: object
+      required: [lotId, quantity, availableQuantity, entryPrice, currentPnlPercent, openedAt]
+      description: Lote de compra aberto. availableQuantity e o teto de SELL para este lote.
+      properties:
+        lotId: { type: string, format: uuid }
+        quantity: { $ref: '#/components/schemas/Decimal' }
+        availableQuantity: { $ref: '#/components/schemas/Decimal' }
+        entryPrice: { $ref: '#/components/schemas/Decimal' }
+        currentPnlPercent: { $ref: '#/components/schemas/Decimal' }
+        openedAt:
+          type: string
+          format: date-time
+
+    PendingOrder:
+      type: object
+      required: [transactionId, type, quantity, price, status, requestedAt]
+      description: >
+        Ordem em transito (BUY/SELL). transactionId e o alvo de um SHOULD_CANCEL.
+      properties:
+        transactionId: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/TradingAction' }
+        quantity: { $ref: '#/components/schemas/Decimal' }
+        price: { $ref: '#/components/schemas/Decimal' }
+        status: { $ref: '#/components/schemas/TransactionStatus' }
+        requestedAt:
+          type: string
+          format: date-time
+
+    # ---- Decisao (espelha StrategyOutputDto) -------------------------------
+
+    Decision:
+      type: object
+      required: [strategyName, decision, reasoning]
+      description: >
+        Decisao de trade. Regras de coerencia por decision:
+          SHOULD_HOLD   : quantity/confidence ignorados; nenhuma acao.
+          SHOULD_BUY    : quantity > 0 obrigatoria; confidence em [0,1].
+          SHOULD_SELL   : quantity > 0 obrigatoria; targetLotId opcional (null=FIFO).
+          SHOULD_CANCEL : targetTransactionId obrigatorio; quantity/confidence ignorados.
+      properties:
+        strategyName:
+          type: string
+          description: Nome logico da estrategia (ecoado em logs/observabilidade).
+        decision: { $ref: '#/components/schemas/TradingAction' }
+        confidence:
+          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          description: Grau de conviccao em [0.0, 1.0]. Obrigatorio em BUY/SELL.
+          nullable: true
+        quantity:
+          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          description: Quantidade absoluta a executar. Positiva em BUY/SELL.
+          nullable: true
+        limitPrice:
+          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          description: >
+            Preco-limite da ordem. null = usar o preco de mercado do tick
+            (comportamento default). Se informado, deve ser positivo.
+          nullable: true
+        targetLotId:
+          type: string
+          format: uuid
+          nullable: true
+          description: SELL de lote especifico. null = FIFO.
+        targetTransactionId:
+          type: string
+          format: uuid
+          nullable: true
+          description: Ordem em transito a cancelar. Obrigatorio somente em SHOULD_CANCEL.
+        reasoning:
+          type: string
+          description: Justificativa legivel da decisao (auditoria/observabilidade).
+        timestamp:
+          type: string
+          format: date-time
+          nullable: true
+          description: Instante da decisao, ISO-8601 UTC. Preenchido pela app.
+        metadata:
+          type: object
+          additionalProperties: true
+          nullable: true
+          description: Extensao livre (indicadores, features, diagnostico).
+
+    # ---- Operacional --------------------------------------------------------
+
+    Health:
+      type: object
+      required: [status, ready]
+      properties:
+        status:
+          type: string
+          enum: [UP, DOWN]
+        ready:
+          type: boolean
+          description: true quando o warm-up terminou e a app pode ir para ACTIVE.
+        detail:
+          type: string
+          nullable: true
+          description: 'Ex.: "warming up 12/20 ticks".'
+
+    Meta:
+      type: object
+      required: [strategyId, name, version, contractVersion]
+      properties:
+        strategyId:
+          type: string
+          format: uuid
+          description: Identidade imutavel desta versao de estrategia.
+        name:
+          type: string
+        version:
+          type: string
+          description: Versao semantica da estrategia, ex. "2.0.0".
+        contractVersion:
+          type: string
+          description: Versao do contrato implementada, ex. "1.0.0".
+
+    Error:
+      type: object
+      required: [message]
+      properties:
+        message: { type: string }
+        details:
+          type: object
+          additionalProperties: true
+          nullable: true
