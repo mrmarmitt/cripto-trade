@@ -49,4 +49,20 @@ class ImmediateRoundTripStrategyTest {
 
         assertEquals(TradingAction.SHOULD_HOLD, out.decision());
     }
+
+    @Test
+    void stopsAfterMaxCyclesReached() {
+        ImmediateRoundTripStrategy bounded = new ImmediateRoundTripStrategy(ScenarioStrategyConfig.boundedConfig(1));
+        BigDecimal capital = new BigDecimal("10000");
+
+        // ciclo 1: abre (BUY marketable)
+        assertEquals(TradingAction.SHOULD_BUY,
+                bounded.executeStrategy(input(MARKET), context(capital, List.of(), List.of())).decision());
+        // lote aberto -> fecha (SELL marketable), completando o round trip
+        assertEquals(TradingAction.SHOULD_SELL,
+                bounded.executeStrategy(input(MARKET), context(capital, List.of(openLot(new BigDecimal("0.001"))), List.of())).decision());
+        // estado limpo, teto atingido -> HOLD (nao reabre)
+        assertEquals(TradingAction.SHOULD_HOLD,
+                bounded.executeStrategy(input(MARKET), context(capital, List.of(), List.of())).decision());
+    }
 }

@@ -61,4 +61,26 @@ class FilledBuyRestingSellCancelStrategyTest {
         assertEquals(TradingAction.SHOULD_CANCEL, out.decision());
         assertEquals(txId, out.targetTransactionId());
     }
+
+    @Test
+    void stopsAfterMaxCyclesReached() {
+        FilledBuyRestingSellCancelStrategy bounded =
+                new FilledBuyRestingSellCancelStrategy(ScenarioStrategyConfig.boundedConfig(1));
+        BigDecimal capital = new BigDecimal("10000");
+        BigDecimal lotQty = new BigDecimal("0.001");
+
+        // BUY marketable (setup, nao consome orcamento)
+        assertEquals(TradingAction.SHOULD_BUY,
+                bounded.executeStrategy(input(MARKET), context(capital, List.of(), List.of())).decision());
+        // lote aberto -> coloca SELL descansando (ciclo 1)
+        assertEquals(TradingAction.SHOULD_SELL,
+                bounded.executeStrategy(input(MARKET), context(capital, List.of(openLot(lotQty)), List.of())).decision());
+        // pending SELL -> cancela (limpeza)
+        assertEquals(TradingAction.SHOULD_CANCEL,
+                bounded.executeStrategy(input(MARKET),
+                        context(capital, List.of(openLot(lotQty)), List.of(pending(TradingAction.SHOULD_SELL, UUID.randomUUID())))).decision());
+        // lote aberto, sem pending, teto atingido -> HOLD (nao recoloca SELL)
+        assertEquals(TradingAction.SHOULD_HOLD,
+                bounded.executeStrategy(input(MARKET), context(capital, List.of(openLot(lotQty)), List.of())).decision());
+    }
 }

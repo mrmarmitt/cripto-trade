@@ -45,6 +45,9 @@ public class RestingBuyCancelStrategy extends AbstractScenarioStrategy {
         }
 
         if (!context.hasOpenLots() && !context.hasPendingOrders()) {
+            if (!tryStartCycle()) {
+                return StrategyOutputDto.hold(NAME, "cenario resting-buy-cancel: teto de ciclos atingido");
+            }
             BigDecimal limitPrice = priceBelow(input.currentPrice(), config.restingOffset());
             return StrategyOutputDto.buyAt(NAME, CONFIDENCE, config.quantity(), limitPrice,
                     "cenario resting-buy-cancel: BUY descansando abaixo do mercado");

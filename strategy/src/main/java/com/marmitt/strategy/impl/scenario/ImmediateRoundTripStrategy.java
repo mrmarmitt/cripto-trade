@@ -47,6 +47,9 @@ public class ImmediateRoundTripStrategy extends AbstractScenarioStrategy {
                     "cenario immediate-round-trip: SELL marketable para fechar o lote");
         }
 
+        if (!tryStartCycle()) {
+            return StrategyOutputDto.hold(NAME, "cenario immediate-round-trip: teto de ciclos atingido");
+        }
         BigDecimal limitPrice = priceAbove(input.currentPrice(), config.fillOffset());
         return StrategyOutputDto.buyAt(NAME, CONFIDENCE, config.quantity(), limitPrice,
                 "cenario immediate-round-trip: BUY marketable para abrir");

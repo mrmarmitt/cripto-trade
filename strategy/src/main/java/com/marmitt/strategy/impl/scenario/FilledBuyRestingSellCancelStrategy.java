@@ -60,6 +60,9 @@ public class FilledBuyRestingSellCancelStrategy extends AbstractScenarioStrategy
                     "cenario filled-buy-resting-sell-cancel: BUY marketable para preencher");
         }
 
+        if (!tryStartCycle()) {
+            return StrategyOutputDto.hold(NAME, "cenario filled-buy-resting-sell-cancel: teto de ciclos atingido");
+        }
         OpenLotDto lot = context.openLots().getFirst();
         BigDecimal limitPrice = priceAbove(input.currentPrice(), config.restingOffset());
         return StrategyOutputDto.sellAt(NAME, CONFIDENCE, lot.availableQuantity(), limitPrice,

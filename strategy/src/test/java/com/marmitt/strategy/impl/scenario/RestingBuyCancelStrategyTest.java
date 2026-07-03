@@ -50,4 +50,21 @@ class RestingBuyCancelStrategyTest {
 
         assertEquals(TradingAction.SHOULD_HOLD, out.decision());
     }
+
+    @Test
+    void stopsAfterMaxCyclesReached() {
+        RestingBuyCancelStrategy bounded = new RestingBuyCancelStrategy(ScenarioStrategyConfig.boundedConfig(1));
+        BigDecimal capital = new BigDecimal("10000");
+
+        // ciclo 1: estado limpo -> abre a BUY que descansa
+        assertEquals(TradingAction.SHOULD_BUY,
+                bounded.executeStrategy(input(MARKET), context(capital, List.of(), List.of())).decision());
+        // pending BUY -> cancela (limpeza, nao consome orcamento)
+        assertEquals(TradingAction.SHOULD_CANCEL,
+                bounded.executeStrategy(input(MARKET),
+                        context(capital, List.of(), List.of(pending(TradingAction.SHOULD_BUY, UUID.randomUUID())))).decision());
+        // estado limpo de novo, mas teto atingido -> HOLD (nao abre nova ordem)
+        assertEquals(TradingAction.SHOULD_HOLD,
+                bounded.executeStrategy(input(MARKET), context(capital, List.of(), List.of())).decision());
+    }
 }

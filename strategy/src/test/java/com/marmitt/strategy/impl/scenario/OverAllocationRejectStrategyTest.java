@@ -38,4 +38,18 @@ class OverAllocationRejectStrategyTest {
         assertEquals(TradingAction.SHOULD_BUY, out.decision());
         assertTrue(out.quantity().compareTo(BigDecimal.ZERO) > 0, "quantidade deve ser positiva");
     }
+
+    @Test
+    void stopsAfterMaxCyclesReached() {
+        OverAllocationRejectStrategy bounded = new OverAllocationRejectStrategy(ScenarioStrategyConfig.boundedConfig(2));
+        BigDecimal available = new BigDecimal("1000");
+
+        assertEquals(TradingAction.SHOULD_BUY,
+                bounded.executeStrategy(input(MARKET), context(available, List.of(), List.of())).decision());
+        assertEquals(TradingAction.SHOULD_BUY,
+                bounded.executeStrategy(input(MARKET), context(available, List.of(), List.of())).decision());
+        // teto de 2 atingido -> HOLD, sem mais tentativas de reserva
+        assertEquals(TradingAction.SHOULD_HOLD,
+                bounded.executeStrategy(input(MARKET), context(available, List.of(), List.of())).decision());
+    }
 }

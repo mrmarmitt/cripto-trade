@@ -15,7 +15,8 @@ public record ScenarioStrategyConfig(
         BigDecimal restingOffset,        // afastamento p/ a ordem descansar sem preencher (0 < x < 1)
         BigDecimal fillOffset,           // afastamento p/ tornar a ordem marketable (> 0)
         BigDecimal quantity,             // quantidade absoluta por ordem (> 0)
-        BigDecimal overAllocationFactor  // multiplicador (> 1) p/ estourar o capital disponível
+        BigDecimal overAllocationFactor, // multiplicador (> 1) p/ estourar o capital disponível
+        int maxCycles                    // nº máx. de ciclos antes de a estratégia ficar inerte (HOLD); 0 = ilimitado
 ) {
 
     public ScenarioStrategyConfig {
@@ -25,18 +26,37 @@ public record ScenarioStrategyConfig(
         if (overAllocationFactor == null || overAllocationFactor.compareTo(BigDecimal.ONE) <= 0) {
             throw new IllegalArgumentException("overAllocationFactor must be > 1");
         }
+        if (maxCycles < 0) {
+            throw new IllegalArgumentException("maxCycles must be >= 0 (0 = unlimited)");
+        }
+    }
+
+    /** {@code true} se o número de ciclos é limitado (útil para e2e determinístico). */
+    public boolean hasCycleLimit() {
+        return maxCycles > 0;
     }
 
     /**
-     * Defaults sensatos para testnet. Ajuste os offsets aos filtros do símbolo antes de operar.
+     * Defaults sensatos para testnet, <b>ilimitados</b> ({@code maxCycles = 0}) — preserva o loop
+     * contínuo. Ajuste os offsets aos filtros do símbolo antes de operar.
      */
     public static ScenarioStrategyConfig defaultConfig() {
         return new ScenarioStrategyConfig(
                 new BigDecimal("0.50"),   // 50% longe do mercado — descansa sem preencher
                 new BigDecimal("0.02"),   // 2% além do mercado — marketable (cruza o spread)
                 new BigDecimal("0.001"),  // 0.001 unidade por ordem
-                new BigDecimal("2")       // 2x o capital disponível
+                new BigDecimal("2"),      // 2x o capital disponível
+                0                         // ilimitado
         );
+    }
+
+    /**
+     * Variante com teto de ciclos, para cenários e2e com início e fim determinísticos.
+     */
+    public static ScenarioStrategyConfig boundedConfig(int maxCycles) {
+        ScenarioStrategyConfig base = defaultConfig();
+        return new ScenarioStrategyConfig(base.restingOffset(), base.fillOffset(),
+                base.quantity(), base.overAllocationFactor(), maxCycles);
     }
 
     private static void requireFraction(BigDecimal value, String name) {

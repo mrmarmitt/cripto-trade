@@ -32,6 +32,9 @@ public class OverAllocationRejectStrategy extends AbstractScenarioStrategy {
 
     @Override
     public StrategyOutputDto executeStrategy(StrategyInputDto input, StrategyContextDto context) {
+        if (!tryStartCycle()) {
+            return StrategyOutputDto.hold(NAME, "cenario over-allocation-reject: teto de ciclos atingido");
+        }
         BigDecimal quantity = overAllocatingQuantity(input.currentPrice(), context.availableCapital());
         return StrategyOutputDto.buy(NAME, CONFIDENCE, quantity,
                 "cenario over-allocation-reject: BUY acima do capital para forcar REJECTED_CAPITAL");
