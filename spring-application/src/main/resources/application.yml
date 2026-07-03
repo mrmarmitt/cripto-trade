@@ -113,3 +113,9 @@ notification:
   grafana:
     # Opcional: template do link "ver logs" no Discord; {correlationId} é substituído em runtime.
     explore-url-template: ${GRAFANA_EXPLORE_URL_TEMPLATE:}
+
+ctrade:
+  scenario-strategies:
+    # Estrategias de cenario deterministicas p/ testes em testnet (T35). Default OFF: nunca
+    # registradas em producao. Ligar apenas em testnet/dev via CTRADE_SCENARIO_STRATEGIES_ENABLED=true.
+    enabled: ${CTRADE_SCENARIO_STRATEGIES_ENABLED:false}
