@@ -13,7 +13,7 @@ import java.math.BigDecimal;
  */
 public record ScenarioStrategyConfig(
         BigDecimal restingOffset,        // afastamento p/ a ordem descansar sem preencher (0 < x < 1)
-        BigDecimal fillOffset,           // afastamento p/ tornar a ordem marketable (> 0)
+        BigDecimal fillOffset,           // afastamento p/ tornar a ordem marketable (0 < x < 1)
         BigDecimal quantity,             // quantidade absoluta por ordem (> 0)
         BigDecimal overAllocationFactor, // multiplicador (> 1) p/ estourar o capital disponível
         int maxCycles                    // nº máx. de ciclos antes de a estratégia ficar inerte (HOLD); 0 = ilimitado
@@ -21,7 +21,10 @@ public record ScenarioStrategyConfig(
 
     public ScenarioStrategyConfig {
         requireFraction(restingOffset, "restingOffset");
-        requirePositive(fillOffset, "fillOffset");
+        // fillOffset também é fração < 1: no leg SELL, priceBelow(preço, fillOffset) = preço*(1-fillOffset),
+        // que ficaria zero/negativo com fillOffset >= 1 e faria o sellAt rejeitar o sinal (vira HOLD),
+        // deixando o BUY preenchido em aberto. Falhar na construção do config em vez de degradar em runtime.
+        requireFraction(fillOffset, "fillOffset");
         requirePositive(quantity, "quantity");
         if (overAllocationFactor == null || overAllocationFactor.compareTo(BigDecimal.ONE) <= 0) {
             throw new IllegalArgumentException("overAllocationFactor must be > 1");
