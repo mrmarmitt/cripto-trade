@@ -83,4 +83,23 @@ class FilledBuyRestingSellCancelStrategyTest {
         assertEquals(TradingAction.SHOULD_HOLD,
                 bounded.executeStrategy(input(MARKET), context(capital, List.of(openLot(lotQty)), List.of())).decision());
     }
+
+    @Test
+    void doesNotReopenPositionAfterCapWhenRestingSellFills() {
+        FilledBuyRestingSellCancelStrategy bounded =
+                new FilledBuyRestingSellCancelStrategy(ScenarioStrategyConfig.boundedConfig(1));
+        BigDecimal capital = new BigDecimal("10000");
+        BigDecimal lotQty = new BigDecimal("0.001");
+
+        // setup BUY (nao consome) + SELL descansando (consome o unico ciclo)
+        assertEquals(TradingAction.SHOULD_BUY,
+                bounded.executeStrategy(input(MARKET), context(capital, List.of(), List.of())).decision());
+        assertEquals(TradingAction.SHOULD_SELL,
+                bounded.executeStrategy(input(MARKET), context(capital, List.of(openLot(lotQty)), List.of())).decision());
+
+        // a SELL que descansa preencheu e fechou o lote: estado limpo, mas teto ja atingido ->
+        // HOLD (nao reabre posicao), preservando o contrato de nenhuma transacao extra apos o teto
+        assertEquals(TradingAction.SHOULD_HOLD,
+                bounded.executeStrategy(input(MARKET), context(capital, List.of(), List.of())).decision());
+    }
 }

@@ -55,6 +55,13 @@ public class FilledBuyRestingSellCancelStrategy extends AbstractScenarioStrategy
         }
 
         if (!context.hasOpenLots()) {
+            // Reabertura de posição também respeita o teto: se a SELL que descansa preencheu e fechou
+            // o lote após o cap, o estado fica limpo — sem este gate o cenário emitiria um novo BUY
+            // (e novo ciclo) violando o contrato e2e de nao produzir transacoes extras apos o teto.
+            if (budgetExhausted()) {
+                return StrategyOutputDto.hold(NAME,
+                        "cenario filled-buy-resting-sell-cancel: teto de ciclos atingido, nao reabre posicao");
+            }
             BigDecimal limitPrice = priceAbove(input.currentPrice(), config.fillOffset());
             return StrategyOutputDto.buyAt(NAME, CONFIDENCE, config.quantity(), limitPrice,
                     "cenario filled-buy-resting-sell-cancel: BUY marketable para preencher");

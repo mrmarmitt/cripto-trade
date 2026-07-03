@@ -92,6 +92,15 @@ abstract class AbstractScenarioStrategy implements TradingStrategy {
         return cyclesStarted.get();
     }
 
+    /**
+     * {@code true} quando há teto e ele já foi totalmente consumido. Ao contrário de
+     * {@link #tryStartCycle()}, <b>não</b> consome orçamento — serve para legs de setup (ex.:
+     * reabertura de posição) ficarem inertes após o teto sem serem contadas como ciclo.
+     */
+    protected boolean budgetExhausted() {
+        return config.hasCycleLimit() && cyclesStarted.get() >= config.maxCycles();
+    }
+
     /** Primeira ordem em trânsito do lado informado (BUY/SELL), se houver. */
     protected Optional<PendingOrderDto> firstPendingOfType(StrategyContextDto context, TradingAction type) {
         return context.pendingOrders().stream()
