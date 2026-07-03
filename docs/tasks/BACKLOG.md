@@ -43,6 +43,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T35 | Estratégias de cenário para testnet                             | Média | Claude | Implementado (PR aberto) |
 | T36 | Safety buffer na reserva de capital (documentado vs. não implementado) | Média | Claude | Pendente  |
 | T37 | Normalização de preço side-aware (BUY floor / SELL ceiling)     | Média | Claude | Pendente  |
+| T38 | Testes E2E das estratégias de cenário                           | Média | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 
 ## Ordem de execução
@@ -153,8 +154,12 @@ T34  Preço de ordem dirigido pela estratégia (limitPrice no contrato)   ← fu
        (habilita ordens que descansam / marketable de forma determinística)
        ↓
 T35  Estratégias de cenário (resting-buy-cancel, filled-buy-resting-sell-cancel,
-     immediate-round-trip, over-allocation-reject)
+     immediate-round-trip, over-allocation-reject)   + teto de ciclos (maxCycles)
    (reusa SHOULD_CANCEL da T32; registro condicional por flag, isolado de produção)
+       ↓
+T38  Testes E2E por estratégia (sobe app → ativa com teto de ciclos → valida → sem excesso)
+   (pré-requisito: comportamento do MOCK para ordens resting — override determinístico ou
+    ensinar o MOCK a honrar marketable-vs-resting)
 ```
 
 > Objetivo: testes repetíveis em testnet cobrindo cada ramo de
