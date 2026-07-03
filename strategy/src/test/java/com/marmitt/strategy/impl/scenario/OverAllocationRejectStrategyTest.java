@@ -31,6 +31,22 @@ class OverAllocationRejectStrategyTest {
     }
 
     @Test
+    void flooredToFixedQuantityWhenBalanceTooSmall() {
+        // available=10 com price=65000 daria (10/65000)*2 ≈ 0.0003077, abaixo do fixo 0.001 e
+        // vulneravel ao floor de stepSize (viraria 0). Deve usar o fixo como piso e ainda over-alocar.
+        BigDecimal available = new BigDecimal("10");
+        StrategyOutputDto out = strategy.executeStrategy(
+                input(MARKET), context(available, List.of(), List.of()));
+
+        assertEquals(TradingAction.SHOULD_BUY, out.decision());
+        assertTrue(out.quantity().compareTo(new BigDecimal("0.001")) >= 0,
+                "quantidade (" + out.quantity() + ") nao pode ficar abaixo do fixo do config (0.001)");
+        BigDecimal estimatedCost = out.quantity().multiply(MARKET);
+        assertTrue(estimatedCost.compareTo(available) > 0,
+                "custo estimado (" + estimatedCost + ") deve exceder o capital disponivel (" + available + ")");
+    }
+
+    @Test
     void fallsBackToPositiveQuantityWhenNoCapital() {
         StrategyOutputDto out = strategy.executeStrategy(
                 input(MARKET), context(BigDecimal.ZERO, List.of(), List.of()));

@@ -42,18 +42,19 @@ public class OverAllocationRejectStrategy extends AbstractScenarioStrategy {
 
     /**
      * Quantidade cujo custo estimado supera o capital disponível: {@code (available / price) ×
-     * factor}, com {@code factor > 1}. Quando não há capital/preço utilizável, cai para a
-     * quantidade fixa do config (positiva) — a reserva de valor não-nulo contra saldo zero também
-     * é recusada.
+     * factor}, com {@code factor > 1}. Nunca abaixo da quantidade fixa do config: com saldo muito
+     * pequeno o valor calculado encolhe a ponto de o floor de {@code stepSize} da exchange zerá-lo,
+     * o que desviaria o cenário do outcome {@code REJECTED_CAPITAL} para uma falha de filtro/dispatch
+     * (reserva de valor 0). O piso ainda over-aloca no regime de saldo baixo — quando o calculado
+     * fica abaixo do fixo, {@code fixo × price > available}, então a reserva segue sendo recusada.
+     * Quando não há capital/preço utilizável, cai direto para a quantidade fixa (positiva).
      */
     private BigDecimal overAllocatingQuantity(BigDecimal price, BigDecimal availableCapital) {
         if (price != null && price.signum() > 0 && availableCapital != null && availableCapital.signum() > 0) {
             BigDecimal quantity = availableCapital
                     .divide(price, 8, RoundingMode.HALF_UP)
                     .multiply(config.overAllocationFactor());
-            if (quantity.signum() > 0) {
-                return quantity;
-            }
+            return quantity.max(config.quantity());
         }
         return config.quantity();
     }
