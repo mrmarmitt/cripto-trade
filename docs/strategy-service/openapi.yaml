@@ -166,6 +166,35 @@ components:
       pattern: '^-?\d+(\.\d+)?$'
       example: "64150.75000000"
 
+    # ---- Decimais com faixa (enforced na fronteira, ver nota) --------------
+    # O Decimal generico aceita negativos e valores fora de faixa. Nos campos de
+    # DECISAO (saida remota nao-confiavel que vira transacao) a faixa que o
+    # contrato promete e enforced por `pattern` — decimal trafega como string,
+    # entao minimum/maximum (que valem para `number`) nao se aplicam. Regex sem
+    # lookahead, portavel entre Java/Python/JS/RE2. Os decimais de input/context
+    # seguem Decimal generico: sao dados que o ctrade envia ja validados.
+
+    PositiveDecimal:
+      type: string
+      description: 'Decimal como string, estritamente positivo (> 0). Ex.: quantity.'
+      pattern: '^(0*[1-9]\d*(\.\d+)?|0+\.\d*[1-9]\d*)$'
+      example: "0.03118000"
+
+    NullablePositiveDecimal:
+      type: string
+      nullable: true
+      description: >
+        Decimal positivo (> 0) como string, ou null. Ex.: limitPrice (null =
+        preco de mercado do tick; se informado, deve ser positivo).
+      pattern: '^(0*[1-9]\d*(\.\d+)?|0+\.\d*[1-9]\d*)$'
+      example: "64150.75000000"
+
+    UnitFractionDecimal:
+      type: string
+      description: 'Decimal como string em [0, 1] inclusive. Ex.: confidence.'
+      pattern: '^(0(\.\d+)?|1(\.0+)?)$'
+      example: "0.80"
+
     Symbol:
       type: string
       description: Par de trading, ex. "BTCUSDT".
@@ -387,13 +416,13 @@ components:
               type: string
               enum: [SHOULD_BUY]
             quantity:
-              allOf: [{ $ref: '#/components/schemas/Decimal' }]
+              allOf: [{ $ref: '#/components/schemas/PositiveDecimal' }]
               description: Quantidade absoluta a executar (> 0).
             confidence:
-              allOf: [{ $ref: '#/components/schemas/Decimal' }]
+              allOf: [{ $ref: '#/components/schemas/UnitFractionDecimal' }]
               description: Grau de conviccao em [0.0, 1.0].
             limitPrice:
-              allOf: [{ $ref: '#/components/schemas/NullableDecimal' }]
+              allOf: [{ $ref: '#/components/schemas/NullablePositiveDecimal' }]
               description: >
                 Preco-limite da ordem. null = usar o preco de mercado do tick
                 (default). Se informado, deve ser positivo.
@@ -409,13 +438,13 @@ components:
               type: string
               enum: [SHOULD_SELL]
             quantity:
-              allOf: [{ $ref: '#/components/schemas/Decimal' }]
+              allOf: [{ $ref: '#/components/schemas/PositiveDecimal' }]
               description: Quantidade absoluta a executar (> 0).
             confidence:
-              allOf: [{ $ref: '#/components/schemas/Decimal' }]
+              allOf: [{ $ref: '#/components/schemas/UnitFractionDecimal' }]
               description: Grau de conviccao em [0.0, 1.0].
             limitPrice:
-              allOf: [{ $ref: '#/components/schemas/NullableDecimal' }]
+              allOf: [{ $ref: '#/components/schemas/NullablePositiveDecimal' }]
               description: >
                 Preco-limite da ordem. null = usar o preco de mercado do tick
                 (default). Se informado, deve ser positivo.

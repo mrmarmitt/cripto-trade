@@ -85,6 +85,13 @@ Assim os campos específicos de cada ação são **obrigatórios na fronteira** 
 apenas por convenção — uma decisão malformada (ex.: `SHOULD_BUY` sem `quantity`) é rejeitada antes de
 virar transação, em vez de falhar em runtime no signal path.
 
+As **faixas** também são enforced na fronteira: como decimal trafega como string (então `minimum`/
+`maximum` do JSON Schema, que valem para `number`, não se aplicam), `quantity` usa `PositiveDecimal`
+(`> 0`), `confidence` usa `UnitFractionDecimal` (`[0,1]`) e `limitPrice` usa `NullablePositiveDecimal`
+— todos via `pattern` (regex sem lookahead, portável entre Java/Python/JS). Assim `quantity: "-0.1"`
+ou `confidence: "2"` são rejeitados no boundary. Os decimais de `input`/`context` seguem o `Decimal`
+genérico: são dados que o ctrade **envia** já validados, não saída remota não-confiável.
+
 | `decision` | Campos obrigatórios | Ignorados | Efeito |
 |---|---|---|---|
 | `SHOULD_HOLD` | — | `quantity`, `confidence` | Nenhuma ação neste tick. |
