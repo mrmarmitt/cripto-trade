@@ -30,7 +30,8 @@ reiniciar o ctrade.
 | Método | Caminho | Papel |
 |---|---|---|
 | `POST` | `/v1/evaluate` | Uma decisão pura por tick. É a chamada quente. |
-| `GET`  | `/v1/health`   | Liveness + **readiness** (warm-up concluído), escopada por `strategyRef`. |
+| `GET`  | `/v1/health`   | Liveness + **readiness agregada** (todas as versões prontas). |
+| `GET`  | `/v1/health/{strategyRef}` | **Readiness escopada** de uma versão; ecoa `strategyRef` (obrigatório). |
 | `GET`  | `/v1/meta`     | **Lista** das versões servidas (`strategyId`, `name`, `version`) para popular/verificar o catálogo; filtrável por `strategyRef`. |
 
 ---
@@ -117,16 +118,22 @@ na decisão. A decisão deve ser função de `(input, context)` + estado de warm
 - `ready=true` — warm-up concluído; a versão pode ir para `ACTIVE`.
 
 **Readiness é escopada por versão.** Como o warm-up é chaveado por `strategyRef`, a readiness também
-é: numa app que serve V1 e V2, a V1 pode estar `ready=true` enquanto a V2 ainda aquece. Por isso
-`GET /health?strategyRef=<uuid>` responde a readiness **daquela** versão e ecoa o `strategyRef` a que
-`ready` se refere. Sem o parâmetro, `ready` é o agregado da app (`true` só se **todas** as versões
-servidas estão prontas) — suficiente para apps de versão única. Um `ready` app-wide único seria
-ambíguo com múltiplas versões: promoveria uma V2 fria ou barraria uma V1 pronta.
+é: numa app que serve V1 e V2, a V1 pode estar `ready=true` enquanto a V2 ainda aquece. Há dois
+endpoints, com **schemas de resposta distintos**:
 
-**O portão de promoção do ctrade consulta `/health` com o `strategyRef` alvo e não vira o ponteiro do
-runner para uma versão com `ready=false`.** Isso é o que torna o deploy-ao-lado seguro: a V2 sobe e
-aquece em paralelo enquanto a V1 opera, e a troca só ocorre quando a V2 se declara pronta — sem janela
-cega.
+- `GET /health` — readiness **agregada** (`Health`): `ready=true` só se **todas** as versões servidas
+  estão prontas. Serve como probe de liveness e para apps de versão única. Não ecoa `strategyRef`.
+- `GET /health/{strategyRef}` — readiness **escopada** (`ScopedHealth`): `ready` fala pela versão do
+  path e a resposta **ecoa `strategyRef` (obrigatório e não-nulo)**.
+
+A separação é o que dá **prova de schema**: uma resposta agregada não pode se passar por escopada
+(faltaria o `strategyRef` obrigatório), então o portão de promoção não corre o risco de tomar um
+`ready` app-wide como se fosse da V2 e promover uma versão fria.
+
+**O portão de promoção do ctrade consulta `GET /health/{strategyRef}` da versão alvo e não vira o
+ponteiro do runner para uma versão com `ready=false`.** Isso é o que torna o deploy-ao-lado seguro: a
+V2 sobe e aquece em paralelo enquanto a V1 opera, e a troca só ocorre quando a V2 se declara pronta —
+sem janela cega.
 
 ---
 
@@ -149,7 +156,7 @@ pipeline financeiro.
 - Durante a coexistência V1/V2, o runner deve resolver por **`strategyId` explícito**, não por nome
   (o fallback por nome fica ambíguo com duas versões de mesmo nome no ar).
 - Como uma app pode servir múltiplas versões, `/meta` retorna a **lista** das versões servidas e
-  `/health?strategyRef=` reporta a readiness **daquela** versão — o catálogo e o portão de promoção
+  `/health/{strategyRef}` reporta a readiness **daquela** versão — o catálogo e o portão de promoção
   operam por `strategyId`, nunca por um estado app-wide único.
 - `contractVersion` (em `/meta`) declara a versão **deste contrato** que a app implementa, separada da
   `version` da estratégia. O caminho é versionado (`/v1`); mudança incompatível de contrato ⇒ `/v2`.

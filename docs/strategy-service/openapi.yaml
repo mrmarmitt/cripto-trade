@@ -64,29 +64,13 @@ paths:
   /health:
     get:
       operationId: health
-      summary: Liveness e readiness (warm-up), escopado por versao
+      summary: Liveness e readiness AGREGADA da app
       description: >
-        readiness=true indica que o estado de warm-up (ex.: janela de historico
-        de uma media movel) ja esta preenchido e a estrategia pode ir para
-        ACTIVE. O portao de promocao do ctrade NAO deve virar o ponteiro do
-        runner para uma versao com readiness=false.
-
-        O warm-up e chaveado por strategyRef (ver /evaluate), entao a readiness
-        tambem e: numa app que serve multiplas versoes, a V1 pode estar pronta
-        enquanto a V2 aquece. O portao de promocao DEVE consultar /health com o
-        strategyRef alvo — a resposta ecoa o strategyRef ao qual `ready` se
-        refere. Sem o parametro, `ready` e o agregado da app (true somente se
-        TODAS as versoes servidas estao prontas), util para apps de versao unica.
-      parameters:
-        - name: strategyRef
-          in: query
-          required: false
-          description: >
-            Versao alvo cuja readiness se quer consultar (== strategyId de /meta).
-            Omitido = readiness agregada da app.
-          schema:
-            type: string
-            format: uuid
+        Liveness + readiness agregada: ready=true somente se TODAS as versoes
+        servidas terminaram o warm-up. Serve como probe de liveness e para apps
+        de versao unica. Para a decisao de promocao de UMA versao especifica use
+        GET /health/{strategyRef} — la a resposta comprova, no schema, a que
+        versao o `ready` se refere.
       responses:
         '200':
           description: App viva
@@ -94,10 +78,47 @@ paths:
             application/json:
               schema: { $ref: '#/components/schemas/Health' }
         '503':
-          description: App viva porem nao pronta (aquecendo)
+          description: App viva porem nao pronta (ao menos uma versao aquecendo)
           content:
             application/json:
               schema: { $ref: '#/components/schemas/Health' }
+
+  /health/{strategyRef}:
+    get:
+      operationId: healthScoped
+      summary: Readiness de UMA versao (escopada)
+      description: >
+        readiness da versao strategyRef. O warm-up e chaveado por strategyRef
+        (ver /evaluate), entao numa app que serve V1+V2 a V1 pode estar pronta
+        enquanto a V2 aquece. A resposta ecoa strategyRef (obrigatorio e nao-nulo,
+        ver ScopedHealth): o portao de promocao tem prova, no schema, de que
+        `ready` pertence a versao alvo — sem isso, uma resposta agregada poderia
+        se passar por escopada e promover uma versao fria. O portao NAO vira o
+        ponteiro do runner para strategyRef com ready=false.
+      parameters:
+        - name: strategyRef
+          in: path
+          required: true
+          description: Versao alvo (== strategyId de /meta).
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Versao viva
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopedHealth' }
+        '404':
+          description: strategyRef nao e servido por esta app
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+        '503':
+          description: Versao viva porem aquecendo
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ScopedHealth' }
 
   /meta:
     get:
@@ -472,6 +493,9 @@ components:
     # ---- Operacional --------------------------------------------------------
 
     Health:
+      # Readiness AGREGADA da app (GET /health). Sem strategyRef: `ready` fala
+      # pela app inteira (todas as versoes prontas), nunca por uma versao — por
+      # isso o eco nao existe aqui. Prova por-versao vem de ScopedHealth.
       type: object
       required: [status, ready]
       properties:
@@ -481,20 +505,29 @@ components:
         ready:
           type: boolean
           description: >
-            true quando o warm-up terminou e a versao pode ir para ACTIVE.
-            Escopado ao strategyRef consultado; sem o parametro, e o agregado da
-            app (true somente se todas as versoes servidas estao prontas).
-        strategyRef:
-          type: string
-          format: uuid
-          nullable: true
-          description: >
-            Versao a que `ready` se refere (eco do parametro de query). null
-            quando a consulta foi agregada (sem strategyRef).
+            Agregado: true somente quando TODAS as versoes servidas terminaram o
+            warm-up e a app pode ir para ACTIVE. Readiness por versao: ScopedHealth.
         detail:
           type: string
           nullable: true
           description: 'Ex.: "warming up 12/20 ticks".'
+
+    ScopedHealth:
+      # Readiness de UMA versao (GET /health/{strategyRef}). strategyRef e
+      # OBRIGATORIO e nao-nulo: e a prova, no schema, de que `ready` pertence a
+      # versao consultada. Sem isso uma resposta agregada se passaria por
+      # escopada e o portao de promocao poderia promover uma versao fria.
+      allOf:
+        - $ref: '#/components/schemas/Health'
+        - type: object
+          required: [strategyRef]
+          properties:
+            strategyRef:
+              type: string
+              format: uuid
+              description: >
+                Versao a que `ready` se refere (eco do path). Obrigatorio e
+                nao-nulo; aqui `ready` e escopado a esta versao, nao agregado.
 
     Meta:
       type: object
