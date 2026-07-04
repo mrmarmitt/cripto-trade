@@ -31,7 +31,7 @@ reiniciar o ctrade.
 |---|---|---|
 | `POST` | `/v1/evaluate` | Uma decisão pura por tick. É a chamada quente. |
 | `GET`  | `/v1/health`   | Liveness + **readiness** (warm-up concluído), escopada por `strategyRef`. |
-| `GET`  | `/v1/meta`     | Identidade (`strategyId`, `name`, `version`) para popular/verificar o catálogo. |
+| `GET`  | `/v1/meta`     | **Lista** das versões servidas (`strategyId`, `name`, `version`) para popular/verificar o catálogo; filtrável por `strategyRef`. |
 
 ---
 
@@ -79,6 +79,11 @@ Strings `date-time` (`2026-07-03T14:22:05.123Z`). Sem epoch, sem timezone local.
   abertos e ordens em trânsito. `availableQuantity` de cada lote é o teto de SELL daquele lote.
 
 ### Response (`Decision`) — regras de coerência por `decision`
+
+`Decision` é modelada como `oneOf` das quatro variantes abaixo, com `discriminator` em `decision`.
+Assim os campos específicos de cada ação são **obrigatórios na fronteira** (validação/codegen), e não
+apenas por convenção — uma decisão malformada (ex.: `SHOULD_BUY` sem `quantity`) é rejeitada antes de
+virar transação, em vez de falhar em runtime no signal path.
 
 | `decision` | Campos obrigatórios | Ignorados | Efeito |
 |---|---|---|---|
@@ -136,6 +141,9 @@ pipeline financeiro.
 - **Uma versão = um `strategyId` (UUID) próprio.** V2 não reusa o UUID da V1.
 - Durante a coexistência V1/V2, o runner deve resolver por **`strategyId` explícito**, não por nome
   (o fallback por nome fica ambíguo com duas versões de mesmo nome no ar).
+- Como uma app pode servir múltiplas versões, `/meta` retorna a **lista** das versões servidas e
+  `/health?strategyRef=` reporta a readiness **daquela** versão — o catálogo e o portão de promoção
+  operam por `strategyId`, nunca por um estado app-wide único.
 - `contractVersion` (em `/meta`) declara a versão **deste contrato** que a app implementa, separada da
   `version` da estratégia. O caminho é versionado (`/v1`); mudança incompatível de contrato ⇒ `/v2`.
 

@@ -102,16 +102,40 @@ paths:
   /meta:
     get:
       operationId: meta
-      summary: Identidade da estrategia servida por esta app
+      summary: Identidade das versoes de estrategia servidas por esta app
       description: >
         Usado pelo ctrade para popular/verificar o catalogo (strategy_catalog).
         strategyId e imutavel por versao — V2 tem UUID proprio, distinto da V1.
+
+        Retorna a LISTA das versoes servidas: como uma app pode servir V1 e V2
+        (o warm-up e a avaliacao sao chaveados por strategyRef), um `/meta`
+        singular so reportaria uma identidade e o catalogo nao conseguiria
+        descobrir/verificar a versao alvo no endpoint compartilhado. Apps de
+        versao unica retornam um array de um elemento. Opcionalmente filtravel
+        por strategyRef.
+      parameters:
+        - name: strategyRef
+          in: query
+          required: false
+          description: >
+            Filtra para uma versao especifica (== strategyId). Omitido = todas as
+            versoes servidas.
+          schema:
+            type: string
+            format: uuid
       responses:
         '200':
-          description: Metadados de identidade
+          description: Metadados de identidade das versoes servidas
           content:
             application/json:
-              schema: { $ref: '#/components/schemas/Meta' }
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Meta' }
+        '404':
+          description: strategyRef informado nao e servido por esta app
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
 
 components:
   schemas:
@@ -292,40 +316,41 @@ components:
     # ---- Decisao (espelha StrategyOutputDto) -------------------------------
 
     Decision:
-      type: object
-      required: [strategyName, decision, reasoning]
+      # oneOf + discriminator por `decision`: cada acao exige os seus proprios
+      # campos NA FRONTEIRA. Um objeto unico com so os campos comuns obrigatorios
+      # deixaria passar SHOULD_BUY sem quantity/confidence ou SHOULD_CANCEL sem
+      # targetTransactionId, que so falhariam em runtime no signal path. Aqui o
+      # validador/codegen rejeita a decisao malformada antes de virar transacao.
+      oneOf:
+        - $ref: '#/components/schemas/HoldDecision'
+        - $ref: '#/components/schemas/BuyDecision'
+        - $ref: '#/components/schemas/SellDecision'
+        - $ref: '#/components/schemas/CancelDecision'
+      discriminator:
+        propertyName: decision
+        mapping:
+          SHOULD_HOLD: '#/components/schemas/HoldDecision'
+          SHOULD_BUY: '#/components/schemas/BuyDecision'
+          SHOULD_SELL: '#/components/schemas/SellDecision'
+          SHOULD_CANCEL: '#/components/schemas/CancelDecision'
       description: >
-        Decisao de trade. Regras de coerencia por decision:
+        Decisao de trade. O campo `decision` seleciona a variante (discriminator)
+        e cada variante torna obrigatorios os campos daquela acao. Regras de
+        coerencia por decision:
           SHOULD_HOLD   : quantity/confidence ignorados; nenhuma acao.
-          SHOULD_BUY    : quantity > 0 obrigatoria; confidence em [0,1].
-          SHOULD_SELL   : quantity > 0 obrigatoria; targetLotId opcional (null=FIFO).
+          SHOULD_BUY    : quantity (> 0) e confidence ([0,1]) obrigatorios.
+          SHOULD_SELL   : quantity (> 0) e confidence ([0,1]) obrigatorios; targetLotId opcional (null=FIFO).
           SHOULD_CANCEL : targetTransactionId obrigatorio; quantity/confidence ignorados.
+
+    DecisionBase:
+      # Campos comuns a toda decisao. `decision` e declarado em cada variante com
+      # o enum restrito a uma unica acao (exigencia do discriminator).
+      type: object
+      required: [strategyName, reasoning]
       properties:
         strategyName:
           type: string
           description: Nome logico da estrategia (ecoado em logs/observabilidade).
-        decision: { $ref: '#/components/schemas/TradingAction' }
-        confidence:
-          allOf: [{ $ref: '#/components/schemas/NullableDecimal' }]
-          description: Grau de conviccao em [0.0, 1.0]. Obrigatorio em BUY/SELL.
-        quantity:
-          allOf: [{ $ref: '#/components/schemas/NullableDecimal' }]
-          description: Quantidade absoluta a executar. Positiva em BUY/SELL.
-        limitPrice:
-          allOf: [{ $ref: '#/components/schemas/NullableDecimal' }]
-          description: >
-            Preco-limite da ordem. null = usar o preco de mercado do tick
-            (comportamento default). Se informado, deve ser positivo.
-        targetLotId:
-          type: string
-          format: uuid
-          nullable: true
-          description: SELL de lote especifico. null = FIFO.
-        targetTransactionId:
-          type: string
-          format: uuid
-          nullable: true
-          description: Ordem em transito a cancelar. Obrigatorio somente em SHOULD_CANCEL.
         reasoning:
           type: string
           description: Justificativa legivel da decisao (auditoria/observabilidade).
@@ -339,6 +364,81 @@ components:
           additionalProperties: true
           nullable: true
           description: Extensao livre (indicadores, features, diagnostico).
+
+    HoldDecision:
+      description: HOLD — nenhuma acao neste tick; quantity/confidence ignorados.
+      allOf:
+        - $ref: '#/components/schemas/DecisionBase'
+        - type: object
+          required: [decision]
+          properties:
+            decision:
+              type: string
+              enum: [SHOULD_HOLD]
+
+    BuyDecision:
+      description: BUY — quantity (> 0) e confidence ([0,1]) obrigatorios.
+      allOf:
+        - $ref: '#/components/schemas/DecisionBase'
+        - type: object
+          required: [decision, quantity, confidence]
+          properties:
+            decision:
+              type: string
+              enum: [SHOULD_BUY]
+            quantity:
+              allOf: [{ $ref: '#/components/schemas/Decimal' }]
+              description: Quantidade absoluta a executar (> 0).
+            confidence:
+              allOf: [{ $ref: '#/components/schemas/Decimal' }]
+              description: Grau de conviccao em [0.0, 1.0].
+            limitPrice:
+              allOf: [{ $ref: '#/components/schemas/NullableDecimal' }]
+              description: >
+                Preco-limite da ordem. null = usar o preco de mercado do tick
+                (default). Se informado, deve ser positivo.
+
+    SellDecision:
+      description: SELL — quantity (> 0) e confidence ([0,1]) obrigatorios; targetLotId opcional.
+      allOf:
+        - $ref: '#/components/schemas/DecisionBase'
+        - type: object
+          required: [decision, quantity, confidence]
+          properties:
+            decision:
+              type: string
+              enum: [SHOULD_SELL]
+            quantity:
+              allOf: [{ $ref: '#/components/schemas/Decimal' }]
+              description: Quantidade absoluta a executar (> 0).
+            confidence:
+              allOf: [{ $ref: '#/components/schemas/Decimal' }]
+              description: Grau de conviccao em [0.0, 1.0].
+            limitPrice:
+              allOf: [{ $ref: '#/components/schemas/NullableDecimal' }]
+              description: >
+                Preco-limite da ordem. null = usar o preco de mercado do tick
+                (default). Se informado, deve ser positivo.
+            targetLotId:
+              type: string
+              format: uuid
+              nullable: true
+              description: SELL de lote especifico. null = FIFO.
+
+    CancelDecision:
+      description: CANCEL — targetTransactionId obrigatorio; quantity/confidence ignorados.
+      allOf:
+        - $ref: '#/components/schemas/DecisionBase'
+        - type: object
+          required: [decision, targetTransactionId]
+          properties:
+            decision:
+              type: string
+              enum: [SHOULD_CANCEL]
+            targetTransactionId:
+              type: string
+              format: uuid
+              description: Ordem em transito a cancelar.
 
     # ---- Operacional --------------------------------------------------------
 
