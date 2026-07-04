@@ -58,7 +58,7 @@ public class FilledBuyRestingSellCancelStrategy extends AbstractScenarioStrategy
             // Reabertura de posição também respeita o teto: se a SELL que descansa preencheu e fechou
             // o lote após o cap, o estado fica limpo — sem este gate o cenário emitiria um novo BUY
             // (e novo ciclo) violando o contrato e2e de nao produzir transacoes extras apos o teto.
-            if (budgetExhausted()) {
+            if (budgetExhausted(context.runnerId())) {
                 return StrategyOutputDto.hold(NAME,
                         "cenario filled-buy-resting-sell-cancel: teto de ciclos atingido, nao reabre posicao");
             }
@@ -67,7 +67,7 @@ public class FilledBuyRestingSellCancelStrategy extends AbstractScenarioStrategy
                     "cenario filled-buy-resting-sell-cancel: BUY marketable para preencher");
         }
 
-        if (!tryStartCycle()) {
+        if (!tryStartCycle(context.runnerId())) {
             return StrategyOutputDto.hold(NAME, "cenario filled-buy-resting-sell-cancel: teto de ciclos atingido");
         }
         OpenLotDto lot = context.openLots().getFirst();

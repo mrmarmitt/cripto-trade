@@ -40,7 +40,7 @@ public class OverAllocationRejectStrategy extends AbstractScenarioStrategy {
             return StrategyOutputDto.hold(NAME,
                     "cenario over-allocation-reject: aguardando estado limpo antes de forcar REJECTED_CAPITAL");
         }
-        if (!tryStartCycle()) {
+        if (!tryStartCycle(context.runnerId())) {
             return StrategyOutputDto.hold(NAME, "cenario over-allocation-reject: teto de ciclos atingido");
         }
         BigDecimal quantity = overAllocatingQuantity(input.currentPrice(), context.availableCapital());

@@ -38,8 +38,19 @@ final class ScenarioTestFixtures {
     static StrategyContextDto context(BigDecimal availableCapital,
                                       List<OpenLotDto> openLots,
                                       List<PendingOrderDto> pendingOrders) {
+        return context(UUID.randomUUID(), availableCapital, openLots, pendingOrders);
+    }
+
+    /**
+     * Variante com {@code runnerId} explícito: os cenários com teto de ciclos escopam o orçamento
+     * por runner, então ticks que precisam compartilhar o mesmo orçamento têm de usar o mesmo id.
+     */
+    static StrategyContextDto context(UUID runnerId,
+                                      BigDecimal availableCapital,
+                                      List<OpenLotDto> openLots,
+                                      List<PendingOrderDto> pendingOrders) {
         return StrategyContextDto.builder()
-                .runnerId(UUID.randomUUID())
+                .runnerId(runnerId)
                 .portfolioId(UUID.randomUUID())
                 .symbol(Symbol.of(SYMBOL))
                 .positionContext(PositionContext.empty(SYMBOL))

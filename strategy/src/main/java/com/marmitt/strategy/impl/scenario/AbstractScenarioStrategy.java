@@ -9,6 +9,8 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -28,7 +30,11 @@ abstract class AbstractScenarioStrategy implements TradingStrategy {
     private final String strategyName;
     private final String strategyVersion;
     protected final ScenarioStrategyConfig config;
-    private final AtomicInteger cyclesStarted = new AtomicInteger(0);
+    // Orçamento de ciclos escopado por runner: a instância é um singleton resolvido no
+    // StrategyRepository para todo runner, então um contador único vazaria o teto entre runners
+    // (o primeiro esgotaria e os demais nasceriam inertes). Cada runnerId tem o seu próprio contador,
+    // mantendo o contrato "N ciclos por runner" independente de ordem/compartilhamento.
+    private final ConcurrentMap<UUID, AtomicInteger> cyclesByRunner = new ConcurrentHashMap<>();
     private boolean enabled = true;
 
     protected AbstractScenarioStrategy(UUID strategyId, String strategyName,
@@ -65,40 +71,43 @@ abstract class AbstractScenarioStrategy implements TradingStrategy {
     }
 
     /**
-     * Consome um ciclo do orçamento, se houver. Retorna {@code true} (e incrementa) quando a
-     * estratégia ainda pode iniciar um novo ciclo; {@code false} quando o teto {@code maxCycles}
-     * já foi atingido — sinal para a estratégia ficar inerte (HOLD). Sem teto ({@code maxCycles=0})
-     * sempre retorna {@code true}. Cada subclasse chama isto no ponto que inicia o seu ciclo
-     * (abertura de BUY, colocação de SELL descansando, etc.), não na limpeza (cancelamento).
+     * Consome um ciclo do orçamento do {@code runnerId}, se houver. Retorna {@code true} (e
+     * incrementa) quando o runner ainda pode iniciar um novo ciclo; {@code false} quando o teto
+     * {@code maxCycles} já foi atingido para aquele runner — sinal para a estratégia ficar inerte
+     * (HOLD). Sem teto ({@code maxCycles=0}) sempre retorna {@code true}. Cada subclasse chama isto
+     * no ponto que inicia o seu ciclo (abertura de BUY, colocação de SELL descansando, etc.), não na
+     * limpeza (cancelamento).
      */
-    protected boolean tryStartCycle() {
+    protected boolean tryStartCycle(UUID runnerId) {
         if (!config.hasCycleLimit()) {
             return true;
         }
         int limit = config.maxCycles();
+        AtomicInteger counter = cyclesByRunner.computeIfAbsent(runnerId, k -> new AtomicInteger(0));
         while (true) {
-            int current = cyclesStarted.get();
+            int current = counter.get();
             if (current >= limit) {
                 return false;
             }
-            if (cyclesStarted.compareAndSet(current, current + 1)) {
+            if (counter.compareAndSet(current, current + 1)) {
                 return true;
             }
         }
     }
 
-    /** Número de ciclos já iniciados (para observabilidade/teste). */
-    protected int cyclesStarted() {
-        return cyclesStarted.get();
+    /** Número de ciclos já iniciados pelo runner (para observabilidade/teste). */
+    protected int cyclesStarted(UUID runnerId) {
+        AtomicInteger counter = cyclesByRunner.get(runnerId);
+        return counter == null ? 0 : counter.get();
     }
 
     /**
-     * {@code true} quando há teto e ele já foi totalmente consumido. Ao contrário de
-     * {@link #tryStartCycle()}, <b>não</b> consome orçamento — serve para legs de setup (ex.:
-     * reabertura de posição) ficarem inertes após o teto sem serem contadas como ciclo.
+     * {@code true} quando há teto e ele já foi totalmente consumido pelo {@code runnerId}. Ao
+     * contrário de {@link #tryStartCycle(UUID)}, <b>não</b> consome orçamento — serve para legs de
+     * setup (ex.: reabertura de posição) ficarem inertes após o teto sem serem contadas como ciclo.
      */
-    protected boolean budgetExhausted() {
-        return config.hasCycleLimit() && cyclesStarted.get() >= config.maxCycles();
+    protected boolean budgetExhausted(UUID runnerId) {
+        return config.hasCycleLimit() && cyclesStarted(runnerId) >= config.maxCycles();
     }
 
     /** Primeira ordem em trânsito do lado informado (BUY/SELL), se houver. */

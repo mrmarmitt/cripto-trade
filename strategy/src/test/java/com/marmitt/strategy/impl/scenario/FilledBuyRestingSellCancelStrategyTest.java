@@ -66,40 +66,42 @@ class FilledBuyRestingSellCancelStrategyTest {
     void stopsAfterMaxCyclesReached() {
         FilledBuyRestingSellCancelStrategy bounded =
                 new FilledBuyRestingSellCancelStrategy(ScenarioStrategyConfig.boundedConfig(1));
+        UUID runner = UUID.randomUUID();
         BigDecimal capital = new BigDecimal("10000");
         BigDecimal lotQty = new BigDecimal("0.001");
 
         // BUY marketable (setup, nao consome orcamento)
         assertEquals(TradingAction.SHOULD_BUY,
-                bounded.executeStrategy(input(MARKET), context(capital, List.of(), List.of())).decision());
+                bounded.executeStrategy(input(MARKET), context(runner, capital, List.of(), List.of())).decision());
         // lote aberto -> coloca SELL descansando (ciclo 1)
         assertEquals(TradingAction.SHOULD_SELL,
-                bounded.executeStrategy(input(MARKET), context(capital, List.of(openLot(lotQty)), List.of())).decision());
+                bounded.executeStrategy(input(MARKET), context(runner, capital, List.of(openLot(lotQty)), List.of())).decision());
         // pending SELL -> cancela (limpeza)
         assertEquals(TradingAction.SHOULD_CANCEL,
                 bounded.executeStrategy(input(MARKET),
-                        context(capital, List.of(openLot(lotQty)), List.of(pending(TradingAction.SHOULD_SELL, UUID.randomUUID())))).decision());
+                        context(runner, capital, List.of(openLot(lotQty)), List.of(pending(TradingAction.SHOULD_SELL, UUID.randomUUID())))).decision());
         // lote aberto, sem pending, teto atingido -> HOLD (nao recoloca SELL)
         assertEquals(TradingAction.SHOULD_HOLD,
-                bounded.executeStrategy(input(MARKET), context(capital, List.of(openLot(lotQty)), List.of())).decision());
+                bounded.executeStrategy(input(MARKET), context(runner, capital, List.of(openLot(lotQty)), List.of())).decision());
     }
 
     @Test
     void doesNotReopenPositionAfterCapWhenRestingSellFills() {
         FilledBuyRestingSellCancelStrategy bounded =
                 new FilledBuyRestingSellCancelStrategy(ScenarioStrategyConfig.boundedConfig(1));
+        UUID runner = UUID.randomUUID();
         BigDecimal capital = new BigDecimal("10000");
         BigDecimal lotQty = new BigDecimal("0.001");
 
         // setup BUY (nao consome) + SELL descansando (consome o unico ciclo)
         assertEquals(TradingAction.SHOULD_BUY,
-                bounded.executeStrategy(input(MARKET), context(capital, List.of(), List.of())).decision());
+                bounded.executeStrategy(input(MARKET), context(runner, capital, List.of(), List.of())).decision());
         assertEquals(TradingAction.SHOULD_SELL,
-                bounded.executeStrategy(input(MARKET), context(capital, List.of(openLot(lotQty)), List.of())).decision());
+                bounded.executeStrategy(input(MARKET), context(runner, capital, List.of(openLot(lotQty)), List.of())).decision());
 
         // a SELL que descansa preencheu e fechou o lote: estado limpo, mas teto ja atingido ->
         // HOLD (nao reabre posicao), preservando o contrato de nenhuma transacao extra apos o teto
         assertEquals(TradingAction.SHOULD_HOLD,
-                bounded.executeStrategy(input(MARKET), context(capital, List.of(), List.of())).decision());
+                bounded.executeStrategy(input(MARKET), context(runner, capital, List.of(), List.of())).decision());
     }
 }
