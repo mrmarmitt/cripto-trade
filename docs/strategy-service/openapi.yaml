@@ -371,6 +371,15 @@ components:
       # deixaria passar SHOULD_BUY sem quantity/confidence ou SHOULD_CANCEL sem
       # targetTransactionId, que so falhariam em runtime no signal path. Aqui o
       # validador/codegen rejeita a decisao malformada antes de virar transacao.
+      #
+      # `decision` e declarado required NESTE schema (nao so nas variantes) porque
+      # a OAS 3.0 exige que a propriedade do discriminator seja required no schema
+      # que o declara — sem isso validadores/geradores estritos podem des-
+      # polimorfizar o modelo e perder as checagens por acao.
+      type: object
+      required: [decision]
+      properties:
+        decision: { $ref: '#/components/schemas/TradingAction' }
       oneOf:
         - $ref: '#/components/schemas/HoldDecision'
         - $ref: '#/components/schemas/BuyDecision'
