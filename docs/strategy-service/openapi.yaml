@@ -64,12 +64,29 @@ paths:
   /health:
     get:
       operationId: health
-      summary: Liveness e readiness (warm-up)
+      summary: Liveness e readiness (warm-up), escopado por versao
       description: >
         readiness=true indica que o estado de warm-up (ex.: janela de historico
         de uma media movel) ja esta preenchido e a estrategia pode ir para
         ACTIVE. O portao de promocao do ctrade NAO deve virar o ponteiro do
         runner para uma versao com readiness=false.
+
+        O warm-up e chaveado por strategyRef (ver /evaluate), entao a readiness
+        tambem e: numa app que serve multiplas versoes, a V1 pode estar pronta
+        enquanto a V2 aquece. O portao de promocao DEVE consultar /health com o
+        strategyRef alvo — a resposta ecoa o strategyRef ao qual `ready` se
+        refere. Sem o parametro, `ready` e o agregado da app (true somente se
+        TODAS as versoes servidas estao prontas), util para apps de versao unica.
+      parameters:
+        - name: strategyRef
+          in: query
+          required: false
+          description: >
+            Versao alvo cuja readiness se quer consultar (== strategyId de /meta).
+            Omitido = readiness agregada da app.
+          schema:
+            type: string
+            format: uuid
       responses:
         '200':
           description: App viva
@@ -108,6 +125,20 @@ components:
         preservar precisao financeira entre linguagens. NUNCA usar number JSON.
         A app DEVE (de)serializar com biblioteca decimal (BigDecimal / Python
         decimal.Decimal / decimal.js|big.js), nunca float/Number nativo.
+      pattern: '^-?\d+(\.\d+)?$'
+      example: "64150.75000000"
+
+    NullableDecimal:
+      # Igual a Decimal, porem aceita null. Schema dedicado (nao allOf+nullable
+      # sobre Decimal) porque em OpenAPI 3.0 o `nullable` precisa acompanhar o
+      # `type` — como irmao de `allOf` ele e ignorado por validadores/geradores
+      # estritos, produzindo clientes que rejeitam null nos campos abaixo.
+      type: string
+      nullable: true
+      description: >
+        Numero decimal como string (ver Decimal) que tambem admite null. Usado
+        nos campos opcionais de MarketInput e nos campos de Decision cujo null
+        tem semantica (ex.: limitPrice null = preco de mercado do tick).
       pattern: '^-?\d+(\.\d+)?$'
       example: "64150.75000000"
 
@@ -154,24 +185,12 @@ components:
       properties:
         symbol: { $ref: '#/components/schemas/Symbol' }
         currentPrice: { $ref: '#/components/schemas/Decimal' }
-        previousPrice:
-          allOf: [{ $ref: '#/components/schemas/Decimal' }]
-          nullable: true
-        bidPrice:
-          allOf: [{ $ref: '#/components/schemas/Decimal' }]
-          nullable: true
-        askPrice:
-          allOf: [{ $ref: '#/components/schemas/Decimal' }]
-          nullable: true
-        volume:
-          allOf: [{ $ref: '#/components/schemas/Decimal' }]
-          nullable: true
-        high24h:
-          allOf: [{ $ref: '#/components/schemas/Decimal' }]
-          nullable: true
-        low24h:
-          allOf: [{ $ref: '#/components/schemas/Decimal' }]
-          nullable: true
+        previousPrice: { $ref: '#/components/schemas/NullableDecimal' }
+        bidPrice: { $ref: '#/components/schemas/NullableDecimal' }
+        askPrice: { $ref: '#/components/schemas/NullableDecimal' }
+        volume: { $ref: '#/components/schemas/NullableDecimal' }
+        high24h: { $ref: '#/components/schemas/NullableDecimal' }
+        low24h: { $ref: '#/components/schemas/NullableDecimal' }
         timestamp:
           type: string
           format: date-time
@@ -287,19 +306,16 @@ components:
           description: Nome logico da estrategia (ecoado em logs/observabilidade).
         decision: { $ref: '#/components/schemas/TradingAction' }
         confidence:
-          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          allOf: [{ $ref: '#/components/schemas/NullableDecimal' }]
           description: Grau de conviccao em [0.0, 1.0]. Obrigatorio em BUY/SELL.
-          nullable: true
         quantity:
-          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          allOf: [{ $ref: '#/components/schemas/NullableDecimal' }]
           description: Quantidade absoluta a executar. Positiva em BUY/SELL.
-          nullable: true
         limitPrice:
-          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          allOf: [{ $ref: '#/components/schemas/NullableDecimal' }]
           description: >
             Preco-limite da ordem. null = usar o preco de mercado do tick
             (comportamento default). Se informado, deve ser positivo.
-          nullable: true
         targetLotId:
           type: string
           format: uuid
@@ -335,7 +351,17 @@ components:
           enum: [UP, DOWN]
         ready:
           type: boolean
-          description: true quando o warm-up terminou e a app pode ir para ACTIVE.
+          description: >
+            true quando o warm-up terminou e a versao pode ir para ACTIVE.
+            Escopado ao strategyRef consultado; sem o parametro, e o agregado da
+            app (true somente se todas as versoes servidas estao prontas).
+        strategyRef:
+          type: string
+          format: uuid
+          nullable: true
+          description: >
+            Versao a que `ready` se refere (eco do parametro de query). null
+            quando a consulta foi agregada (sem strategyRef).
         detail:
           type: string
           nullable: true

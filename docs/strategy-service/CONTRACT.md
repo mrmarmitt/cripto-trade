@@ -30,7 +30,7 @@ reiniciar o ctrade.
 | Método | Caminho | Papel |
 |---|---|---|
 | `POST` | `/v1/evaluate` | Uma decisão pura por tick. É a chamada quente. |
-| `GET`  | `/v1/health`   | Liveness + **readiness** (warm-up concluído). |
+| `GET`  | `/v1/health`   | Liveness + **readiness** (warm-up concluído), escopada por `strategyRef`. |
 | `GET`  | `/v1/meta`     | Identidade (`strategyId`, `name`, `version`) para popular/verificar o catálogo. |
 
 ---
@@ -104,9 +104,17 @@ na decisão. A decisão deve ser função de `(input, context)` + estado de warm
 - `ready=false` — app viva, mas ainda aquecendo (ex.: `"warming up: 12/20 ticks"`). Responde `503`.
 - `ready=true` — warm-up concluído; a versão pode ir para `ACTIVE`.
 
-**O portão de promoção do ctrade não vira o ponteiro do runner para uma versão com `ready=false`.**
-Isso é o que torna o deploy-ao-lado seguro: a V2 sobe e aquece em paralelo enquanto a V1 opera, e a
-troca só ocorre quando a V2 se declara pronta — sem janela cega.
+**Readiness é escopada por versão.** Como o warm-up é chaveado por `strategyRef`, a readiness também
+é: numa app que serve V1 e V2, a V1 pode estar `ready=true` enquanto a V2 ainda aquece. Por isso
+`GET /health?strategyRef=<uuid>` responde a readiness **daquela** versão e ecoa o `strategyRef` a que
+`ready` se refere. Sem o parâmetro, `ready` é o agregado da app (`true` só se **todas** as versões
+servidas estão prontas) — suficiente para apps de versão única. Um `ready` app-wide único seria
+ambíguo com múltiplas versões: promoveria uma V2 fria ou barraria uma V1 pronta.
+
+**O portão de promoção do ctrade consulta `/health` com o `strategyRef` alvo e não vira o ponteiro do
+runner para uma versão com `ready=false`.** Isso é o que torna o deploy-ao-lado seguro: a V2 sobe e
+aquece em paralelo enquanto a V1 opera, e a troca só ocorre quando a V2 se declara pronta — sem janela
+cega.
 
 ---
 
