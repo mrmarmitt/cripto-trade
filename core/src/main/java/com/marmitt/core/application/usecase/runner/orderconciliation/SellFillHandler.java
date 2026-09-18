@@ -126,13 +126,22 @@ class SellFillHandler {
     }
 
     /**
-     * Resolve a posicao alvo da venda usando o mesmo criterio do pipeline de sinais:
-     * lote especifico via {@code targetLotId} tem precedencia; fallback para a posicao
-     * aberta do runner no simbolo (politica FIFO implicita).
+     * Resolve a posicao alvo da venda: lote especifico via {@code targetLotId} tem precedencia;
+     * senao, a posicao que esta transacao travou; por ultimo, a posicao aberta do runner no
+     * simbolo (politica FIFO implicita).
+     *
+     * <p>A busca pela posicao travada por esta transacao e o que sustenta a SELL FIFO. Nesse caso
+     * o sinal nao informa {@code targetLotId}, e o lock movimenta a posicao de OPEN para CLOSING —
+     * entao a busca por posicao aberta nao a encontraria e o fill morreria com "No position found"
+     * deixando SELL e lote em limbo. O {@code locked_by_transaction_id} e o vinculo autoritativo:
+     * liquida exatamente o lote que esta venda reservou, nunca outro. Mesma razao pela qual
+     * {@code TerminationHandler} ja considera posicoes em CLOSING ao desfazer o lock.
      */
     private Optional<Position> resolvePosition(Transaction transaction) {
         return Optional.ofNullable(transaction.getTargetLotId())
                 .flatMap(strategyRunnerRepository::findPositionByIdForUpdate)
+                .or(() -> strategyRunnerRepository
+                        .findPositionLockedByTransactionIdForUpdate(transaction.getId()))
                 .or(() -> strategyRunnerRepository.findOpenPositionByRunnerIdAndSymbolForUpdate(
                         transaction.getRunnerId(), transaction.getSymbol()));
     }

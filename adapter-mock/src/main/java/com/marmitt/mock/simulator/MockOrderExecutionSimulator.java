@@ -176,6 +176,78 @@ public class MockOrderExecutionSimulator {
         return scheduled;
     }
 
+    /**
+     * Decides whether a LIMIT order rests on the book instead of executing right away.
+     *
+     * <p>A BUY below the market and a SELL above it are non-marketable, so they rest. Anything
+     * else crosses and executes. A null/non-positive reference price means the caller has no
+     * market opinion for this symbol, in which case the order executes as it always did.
+     */
+    public boolean shouldRest(SendOrderRequest request, BigDecimal referencePrice) {
+        if (request.getOrderType() != com.marmitt.core.enums.OrderType.LIMIT) {
+            return false;
+        }
+        if (referencePrice == null || referencePrice.compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
+        BigDecimal limitPrice = request.getPrice();
+        if (limitPrice == null || limitPrice.compareTo(BigDecimal.ZERO) <= 0) {
+            return false;
+        }
+        if (request.getOrderSide() == com.marmitt.core.enums.OrderSide.BUY) {
+            return limitPrice.compareTo(referencePrice) < 0;
+        }
+        return limitPrice.compareTo(referencePrice) > 0;
+    }
+
+    /**
+     * Builds the schedule for an order that rests: validation (which also reserves balance)
+     * followed by a single NEW event. No terminal event is produced — the order stays open
+     * until the market crosses its limit or a cancel arrives.
+     */
+    public List<MockScheduledOrderEvent> buildRestingSchedule(SendOrderRequest request,
+                                                              String orderId,
+                                                              MockScenarioConfig config,
+                                                              MockBalanceStore balanceStore) {
+        OrderValidationResult validation = orderValidator.validate(request, config, balanceStore);
+        if (!validation.accepted()) {
+            return List.of(new MockScheduledOrderEvent(
+                    simulateRejected(request, orderId, validation.rejectReason()), 0L));
+        }
+        return List.of(new MockScheduledOrderEvent(simulateAccepted(request, orderId), -1L));
+    }
+
+    /**
+     * Builds the fill of an order that was already resting and has just been crossed by the
+     * market. Balance was reserved when the order was accepted, so this only settles the fill —
+     * it must not re-validate or reserve again.
+     *
+     * <p>A resting order fills at its own limit price: that is the price the book guaranteed
+     * when the order was placed.
+     */
+    public List<MockScheduledOrderEvent> buildRestingFillSchedule(SendOrderRequest request,
+                                                                  String orderId,
+                                                                  MockScenarioConfig config,
+                                                                  MockBalanceStore balanceStore) {
+        BigDecimal executedPrice = request.getPrice();
+        BigDecimal fee = feeModel.calculateFee(request.getQuantity(), executedPrice, config);
+        applyBalanceForFill(request, balanceStore, executedPrice, request.getQuantity(), fee);
+        return List.of(new MockScheduledOrderEvent(
+                simulateFilled(request, orderId, executedPrice, fee), -1L));
+    }
+
+    /**
+     * Releases the balance reserved for an order that never executed.
+     *
+     * <p>Exposed for the runtime, which owns the lifecycle of resting orders and needs to give
+     * the reservation back when one is canceled from outside the simulation schedule.
+     */
+    public void releaseReservationForOpenOrder(SendOrderRequest request,
+                                               MockBalanceStore balanceStore,
+                                               MockScenarioConfig config) {
+        releaseReservation(request, balanceStore, config);
+    }
+
     public OrderDataDto simulateAccepted(SendOrderRequest request, String orderId) {
         return new OrderDataDto(
                 orderId,

@@ -93,6 +93,53 @@ executado para `MOCK`.
 - validacao basica de quantidade, step size e notional;
 - saldos iniciais.
 
+O caminho default preenche a ordem (`slippage` decide o preco executado, limitado pelo
+`limitPrice` quando a ordem e `LIMIT`), exceto quando ela descansa no book — ver
+"Ordens Que Descansam".
+
+## Ordens Que Descansam
+
+O simulador decide se uma ordem `LIMIT` cruza o mercado ou descansa no book:
+
+- BUY com `limitPrice` abaixo da referencia e SELL acima dela sao nao-marketable e descansam;
+- qualquer outro caso executa pelo caminho normal;
+- **sem preco de referencia conhecido para o simbolo, o comportamento e o de sempre (preenche)**.
+
+O preco de referencia vem de `MockReferencePriceStore`, alimentado por duas fontes:
+
+- ticks do `MockMarketDataFeedEngine`, via `setPriceListener`;
+- `MockExchangeRuntime.seedReferencePrice`, para testes que injetam ticks direto no pipeline de
+  sinal e nunca acionam o feed.
+
+Ordem que descansa e validada, reservada e registrada **sincronamente** na submissao, antes do ACK
+REST retornar; so o callback `NEW` e publicado de forma assincrona. Isso garante que um cancelamento
+ou um tick que cruza logo apos o ACK sempre encontre a ordem no book. O callback `NEW` e descartado
+se a ordem ja tiver saido do book, para nao aterrissar depois do `CANCELED`/`FILLED` que a fechou.
+
+Enquanto descansa, a ordem nao emite evento terminal. Ela sai do book por:
+
+- **cruzamento** — uma atualizacao de referencia que torna o limite marketable gera `FILLED` no
+  proprio `limitPrice`, consumindo a reserva retida sem reservar de novo;
+- **cancelamento** — `cancelOrderRest` devolve a reserva e publica `CANCELED`.
+
+Quem remove a ordem do registro vence, e essa remocao e o unico arbitro: o cancelamento so emite
+`CANCELED` quando ele proprio tirou a ordem do book. Se um tick cruzou antes, o cancelamento vira
+no-op e devolve o desfecho vencedor, para nao entregar ao core um terminal que contradiga os saldos
+ja liquidados pelo fill.
+
+Ordem recusada na validacao **nao descansa e nao e publicada no canal de eventos**: a recusa volta
+no retorno sincrono do REST, que ja e conciliado como desfecho da submissao. Publica-la de novo
+entregaria um segundo terminal para uma transacao ja terminal.
+
+Apos registrar uma ordem no book o runtime **re-avalia o preco de referencia corrente**, porque ele
+pode ter mudado entre a decisao de descansar e a insercao — sem isso a ordem ficaria encalhada ate
+um proximo tick.
+
+O ACK `NEW` assincrono decide e grava o snapshot dentro de um unico `compute` sobre
+`latestEventByOrderId`. Isso o torna atomico contra a gravacao do terminal por um cancelamento ou
+cruzamento: checar e depois gravar em passos separados permitiria rebaixar o snapshot de volta para
+`NEW`, e `queryOrder*`/`listOpenOrders*` passariam a reportar como aberta uma ordem ja liquidada.
+
 `MockOrderScenarioOverride` permite cenarios deterministas por `clientOrderId`:
 
 - lista ordenada de eventos planejados;
@@ -151,6 +198,7 @@ exchange real.
 | `adapter-mock/src/main/java/com/marmitt/mock/simulator/MockOrderExecutionSimulator.java` | Gera lifecycle de ordens, fills, falhas e duplicatas. |
 | `adapter-mock/src/main/java/com/marmitt/mock/config/MockScenarioConfig.java` | Configuracao aleatoria controlada do simulador. |
 | `adapter-mock/src/main/java/com/marmitt/mock/config/MockOrderScenarioOverride.java` | Cenarios deterministas por ordem. |
+| `adapter-mock/src/main/java/com/marmitt/mock/simulator/MockReferencePriceStore.java` | Ultimo preco de mercado conhecido por simbolo, base da decisao marketable-vs-resting. |
 | `adapter-mock/src/main/java/com/marmitt/mock/simulator/FeeModel.java` | Calcula fee por incremento executado. |
 | `adapter-mock/src/main/java/com/marmitt/mock/simulator/SlippageModel.java` | Calcula preco executado com slippage. |
 
@@ -161,6 +209,9 @@ exchange real.
 - Duplicatas e out-of-order sao cenarios validos; o core deve preservar
   idempotencia.
 - Overrides deterministas devem ser consumidos uma vez por `clientOrderId`.
+- Override tem precedencia sobre a decisao de resting: ordem com override segue o schedule planejado.
+- Sem preco de referencia, o mock nao muda de comportamento em relacao ao always-fill historico.
+- Ordem que descansa retem a reserva ate cruzar ou ser cancelada; cancelar devolve o capital.
 - Snapshots seedados para query nao devem publicar callbacks automaticamente.
 - `LocalEventWebSocketAdapter` nao deve abrir rede real.
 - O mock nao deve introduzir regra de dominio; ele simula exchange e traduz para
@@ -169,6 +220,10 @@ exchange real.
 ## Validacao
 
 - `adapter-mock/src/test/java/com/marmitt/mock/simulator/MockOrderExecutionSimulatorDeterministicScenarioTest.java`
+- `adapter-mock/src/test/java/com/marmitt/mock/simulator/MockOrderExecutionSimulatorRestingOrderTest.java`
+- `adapter-mock/src/test/java/com/marmitt/mock/runtime/MockExchangeRuntimeRestingOrderTest.java`
+- `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/ScenarioRestingBuyCancelE2ETest.java`
+- `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/ScenarioFilledBuyRestingSellCancelE2ETest.java`
 - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/ProcessTradeSignalMockIntegrationTest.java`
 - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/OrderLifecycleMockIntegrationTest.java`
 - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/MockBuyOrderOverrideIntegrationTest.java`

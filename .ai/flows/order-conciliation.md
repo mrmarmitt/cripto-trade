@@ -70,7 +70,8 @@ aplicando o incremento.
 
 `SellFillHandler` reduz a posicao alvo:
 
-1. Resolve posicao por `targetLotId` ou posicao aberta do runner/simbolo.
+1. Resolve posicao, nesta ordem: `targetLotId` da transacao; posicao travada por aquela transacao
+   (`locked_by_transaction_id`, status `CLOSING`); posicao aberta do runner/simbolo.
 2. Aplica reducao incremental.
 3. Destrava a posicao no fill final.
 4. Cria `TransactionMatch`.
@@ -102,6 +103,8 @@ erro de consistencia.
 
 ## Invariantes
 
+- SELL sem `targetLotId` (FIFO) precisa continuar resolvivel depois do lock: travar a posicao a tira
+  de `OPEN`, entao a busca por posicao aberta sozinha nao a encontra.
 - Transicoes de `Transaction` sao monotonicas; estados terminais nao devem ser
   reabertos.
 - Eventos duplicados nao podem duplicar quantidade, PnL, match ou efeito

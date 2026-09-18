@@ -72,6 +72,20 @@ SELL:
 Esse metodo reduz reserva, aplica PnL realizado, devolve custo ao disponivel e
 acumula taxa convertida.
 
+### Lacuna conhecida: excedente da reserva nao e devolvido
+
+A reserva e feita ao **preco-limite** (`TradeIntentFactory`: `total = quantity x price`) e a baixa
+em `confirmExecution` usa o **preco executado** (`SellFillHandler`:
+`totalCost = fillIncrement x position.getAveragePrice()`). Como `confirmExecution` faz
+`reserved -= cost`, a diferenca `quantity x (limite - executado)` **fica presa em `reserved`**.
+
+Nao ha passo compensatorio: `release()` so roda nos terminais de falha (`REJECTED`/`CANCELED`/
+`EXPIRED`); o caminho `FILLED` passa apenas por `confirmExecution`. Toda BUY `LIMIT` que executa
+melhor que o proprio limite acumula residuo, ciclo apos ciclo.
+
+E a reconciliacao §7.2.3 do `docs/IMPLEMENTATION_GUIDE.md` — documentada e nao implementada.
+Medida em 2026-09-18 pelos e2e da T38; decisao e correcao pertencem a `.ai/tasks/T36-capital-reservation-safety-buffer.md`.
+
 ## Liberacao De Margem
 
 `MarginReleasedReaction` processa `MarginReleaseEvent`:
@@ -129,6 +143,8 @@ ou replay.
 - Safe Mode deve impedir novas reservas quando ativo.
 - Limite de exposicao do runner deve considerar exposicao atual mais reserva
   solicitada.
+- Capital reservado por uma transacao terminal deve voltar integralmente ao disponivel.
+  **Hoje esta invariante e violada** no caminho `FILLED` — ver "Lacuna conhecida" acima.
 
 ## Validacao
 
