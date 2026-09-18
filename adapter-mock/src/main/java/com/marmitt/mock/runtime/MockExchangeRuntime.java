@@ -17,9 +17,11 @@ import com.marmitt.mock.config.MockScenarioConfig;
 import com.marmitt.mock.processor.MockRawMessagePublisher;
 import com.marmitt.mock.simulator.MockMarketDataFeedEngine;
 import com.marmitt.mock.simulator.MockOrderExecutionSimulator;
+import com.marmitt.mock.simulator.MockReferencePriceStore;
 import com.marmitt.mock.simulator.MockScheduledOrderEvent;
 import lombok.extern.slf4j.Slf4j;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -48,6 +50,8 @@ public class MockExchangeRuntime {
     private final Map<String, OrderDataDto> latestEventByOrderId = new ConcurrentHashMap<>();
     private final Map<String, MockOrderScenarioOverride> orderScenarioOverrideByClientOrderId = new ConcurrentHashMap<>();
     private final Map<String, QueryFailurePlan> queryFailurePlanByClientOrderId = new ConcurrentHashMap<>();
+    private final Map<String, RestingOrder> restingOrderByOrderId = new ConcurrentHashMap<>();
+    private final MockReferencePriceStore referencePriceStore = new MockReferencePriceStore();
     private Random random;
     private MockBalanceStore balanceStore;
 
@@ -73,6 +77,7 @@ public class MockExchangeRuntime {
                 marketDataFeedEngine::reset,
                 this::resetInternal
         );
+        this.marketDataFeedEngine.setPriceListener(this::updateReferencePrice);
     }
 
     public String submitOrder(SendOrderRequest orderRequest) {
@@ -94,6 +99,11 @@ public class MockExchangeRuntime {
 
         String orderId = generateOrderId();
         orderIdByClientOrderId.put(orderRequest.getClientOrderId(), orderId);
+
+        if (!orderScenarioOverrideByClientOrderId.containsKey(orderRequest.getClientOrderId())
+                && restsOnBook(orderRequest)) {
+            return placeRestingOrder(orderRequest, orderId);
+        }
 
         OrderDataDto accepted = simulator.simulateAccepted(orderRequest, orderId);
         latestEventByOrderId.put(orderId, accepted);
@@ -121,6 +131,8 @@ public class MockExchangeRuntime {
         if (isTerminal(current.status())) {
             return current;
         }
+
+        releaseRestingReservation(exchangeOrderId);
 
         OrderDataDto canceled = new OrderDataDto(
                 current.orderId(),
@@ -295,6 +307,81 @@ public class MockExchangeRuntime {
                 orderData.orderId(), orderData.clientOrderId(), orderData.status());
     }
 
+    /**
+     * Seeds the market reference price used to decide whether a LIMIT order rests.
+     *
+     * <p>Intended for integration tests that drive ticks straight into the signal pipeline and
+     * therefore never exercise the mock feed. Seeding the same price the strategy sees keeps the
+     * strategy and the exchange looking at one market.
+     *
+     * <p>Seeding also re-evaluates orders already resting on that symbol, which is how a test
+     * moves the market and makes a resting order fill.
+     */
+    public void seedReferencePrice(String symbol, BigDecimal price) {
+        if (symbol == null || symbol.isBlank()) {
+            throw new IllegalArgumentException("symbol cannot be null or blank");
+        }
+        if (price == null || price.compareTo(BigDecimal.ZERO) <= 0) {
+            throw new IllegalArgumentException("price must be positive");
+        }
+        updateReferencePrice(symbol, price);
+        log.info("Mock reference price seeded - Symbol: {}, Price: {}", symbol, price);
+    }
+
+    private void updateReferencePrice(String symbol, BigDecimal price) {
+        referencePriceStore.update(symbol, price);
+        crossRestingOrders(symbol, price);
+    }
+
+    /**
+     * Fills every resting order on the symbol whose limit the market has crossed.
+     *
+     * <p>Each order is removed from the registry before executing, so a concurrent cancel and a
+     * crossing tick cannot both settle the same order.
+     */
+    private void crossRestingOrders(String symbol, BigDecimal price) {
+        if (restingOrderByOrderId.isEmpty()) {
+            return;
+        }
+        for (RestingOrder resting : List.copyOf(restingOrderByOrderId.values())) {
+            if (!resting.request().getSymbol().equalsIgnoreCase(symbol)) {
+                continue;
+            }
+            if (simulator.shouldRest(resting.request(), price)) {
+                continue;
+            }
+            if (restingOrderByOrderId.remove(resting.orderId()) == null) {
+                continue;
+            }
+            fillRestingOrder(resting);
+        }
+    }
+
+    private void fillRestingOrder(RestingOrder resting) {
+        try {
+            List<MockScheduledOrderEvent> events = simulator.buildRestingFillSchedule(
+                    resting.request(), resting.orderId(), config, this.balanceStore);
+            for (MockScheduledOrderEvent event : events) {
+                publishMockOrderResponse(event.orderData());
+            }
+            log.info("Mock resting order crossed and filled - ClientOrderId: {}, OrderId: {}",
+                    resting.request().getClientOrderId(), resting.orderId());
+        } catch (Exception e) {
+            log.error("Error filling resting mock order - ClientOrderId: {}, Error: {}",
+                    resting.request().getClientOrderId(), e.getMessage(), e);
+        }
+    }
+
+    private void releaseRestingReservation(String exchangeOrderId) {
+        RestingOrder resting = restingOrderByOrderId.remove(exchangeOrderId);
+        if (resting == null) {
+            return;
+        }
+        simulator.releaseReservationForOpenOrder(resting.request(), this.balanceStore, config);
+        log.info("Mock resting order canceled, reservation released - ClientOrderId: {}, OrderId: {}",
+                resting.request().getClientOrderId(), exchangeOrderId);
+    }
+
     private void simulateOrderExecutionAsync(SendOrderRequest orderRequest, String orderId) {
         try {
             Random localRandom = this.random;
@@ -320,6 +407,65 @@ public class MockExchangeRuntime {
             log.error("Error simulating order execution - ClientOrderId: {}, Error: {}",
                     orderRequest.getClientOrderId(), e.getMessage(), e);
         }
+    }
+
+    private boolean restsOnBook(SendOrderRequest orderRequest) {
+        BigDecimal reference = referencePriceStore.find(orderRequest.getSymbol()).orElse(null);
+        return simulator.shouldRest(orderRequest, reference);
+    }
+
+    /**
+     * Places an order that does not cross the market.
+     *
+     * <p>Validation, reservation and registration happen synchronously, before this returns, so
+     * that a cancel or a crossing tick arriving right after the REST acknowledgment always finds
+     * the order on the book. Only the NEW callback is published asynchronously, matching how the
+     * scripted path emits events.
+     *
+     * <p>No terminal event follows: the order waits for a crossing tick or a cancel.
+     */
+    private OrderDataDto placeRestingOrder(SendOrderRequest orderRequest, String orderId) {
+        MockScheduledOrderEvent placement = simulator
+                .buildRestingSchedule(orderRequest, orderId, config, this.balanceStore)
+                .getFirst();
+        OrderDataDto event = placement.orderData();
+        latestEventByOrderId.put(orderId, event);
+
+        if (event.status() != OrderDataDto.OrderStatus.NEW) {
+            log.info("Mock order rejected before resting - ClientOrderId: {}, OrderId: {}, Reason: {}",
+                    orderRequest.getClientOrderId(), orderId, event.rejectReason());
+            publishAsync(orderId, event, false);
+            return event;
+        }
+
+        restingOrderByOrderId.put(orderId, new RestingOrder(orderRequest, orderId));
+        log.info("Mock order resting on book - ClientOrderId: {}, OrderId: {}, LimitPrice: {}",
+                orderRequest.getClientOrderId(), orderId, orderRequest.getPrice());
+        publishAsync(orderId, event, true);
+        return event;
+    }
+
+    /**
+     * Publishes a resting-order callback after the simulated latency.
+     *
+     * <p>When {@code onlyWhileResting} is set the callback is dropped if the order left the book
+     * meanwhile, so a NEW event can never land after the CANCELED or FILLED that closed it.
+     */
+    private void publishAsync(String orderId, OrderDataDto event, boolean onlyWhileResting) {
+        CompletableFuture.runAsync(() -> {
+            try {
+                sleepLatency();
+                if (onlyWhileResting && !restingOrderByOrderId.containsKey(orderId)) {
+                    return;
+                }
+                publishMockOrderResponse(event);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } catch (Exception e) {
+                log.error("Error publishing resting mock order event - OrderId: {}, Error: {}",
+                        orderId, e.getMessage(), e);
+            }
+        });
     }
 
     private void sleepForEvent(MockScheduledOrderEvent scheduledEvent) throws InterruptedException {
@@ -363,6 +509,8 @@ public class MockExchangeRuntime {
         this.latestEventByOrderId.clear();
         this.orderScenarioOverrideByClientOrderId.clear();
         this.queryFailurePlanByClientOrderId.clear();
+        this.restingOrderByOrderId.clear();
+        this.referencePriceStore.clear();
     }
 
     private void ensureLifecycleForQuery() {
@@ -458,5 +606,12 @@ public class MockExchangeRuntime {
     private record QueryFailurePlan(int remainingFailures,
                                     ErrorType errorType,
                                     String message) {
+    }
+
+    /**
+     * An order sitting on the book, kept so a later crossing tick or cancel can settle it.
+     * The original request is retained because settling needs its quantity, side and limit price.
+     */
+    private record RestingOrder(SendOrderRequest request, String orderId) {
     }
 }

@@ -47,6 +47,35 @@ Registrar a escolha nesta task antes da implementação. Independentemente da op
 (round trip) e 4 (over-allocation) já são determinísticos no MOCK atual (fill garantido / rejeição
 por capital).
 
+### Decisão registrada (2026-09-18): Opção B
+
+Escolhida a **Opção B** — o MOCK passou a honrar marketable-vs-resting. Motivo: a Opção A é uma
+escada descartável, enquanto a B é infraestrutura que a **T37** (normalização de preço side-aware,
+hoje inobservável sob always-fill) e os futuros e2e de estratégia out-of-process também consomem.
+
+A spec original subestimava o trabalho: além do `if` de marketable, faltavam duas peças que não
+existiam. Como foram resolvidas:
+
+- **Não havia preço de referência.** `lastPrice` era campo privado da inner class `FeedTask` e os
+  testes de integração sequer usam o feed (injetam `MarketDataDto` direto via `ProcessTradeSignalPort`).
+  Criado `MockReferencePriceStore`, alimentado pelo feed (`setPriceListener`) e por
+  `MockExchangeRuntime.seedReferencePrice` / `MockExchangeAdapter.seedReferencePrice` nos testes.
+- **O modelo de execução era script pré-computado.** `submitOrderRest` montava todo o ciclo de vida
+  na submissão. Ordem que descansa exige parar no `NEW` e esperar sinal externo, então a colocação
+  de ordem resting passou a ser síncrona (validação + reserva + registro antes do ACK REST), com
+  apenas o callback `NEW` assíncrono.
+
+**Backward compatibility por construção:** sem preço de referência conhecido para o símbolo, o
+comportamento é o de sempre (preenche). Nenhum teste existente precisou ser editado — as 166 do
+`spring-application` e as do `adapter-mock` passam sem alteração.
+
+Blast radius medido antes da decisão: 12 arquivos de teste citam `FILLED`, mas 6 usam
+`MockOrderScenarioOverride` (imunes, o override tem precedência sobre resting) e 2 são de outro
+fluxo; exposição real ~4 arquivos, nenhum quebrado.
+
+Consequência para os e2e: os cenários 1 e 2 passam a descansar de verdade, bastando semear o mesmo
+preço que o teste injeta no pipeline de sinal.
+
 ---
 
 ## Contexto técnico
@@ -94,7 +123,7 @@ transações nem altera saldo/posição (prova o "sem excesso").
 | `spring-application/src/test/.../bootstrap/ScenarioFilledBuyRestingSellCancelE2ETest.java` | E2E cenário 2 |
 | `spring-application/src/test/.../bootstrap/ScenarioImmediateRoundTripE2ETest.java` | E2E cenário 3 |
 | `spring-application/src/test/.../bootstrap/ScenarioOverAllocationRejectE2ETest.java` | E2E cenário 4 |
-| (opcional, Opção B) `adapter-mock/.../simulator/MockOrderExecutionSimulator.java` | Honrar resting vs. marketable por `limitPrice` |
+| ~~(opcional, Opção B) `adapter-mock/.../simulator/MockOrderExecutionSimulator.java`~~ | **Entregue** — ver "Decisão registrada" |
 | Suporte de teste comum (fixtures/helpers) | Registro de estratégia bounded, driver de ticks, consultas JDBC de transação/posição/saldo, leitura de métrica |
 
 Reusar ou generalizar os helpers de `ProcessTradeSignalMockIntegrationTest`/
@@ -104,8 +133,9 @@ Reusar ou generalizar os helpers de `ProcessTradeSignalMockIntegrationTest`/
 
 ## Riscos / pontos de atenção
 
-- **MOCK sempre-fill (pré-requisito acima):** sem a Opção A ou B, os cenários 1 e 2 não descansam.
-  Não escrever o e2e desses dois antes de resolver isso.
+- ~~**MOCK sempre-fill (pré-requisito acima):**~~ resolvido pela Opção B. O e2e precisa semear o
+  preço de referência com o mesmo valor do tick injetado, senão estratégia e exchange enxergam
+  mercados diferentes — usar um helper único que faça as duas coisas.
 - **Assíncrono/timing:** o pipeline despacha e concilia em background (como no teste atual, que faz
   polling com timeout). Usar espera com deadline, não `sleep` fixo, e asserir por convergência.
 - **Isolamento entre testes:** truncar tabelas e resetar o MOCK no `@BeforeEach` (padrão já existente).

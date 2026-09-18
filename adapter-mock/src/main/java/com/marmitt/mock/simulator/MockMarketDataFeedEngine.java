@@ -22,6 +22,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.BiConsumer;
 
 /**
  * Generates synthetic market-data ticks and injects them into the raw-message pipeline.
@@ -37,6 +38,8 @@ public class MockMarketDataFeedEngine {
     private final long seed;
     private final ScheduledExecutorService scheduler;
     private final Map<String, FeedTask> tasksBySymbol = new ConcurrentHashMap<>();
+    private volatile BiConsumer<String, BigDecimal> priceListener = (symbol, price) -> {
+    };
 
     public MockMarketDataFeedEngine(EventPublisherPort eventPublisher,
                                     ObjectMapper objectMapper,
@@ -50,6 +53,17 @@ public class MockMarketDataFeedEngine {
             t.setDaemon(true);
             return t;
         });
+    }
+
+    /**
+     * Registers a listener notified with the last price of every published tick.
+     *
+     * <p>Lets the runtime keep a market reference for order execution without the feed knowing
+     * anything about orders.
+     */
+    public void setPriceListener(BiConsumer<String, BigDecimal> priceListener) {
+        this.priceListener = priceListener == null ? (symbol, price) -> {
+        } : priceListener;
     }
 
     public void subscribe(List<CurrencyPair> pairs) {
@@ -188,6 +202,7 @@ public class MockMarketDataFeedEngine {
                         changePercent24h,
                         Instant.now()
                 );
+                priceListener.accept(symbol, lastPrice);
                 rawPublisher.publish(marketData);
             } catch (Exception e) {
                 log.error("Mock feed tick failure symbol={} error={}", symbol, e.getMessage(), e);

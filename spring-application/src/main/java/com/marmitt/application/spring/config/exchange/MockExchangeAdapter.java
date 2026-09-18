@@ -30,6 +30,7 @@ import com.marmitt.mock.runtime.MockExchangeRuntime;
 import com.marmitt.mock.simulator.MockMarketDataFeedEngine;
 import com.marmitt.mock.simulator.MockOrderExecutionSimulator;
 
+import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 
@@ -177,6 +178,15 @@ public class MockExchangeAdapter implements ExchangeStreamingPort,
      */
     public void seedQueriedOrderSnapshot(OrderDataDto orderData) {
         runtime.seedQueriedOrderSnapshot(orderData);
+    }
+
+    /**
+     * Seeds the market reference price the mock uses to decide whether a LIMIT order rests.
+     * Intended for integration tests that publish ticks straight into the signal pipeline,
+     * bypassing the mock feed. Seeding again moves the market and crosses resting orders.
+     */
+    public void seedReferencePrice(String symbol, BigDecimal price) {
+        runtime.seedReferencePrice(symbol, price);
     }
 
     /**
