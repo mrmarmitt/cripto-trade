@@ -38,6 +38,10 @@ class MockExchangeRuntimeRestingOrderTest {
 
     @BeforeEach
     void setUp() {
+        // Nao adianta capturar eventos aqui: MockRawMessagePublisher instancia o evento por
+        // reflexao a partir do spring-application, ausente do classpath deste modulo, entao a
+        // publicacao falha e e engolida. O estado observavel e latestEventByOrderId, via as
+        // consultas do runtime. Assercao sobre eventos publicados precisa ser teste de integracao.
         EventPublisherPort noOpPublisher = new EventPublisherPort() {
             @Override
             public void publishEvent(Object event) {
@@ -156,6 +160,45 @@ class MockExchangeRuntimeRestingOrderTest {
 
         OrderDataDto filled = awaitStatus("no-reference-1", OrderDataDto.OrderStatus.FILLED);
         assertEquals(OrderDataDto.OrderStatus.FILLED, filled.status());
+    }
+
+    /**
+     * Cobre a ordenacao comum: o fill ja foi publicado quando o cancelamento chega.
+     *
+     * <p>Nao exercita a janela estreita em que o cruzamento ja tirou a ordem do book mas ainda nao
+     * publicou o fill — essa exige interleaving entre a remocao e a publicacao, sem seam no runtime
+     * para forcar. Essa janela e fechada pelo claim em {@code cancelOrderRest}, nao por este teste.
+     */
+    @Test
+    void cancelAfterCrossShouldReturnTheFillOutcome() {
+        runtime.seedReferencePrice(SYMBOL, MARKET);
+        runtime.submitOrderRest(limitBuy(new BigDecimal("90.00000000"), "race-1"));
+        awaitStatus("race-1", OrderDataDto.OrderStatus.NEW);
+
+        runtime.seedReferencePrice(SYMBOL, new BigDecimal("89.00000000"));
+        OrderDataDto cancelResult = runtime.cancelOrderRest(
+                new SendCancelOrderRequest("MOCK", "race-1", SYMBOL));
+
+        assertEquals(OrderDataDto.OrderStatus.FILLED, cancelResult.status(),
+                "O cancelamento perdido deve devolver o desfecho vencedor, nao CANCELED");
+        assertEquals(OrderDataDto.OrderStatus.FILLED, order("race-1").orElseThrow().status());
+        assertEquals(0, available("BTC").compareTo(new BigDecimal("1.00000000")),
+                "O fill deve permanecer liquidado nos saldos");
+    }
+
+    @Test
+    void rejectedRestingOrderShouldReturnTheRejectionSynchronously() {
+        runtime.seedReferencePrice(SYMBOL, MARKET);
+
+        // Nao-marketable (descansaria) mas sem saldo para a reserva: recusada na validacao.
+        OrderDataDto result = runtime.submitOrderRest(new SendOrderRequest(
+                "MOCK", SYMBOL, new BigDecimal("100.00000000"), new BigDecimal("90.00000000"),
+                OrderType.LIMIT, OrderSide.BUY, "reject-1"));
+
+        assertEquals(OrderDataDto.OrderStatus.REJECTED, result.status(),
+                "A recusa deve voltar no retorno sincrono, que e o desfecho REST da submissao");
+        assertTrue(runtime.listOpenOrdersBySymbol(SYMBOL).isEmpty(),
+                "Ordem recusada nao pode ficar no book");
     }
 
     private SendOrderRequest limitBuy(BigDecimal limitPrice, String clientOrderId) {

@@ -122,8 +122,18 @@ Enquanto descansa, a ordem nao emite evento terminal. Ela sai do book por:
   proprio `limitPrice`, consumindo a reserva retida sem reservar de novo;
 - **cancelamento** — `cancelOrderRest` devolve a reserva e publica `CANCELED`.
 
-Quem remove a ordem do registro primeiro vence, entao cruzamento e cancelamento concorrentes nao
-liquidam a mesma ordem duas vezes.
+Quem remove a ordem do registro vence, e essa remocao e o unico arbitro: o cancelamento so emite
+`CANCELED` quando ele proprio tirou a ordem do book. Se um tick cruzou antes, o cancelamento vira
+no-op e devolve o desfecho vencedor, para nao entregar ao core um terminal que contradiga os saldos
+ja liquidados pelo fill.
+
+Ordem recusada na validacao **nao descansa e nao e publicada no canal de eventos**: a recusa volta
+no retorno sincrono do REST, que ja e conciliado como desfecho da submissao. Publica-la de novo
+entregaria um segundo terminal para uma transacao ja terminal.
+
+Apos registrar uma ordem no book o runtime **re-avalia o preco de referencia corrente**, porque ele
+pode ter mudado entre a decisao de descansar e a insercao — sem isso a ordem ficaria encalhada ate
+um proximo tick.
 
 `MockOrderScenarioOverride` permite cenarios deterministas por `clientOrderId`:
 

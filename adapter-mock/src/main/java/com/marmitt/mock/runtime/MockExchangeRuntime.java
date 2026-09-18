@@ -26,6 +26,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Random;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
@@ -51,6 +52,11 @@ public class MockExchangeRuntime {
     private final Map<String, MockOrderScenarioOverride> orderScenarioOverrideByClientOrderId = new ConcurrentHashMap<>();
     private final Map<String, QueryFailurePlan> queryFailurePlanByClientOrderId = new ConcurrentHashMap<>();
     private final Map<String, RestingOrder> restingOrderByOrderId = new ConcurrentHashMap<>();
+    /**
+     * Orders that were ever placed as resting. Lets a cancel tell "never rested" (scripted path)
+     * apart from "rested, but a crossing tick already claimed it".
+     */
+    private final Set<String> restingManagedOrderIds = ConcurrentHashMap.newKeySet();
     private final MockReferencePriceStore referencePriceStore = new MockReferencePriceStore();
     private Random random;
     private MockBalanceStore balanceStore;
@@ -132,7 +138,20 @@ public class MockExchangeRuntime {
             return current;
         }
 
-        releaseRestingReservation(exchangeOrderId);
+        if (restingManagedOrderIds.contains(exchangeOrderId)) {
+            RestingOrder claimed = restingOrderByOrderId.remove(exchangeOrderId);
+            if (claimed == null) {
+                // A crossing tick already took this order off the book and is settling it as a
+                // fill. Emitting CANCELED here would hand the core a terminal that contradicts the
+                // mock's own balances, so the fill wins and the cancel is a no-op.
+                log.info("Mock cancel ignored, resting order already crossed - ClientOrderId: {}, OrderId: {}",
+                        request.getClientOrderId(), exchangeOrderId);
+                return latestEventByOrderId.getOrDefault(exchangeOrderId, current);
+            }
+            simulator.releaseReservationForOpenOrder(claimed.request(), this.balanceStore, config);
+            log.info("Mock resting order canceled, reservation released - ClientOrderId: {}, OrderId: {}",
+                    request.getClientOrderId(), exchangeOrderId);
+        }
 
         OrderDataDto canceled = new OrderDataDto(
                 current.orderId(),
@@ -372,16 +391,6 @@ public class MockExchangeRuntime {
         }
     }
 
-    private void releaseRestingReservation(String exchangeOrderId) {
-        RestingOrder resting = restingOrderByOrderId.remove(exchangeOrderId);
-        if (resting == null) {
-            return;
-        }
-        simulator.releaseReservationForOpenOrder(resting.request(), this.balanceStore, config);
-        log.info("Mock resting order canceled, reservation released - ClientOrderId: {}, OrderId: {}",
-                resting.request().getClientOrderId(), exchangeOrderId);
-    }
-
     private void simulateOrderExecutionAsync(SendOrderRequest orderRequest, String orderId) {
         try {
             Random localRandom = this.random;
@@ -432,30 +441,39 @@ public class MockExchangeRuntime {
         latestEventByOrderId.put(orderId, event);
 
         if (event.status() != OrderDataDto.OrderStatus.NEW) {
+            // Returned synchronously, so the caller conciliates it as the REST outcome. Publishing
+            // the same rejection again through the event channel would deliver a second terminal
+            // for a transaction that is already terminal.
             log.info("Mock order rejected before resting - ClientOrderId: {}, OrderId: {}, Reason: {}",
                     orderRequest.getClientOrderId(), orderId, event.rejectReason());
-            publishAsync(orderId, event, false);
             return event;
         }
 
         restingOrderByOrderId.put(orderId, new RestingOrder(orderRequest, orderId));
+        restingManagedOrderIds.add(orderId);
         log.info("Mock order resting on book - ClientOrderId: {}, OrderId: {}, LimitPrice: {}",
                 orderRequest.getClientOrderId(), orderId, orderRequest.getPrice());
-        publishAsync(orderId, event, true);
+        publishRestingAck(orderId, event);
+
+        // The reference price may have moved between restsOnBook and this registration, in which
+        // case that crossing pass found no entry to settle. Re-evaluate against the current
+        // reference so the order does not sit on the book waiting for an unrelated next tick.
+        referencePriceStore.find(orderRequest.getSymbol())
+                .ifPresent(reference -> crossRestingOrders(orderRequest.getSymbol(), reference));
         return event;
     }
 
     /**
-     * Publishes a resting-order callback after the simulated latency.
+     * Publishes the NEW callback of a resting order after the simulated latency.
      *
-     * <p>When {@code onlyWhileResting} is set the callback is dropped if the order left the book
-     * meanwhile, so a NEW event can never land after the CANCELED or FILLED that closed it.
+     * <p>The callback is dropped if the order left the book meanwhile, so a NEW event can never
+     * land after the CANCELED or FILLED that closed it.
      */
-    private void publishAsync(String orderId, OrderDataDto event, boolean onlyWhileResting) {
+    private void publishRestingAck(String orderId, OrderDataDto event) {
         CompletableFuture.runAsync(() -> {
             try {
                 sleepLatency();
-                if (onlyWhileResting && !restingOrderByOrderId.containsKey(orderId)) {
+                if (!restingOrderByOrderId.containsKey(orderId)) {
                     return;
                 }
                 publishMockOrderResponse(event);
@@ -510,6 +528,7 @@ public class MockExchangeRuntime {
         this.orderScenarioOverrideByClientOrderId.clear();
         this.queryFailurePlanByClientOrderId.clear();
         this.restingOrderByOrderId.clear();
+        this.restingManagedOrderIds.clear();
         this.referencePriceStore.clear();
     }
 
