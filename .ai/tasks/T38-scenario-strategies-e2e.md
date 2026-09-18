@@ -175,18 +175,26 @@ e o fallback antigo. `locked_by_transaction_id` é o vínculo autoritativo: liqu
 que aquela venda reservou. É o mesmo raciocínio que `TerminationHandler.resolvePosition` já aplicava
 ao considerar posições em `CLOSING` para desfazer o lock.
 
-### 2. Resíduo de capital reservado por ciclo — **não corrigido, ver T36**
+### 2. Capital preso a cada fill com melhora de preço — **não corrigido, ver T36**
 
 Depois de um round trip completo (BUY `FILLED`, SELL `FILLED`, posição `CLOSED`, match
-materializado), o `global_balances` fica com `reserved = 0.06630000` — exatamente a taxa estimada da
-BUY (`0.001 × 66300 × 0.0010`). O restante do saldo fecha: `available + reserved` menos o capital
-inicial é igual ao PnL realizado. Ou seja, a reserva da BUY não é devolvida por inteiro; cada ciclo
-deixa a estimativa de fee presa em `reserved`.
+materializado), o `global_balances` fica com `reserved = 0.06630000` sem ordem viva nem lote aberto
+que o justifique. O restante fecha: `available + reserved − capital inicial` = PnL realizado.
 
-Não corrigido aqui de propósito: é aritmética de reserva/devolução, toca invariantes do
-`PHASE0_INVARIANTS` e cai exatamente no escopo da **T36**, que já precisa decidir entre implementar
-o safety buffer com a devolução do excedente (§7.2.3 do `IMPLEMENTATION_GUIDE`) ou remover o buffer
-do design. Recomendação: tratar esse resíduo como evidência concreta para a T36, não como task nova.
+Causa (código conferido): a reserva é feita ao **preço-limite** (`TradeIntentFactory`:
+`total = quantity × price`) e a baixa é feita ao **preço executado** (`SellFillHandler`:
+`totalCost = fillIncrement × position.getAveragePrice()`). `GlobalBalance.confirmExecution` faz
+`reserved -= cost`, então `quantity × (limite − executado)` nunca sai de `reserved`. `release()` só
+roda nos terminais de falha; o caminho `FILLED` não passa por ele. É a reconciliação §7.2.3 do
+`IMPLEMENTATION_GUIDE`, documentada e não implementada.
+
+Vale notar que **não é específico de cenário nem do mock**: toda BUY `LIMIT` que executa melhor que
+o próprio limite — o caso normal em book real — deixa resíduo, que se acumula e nunca é recuperado.
+
+Não corrigido aqui de propósito: é aritmética de reserva com efeito financeiro, toca invariantes do
+`PHASE0_INVARIANTS` e pertence à **T36**. Registrado lá com a mecânica completa, na seção
+"Evidência"; responde a pergunta que a própria T36 deixara em aberto ("verificar se o caminho atual
+já devolve `reservado − efetivo`").
 
 Por isso o e2e do cenário 3 assere os critérios da tabela acima (BUY+SELL `FILLED`, posição fechada,
 PnL materializado, quantidade casada) e **não** assere `reserved == 0`.

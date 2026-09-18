@@ -179,6 +179,14 @@ T36  Safety buffer na reserva de capital   ← decisão de negócio pendente
 > **não está implementado** — `TradeIntentFactory` reserva `quantity × price` sem multiplicador.
 > T36 exige decidir entre **implementar** o buffer (com a devolução do excedente §7.2.3) ou
 > **remover do design**; independente das estratégias, mas toca o mesmo `TradeIntentFactory` da T34.
+>
+> **Escopo ampliado por evidência (2026-09-18, e2e da T38):** a devolução do excedente §7.2.3
+> **não existe**. A reserva é feita ao preço-limite e a baixa ao preço executado, então
+> `quantity × (limite − executado)` fica preso em `reserved` para sempre — toda BUY `LIMIT` que
+> executa melhor que o limite acumula resíduo. Não é hipótese nem artefato do mock: é capital
+> preso em produção. Consequência para a decisão: §7.2.3 precisa ser implementado **tanto na
+> Opção A quanto na B**; o buffer só muda o tamanho do excedente, não a necessidade de devolvê-lo.
+> Mecânica completa em `.ai/tasks/T36-capital-reservation-safety-buffer.md`, seção "Evidência".
 > A reconciliação documental de nomenclatura/campos do contrato (`TradingDecision` ↔
 > `StrategyOutputDto`) é entregável da própria T34, não uma task separada.
 >

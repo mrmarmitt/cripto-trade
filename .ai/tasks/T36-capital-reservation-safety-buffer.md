@@ -3,7 +3,9 @@
 **Complexidade:** Média (decisão de negócio + eventual efeito financeiro)
 **Responsável:** Claude
 **Dependências:** nenhuma (independente das estratégias; toca o caminho de reserva de capital)
-**Status:** Pendente — **decisão de negócio pendente** (implementar o buffer ou remover do design)
+**Status:** Pendente — **decisão de negócio pendente** (implementar o buffer ou remover do design).
+Escopo ampliado por evidência: a devolução do excedente (§7.2.3) não existe e é necessária em
+qualquer das duas opções — ver "Evidência" abaixo.
 
 ---
 
@@ -30,6 +32,68 @@ O design descreve que a reserva de capital deve aplicar um multiplicador de segu
 
 ---
 
+## Evidência: a devolução do excedente (§7.2.3) **não existe** — medida em 2026-09-18
+
+O escopo da Opção A (item 3) pedia *"verificar se o caminho atual já devolve `reservado − efetivo`"*.
+Os e2e da T38 responderam essa pergunta na prática: **não devolve**. O excedente fica preso em
+`reserved` permanentemente.
+
+### Como foi observado
+
+`ScenarioImmediateRoundTripE2ETest` fecha um ciclo completo (BUY `FILLED` → SELL `FILLED` → posição
+`CLOSED` → match materializado). Ao final, com tudo terminal e a posição fechada, o
+`global_balances` do portfolio fica assim:
+
+```
+available = 9997.39150263    reserved = 0.06630000    realized = -2.54219737
+```
+
+O restante da contabilidade fecha (`available + reserved − capital inicial` = PnL realizado), mas
+`reserved = 0.0663` sobra sem dono — não há ordem viva nem lote aberto que o justifique.
+
+### Mecânica (código conferido, não inferido)
+
+| Passo | Fórmula | Valor no cenário |
+|---|---|---|
+| Reserva na intenção | `TradeIntentFactory`: `total = quantity × price`, e `price` é o **limitPrice** | `0.001 × 66300 = 66.30` |
+| Baixa na confirmação | `SellFillHandler`: `totalCost = fillIncrement × buyPrice`, e `buyPrice` é `position.getAveragePrice()`, o **preço médio executado da BUY** | `0.001 × 66233.70 = 66.2337` |
+| Resíduo | `quantity × (limitPrice − precoMedioExecutado)` | **`0.0663`** |
+
+`GlobalBalance.confirmExecution(cost, pnl, fee)` faz `reserved -= cost`. Como `cost` é calculado ao
+**preço executado** e a reserva foi feita ao **preço-limite**, a diferença nunca sai de `reserved`.
+Não há nenhum passo compensatório: `release()` só é chamado nos caminhos terminais de falha
+(`REJECTED`/`CANCELED`/`EXPIRED`, via `TerminationHandler`); o caminho `FILLED` passa apenas por
+`confirmExecution`. Fills parciais não mudam a conclusão — a soma dos incrementos dá
+`quantity × precoMedioExecutado`, o mesmo total.
+
+### Por que isso muda o peso da decisão
+
+- **O vazamento já acontece hoje, sem buffer nenhum.** Não é risco hipotético da Opção A: toda BUY
+  `LIMIT` que executa **melhor que o próprio limite** deixa `quantity × (limite − executado)` preso.
+  Em testnet/produção isso ocorre sempre que o book oferece preço melhor — o caso normal, não a
+  exceção. O capital preso se acumula ciclo após ciclo e nunca é recuperado.
+- **A Opção A amplifica.** Implementar o buffer sem §7.2.3 torna o vazamento sistemático e maior
+  (o buffer inteiro vira resíduo em todo fill). É exatamente o risco já registrado em "Riscos" —
+  agora com evidência de que o mecanismo de devolução realmente não existe.
+- **A Opção B não dispensa a correção.** Mesmo decidindo operar sem buffer, o resíduo por melhora de
+  preço continua existindo. Ou seja, **§7.2.3 precisa ser implementado nas duas opções**; o que a
+  decisão A/B muda é só o tamanho do excedente, não a necessidade de devolvê-lo.
+
+### Não verificado
+
+- Se a fee da BUY é debitada de `reserved` em algum ponto (aqui ela só entra em `totalFeesPaid`).
+  No cenário medido a fee (0,1%) coincide numericamente com a melhora de preço (0,1%), então **o
+  número sozinho não distingue as duas causas** — a atribuição acima vem da leitura do código
+  (`totalCost = fillIncrement × buyPrice`), não da aritmética.
+- Comportamento com `quantity × (limite − executado) < 0` (execução pior que o limite). Pelo
+  `confirmExecution`, `reserved < cost` lança `IllegalStateException` — é o cenário de reserva
+  insuficiente já previsto em "Por que importa".
+
+> Correção **não** aplicada na T38 de propósito: é aritmética de reserva com efeito financeiro e
+> pertence a esta task. Ver `.ai/tasks/T38-scenario-strategies-e2e.md`, seção "Achados dos e2e".
+
+---
+
 ## Decisão de negócio (pré-requisito da implementação)
 
 Esta task **não** deve implementar às cegas. Primeiro decidir entre:
@@ -47,14 +111,17 @@ A escolha depende do apetite de risco e do roadmap de tipos de ordem. Registrar 
 
 1. Definir onde o buffer é aplicado. O design diz "pelo Runner antes da chamada" e que o buffer **não** afeta a ordem enviada — apenas o valor reservado (o dispatch continua com `quantity`/`price` originais). Candidato natural: `TradeIntentFactory.buildCapitalRequest` (ou um passo dedicado), mantendo `transaction.getPrice()`/`getQuantity()` intactos para o dispatch.
 2. Buffer por tipo de ordem (§7.2.2). Como hoje só há `LIMIT`, começar por `1.001`; parametrizar por configuração (não hardcode).
-3. **Garantir a reconciliação (§7.2.3):** o excedente `reservado − efetivo` deve voltar ao `Available` no `confirmExecution()`/`release()`. **Verificar se o caminho atual já devolve `reservado − efetivo`** — se a reserva passa a ser maior que o efetivo, essa devolução tem de existir e estar correta, senão o buffer vira capital preso.
+3. **Implementar a reconciliação (§7.2.3):** o excedente `reservado − efetivo` deve voltar ao `Available`. **Já verificado: hoje não volta** (ver "Evidência" acima) — `confirmExecution` baixa `reserved` pelo custo ao preço executado, enquanto a reserva foi feita ao preço-limite. Sem isso, o buffer vira capital preso.
 4. Testes de invariante: reserva ≥ efetivo em fills normais; devolução do excedente; sem saldo negativo; idempotência na conciliação.
 
 ### Se Opção B (remover do design)
 
-1. Corrigir `docs/IMPLEMENTATION_GUIDE.md` §7.2.1–7.2.3 e `docs/BLUEPRINT.md` onde referenciar buffer.
+1. Corrigir `docs/IMPLEMENTATION_GUIDE.md` §7.2.1–7.2.2 e `docs/BLUEPRINT.md` onde referenciar buffer.
 2. Corrigir o Javadoc de `core/.../dto/capital/CapitalRequest.java` (remover a afirmação de que `amount` inclui buffer).
 3. Registrar a decisão (sem buffer) e o motivo.
+4. **Ainda assim implementar §7.2.3.** Remover o buffer não elimina o resíduo: uma BUY `LIMIT` que
+   executa melhor que o limite continua deixando `quantity × (limite − executado)` preso em
+   `reserved`. A devolução do excedente é necessária nas duas opções.
 
 ---
 
