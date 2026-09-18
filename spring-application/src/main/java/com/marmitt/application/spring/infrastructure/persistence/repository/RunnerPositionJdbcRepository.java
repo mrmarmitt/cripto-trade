@@ -63,6 +63,18 @@ public interface RunnerPositionJdbcRepository extends CrudRepository<RunnerPosit
 
     @Query("""
             SELECT * FROM positions
+             WHERE locked_by_transaction_id = :transactionId
+               AND status = 'CLOSING'
+             ORDER BY updated_at DESC
+             LIMIT 1
+             FOR UPDATE
+            """)
+    Optional<RunnerPositionEntity> findLockedByTransactionIdForUpdate(
+            @Param("transactionId") UUID transactionId
+    );
+
+    @Query("""
+            SELECT * FROM positions
              WHERE id = :positionId
              FOR UPDATE
             """)

@@ -3,7 +3,8 @@
 **Complexidade:** Média
 **Responsável:** Claude
 **Dependências:** T35 (estratégias de cenário + `maxCycles`), T34 (`limitPrice`), T32 (`SHOULD_CANCEL`)
-**Status:** Pendente
+**Status:** Em andamento — mock resting entregue (fase 1); e2e dos cenários 3 e 4 entregues (fase 2);
+cenários 1 e 2 pendentes (fase 3)
 
 ---
 
@@ -145,6 +146,50 @@ Reusar ou generalizar os helpers de `ProcessTradeSignalMockIntegrationTest`/
   transações esperado; o assert de "sem excesso" cobre regressões aqui.
 - **Custo de suíte:** e2e com Testcontainers é caro; manter os cenários enxutos (teto pequeno) e,
   se necessário, agrupar num único arquivo por afinidade para reduzir bootstraps.
+
+---
+
+---
+
+## Achados dos e2e (2026-09-18)
+
+Os dois primeiros e2e (cenários 3 e 4) expuseram um bug real no core e um resíduo de capital.
+
+### 1. SELL FIFO não encontrava a própria posição no fill — **corrigido**
+
+`SellFillHandler.resolvePosition` resolvia a posição por `targetLotId` ou, no fallback, por
+**posição OPEN** (`findOpenPositionByRunnerIdAndSymbolForUpdate`, que ainda exige
+`locked_by_transaction_id IS NULL`). Uma SELL FIFO não carrega `targetLotId` — `TradeIntentFactory`
+copia `signal.targetLotId()`, que é null por contrato ("null ⇒ FIFO") — e o lock move a posição de
+`OPEN` para `CLOSING`. Resultado: **nenhum dos dois caminhos achava a posição**, todo fill de SELL
+FIFO morria com `IllegalStateException: No position found for SELL fill`, deixando a SELL em
+`SUBMITTED` e o lote travado em `CLOSING` — capital e posição em limbo, sem DLQ.
+
+Atingia qualquer estratégia que venda sem designar lote, incluindo `ImmediateRoundTripStrategy` e
+`FilledBuyRestingSellCancelStrategy` da T35. Passou despercebido porque os testes de SELL existentes
+usam override e caminho com lote explícito.
+
+Correção: `resolvePosition` passou a consultar a posição travada por aquela transação
+(`findPositionLockedByTransactionIdForUpdate`, novo no port e no adapter JDBC) entre o `targetLotId`
+e o fallback antigo. `locked_by_transaction_id` é o vínculo autoritativo: liquida exatamente o lote
+que aquela venda reservou. É o mesmo raciocínio que `TerminationHandler.resolvePosition` já aplicava
+ao considerar posições em `CLOSING` para desfazer o lock.
+
+### 2. Resíduo de capital reservado por ciclo — **não corrigido, ver T36**
+
+Depois de um round trip completo (BUY `FILLED`, SELL `FILLED`, posição `CLOSED`, match
+materializado), o `global_balances` fica com `reserved = 0.06630000` — exatamente a taxa estimada da
+BUY (`0.001 × 66300 × 0.0010`). O restante do saldo fecha: `available + reserved` menos o capital
+inicial é igual ao PnL realizado. Ou seja, a reserva da BUY não é devolvida por inteiro; cada ciclo
+deixa a estimativa de fee presa em `reserved`.
+
+Não corrigido aqui de propósito: é aritmética de reserva/devolução, toca invariantes do
+`PHASE0_INVARIANTS` e cai exatamente no escopo da **T36**, que já precisa decidir entre implementar
+o safety buffer com a devolução do excedente (§7.2.3 do `IMPLEMENTATION_GUIDE`) ou remover o buffer
+do design. Recomendação: tratar esse resíduo como evidência concreta para a T36, não como task nova.
+
+Por isso o e2e do cenário 3 assere os critérios da tabela acima (BUY+SELL `FILLED`, posição fechada,
+PnL materializado, quantidade casada) e **não** assere `reserved == 0`.
 
 ---
 

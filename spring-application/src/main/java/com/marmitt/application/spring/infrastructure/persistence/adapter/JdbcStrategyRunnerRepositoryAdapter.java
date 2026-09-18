@@ -236,6 +236,17 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     }
 
     @Override
+    public Optional<Position> findPositionLockedByTransactionIdForUpdate(UUID transactionId) {
+        long start = System.nanoTime();
+        log.trace("[REPO] position.findLockedByTransactionIdForUpdate({}) - acquiring FOR UPDATE lock", transactionId);
+        Optional<Position> result = positionRepo.findLockedByTransactionIdForUpdate(transactionId)
+                .map(StrategyRunnerEntityMapper::toDomain);
+        log.trace("[REPO] position.findLockedByTransactionIdForUpdate({}) - {}ms - {}",
+                transactionId, RepoTiming.elapsedMs(start), result.isPresent() ? "1 result" : "0 results");
+        return result;
+    }
+
+    @Override
     public Optional<Position> findActivePositionByRunnerIdAndSymbol(UUID runnerId, String symbol) {
         long start = System.nanoTime();
         Optional<Position> result = positionRepo.findActiveByRunnerIdAndSymbol(runnerId, symbol)

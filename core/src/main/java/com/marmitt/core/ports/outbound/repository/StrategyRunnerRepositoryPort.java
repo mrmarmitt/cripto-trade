@@ -144,6 +144,16 @@ public interface StrategyRunnerRepositoryPort {
     Optional<Position> findOpenPositionByRunnerIdAndSymbolForUpdate(UUID runnerId, String symbol);
 
     /**
+     * Busca a Position que a transacao SELL informada travou (status CLOSING), com lock
+     * pessimista de linha (FOR UPDATE).
+     *
+     * <p>E o vinculo autoritativo entre uma SELL em voo e o lote que ela vai liquidar: uma SELL
+     * FIFO nao carrega {@code targetLotId}, e ao travar a posicao ela sai de OPEN, entao as buscas
+     * por posicao aberta deixam de encontra-la.
+     */
+    Optional<Position> findPositionLockedByTransactionIdForUpdate(UUID transactionId);
+
+    /**
      * Persiste a Transaction (INSERT ou UPDATE).
      * Usa optimistic locking via campo {@code version}.
      */
