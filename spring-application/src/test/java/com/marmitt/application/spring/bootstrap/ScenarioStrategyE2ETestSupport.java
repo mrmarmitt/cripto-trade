@@ -202,6 +202,14 @@ abstract class ScenarioStrategyE2ETestSupport extends AbstractIntegrationTest {
         return count == null ? 0 : count;
     }
 
+    /** {@code true} se existe posicao do runner ainda travada por alguma transacao de venda. */
+    protected boolean hasLockedPosition(UUID runnerId) {
+        Integer count = jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM positions WHERE runner_id = ? AND locked_by_transaction_id IS NOT NULL",
+                Integer.class, runnerId);
+        return count != null && count > 0;
+    }
+
     protected int matchCount(UUID runnerId) {
         Integer count = jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM transaction_matches WHERE runner_id = ?", Integer.class, runnerId);

@@ -207,6 +207,8 @@ exchange real.
 - `adapter-mock/src/test/java/com/marmitt/mock/simulator/MockOrderExecutionSimulatorDeterministicScenarioTest.java`
 - `adapter-mock/src/test/java/com/marmitt/mock/simulator/MockOrderExecutionSimulatorRestingOrderTest.java`
 - `adapter-mock/src/test/java/com/marmitt/mock/runtime/MockExchangeRuntimeRestingOrderTest.java`
+- `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/ScenarioRestingBuyCancelE2ETest.java`
+- `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/ScenarioFilledBuyRestingSellCancelE2ETest.java`
 - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/ProcessTradeSignalMockIntegrationTest.java`
 - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/OrderLifecycleMockIntegrationTest.java`
 - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/MockBuyOrderOverrideIntegrationTest.java`

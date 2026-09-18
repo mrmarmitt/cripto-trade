@@ -3,8 +3,7 @@
 **Complexidade:** Média
 **Responsável:** Claude
 **Dependências:** T35 (estratégias de cenário + `maxCycles`), T34 (`limitPrice`), T32 (`SHOULD_CANCEL`)
-**Status:** Em andamento — mock resting entregue (fase 1); e2e dos cenários 3 e 4 entregues (fase 2);
-cenários 1 e 2 pendentes (fase 3)
+**Status:** Concluído — mock resting (fase 1), e2e dos cenários 3 e 4 (fase 2), e2e dos cenários 1 e 2 (fase 3)
 
 ---
 
@@ -120,12 +119,12 @@ transações nem altera saldo/posição (prova o "sem excesso").
 
 | Arquivo | Mudança |
 |---|---|
-| `spring-application/src/test/.../bootstrap/ScenarioRestingBuyCancelE2ETest.java` | E2E cenário 1 |
-| `spring-application/src/test/.../bootstrap/ScenarioFilledBuyRestingSellCancelE2ETest.java` | E2E cenário 2 |
-| `spring-application/src/test/.../bootstrap/ScenarioImmediateRoundTripE2ETest.java` | E2E cenário 3 |
-| `spring-application/src/test/.../bootstrap/ScenarioOverAllocationRejectE2ETest.java` | E2E cenário 4 |
+| `spring-application/src/test/.../bootstrap/ScenarioRestingBuyCancelE2ETest.java` | E2E cenário 1 — entregue |
+| `spring-application/src/test/.../bootstrap/ScenarioFilledBuyRestingSellCancelE2ETest.java` | E2E cenário 2 — entregue |
+| `spring-application/src/test/.../bootstrap/ScenarioImmediateRoundTripE2ETest.java` | E2E cenário 3 — entregue |
+| `spring-application/src/test/.../bootstrap/ScenarioOverAllocationRejectE2ETest.java` | E2E cenário 4 — entregue |
+| `spring-application/src/test/.../bootstrap/ScenarioStrategyE2ETestSupport.java` | Harness comum — entregue |
 | ~~(opcional, Opção B) `adapter-mock/.../simulator/MockOrderExecutionSimulator.java`~~ | **Entregue** — ver "Decisão registrada" |
-| Suporte de teste comum (fixtures/helpers) | Registro de estratégia bounded, driver de ticks, consultas JDBC de transação/posição/saldo, leitura de métrica |
 
 Reusar ou generalizar os helpers de `ProcessTradeSignalMockIntegrationTest`/
 `MockOrderOverrideIntegrationTestSupport` em vez de duplicar.
@@ -195,6 +194,16 @@ Não corrigido aqui de propósito: é aritmética de reserva com efeito financei
 `PHASE0_INVARIANTS` e pertence à **T36**. Registrado lá com a mecânica completa, na seção
 "Evidência"; responde a pergunta que a própria T36 deixara em aberto ("verificar se o caminho atual
 já devolve `reservado − efetivo`").
+
+### 3. Cenários 1 e 2 validam o resting de ponta a ponta
+
+Os e2e provam que a Opção B funciona pelo pipeline real, não apenas no unitário do mock: a BUY do
+cenário 1 descansa em `32500` (50% abaixo de `65000`) e termina `CANCELED` com o capital voltando
+integralmente ao disponível; a SELL do cenário 2 descansa em `97500` e termina `CANCELED` com o lock
+da posição liberado e o lote seguindo aberto (por design). Se o mock tivesse preenchido qualquer uma
+das duas, ambos os testes falhariam na asserção de status.
+
+O cenário 2 só é possível por causa da correção do achado 1: ele vende sem designar lote.
 
 Por isso o e2e do cenário 3 assere os critérios da tabela acima (BUY+SELL `FILLED`, posição fechada,
 PnL materializado, quantidade casada) e **não** assere `reserved == 0`.

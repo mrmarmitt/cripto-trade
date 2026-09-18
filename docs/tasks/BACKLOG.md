@@ -43,7 +43,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T35 | Estratégias de cenário para testnet                             | Média | Claude | Concluído |
 | T36 | Safety buffer na reserva de capital (documentado vs. não implementado) | Média | Claude | Pendente  |
 | T37 | Normalização de preço side-aware (BUY floor / SELL ceiling)     | Média | Claude | Pendente  |
-| T38 | Testes E2E das estratégias de cenário                           | Média | Claude | Pendente  |
+| T38 | Testes E2E das estratégias de cenário                           | Média | Claude | Concluído |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 
 ## Ordem de execução
