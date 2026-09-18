@@ -135,6 +135,11 @@ Apos registrar uma ordem no book o runtime **re-avalia o preco de referencia cor
 pode ter mudado entre a decisao de descansar e a insercao — sem isso a ordem ficaria encalhada ate
 um proximo tick.
 
+O ACK `NEW` assincrono decide e grava o snapshot dentro de um unico `compute` sobre
+`latestEventByOrderId`. Isso o torna atomico contra a gravacao do terminal por um cancelamento ou
+cruzamento: checar e depois gravar em passos separados permitiria rebaixar o snapshot de volta para
+`NEW`, e `queryOrder*`/`listOpenOrders*` passariam a reportar como aberta uma ordem ja liquidada.
+
 `MockOrderScenarioOverride` permite cenarios deterministas por `clientOrderId`:
 
 - lista ordenada de eventos planejados;

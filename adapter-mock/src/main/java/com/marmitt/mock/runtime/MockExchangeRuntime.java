@@ -30,6 +30,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Runtime/orchestrator for the mock exchange.
@@ -468,15 +469,25 @@ public class MockExchangeRuntime {
      *
      * <p>The callback is dropped if the order left the book meanwhile, so a NEW event can never
      * land after the CANCELED or FILLED that closed it.
+     *
+     * <p>The decision and the snapshot write happen inside a single {@code compute} on
+     * {@code latestEventByOrderId}. That is what makes them atomic against the plain {@code put}
+     * of a terminal event in {@link #publishMockOrderResponse}: a check followed by a separate
+     * write could be overtaken by a cancel or a crossing tick and then downgrade the stored
+     * snapshot back to NEW, leaving {@code queryOrder*}/{@code listOpenOrders*} reporting an
+     * order as open forever even though it was already settled.
      */
     private void publishRestingAck(String orderId, OrderDataDto event) {
         CompletableFuture.runAsync(() -> {
             try {
                 sleepLatency();
-                if (!restingOrderByOrderId.containsKey(orderId)) {
+                if (!claimAckSlot(orderId, event)) {
+                    log.debug("Mock resting ACK dropped, order already left the book - OrderId: {}", orderId);
                     return;
                 }
-                publishMockOrderResponse(event);
+                rawMessagePublisher.publish(event);
+                log.debug("Mock order response event published - OrderId: {}, ClientOrderId: {}",
+                        event.orderId(), event.clientOrderId());
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
             } catch (Exception e) {
@@ -484,6 +495,26 @@ public class MockExchangeRuntime {
                         orderId, e.getMessage(), e);
             }
         });
+    }
+
+    /**
+     * Stores the resting ACK snapshot only while the order is still on the book and nothing
+     * terminal has been recorded for it. Returns {@code true} when the snapshot was stored and the
+     * caller should publish the event.
+     */
+    private boolean claimAckSlot(String orderId, OrderDataDto ack) {
+        AtomicBoolean claimed = new AtomicBoolean(false);
+        latestEventByOrderId.compute(orderId, (id, current) -> {
+            if (current == null || isTerminal(current.status())) {
+                return current;
+            }
+            if (!restingOrderByOrderId.containsKey(id)) {
+                return current;
+            }
+            claimed.set(true);
+            return ack;
+        });
+        return claimed.get();
     }
 
     private void sleepForEvent(MockScheduledOrderEvent scheduledEvent) throws InterruptedException {
