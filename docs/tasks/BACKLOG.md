@@ -44,6 +44,13 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T36 | Safety buffer na reserva de capital (documentado vs. não implementado) | Média | Claude | Pendente  |
 | T37 | Normalização de preço side-aware (BUY floor / SELL ceiling)     | Média | Claude | Pendente  |
 | T38 | Testes E2E das estratégias de cenário                           | Média | Claude | Concluído |
+| T39 | Auditoria design × código (capital, risco, concorrência)        | Média | Claude | Pendente  |
+| T40 | Revisão do contrato do strategy service antes do adapter        | Média | Claude | Pendente  |
+| T41 | Extração mínima da estratégia (port, proxy remoto, catálogo)    | Alta  | Claude | Pendente  |
+| T42 | Mailbox por runner e separação dos executores tick × ordem      | Alta  | Claude | Pendente  |
+| T43 | Circuit breaker de capital: drawdown e perda diária             | Alta  | Claude | Pendente  |
+| T44 | Proteção de posição independente da estratégia                  | Alta  | Claude | Pendente  |
+| T45 | Ativação do Safe Mode e níveis `CANCEL_ALL` / `PANIC_SELL`      | Média | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 
 ## Ordem de execução
@@ -194,6 +201,48 @@ T36  Safety buffer na reserva de capital   ← decisão de negócio pendente
 > (side-agnostic), podendo deslocar um preço-limite até meio tick contra o trader. Correção correta é
 > BUY→floor / SELL→ceiling, mas exige propagar o lado ao port `OrderQuantityNormalizerPort` (afeta todas
 > as ordens), fora do escopo da T34. Não é regressão — o HALF_UP já existia para preço de mercado.
+
+## Ordem de execução — Prontidão para operação com estratégia out-of-process
+
+```
+T36  Devolução do excedente da reserva   T37  Preço side-aware      ← correção financeira (já mapeadas)
+T39  Auditoria design × código            ← independente; pode gerar novas tasks
+       ↓
+T40  Revisão do contrato (warm-up por runner, tickId, sem retry, idade da decisão)
+       ↓
+T41  Extração mínima: StrategyEvaluationPort + RemoteTradingStrategy + catálogo estático
+       (código pode andar em paralelo à T42; ATIVAR em ambiente real só após T42 e T44)
+T42  Mailbox por runner + executores separados (fill nunca espera tick)
+
+T45  Ativação do Safe Mode + CANCEL_ALL / PANIC_SELL   ← pré-requisito de T25 e T43
+       ↓
+T43  Drawdown 24h / perda diária (inclui marcação a mercado)     T25  Safe Mode automático
+T44  Proteção de posição independente da estratégia               T24  Circuit breaker REST
+       ↓
+   perfil de produção + soak testnet com estratégia remota → canário em produção
+```
+
+> Origem: avaliação de prontidão de 2026-10-15. O ponto central é que a extração mínima (T40–T42)
+> entra no caminho crítico, mas o loop autônomo de promoção (shadow, canário automático, máquina de
+> estados de versão, backtest) **fica fora** do go-live.
+>
+> Achados que motivaram as tasks:
+> - Nenhum limite baseado em perda existe no código; o design (BLUEPRINT §11.1.A, IG `DrawdownMonitor`)
+>   não foi implementado → T43.
+> - `Portfolio.setSafeModeStatus` não tem chamador: o Safe Mode não pode ser ativado nem manualmente,
+>   e `CANCEL_ALL`/`PANIC_SELL` não têm efeito → T45 (a afirmação de ativação manual na T25 estava errada).
+> - `Position.updateCurrentPrice` não tem chamador: `unrealizedPnl` é sempre zero, inclusive no
+>   contexto enviado às estratégias → T43 (marcação a mercado) e T40 (contrato).
+> - Com a estratégia fora do processo, indisponibilidade = HOLD, o que impede qualquer saída de
+>   posição → T44.
+> - Ticks e fills dividem o `messageProcessingExecutor` (2–4 threads, `CallerRunsPolicy`); o
+>   Actor/Mailbox do IG §12 não existe → T42.
+> - Warm-up do SMA é compartilhado entre runners e o contrato repete a chave só por `strategyRef` → T40.
+> - IG/Blueprint descrevem como decididas várias coisas que não estão no código (mesma classe da T36) → T39.
+>
+> Fora desta trilha, ainda sem task: perfil `application-prod.yml` e gestão de segredos
+> (`GO_LIVE_CHECKLIST` itens 8–9), harness de backtest/modo shadow e limpeza de documentação
+> desatualizada.
 
 ## Critério de pronto da trilha
 
