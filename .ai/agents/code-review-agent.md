@@ -17,10 +17,11 @@ Se a tarefa principal for implementacao, refactor ou documentacao, este agente n
 
 1. `/.ai/README.md`
 2. `/.ai/architecture.md`
-3. `/.ai/coding-standards.md`
-4. `/.ai/validation.md`
-5. `/.ai/review.md`
-6. `AGENTS.md` ou `CLAUDE.md`, apenas para regras operacionais da ferramenta em uso
+3. `/.ai/development-manual.md` (tabela de decisao de dono, anti-padroes rejeitados e checklist da secao 12)
+4. `/.ai/coding-standards.md`
+5. `/.ai/validation.md`
+6. `/.ai/review.md`
+7. `AGENTS.md` ou `CLAUDE.md`, apenas para regras operacionais da ferramenta em uso
 
 Leituras adicionais por contexto:
 

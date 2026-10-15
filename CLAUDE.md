@@ -12,6 +12,14 @@ Before any implementation, review, refactor, architectural suggestion, or docume
 
 `/.ai` is the canonical source for this repository. This file should only adapt that policy for Claude Code and must not redefine detailed project rules.
 
+## Development Manual (mandatory)
+
+Every implementation, refactor, review, task spec, or architectural suggestion must follow
+`/.ai/development-manual.md`. Its core rule is **responsibility placement**: business decisions in
+`core`, pure decision math in `strategy`, provider knowledge in `adapter-*`, technical mechanics and
+composition in `spring-application`. Use its decision table, rejected anti-patterns, delegated-work
+protocol, and pre-PR checklist.
+
 ## Canonical Source
 
 Use `/.ai/README.md` as the operational index for:

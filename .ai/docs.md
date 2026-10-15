@@ -23,6 +23,9 @@ tarefa ou no PR.
 - `README.md`: visao geral do projeto, arquitetura resumida e instrucoes principais
 - `AGENTS.md` e `CLAUDE.md`: ponte obrigatoria para as regras em `/.ai`
 - `/.ai/*`: regras detalhadas e canonicas para agentes e colaboradores
+- `/.ai/development-manual.md`: manual operacional (dono de cada responsabilidade, padroes por
+  modulo, anti-padroes rejeitados, processo e checklist); atualizar quando um padrao novo for
+  adotado ou um anti-padrao for corrigido
 - `/.ai/flows/*`: mapas curtos de fluxos implementados, conectando comportamento,
   codigo principal, invariantes e testes
 - `/.ai/tasks/*`: especificacoes tecnicas das tasks; consultadas antes de qualquer implementacao

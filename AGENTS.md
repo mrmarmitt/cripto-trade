@@ -10,6 +10,14 @@ Antes de qualquer implementacao, review, refactor, sugestao arquitetural ou atua
 
 `/.ai` e a fonte canonica deste repositorio. Este arquivo e apenas uma ponte para agentes que carregam `AGENTS.md` automaticamente.
 
+## Manual de Desenvolvimento (obrigatorio)
+
+Toda implementacao, refactor, review, spec de task ou sugestao arquitetural deve seguir
+`/.ai/development-manual.md`. A regra central e a **disposicao de responsabilidades**: decisao de
+negocio no `core`, calculo de decisao puro no `strategy`, conhecimento de provider nos `adapter-*`,
+mecanica tecnica e composicao no `spring-application`. Use a tabela de decisao, os anti-padroes
+rejeitados, o protocolo de trabalho delegado e o checklist pre-PR.
+
 ## Fonte Canonica
 
 Use `/.ai/README.md` como indice operacional para:

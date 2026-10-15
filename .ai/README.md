@@ -15,9 +15,10 @@ Todo agente deve consultar este material antes de implementar, revisar, refatora
 
 1. `project-context.md`
 2. `architecture.md`
-3. `coding-standards.md`
-4. `validation.md`
-5. `git-workflow.md`
+3. `development-manual.md` (obrigatorio: disposicao de responsabilidades, padroes por modulo, anti-padroes rejeitados)
+4. `coding-standards.md`
+5. `validation.md`
+6. `git-workflow.md`
 
 ## Specs de tasks
 
@@ -25,12 +26,13 @@ As especificacoes tecnicas das tasks ativas ficam em `/.ai/tasks/`. Consulte o a
 
 ## Contexto minimo por tarefa
 
-- Implementacao: spec da task em `tasks/`, `project-context.md`, `architecture.md`, `coding-standards.md`, `validation.md` e flow map aplicavel em `flows/`
-- Review de PR ou diff: `project-context.md`, `architecture.md`, `coding-standards.md`, `validation.md`, `review.md`, `agents/code-review-agent.md` e flow map aplicavel em `flows/`
-- Resolver comentarios de PR: `project-context.md`, `architecture.md`, `coding-standards.md`, `validation.md`, `review.md`, `agents/code-review-agent.md`, `skills/pr-comment-resolver/SKILL.md`
+- Implementacao: spec da task em `tasks/`, `project-context.md`, `architecture.md`, `development-manual.md`, `coding-standards.md`, `validation.md` e flow map aplicavel em `flows/`
+- Review de PR ou diff: `project-context.md`, `architecture.md`, `development-manual.md`, `coding-standards.md`, `validation.md`, `review.md`, `agents/code-review-agent.md` e flow map aplicavel em `flows/`
+- Resolver comentarios de PR: `project-context.md`, `architecture.md`, `development-manual.md`, `coding-standards.md`, `validation.md`, `review.md`, `agents/code-review-agent.md`, `skills/pr-comment-resolver/SKILL.md`
 - Criacao de PR: `project-context.md`, `architecture.md`, `coding-standards.md`, `validation.md`, `git-workflow.md`, `skills/pr-creator/SKILL.md`
-- Refactor ou mudanca de responsabilidade entre modulos: `project-context.md`, `architecture.md`, `coding-standards.md`, `validation.md`, `change-safety.md` e flow map aplicavel em `flows/`
-- Sugestao arquitetural: `project-context.md`, `architecture.md`, `coding-standards.md`, `change-safety.md` e flow map aplicavel em `flows/` quando envolver fluxo existente
+- Refactor ou mudanca de responsabilidade entre modulos: `project-context.md`, `architecture.md`, `development-manual.md`, `coding-standards.md`, `validation.md`, `change-safety.md` e flow map aplicavel em `flows/`
+- Sugestao arquitetural: `project-context.md`, `architecture.md`, `development-manual.md`, `coding-standards.md`, `change-safety.md` e flow map aplicavel em `flows/` quando envolver fluxo existente
+- Criacao de spec de task: `development-manual.md` (secao 10) e uma spec existente em `tasks/` como modelo
 - Atualizacao de documentacao: `docs.md`
 - Publicacao de findings em PR: `skills/pr-review-publisher/SKILL.md`
 

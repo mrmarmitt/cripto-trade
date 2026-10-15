@@ -42,8 +42,9 @@ Na pratica, este agente deve:
 1. `/.ai/README.md`
 2. `/.ai/project-context.md`
 3. `/.ai/architecture.md`
-4. `/.ai/coding-standards.md`
-5. `/.ai/validation.md`
+4. `/.ai/development-manual.md`
+5. `/.ai/coding-standards.md`
+6. `/.ai/validation.md`
 
 Leituras adicionais por contexto:
 
@@ -108,6 +109,8 @@ O agente deve responder, de forma explicita ou implicita na implementacao:
 - `adapter-*` deve isolar payloads e schemas de provider.
 - DTOs ou formatos externos nao devem vazar para o dominio.
 - Persistencia, transporte e framework nao devem definir politica de dominio.
+- Na duvida sobre o dono, aplicar a tabela de decisao e os anti-padroes de
+  `/.ai/development-manual.md` (secao 1) e o protocolo de trabalho delegado (secao 11).
 
 ## Uso De Skills
 
