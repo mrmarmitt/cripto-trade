@@ -119,7 +119,8 @@ public class RunnerBootRecoveryUseCase {
                 recovery.runnerId(),
                 recovery.inFlight().size(),
                 recovery.limbo().size(),
-                recovery.notes()
+                recovery.notes(),
+                !recovery.hasErrors()
         );
     }
 
@@ -448,11 +449,16 @@ public class RunnerBootRecoveryUseCase {
         recovery.note("Step 6: reconciliation NOT completed due to previous errors.");
     }
 
+    /**
+     * @param completed reconciliacao concluida sem erro (inclui DLQ resolvida); usado pela retomada
+     *                  manual do runner (T49) para decidir se ele pode voltar a operar
+     */
     public record RecoverySummary(
             UUID runnerId,
             int inFlightCount,
             int limboCount,
-            List<String> notes
+            List<String> notes,
+            boolean completed
     ) {}
 
     private static final class BootQueryTimeoutException extends RuntimeException {

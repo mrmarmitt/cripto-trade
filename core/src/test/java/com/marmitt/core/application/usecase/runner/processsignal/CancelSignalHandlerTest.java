@@ -3,7 +3,6 @@ package com.marmitt.core.application.usecase.runner.processsignal;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.runner.OrderCancelCommand;
-import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
@@ -37,7 +36,8 @@ class CancelSignalHandlerTest {
         Transaction tx = tx(runnerId, TransactionStatus.SUBMITTED);
         when(repository.findTransactionById(tx.getId())).thenReturn(Optional.of(tx));
 
-        handler.handle(runner(runnerId), StrategyOutputDto.cancel("s", tx.getId(), "thesis changed"));
+        assertEquals(CancelSignalHandler.CancelOutcome.DISPATCHED,
+                handler.handle(runner(runnerId), tx.getId(), "thesis changed"));
 
         ArgumentCaptor<OrderCancelCommand> captor = ArgumentCaptor.forClass(OrderCancelCommand.class);
         verify(orderDispatch).cancel(captor.capture());
@@ -54,8 +54,8 @@ class CancelSignalHandlerTest {
         when(repository.findTransactionById(pending.getId())).thenReturn(Optional.of(pending));
         when(repository.findTransactionById(partial.getId())).thenReturn(Optional.of(partial));
 
-        handler.handle(runner(runnerId), StrategyOutputDto.cancel("s", pending.getId(), "x"));
-        handler.handle(runner(runnerId), StrategyOutputDto.cancel("s", partial.getId(), "x"));
+        handler.handle(runner(runnerId), pending.getId(), "x");
+        handler.handle(runner(runnerId), partial.getId(), "x");
 
         verify(orderDispatch, org.mockito.Mockito.times(2)).cancel(any());
     }
@@ -65,7 +65,7 @@ class CancelSignalHandlerTest {
         UUID targetId = UUID.randomUUID();
         when(repository.findTransactionById(targetId)).thenReturn(Optional.empty());
 
-        handler.handle(runner(runnerId), StrategyOutputDto.cancel("s", targetId, "x"));
+        assertEquals(CancelSignalHandler.CancelOutcome.NOT_FOUND, handler.handle(runner(runnerId), targetId, "x"));
 
         verify(orderDispatch, never()).cancel(any());
     }
@@ -75,7 +75,7 @@ class CancelSignalHandlerTest {
         Transaction tx = tx(UUID.randomUUID(), TransactionStatus.SUBMITTED); // dono diferente
         when(repository.findTransactionById(tx.getId())).thenReturn(Optional.of(tx));
 
-        handler.handle(runner(runnerId), StrategyOutputDto.cancel("s", tx.getId(), "x"));
+        assertEquals(CancelSignalHandler.CancelOutcome.NOT_FOUND, handler.handle(runner(runnerId), tx.getId(), "x"));
 
         verify(orderDispatch, never()).cancel(any());
     }
@@ -85,7 +85,7 @@ class CancelSignalHandlerTest {
         Transaction tx = tx(runnerId, TransactionStatus.FILLED);
         when(repository.findTransactionById(tx.getId())).thenReturn(Optional.of(tx));
 
-        handler.handle(runner(runnerId), StrategyOutputDto.cancel("s", tx.getId(), "x"));
+        assertEquals(CancelSignalHandler.CancelOutcome.NOT_CANCELABLE, handler.handle(runner(runnerId), tx.getId(), "x"));
 
         verify(orderDispatch, never()).cancel(any());
     }

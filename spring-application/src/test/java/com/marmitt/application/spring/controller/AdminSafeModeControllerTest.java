@@ -9,7 +9,9 @@ import com.marmitt.core.exceptions.PortfolioNotFoundException;
 import com.marmitt.core.exceptions.SafeModeTransitionException;
 import com.marmitt.core.ports.inbound.portfolio.ManageSafeModePort;
 import com.marmitt.core.ports.inbound.runner.HaltRunnerPort;
+import com.marmitt.core.ports.inbound.runner.ManageRunnerLifecyclePort;
 import com.marmitt.core.ports.inbound.runner.QueryRunnerPort;
+import com.marmitt.core.ports.inbound.runner.RunnerOrderCommandPort;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.MediaType;
@@ -42,7 +44,8 @@ class AdminSafeModeControllerTest {
     @BeforeEach
     void setUp() {
         mockMvc = MockMvcBuilders.standaloneSetup(new AdminController(List.of(), mock(HaltRunnerPort.class),
-                        mock(QueryRunnerPort.class), manageSafeMode))
+                        mock(QueryRunnerPort.class), manageSafeMode, mock(ManageRunnerLifecyclePort.class),
+                        mock(RunnerOrderCommandPort.class)))
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
     }

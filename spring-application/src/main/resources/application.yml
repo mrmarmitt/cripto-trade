@@ -101,6 +101,8 @@ runner:
       stale-threshold-ms: 30000
       pending-grace-ms: 600000   # carencia maior p/ PENDING (reserva orfa) — > dispatch+ACK
       max-per-run: 50
+  lifecycle:
+    termination-check-interval-ms: 10000   # T49: arquiva runners TERMINATING sem posicao nem ordem em voo
 
 portfolio:
   circuit-breaker:

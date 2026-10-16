@@ -75,7 +75,7 @@ class SafeModeHandler {
     List<StrategyOutputDto> liquidationSignals(StrategyRunner runner) {
         return strategyRunnerRepository.findOpenPositionsByRunnerId(runner.getId()).stream()
                 .filter(position -> !position.isLocked())
-                .map(this::liquidationSignal)
+                .map(position -> liquidationSignal(position, "safe-mode PANIC_SELL liquidation"))
                 .toList();
     }
 
@@ -83,9 +83,12 @@ class SafeModeHandler {
         return OrderType.MARKET;
     }
 
-    private StrategyOutputDto liquidationSignal(Position position) {
+    /**
+     * Sinal de venda a mercado do lote inteiro. Fonte unica da liquidacao: Safe Mode e comando admin
+     * de fechar posicao (T49).
+     */
+    StrategyOutputDto liquidationSignal(Position position, String reasoning) {
         return new StrategyOutputDto(STRATEGY_NAME, TradingAction.SHOULD_SELL, BigDecimal.ONE,
-                position.getQuantity(), null, position.getId(), null,
-                "safe-mode PANIC_SELL liquidation", Instant.now(), Map.of());
+                position.getQuantity(), null, position.getId(), null, reasoning, Instant.now(), Map.of());
     }
 }

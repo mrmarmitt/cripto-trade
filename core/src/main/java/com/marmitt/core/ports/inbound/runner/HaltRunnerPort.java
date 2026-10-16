@@ -1,13 +1,13 @@
 package com.marmitt.core.ports.inbound.runner;
 
-import com.marmitt.core.dto.runner.response.RunnerHaltResult;
+import com.marmitt.core.dto.runner.response.RunnerTransitionResult;
 
 import java.util.List;
 import java.util.UUID;
 
 public interface HaltRunnerPort {
 
-    List<RunnerHaltResult> haltAll();
+    List<RunnerTransitionResult> haltAll();
 
-    RunnerHaltResult haltById(UUID id);
+    RunnerTransitionResult haltById(UUID id);
 }

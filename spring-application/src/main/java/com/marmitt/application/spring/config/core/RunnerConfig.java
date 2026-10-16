@@ -5,6 +5,7 @@ import com.marmitt.core.application.usecase.runner.CreateRunnerUseCase;
 import com.marmitt.core.application.usecase.runner.HaltRunnerUseCase;
 import com.marmitt.core.application.usecase.runner.RecoverStaleTransactionsUseCase;
 import com.marmitt.core.application.usecase.runner.RecoverTransactionStatusUseCase;
+import com.marmitt.core.application.usecase.runner.ManageRunnerLifecycleUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.application.usecase.runner.OrderConciliationUseCase;
 import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
@@ -20,10 +21,12 @@ import com.marmitt.core.ports.inbound.runner.HaltRunnerPort;
 import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
 import com.marmitt.core.ports.inbound.runner.RecoverStaleTransactionsPort;
 import com.marmitt.core.ports.inbound.runner.QueryRunnerPort;
+import com.marmitt.core.ports.inbound.runner.ManageRunnerLifecyclePort;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.exchange.rest.OrderQuantityNormalizerPort;
+import com.marmitt.core.ports.outbound.marketdata.LatestPricePort;
 import com.marmitt.core.ports.outbound.metrics.SignalMetricsPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
@@ -122,7 +125,7 @@ public class RunnerConfig {
     }
 
     @Bean
-    public ProcessTradeSignalPort createProcessTradeSignal(
+    public ProcessTradeSignalUseCase createProcessTradeSignal(
             TransactionTemplate txTemplate,
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             StrategyRepositoryPort strategyRepository,
@@ -131,7 +134,8 @@ public class RunnerConfig {
             OrderDispatchPort orderDispatch,
             OrderConciliationPort orderConciliation,
             List<OrderQuantityNormalizerPort> orderNormalizers,
-            SignalMetricsPort signalMetrics) {
+            SignalMetricsPort signalMetrics,
+            LatestPricePort latestPrices) {
 
         return new ProcessTradeSignalUseCase(
                 strategyRunnerRepository,
@@ -141,7 +145,8 @@ public class RunnerConfig {
                 orderDispatch,
                 orderConciliation,
                 orderNormalizers,
-                signalMetrics) {
+                signalMetrics,
+                latestPrices) {
 
             @Override
             public void transactionalPersistBuyAndReserve(BuyExecutionContext context) {
@@ -208,6 +213,16 @@ public class RunnerConfig {
                 strategyRunnerRepository,
                 recoverTransactionStatusUseCase
         );
+    }
+
+    @Bean
+    public ManageRunnerLifecyclePort manageRunnerLifecycle(
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            ExchangeAdapterRepositoryPort exchangeAdapterRepository,
+            RunnerBootRecoveryUseCase runnerBootRecoveryUseCase
+    ) {
+        return new ManageRunnerLifecycleUseCase(strategyRunnerRepository, exchangeAdapterRepository,
+                runnerBootRecoveryUseCase);
     }
 
     @Bean

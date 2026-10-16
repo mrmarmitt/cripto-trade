@@ -15,9 +15,11 @@ import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.SafeModeStatus;
 import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
+import com.marmitt.core.ports.inbound.runner.RunnerOrderCommandPort;
 import com.marmitt.core.ports.outbound.strategy.TradingStrategy;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.exchange.rest.OrderQuantityNormalizerPort;
+import com.marmitt.core.ports.outbound.marketdata.LatestPricePort;
 import com.marmitt.core.ports.outbound.metrics.SignalDecision;
 import com.marmitt.core.ports.outbound.metrics.SignalMetricsPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
@@ -26,6 +28,8 @@ import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import com.marmitt.core.exceptions.ConcurrentPositionLockException;
 import com.marmitt.core.exceptions.RunnerHaltedException;
+import com.marmitt.core.exceptions.RunnerNotFoundException;
+import com.marmitt.core.exceptions.RunnerOperationException;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 
@@ -36,6 +40,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.Predicate;
 
 /**
  * Orquestrador principal do fluxo market data → decisao de trade → ordem na exchange.
@@ -70,7 +75,7 @@ import java.util.UUID;
  * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Secao 5.1 — ProcessTradeSignal</a>
  */
 @Slf4j
-public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPort {
+public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPort, RunnerOrderCommandPort {
 
     private static final BigDecimal MINIMUM_OPERATION_AMOUNT = BigDecimal.valueOf(10);
 
@@ -78,6 +83,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     private final PortfolioRepositoryPort portfolioRepository;
     private final OrderConciliationPort orderConciliation;
     private final SignalMetricsPort signalMetrics;
+    private final LatestPricePort latestPrices;
 
     private final RunnerSignalPolicy signalPolicy;
     private final StrategySignalEvaluator signalEvaluator;
@@ -98,11 +104,13 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                                         OrderDispatchPort orderDispatch,
                                         OrderConciliationPort orderConciliation,
                                         List<OrderQuantityNormalizerPort> orderNormalizers,
-                                        SignalMetricsPort signalMetrics) {
+                                        SignalMetricsPort signalMetrics,
+                                        LatestPricePort latestPrices) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.portfolioRepository = portfolioRepository;
         this.orderConciliation = orderConciliation;
         this.signalMetrics = signalMetrics;
+        this.latestPrices = latestPrices;
 
         this.signalPolicy = new RunnerSignalPolicy();
         this.signalEvaluator = new StrategySignalEvaluator(strategyRepository);
@@ -147,11 +155,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     protected void persistBuyAndReserve(BuyExecutionContext context) {
         // Re-read runner inside the transaction to close the race with the kill switch.
         // PostgreSQL READ COMMITTED ensures this sees any HALTED status committed since the signal was loaded.
-        StrategyRunner current = strategyRunnerRepository.findById(context.runner().getId())
-                .orElseThrow(() -> new IllegalStateException("Runner disappeared mid-signal: " + context.runner().getId()));
-        if (!current.canAcceptSignals()) {
-            throw new RunnerHaltedException(context.runner().getId());
-        }
+        requireRunner(context.runner().getId(), StrategyRunner::canOpenPositions);
 
         strategyRunnerRepository.saveTransaction(context.transaction());
         capitalReservationPolicy.validateAndReserve(
@@ -206,19 +210,27 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     }
 
     private void checkRunnerNotHalted(UUID runnerId) {
+        requireRunner(runnerId, StrategyRunner::canAcceptSignals);
+    }
+
+    private void checkRunnerCanOpen(UUID runnerId) {
+        requireRunner(runnerId, StrategyRunner::canOpenPositions);
+    }
+
+    /**
+     * Rele o runner (fecha a corrida com kill switch, encerramento e reconciliacao) e exige a condicao.
+     * PostgreSQL READ COMMITTED garante que a releitura ve o status commitado desde o inicio do tick.
+     */
+    private void requireRunner(UUID runnerId, Predicate<StrategyRunner> condition) {
         StrategyRunner current = strategyRunnerRepository.findById(runnerId)
                 .orElseThrow(() -> new IllegalStateException("Runner disappeared mid-signal: " + runnerId));
-        if (!current.canAcceptSignals()) {
+        if (!condition.test(current)) {
             throw new RunnerHaltedException(runnerId);
         }
     }
 
     protected void persistSellAndLockPosition(Transaction transaction, Position targetPosition) {
-        StrategyRunner current = strategyRunnerRepository.findById(transaction.getRunnerId())
-                .orElseThrow(() -> new IllegalStateException("Runner disappeared mid-signal: " + transaction.getRunnerId()));
-        if (!current.canAcceptSignals()) {
-            throw new RunnerHaltedException(transaction.getRunnerId());
-        }
+        requireRunner(transaction.getRunnerId(), StrategyRunner::canAcceptSignals);
 
         strategyRunnerRepository.saveTransaction(transaction);
         boolean locked = strategyRunnerRepository.tryLockPositionForSell(
@@ -305,6 +317,51 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         }
     }
 
+    // ============================================================
+    // Comandos do operador (T49)
+    // ============================================================
+
+    @Override
+    public void cancelOrder(UUID runnerId, UUID transactionId) {
+        StrategyRunner runner = loadRunner(runnerId);
+        switch (cancelSignalHandler.handle(runner, transactionId, "admin FORCE_CANCEL")) {
+            case DISPATCHED -> { }
+            case NOT_FOUND -> throw new RunnerOperationException(
+                    "Order " + transactionId + " not found for runner " + runnerId);
+            case NOT_CANCELABLE -> throw new RunnerOperationException(
+                    "Order " + transactionId + " is not in flight");
+        }
+    }
+
+    @Override
+    public void closePosition(UUID runnerId, UUID positionId) {
+        StrategyRunner runner = loadRunner(runnerId);
+        if (!runner.canAcceptSignals()) {
+            throw new RunnerOperationException("Runner " + runnerId + " in status " + runner.getStatus()
+                    + (runner.isReconciling() ? " (reconciling)" : "") + " cannot sell - resume it first");
+        }
+        Position position = strategyRunnerRepository.findPositionById(positionId)
+                .filter(found -> found.getRunnerId().equals(runnerId) && found.isOpen())
+                .orElseThrow(() -> new RunnerOperationException(
+                        "Position " + positionId + " is not open for runner " + runnerId));
+        if (position.isLocked()) {
+            throw new RunnerOperationException("Position " + positionId
+                    + " is locked by an in-flight SELL - cancel that order first");
+        }
+        BigDecimal referencePrice = latestPrices.find(runner.getSymbol())
+                .orElseThrow(() -> new RunnerOperationException(
+                        "No market price yet for " + runner.getSymbol() + " - wait for the first tick"));
+        log.warn("adminCommand: FORCE_CLOSE_POSITION positionId={} runnerId={} quantity={} referencePrice={}",
+                positionId, runnerId, position.getQuantity(), referencePrice);
+        processTradeSignal(runner, safeModeHandler.liquidationSignal(position, "admin FORCE_CLOSE_POSITION"),
+                referencePrice, safeModeHandler.liquidationOrderType());
+    }
+
+    private StrategyRunner loadRunner(UUID runnerId) {
+        return strategyRunnerRepository.findById(runnerId)
+                .orElseThrow(() -> new RunnerNotFoundException(runnerId));
+    }
+
     private void processRunner(StrategyRunner runner, StrategyInputDto input, BigDecimal currentPrice) {
         Optional<TradingStrategy> activeStrategy = signalEvaluator.resolveActiveStrategy(runner);
         if (activeStrategy.isEmpty()) {
@@ -328,7 +385,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
             // canProcessRunner e o retorno da estrategia. Lanca RunnerHaltedException (capturada em
             // execute) — mesma semantica de seguranca dos ramos BUY/SELL antes do dispatch.
             checkRunnerNotHalted(runner.getId());
-            cancelSignalHandler.handle(runner, strategyOutput);
+            cancelSignalHandler.handle(runner, strategyOutput.targetTransactionId(), strategyOutput.reasoning());
             signalMetrics.recordSignalEvaluated(runner.getId(), SignalDecision.CANCEL);
             return;
         }
@@ -384,7 +441,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                         .buildBuyExecutionContext(runner, transaction, precomputedExposure);
                 BuySignalHandler.BuyOutcome outcome = buySignalHandler.handle(buyContext,
                         this::transactionalPersistBuyAndReserve,
-                        this::checkRunnerNotHalted, this::expirePendingBuy);
+                        this::checkRunnerCanOpen, this::expirePendingBuy);
                 if (outcome == BuySignalHandler.BuyOutcome.DISPATCHED) {
                     logTransactionCreated(transaction, runner);
                 }
