@@ -100,4 +100,22 @@ class ScenarioImmediateRoundTripE2ETest extends ScenarioStrategyE2ETestSupport {
         assertEquals(0, totalMatchedQuantity(runnerId).compareTo(new BigDecimal("0.00100000")),
                 "A quantidade casada deve corresponder ao lote fechado");
     }
+
+    @Test
+    void closedRoundTripShouldLeaveNoCapitalReserved() {
+        // T36: a BUY marketable executa abaixo do limite; o excedente da reserva precisa voltar ao
+        // disponivel. Antes da T36 sobrava quantity x (limite - executado) preso em reserved.
+        UUID runnerId = activateScenario(
+                new ImmediateRoundTripStrategy(ScenarioStrategyConfig.boundedConfig(1)));
+        UUID portfolioId = portfolioIdOf(runnerId);
+
+        driveTicks(10);
+        awaitStable(runnerId, QUIET_WINDOW);
+
+        BalanceRow balance = balance(portfolioId);
+        assertEquals(0, balance.reserved().compareTo(BigDecimal.ZERO),
+                "Sem ordem viva nem lote aberto, nada pode ficar reservado. Saldo=" + balance);
+        assertEquals(0, balance.available().subtract(INITIAL_CAPITAL).compareTo(balance.realized()),
+                "Com tudo fechado, available - capital inicial deve ser o PnL realizado. Saldo=" + balance);
+    }
 }
