@@ -121,12 +121,19 @@ mesmo valor que as vendas daquele lote baixam em `confirmExecution`. Depois do r
   `confirmExecution`. A fee da SELL entra no PnL do match. IG §7.2.3 anotado.
 - **Custo acima da reserva:** não gera devolução negativa; loga WARN. Só com `LIMIT`, não ocorre.
 
+### Resíduo histórico
+
+A devolução vale para fills novos. O capital já preso em `reserved` em bancos de testnet/dev **não**
+é recuperado, e por decisão do mantenedor (2026-10-16) não haverá script de correção: os dados de
+testnet são descartáveis e serão limpos antes de recomeçar os testes. Para produção essa regra não
+se aplica.
+
 ### Achado novo (fora do escopo, registrado)
 
 A fee da **BUY** é ignorada: o `BuyFillHandler` não lê `orderData.fee()`, então ela não aparece no
 PnL nem em `totalFeesPaid`. Na Binance, a fee de BUY costuma vir no ativo base e reduz a quantidade
-realmente recebida; a posição local registra a quantidade bruta. Precisa de task própria
-(contabilização da fee de BUY e quantidade líquida da posição).
+realmente recebida; a posição local registra a quantidade bruta. Tratado na
+**T46** (`.ai/tasks/T46-fee-asset-and-net-position.md`).
 
 ### Validação
 
