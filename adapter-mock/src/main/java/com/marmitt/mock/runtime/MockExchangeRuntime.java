@@ -167,7 +167,8 @@ public class MockExchangeRuntime {
                 current.fee(),
                 OrderDataDto.OrderStatus.CANCELED,
                 null,
-                java.time.Instant.now()
+                java.time.Instant.now(),
+                current.feeAsset()
         );
 
         publishMockOrderResponse(canceled);
