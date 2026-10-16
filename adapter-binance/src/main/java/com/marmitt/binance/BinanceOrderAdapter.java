@@ -107,7 +107,8 @@ public class BinanceOrderAdapter implements ExchangeOrderPort {
                 response.fee(),
                 response.status(),
                 response.rejectReason(),
-                response.timestamp()
+                response.timestamp(),
+                response.feeAsset()
         );
     }
 }

@@ -33,6 +33,7 @@ public class BinanceOrderMapper {
         BigDecimal price             = decimal(node, "price");
         BigDecimal executedPrice     = computeWap(executedQty, cumulativeQuoteQty);
         // updateTime = last status change (fill time for FILLED); preferred over creation time
+        Commission commission = commissionFromFills(node);
         long timeMs = node.path("updateTime").asLong(0);
         if (timeMs == 0) timeMs = node.path("transactTime").asLong(0);
         if (timeMs == 0) timeMs = node.path("time").asLong(0);
@@ -47,10 +48,11 @@ public class BinanceOrderMapper {
                 executedQty,
                 price,
                 executedPrice,
-                BigDecimal.ZERO,
+                commission.amount(),
                 mapStatus(statusRaw),
                 null,
-                timeMs > 0 ? Instant.ofEpochMilli(timeMs) : Instant.now()
+                timeMs > 0 ? Instant.ofEpochMilli(timeMs) : Instant.now(),
+                commission.asset()
         );
     }
 
@@ -75,6 +77,34 @@ public class BinanceOrderMapper {
             throw new ExchangeQueryException("BINANCE", ExchangeQueryException.ErrorType.UNKNOWN,
                     "Failed to parse order list response: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Soma a comissao dos {@code fills[]} da resposta FULL de criacao de ordem (T46). Consultas de
+     * ordem nao trazem fills: fee zero e ativo desconhecido. Fills com ativos diferentes (raro)
+     * nao sao somados: a fee fica desconhecida para o core aplicar o comportamento legado.
+     */
+    private Commission commissionFromFills(JsonNode node) {
+        JsonNode fills = node.path("fills");
+        if (!fills.isArray() || fills.isEmpty()) {
+            return new Commission(BigDecimal.ZERO, null);
+        }
+        BigDecimal total = BigDecimal.ZERO;
+        String asset = null;
+        for (JsonNode fill : fills) {
+            String fillAsset = fill.path("commissionAsset").asText(null);
+            if (asset != null && fillAsset != null && !asset.equals(fillAsset)) {
+                return new Commission(BigDecimal.ZERO, null);
+            }
+            if (fillAsset != null) {
+                asset = fillAsset;
+            }
+            total = total.add(decimal(fill, "commission"));
+        }
+        return new Commission(total, total.signum() == 0 ? null : asset);
+    }
+
+    private record Commission(BigDecimal amount, String asset) {
     }
 
     private BigDecimal computeWap(BigDecimal qty, BigDecimal quoteQty) {
