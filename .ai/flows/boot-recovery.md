@@ -93,6 +93,10 @@ sequencia de boot. Duas coberturas a substituem:
 transacoes em voo, zombies, limbo e outros sinais operacionais, sempre usando os
 contratos centrais de conciliacao quando precisa alterar estado local.
 
+O mesmo `recoverRunner` e usado fora do boot pelo `ManageRunnerLifecycleUseCase` (T49): o start de
+um runner CREATED e o resume de um runner HALTED reconciliam por ele; o resumo traz `completed` e o
+resume so reativa com reconciliacao limpa.
+
 ## Observabilidade
 
 `BootExecutionObserverPort` recebe eventos de fase, resultados, falhas fail-fast

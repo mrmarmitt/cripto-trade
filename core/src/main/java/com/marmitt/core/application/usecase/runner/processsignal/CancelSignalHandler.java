@@ -2,7 +2,6 @@ package com.marmitt.core.application.usecase.runner.processsignal;
 
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
-import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
@@ -35,31 +34,33 @@ class CancelSignalHandler {
         this.orderDispatch = orderDispatch;
     }
 
-    void handle(StrategyRunner runner, StrategyOutputDto signal) {
-        UUID targetTransactionId = signal.targetTransactionId();
+    /**
+     * Valida o alvo e despacha o cancelamento. Usado pelo {@code SHOULD_CANCEL} da estrategia (que
+     * ignora o desfecho) e pelo comando admin de cancelar ordem (T49), que o traduz em resposta.
+     */
+    CancelOutcome handle(StrategyRunner runner, UUID targetTransactionId, String reason) {
         if (targetTransactionId == null) {
-            log.warn("processCancelSignal: SHOULD_CANCEL without targetTransactionId runnerId={} - ignored",
-                    runner.getId());
-            return;
+            log.warn("processCancelSignal: cancel without targetTransactionId runnerId={} - ignored", runner.getId());
+            return CancelOutcome.NOT_FOUND;
         }
 
         Transaction transaction = strategyRunnerRepository.findTransactionById(targetTransactionId).orElse(null);
         if (transaction == null) {
             log.warn("processCancelSignal: target transaction not found transactionId={} runnerId={} - ignored",
                     targetTransactionId, runner.getId());
-            return;
+            return CancelOutcome.NOT_FOUND;
         }
 
         if (!transaction.getRunnerId().equals(runner.getId())) {
             log.warn("processCancelSignal: target belongs to another runner transactionId={} owner={} requester={} - ignored",
                     targetTransactionId, transaction.getRunnerId(), runner.getId());
-            return;
+            return CancelOutcome.NOT_FOUND;
         }
 
         if (!transaction.getStatus().isInFlight()) {
             log.info("processCancelSignal: target not cancelable transactionId={} status={} runnerId={} - no-op",
                     targetTransactionId, transaction.getStatus(), runner.getId());
-            return;
+            return CancelOutcome.NOT_CANCELABLE;
         }
 
         // De-dup de reenvios (estrategia deterministica reemite SHOULD_CANCEL a cada tick enquanto o
@@ -68,6 +69,17 @@ class CancelSignalHandler {
         orderDispatch.cancel(intentFactory.buildCancelCommand(runner, transaction));
 
         log.info("processCancelSignal: cancel dispatched transactionId={} clientOrderId={} runnerId={} reason={}",
-                targetTransactionId, transaction.getClientOrderId(), runner.getId(), signal.reasoning());
+                targetTransactionId, transaction.getClientOrderId(), runner.getId(), reason);
+        return CancelOutcome.DISPATCHED;
+    }
+
+    /**
+     * Desfecho da validacao do alvo. Alvo de outro runner conta como inexistente: o runner nao
+     * enxerga ordens alheias.
+     */
+    enum CancelOutcome {
+        DISPATCHED,
+        NOT_FOUND,
+        NOT_CANCELABLE
     }
 }

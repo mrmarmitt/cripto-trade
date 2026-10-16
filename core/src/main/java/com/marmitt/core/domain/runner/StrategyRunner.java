@@ -3,6 +3,7 @@ package com.marmitt.core.domain.runner;
 import com.marmitt.core.enums.AccountingPolicyType;
 import com.marmitt.core.enums.ExecutionPolicy;
 import com.marmitt.core.enums.RunnerStatus;
+import com.marmitt.core.exceptions.RunnerOperationException;
 import lombok.Getter;
 
 import java.math.BigDecimal;
@@ -52,9 +53,9 @@ public class StrategyRunner {
     private final AccountingPolicyType accountingPolicyType;
 
     // Limites de capital
-    private final BigDecimal maxAllocationPercent;
-    private final int maxOpenPositions;
-    private final int maxPendingOrders;
+    private BigDecimal maxAllocationPercent;
+    private int maxOpenPositions;
+    private int maxPendingOrders;
 
     /**
      * Fatia fixa reservada para este Runner em modo DEDICATED.
@@ -186,6 +187,10 @@ public class StrategyRunner {
      * CREATED → INITIALIZING
      */
     public void startInitializing() {
+        if (this.status == RunnerStatus.INITIALIZING) {
+            // Start anterior parou na reconciliacao: o novo start retoma dali (T49).
+            return;
+        }
         requireStatus(RunnerStatus.CREATED);
         this.status = RunnerStatus.INITIALIZING;
         this.statusChangedAt = Instant.now();
@@ -205,11 +210,14 @@ public class StrategyRunner {
     }
 
     /**
-     * Pausa o Runner (Safe Mode ou intervenção manual).
-     * ACTIVE → HALTED
+     * Pausa o Runner (kill switch ou erro de reconciliação).
+     * ACTIVE ou TERMINATING → HALTED. Um runner em encerramento também para por completo; ao
+     * retomar ele volta a ACTIVE e o encerramento precisa ser pedido de novo (T49).
      */
     public void halt() {
-        requireStatus(RunnerStatus.ACTIVE);
+        if (this.status != RunnerStatus.ACTIVE && this.status != RunnerStatus.TERMINATING) {
+            throw new RunnerOperationException("Cannot halt runner in status " + this.status);
+        }
         this.status = RunnerStatus.HALTED;
         this.statusChangedAt = Instant.now();
     }
@@ -230,8 +238,7 @@ public class StrategyRunner {
      */
     public void startTerminating() {
         if (this.status != RunnerStatus.ACTIVE && this.status != RunnerStatus.HALTED) {
-            throw new IllegalStateException(
-                    "Cannot start terminating from status: " + this.status);
+            throw new RunnerOperationException("Cannot start terminating from status: " + this.status);
         }
         this.status = RunnerStatus.TERMINATING;
         this.statusChangedAt = Instant.now();
@@ -265,7 +272,7 @@ public class StrategyRunner {
      */
     public void beginReconciliation() {
         if (this.status == RunnerStatus.ARCHIVED || this.status == RunnerStatus.TERMINATING) {
-            throw new IllegalStateException("Cannot start reconciliation for status: " + this.status);
+            throw new RunnerOperationException("Cannot start reconciliation for status: " + this.status);
         }
         this.isReconciling = true;
     }
@@ -275,11 +282,40 @@ public class StrategyRunner {
     // ============================================================
 
     /**
-     * Verifica se o Runner pode aceitar novos sinais.
-     * Rejeita se não ACTIVE ou se em Boot Sequence.
+     * Runner conduzido pelo pipeline de sinal (estratégia ou Safe Mode): ACTIVE ou TERMINATING,
+     * fora de reconciliação. Em TERMINATING ele ainda vende para fechar posição (T49).
      */
     public boolean canAcceptSignals() {
+        return (status == RunnerStatus.ACTIVE || status == RunnerStatus.TERMINATING) && !isReconciling;
+    }
+
+    /**
+     * Runner pode abrir posição (BUY): só ACTIVE, fora de reconciliação.
+     */
+    public boolean canOpenPositions() {
         return status == RunnerStatus.ACTIVE && !isReconciling;
+    }
+
+    /**
+     * Altera os limites mutáveis em runtime (IG §13.2.2, T49). {@code null} mantém o valor atual;
+     * vale a partir da próxima reserva. Políticas, estratégia e símbolo são imutáveis.
+     */
+    public void updateLimits(BigDecimal maxAllocationPercent, Integer maxOpenPositions, Integer maxPendingOrders) {
+        if (this.status == RunnerStatus.ARCHIVED) {
+            throw new RunnerOperationException("Cannot change limits of an archived runner: " + id);
+        }
+        if (maxAllocationPercent != null) {
+            if (maxAllocationPercent.signum() <= 0 || maxAllocationPercent.compareTo(BigDecimal.ONE) > 0) {
+                throw new IllegalArgumentException("maxAllocationPercent must be in (0, 1]: " + maxAllocationPercent);
+            }
+            this.maxAllocationPercent = maxAllocationPercent;
+        }
+        if (maxOpenPositions != null) {
+            this.maxOpenPositions = requirePositiveLimit(maxOpenPositions, "maxOpenPositions");
+        }
+        if (maxPendingOrders != null) {
+            this.maxPendingOrders = requirePositiveLimit(maxPendingOrders, "maxPendingOrders");
+        }
     }
 
     /**
@@ -313,8 +349,14 @@ public class StrategyRunner {
 
     private void requireStatus(RunnerStatus expected) {
         if (this.status != expected) {
-            throw new IllegalStateException(
-                    "Expected status " + expected + " but was " + this.status);
+            throw new RunnerOperationException("Expected status " + expected + " but was " + this.status);
         }
+    }
+
+    private static int requirePositiveLimit(int value, String field) {
+        if (value <= 0) {
+            throw new IllegalArgumentException(field + " must be positive: " + value);
+        }
+        return value;
     }
 }

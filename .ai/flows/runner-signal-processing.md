@@ -83,6 +83,16 @@ Nos niveis `CANCEL_ALL` e `PANIC_SELL`, a cada tick do runner:
 O tipo da ordem e decidido aqui (`Transaction.orderType`): `LIMIT` para sinais da estrategia,
 `MARKET` para a liquidacao.
 
+## Ciclo De Vida E Comandos Do Operador (T49)
+
+- `StrategyRunner.canAcceptSignals()` = ACTIVE ou TERMINATING fora de reconciliacao: o runner e
+  conduzido pelo pipeline. `canOpenPositions()` = so ACTIVE: BUY barrado em TERMINATING
+  (`RunnerSignalPolicy` e releitura `requireRunner` antes do persist e do dispatch).
+- `RunnerOrderCommandPort`, implementado pelo `ProcessTradeSignalUseCase`:
+  - `cancelOrder` passa pelo mesmo `CancelSignalHandler` do `SHOULD_CANCEL`;
+  - `closePosition` gera o sinal de liquidacao MARKET da T45 e segue o ramo SELL, com o ultimo preco
+    (`LatestPricePort`) como referencia. Runner halted e recusado.
+
 ## Componentes Principais
 
 | Componente | Papel |

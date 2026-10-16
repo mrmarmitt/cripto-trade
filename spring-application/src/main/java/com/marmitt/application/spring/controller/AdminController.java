@@ -4,13 +4,17 @@ import com.marmitt.binance.filters.SymbolFilterCache;
 import com.marmitt.core.dto.portfolio.request.ChangeSafeModeRequest;
 import com.marmitt.core.dto.portfolio.response.SafeModeStatusDto;
 import com.marmitt.core.dto.runner.response.RunnerDto;
-import com.marmitt.core.dto.runner.response.RunnerHaltResult;
+import com.marmitt.core.dto.runner.response.RunnerTransitionResult;
 import com.marmitt.core.enums.SafeModeOrigin;
 import com.marmitt.core.ports.inbound.portfolio.ManageSafeModePort;
+import com.marmitt.core.dto.runner.request.UpdateRunnerLimitsRequest;
 import com.marmitt.core.ports.inbound.runner.HaltRunnerPort;
+import com.marmitt.core.ports.inbound.runner.ManageRunnerLifecyclePort;
+import com.marmitt.core.ports.inbound.runner.RunnerOrderCommandPort;
 import com.marmitt.core.ports.inbound.runner.QueryRunnerPort;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
@@ -29,15 +33,21 @@ public class AdminController {
     private final HaltRunnerPort haltRunner;
     private final QueryRunnerPort queryRunner;
     private final ManageSafeModePort manageSafeMode;
+    private final ManageRunnerLifecyclePort runnerLifecycle;
+    private final RunnerOrderCommandPort runnerOrderCommands;
 
     public AdminController(List<SymbolFilterCache> filterCaches,
                            HaltRunnerPort haltRunner,
                            QueryRunnerPort queryRunner,
-                           ManageSafeModePort manageSafeMode) {
+                           ManageSafeModePort manageSafeMode,
+                           ManageRunnerLifecyclePort runnerLifecycle,
+                           RunnerOrderCommandPort runnerOrderCommands) {
         this.filterCaches = filterCaches;
         this.haltRunner = haltRunner;
         this.queryRunner = queryRunner;
         this.manageSafeMode = manageSafeMode;
+        this.runnerLifecycle = runnerLifecycle;
+        this.runnerOrderCommands = runnerOrderCommands;
     }
 
     @PostMapping("/filters/refresh")
@@ -47,18 +57,53 @@ public class AdminController {
     }
 
     @PostMapping("/runners/halt")
-    public ResponseEntity<List<RunnerHaltResult>> haltAll() {
+    public ResponseEntity<List<RunnerTransitionResult>> haltAll() {
         return ResponseEntity.ok(haltRunner.haltAll());
     }
 
     @PostMapping("/runners/{id}/halt")
-    public ResponseEntity<RunnerHaltResult> haltById(@PathVariable UUID id) {
+    public ResponseEntity<RunnerTransitionResult> haltById(@PathVariable UUID id) {
         return ResponseEntity.ok(haltRunner.haltById(id));
     }
 
     @GetMapping("/runners/status")
     public ResponseEntity<List<RunnerDto>> runnersStatus() {
         return ResponseEntity.ok(queryRunner.findAll());
+    }
+
+    @PostMapping("/runners/{id}/start")
+    public ResponseEntity<RunnerTransitionResult> start(@PathVariable UUID id) {
+        return ResponseEntity.ok(runnerLifecycle.start(id));
+    }
+
+    @PostMapping("/runners/{id}/resume")
+    public ResponseEntity<RunnerTransitionResult> resume(@PathVariable UUID id) {
+        return ResponseEntity.ok(runnerLifecycle.resume(id));
+    }
+
+    @PostMapping("/runners/{id}/terminate")
+    public ResponseEntity<RunnerTransitionResult> terminate(@PathVariable UUID id) {
+        return ResponseEntity.ok(runnerLifecycle.terminate(id));
+    }
+
+    @PatchMapping("/runners/{id}")
+    public ResponseEntity<RunnerTransitionResult> updateLimits(@PathVariable UUID id,
+                                                               @RequestBody UpdateRunnerLimitsRequest request) {
+        return ResponseEntity.ok(runnerLifecycle.updateLimits(id, request));
+    }
+
+    /** 202: o cancelamento e enviado; o CANCELED chega pelo stream. */
+    @PostMapping("/runners/{id}/orders/{transactionId}/cancel")
+    public ResponseEntity<Void> cancelOrder(@PathVariable UUID id, @PathVariable UUID transactionId) {
+        runnerOrderCommands.cancelOrder(id, transactionId);
+        return ResponseEntity.accepted().build();
+    }
+
+    /** 202: a venda a mercado e enviada; o fechamento chega pela conciliacao. */
+    @PostMapping("/runners/{id}/positions/{positionId}/close")
+    public ResponseEntity<Void> closePosition(@PathVariable UUID id, @PathVariable UUID positionId) {
+        runnerOrderCommands.closePosition(id, positionId);
+        return ResponseEntity.accepted().build();
     }
 
     @GetMapping("/portfolios/{id}/safe-mode")
