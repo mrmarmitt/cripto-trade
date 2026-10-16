@@ -14,6 +14,7 @@ import com.marmitt.core.dto.runner.response.RecoverStaleTransactionsResponse;
 import com.marmitt.core.dto.runner.request.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.response.CreateRunnerResponse;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.AccountingPolicyType;
 import com.marmitt.core.enums.ExecutionPolicy;
 import com.marmitt.core.enums.RunnerStatus;
@@ -624,6 +625,7 @@ class RunnerTransactionRecoveryWatchdogIntegrationTest extends AbstractIntegrati
                 runner.getId(),
                 ClientOrderId.generate(runner.getShortCode(), type),
                 type,
+                OrderType.LIMIT,
                 SYMBOL,
                 quantity,
                 price,

@@ -54,11 +54,7 @@ import java.util.concurrent.TimeoutException;
 @Slf4j
 public class RunnerBootRecoveryUseCase {
 
-    private static final List<TransactionStatus> BOOT_RELEVANT_STATUSES = List.of(
-            TransactionStatus.PENDING,
-            TransactionStatus.SUBMITTED,
-            TransactionStatus.PARTIAL
-    );
+    private static final List<TransactionStatus> BOOT_RELEVANT_STATUSES = TransactionStatus.IN_FLIGHT;
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;

@@ -8,6 +8,7 @@ import com.marmitt.core.dto.portfolio.request.CreatePortfolioRequest;
 import com.marmitt.core.dto.portfolio.response.CreatePortfolioResponse;
 import com.marmitt.core.dto.runner.request.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.response.CreateRunnerResponse;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.PositionStatus;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
@@ -254,6 +255,7 @@ class ConcurrentSellLockIntegrationTest extends AbstractIntegrationTest {
                 runner.getId(),
                 ClientOrderId.generate(runner.getShortCode(), TransactionType.BUY),
                 TransactionType.BUY,
+                OrderType.LIMIT,
                 SYMBOL,
                 POSITION_QUANTITY,
                 POSITION_PRICE,
@@ -273,6 +275,7 @@ class ConcurrentSellLockIntegrationTest extends AbstractIntegrationTest {
                 runner.getId(),
                 ClientOrderId.generate(runner.getShortCode(), TransactionType.SELL),
                 TransactionType.SELL,
+                OrderType.LIMIT,
                 SYMBOL,
                 quantity,
                 POSITION_PRICE,

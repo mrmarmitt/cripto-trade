@@ -2,6 +2,7 @@ package com.marmitt.core.application.usecase.runner.orderconciliation;
 
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.capital.MarginRelease;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.ReleaseReason;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
@@ -80,6 +81,7 @@ class MarginReleaseBuilderTest {
                 .clientOrderId("client-order-id")
                 .status(TransactionStatus.FILLED)
                 .type(type)
+                .orderType(OrderType.LIMIT)
                 .symbol("BTCUSDT")
                 .quantity(new BigDecimal("0.00150000"))
                 .price(new BigDecimal("60000.00000000"))
@@ -98,6 +100,7 @@ class MarginReleaseBuilderTest {
                 .clientOrderId("client-order-id")
                 .status(status)
                 .type(type)
+                .orderType(OrderType.LIMIT)
                 .symbol("BTCUSDT")
                 .quantity(new BigDecimal("0.00150000"))
                 .price(new BigDecimal("60000.00000000"))

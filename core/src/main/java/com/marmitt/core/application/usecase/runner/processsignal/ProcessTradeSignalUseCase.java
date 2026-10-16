@@ -1,5 +1,6 @@
 package com.marmitt.core.application.usecase.runner.processsignal;
 
+import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
@@ -10,6 +11,8 @@ import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.dto.websocket.data.MarketDataDto;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.enums.OrderType;
+import com.marmitt.core.enums.SafeModeStatus;
 import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.strategy.TradingStrategy;
@@ -28,7 +31,9 @@ import org.slf4j.MDC;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -70,6 +75,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     private static final BigDecimal MINIMUM_OPERATION_AMOUNT = BigDecimal.valueOf(10);
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
+    private final PortfolioRepositoryPort portfolioRepository;
     private final OrderConciliationPort orderConciliation;
     private final SignalMetricsPort signalMetrics;
 
@@ -81,6 +87,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     private final BuySignalHandler buySignalHandler;
     private final SellSignalHandler sellSignalHandler;
     private final CancelSignalHandler cancelSignalHandler;
+    private final SafeModeHandler safeModeHandler;
     private final RunnerExposureService runnerExposureService;
     private final CapitalReservationPolicy capitalReservationPolicy;
 
@@ -93,6 +100,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                                         List<OrderQuantityNormalizerPort> orderNormalizers,
                                         SignalMetricsPort signalMetrics) {
         this.strategyRunnerRepository = strategyRunnerRepository;
+        this.portfolioRepository = portfolioRepository;
         this.orderConciliation = orderConciliation;
         this.signalMetrics = signalMetrics;
 
@@ -104,7 +112,8 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         this.orderNormalizer = new OrderNormalizer(orderNormalizers);
         this.buySignalHandler = new BuySignalHandler(this.tradeIntentFactory, orderDispatch);
         this.sellSignalHandler = new SellSignalHandler(strategyRunnerRepository, this.tradeIntentFactory, orderDispatch);
-        this.cancelSignalHandler = new CancelSignalHandler(strategyRunnerRepository, orderDispatch);
+        this.cancelSignalHandler = new CancelSignalHandler(strategyRunnerRepository, this.tradeIntentFactory, orderDispatch);
+        this.safeModeHandler = new SafeModeHandler(strategyRunnerRepository, this.tradeIntentFactory, orderDispatch);
         this.runnerExposureService = new RunnerExposureService(strategyRunnerRepository);
         this.capitalReservationPolicy = new CapitalReservationPolicy(
                 portfolioRepository, globalBalanceRepository, this.runnerExposureService);
@@ -240,12 +249,19 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         }
 
         StrategyInputDto strategyInput = tradeIntentFactory.buildStrategyInput(marketData);
+        Map<UUID, SafeModeStatus> safeModeByPortfolio = new HashMap<>();
         for (StrategyRunner runner : strategyRunners) {
             if (!signalPolicy.canProcessRunner(runner, exchangeId)) {
                 continue;
             }
 
             try {
+                SafeModeStatus safeMode = safeModeByPortfolio.computeIfAbsent(
+                        runner.getPortfolioId(), this::loadSafeMode);
+                if (safeMode.cancelsOrders()) {
+                    enforceSafeMode(runner, safeMode, marketData.price());
+                    continue;
+                }
                 processRunner(runner, strategyInput, marketData.price());
             } catch (RunnerHaltedException e) {
                 log.warn("priceUpdate: signal discarded - runner halted mid-flight runnerId={} symbol={}",
@@ -258,6 +274,35 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                 log.error("priceUpdate: error processing runner={} symbol={} - {}",
                         runner.getId(), symbol, e.getMessage(), e);
             }
+        }
+    }
+
+    /**
+     * Nivel do Safe Mode do portfolio, lido uma vez por tick para cada portfolio. Sem portfolio,
+     * NORMAL: o BUY ja e recusado pela politica de capital.
+     */
+    private SafeModeStatus loadSafeMode(UUID portfolioId) {
+        return portfolioRepository.findById(portfolioId)
+                .map(Portfolio::getSafeModeStatus)
+                .orElse(SafeModeStatus.NORMAL);
+    }
+
+    /**
+     * Niveis CANCEL_ALL e PANIC_SELL (T45): o Safe Mode conduz o runner no lugar da estrategia.
+     * Cancela as ordens LIMIT em voo e, em PANIC_SELL, vende a mercado cada posicao aberta sem lock
+     * pelo pipeline normal de SELL. Reaplicado a cada tick ate nao restar ordem nem posicao.
+     */
+    private void enforceSafeMode(StrategyRunner runner, SafeModeStatus safeMode, BigDecimal currentPrice) {
+        checkRunnerNotHalted(runner.getId());
+        signalMetrics.recordSignalEvaluated(runner.getId(), SignalDecision.SAFE_MODE);
+        safeModeHandler.cancelRestingOrders(runner);
+        if (!safeMode.liquidatesPositions()) {
+            return;
+        }
+        for (StrategyOutputDto liquidation : safeModeHandler.liquidationSignals(runner)) {
+            log.warn("safeMode: PANIC_SELL liquidating positionId={} runnerId={} quantity={}",
+                    liquidation.targetLotId(), runner.getId(), liquidation.quantity());
+            processTradeSignal(runner, liquidation, currentPrice, safeModeHandler.liquidationOrderType());
         }
     }
 
@@ -292,10 +337,11 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         log.debug("priceUpdate: routing signal decision={} runner={} symbol={}",
                 strategyOutput.decision(), runner.getId(), runner.getSymbol());
 
-        processTradeSignal(runner, strategyOutput, currentPrice);
+        processTradeSignal(runner, strategyOutput, currentPrice, OrderType.LIMIT);
     }
 
-    private void processTradeSignal(StrategyRunner runner, StrategyOutputDto signal, BigDecimal currentPrice) {
+    private void processTradeSignal(StrategyRunner runner, StrategyOutputDto signal, BigDecimal currentPrice,
+                                    OrderType orderType) {
         RunnerExposureService.ExposureSnapshot exposureSnapshot = null;
         boolean hasOpenOrInflight = false;
         if (signalPolicy.requiresOpenPositionCheck(runner, signal)) {
@@ -323,7 +369,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                 signal.quantity(), effectivePrice);
 
         Transaction transaction = tradeIntentFactory.buildTransaction(
-                runner, signal, normalized.quantity(), normalized.price());
+                runner, signal, orderType, normalized.quantity(), normalized.price());
 
         // T26: o log de CRIACAO so e emitido quando a transacao foi de fato persistida e despachada
         // (outcome DISPATCHED) — senao anunciaria uma transacao fantasma para sinais descartados antes

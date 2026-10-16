@@ -1,11 +1,11 @@
 package com.marmitt.binance.rest;
 
+import com.marmitt.binance.request.BinanceOrderTypeRules;
 import com.marmitt.binance.auth.BinanceRequestSigner;
 import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.enums.OrderType;
 
-import java.math.BigDecimal;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.StringJoiner;
@@ -46,7 +46,7 @@ public class BinanceRestRequestBuilder {
         params.put("type", toRestOrderType(request.getOrderType()));
         params.put("quantity", request.getQuantity().toPlainString());
         params.put("newClientOrderId", request.getClientOrderId());
-        if (request.getPrice() != null && request.getPrice().compareTo(BigDecimal.ZERO) > 0) {
+        if (BinanceOrderTypeRules.hasLimitPrice(request.getOrderType())) {
             params.put("price", request.getPrice().toPlainString());
             params.put("timeInForce", "GTC");
         }

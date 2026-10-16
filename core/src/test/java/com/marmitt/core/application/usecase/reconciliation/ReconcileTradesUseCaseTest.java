@@ -4,6 +4,7 @@ import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.reconciliation.ReconciliationReportDto;
 import com.marmitt.core.dto.reconciliation.ReconciliationRequest;
 import com.marmitt.core.dto.reconciliation.TradeExecutionDto;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.ports.outbound.exchange.TradeHistoryQueryPort;
@@ -103,6 +104,7 @@ class ReconcileTradesUseCaseTest {
                 .exchangeOrderId("100234")
                 .status(TransactionStatus.FILLED)
                 .type(TransactionType.BUY)
+                .orderType(OrderType.LIMIT)
                 .symbol("BTCUSDT")
                 .quantity(amount)
                 .executedQuantity(amount)

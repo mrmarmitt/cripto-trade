@@ -10,6 +10,7 @@ import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.runner.request.RecoverTransactionStatusRequest;
 import com.marmitt.core.dto.runner.response.RecoverTransactionStatusResponse;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.AccountingPolicyType;
 import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.enums.ExecutionPolicy;
@@ -228,6 +229,7 @@ class RecoverTransactionStatusUseCaseTest {
                 .exchangeOrderId("EX_PROMOTED_DURING_QUERY")
                 .status(TransactionStatus.SUBMITTED)
                 .type(transaction.getType())
+                .orderType(OrderType.LIMIT)
                 .symbol(transaction.getSymbol())
                 .quantity(transaction.getQuantity())
                 .price(transaction.getPrice())
@@ -493,6 +495,7 @@ class RecoverTransactionStatusUseCaseTest {
                 UUID.randomUUID(),
                 ClientOrderId.generate("x1", TransactionType.BUY),
                 TransactionType.BUY,
+                OrderType.LIMIT,
                 "BTCUSDT",
                 quantity,
                 price,

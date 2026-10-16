@@ -4,6 +4,7 @@ import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.reconciliation.ReconciliationReportDto;
 import com.marmitt.core.dto.reconciliation.ReconciliationRequest;
 import com.marmitt.core.dto.reconciliation.TradeExecutionDto;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.ReconciliationStatus;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
@@ -78,7 +79,8 @@ class ReconciliationMatcherTest {
                 .clientOrderId("client-1")
                 .exchangeOrderId(String.valueOf(ORDER_ID))
                 .status(TransactionStatus.FILLED)
-                .type(TransactionType.SELL)   // opposite side
+                .type(TransactionType.SELL)
+                .orderType(OrderType.LIMIT)   // opposite side
                 .symbol("BTCUSDT")
                 .quantity(new BigDecimal("0.01"))
                 .executedQuantity(new BigDecimal("0.01"))
@@ -260,6 +262,7 @@ class ReconciliationMatcherTest {
                 .exchangeOrderId(String.valueOf(exchangeOrderId))
                 .status(TransactionStatus.FILLED)
                 .type(TransactionType.BUY)
+                .orderType(OrderType.LIMIT)
                 .symbol("BTCUSDT")
                 .quantity(amount)
                 .executedQuantity(amount)
@@ -285,6 +288,7 @@ class ReconciliationMatcherTest {
                 .exchangeOrderId(null)
                 .status(TransactionStatus.PENDING)
                 .type(TransactionType.BUY)
+                .orderType(OrderType.LIMIT)
                 .symbol("BTCUSDT")
                 .quantity(new BigDecimal("0.01"))
                 .executedQuantity(null)

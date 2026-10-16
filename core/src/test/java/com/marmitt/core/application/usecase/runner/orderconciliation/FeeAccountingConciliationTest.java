@@ -9,6 +9,7 @@ import com.marmitt.core.domain.runner.TransactionMatch;
 import com.marmitt.core.dto.capital.ExecutionConfirmation;
 import com.marmitt.core.dto.events.ExecutionConfirmedEvent;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.OrderSide;
 import com.marmitt.core.enums.PositionStatus;
 import com.marmitt.core.enums.TransactionType;
@@ -154,7 +155,7 @@ class FeeAccountingConciliationTest {
     private Transaction submitted(TransactionType type, String quantity, String price) {
         BigDecimal qty = new BigDecimal(quantity);
         BigDecimal px = new BigDecimal(price);
-        Transaction tx = new Transaction(runnerId, ClientOrderId.generate("x1", type), type, "BTCUSDT",
+        Transaction tx = new Transaction(runnerId, ClientOrderId.generate("x1", type), type, OrderType.LIMIT, "BTCUSDT",
                 qty, px, qty.multiply(px).setScale(8, RoundingMode.HALF_UP), new BigDecimal("0.8"), "t46", null);
         tx.submit("EX_ORDER_1");
         return tx;

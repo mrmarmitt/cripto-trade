@@ -4,9 +4,11 @@ import com.marmitt.application.spring.service.TransactionalManageDeadLetterPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterReprocessingPort;
 import com.marmitt.core.application.usecase.portfolio.CreatePortfolioUseCase;
 import com.marmitt.core.application.usecase.portfolio.ManageDeadLetterUseCase;
+import com.marmitt.core.application.usecase.portfolio.ManageSafeModeUseCase;
 import com.marmitt.core.application.usecase.portfolio.QueryPortfolioUseCase;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.portfolio.ManageDeadLetterPort;
+import com.marmitt.core.ports.inbound.portfolio.ManageSafeModePort;
 import com.marmitt.core.ports.inbound.portfolio.QueryPortfolioPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
@@ -40,6 +42,14 @@ public class PortfolioConfig {
                 strategyRunnerRepository,
                 globalBalanceRepository
         );
+    }
+
+    @Bean
+    public ManageSafeModePort manageSafeMode(
+            PortfolioRepositoryPort portfolioRepository,
+            StrategyRunnerRepositoryPort strategyRunnerRepository
+    ) {
+        return new ManageSafeModeUseCase(portfolioRepository, strategyRunnerRepository);
     }
 
     @Bean

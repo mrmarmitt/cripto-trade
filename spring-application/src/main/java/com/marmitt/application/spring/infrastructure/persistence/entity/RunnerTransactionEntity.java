@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.infrastructure.persistence.entity;
 
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
 import lombok.AllArgsConstructor;
@@ -37,6 +38,7 @@ public class RunnerTransactionEntity {
 
     private TransactionStatus status;
     private TransactionType type;
+    private OrderType orderType;
     private String symbol;
 
     private BigDecimal quantity;

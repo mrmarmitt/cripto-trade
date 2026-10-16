@@ -16,5 +16,7 @@ public enum SignalDecision {
     REJECTED_CAPITAL,
     REJECTED_LOCK,
     REJECTED_NO_POSITION,
-    REJECTED_POLICY
+    REJECTED_POLICY,
+    /** Tick conduzido pelo Safe Mode (CANCEL_ALL/PANIC_SELL): a estrategia nao foi consultada (T45). */
+    SAFE_MODE
 }

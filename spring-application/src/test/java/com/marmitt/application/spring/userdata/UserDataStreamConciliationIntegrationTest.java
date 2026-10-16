@@ -11,6 +11,7 @@ import com.marmitt.core.dto.portfolio.response.CreatePortfolioResponse;
 import com.marmitt.core.dto.runner.request.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.response.CreateRunnerResponse;
 import com.marmitt.core.dto.websocket.MessageContext;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.domain.Symbol;
@@ -318,7 +319,7 @@ class UserDataStreamConciliationIntegrationTest {
 
     private Transaction seedBuyTransaction(StrategyRunner runner, String clientOrderId, BigDecimal cost) {
         Transaction tx = new Transaction(
-                runner.getId(), clientOrderId, TransactionType.BUY, SYMBOL,
+                runner.getId(), clientOrderId, TransactionType.BUY, OrderType.LIMIT, SYMBOL,
                 QUANTITY, PRICE, cost, new BigDecimal("0.90"), "user-data-stream-test", null);
         strategyRunnerRepository.saveTransaction(tx);
         return tx;

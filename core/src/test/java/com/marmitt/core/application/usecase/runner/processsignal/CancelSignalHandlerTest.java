@@ -4,6 +4,7 @@ import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.runner.OrderCancelCommand;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
@@ -27,7 +28,7 @@ class CancelSignalHandlerTest {
 
     private final StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
     private final OrderDispatchPort orderDispatch = mock(OrderDispatchPort.class);
-    private final CancelSignalHandler handler = new CancelSignalHandler(repository, orderDispatch);
+    private final CancelSignalHandler handler = new CancelSignalHandler(repository, new TradeIntentFactory(), orderDispatch);
 
     private final UUID runnerId = UUID.randomUUID();
 
@@ -105,6 +106,7 @@ class CancelSignalHandlerTest {
                 .exchangeOrderId(status == TransactionStatus.PENDING ? null : "EX_ORDER")
                 .status(status)
                 .type(TransactionType.BUY)
+                .orderType(OrderType.LIMIT)
                 .symbol("BTCUSDT")
                 .quantity(new BigDecimal("0.0015"))
                 .price(new BigDecimal("60000"))

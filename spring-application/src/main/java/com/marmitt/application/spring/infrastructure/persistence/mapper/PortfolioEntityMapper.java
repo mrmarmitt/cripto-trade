@@ -14,7 +14,11 @@ public class PortfolioEntityMapper {
                 .isActive(domain.isActive())
                 .safeModeStatus(domain.getSafeModeStatus())
                 .capitalPoolingMode(domain.getCapitalPoolingMode())
+                .safeModeOrigin(domain.getSafeModeOrigin())
+                .safeModeReason(domain.getSafeModeReason())
+                .safeModeChangedAt(domain.getSafeModeChangedAt())
                 .createdAt(domain.getCreatedAt())
+                .version(domain.getVersion())
                 .build();
     }
 
@@ -27,7 +31,11 @@ public class PortfolioEntityMapper {
                 entity.isActive(),
                 entity.getCreatedAt(),
                 entity.getSafeModeStatus(),
-                entity.getCapitalPoolingMode()
+                entity.getCapitalPoolingMode(),
+                entity.getSafeModeOrigin(),
+                entity.getSafeModeReason(),
+                entity.getSafeModeChangedAt(),
+                entity.getVersion()
         );
     }
 }

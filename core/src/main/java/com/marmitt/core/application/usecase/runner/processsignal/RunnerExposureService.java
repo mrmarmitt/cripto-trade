@@ -44,11 +44,7 @@ class RunnerExposureService {
      * (ex: runners com politica MULTIPLE que nao precisam do {@code hasOpenOrInFlight}).
      */
     public BigDecimal calculateInFlightExposure(UUID runnerId) {
-        List<Transaction> inflight = strategyRunnerRepository.findByRunnerIdAndStatuses(runnerId, List.of(
-                TransactionStatus.PENDING,
-                TransactionStatus.SUBMITTED,
-                TransactionStatus.PARTIAL
-        ));
+        List<Transaction> inflight = strategyRunnerRepository.findByRunnerIdAndStatuses(runnerId, TransactionStatus.IN_FLIGHT);
         return inflight.stream()
                 .map(Transaction::getTotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -64,11 +60,7 @@ class RunnerExposureService {
      */
     public ExposureSnapshot loadSnapshot(StrategyRunner runner) {
         List<Position> openPositions = strategyRunnerRepository.findOpenPositionsByRunnerId(runner.getId());
-        List<Transaction> inFlight = strategyRunnerRepository.findByRunnerIdAndStatuses(runner.getId(), List.of(
-                TransactionStatus.PENDING,
-                TransactionStatus.SUBMITTED,
-                TransactionStatus.PARTIAL
-        ));
+        List<Transaction> inFlight = strategyRunnerRepository.findByRunnerIdAndStatuses(runner.getId(), TransactionStatus.IN_FLIGHT);
 
         BigDecimal inFlightExposure = inFlight.stream()
                 .map(Transaction::getTotal)

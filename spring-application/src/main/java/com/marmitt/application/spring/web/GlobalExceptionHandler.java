@@ -3,7 +3,9 @@ package com.marmitt.application.spring.web;
 import com.marmitt.core.exceptions.DeadLetterConflictException;
 import com.marmitt.core.exceptions.DeadLetterNotFoundException;
 import com.marmitt.core.exceptions.ExchangeQueryException;
+import com.marmitt.core.exceptions.PortfolioNotFoundException;
 import com.marmitt.core.exceptions.RunnerNotFoundException;
+import com.marmitt.core.exceptions.SafeModeTransitionException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
@@ -66,13 +68,14 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.BAD_REQUEST, "Malformed or unreadable request body", request);
     }
 
-    @ExceptionHandler({RunnerNotFoundException.class, DeadLetterNotFoundException.class})
+    @ExceptionHandler({RunnerNotFoundException.class, DeadLetterNotFoundException.class,
+            PortfolioNotFoundException.class})
     public ResponseEntity<ApiError> handleNotFound(RuntimeException ex, HttpServletRequest request) {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), request);
     }
 
-    @ExceptionHandler(DeadLetterConflictException.class)
-    public ResponseEntity<ApiError> handleConflict(DeadLetterConflictException ex, HttpServletRequest request) {
+    @ExceptionHandler({DeadLetterConflictException.class, SafeModeTransitionException.class})
+    public ResponseEntity<ApiError> handleConflict(RuntimeException ex, HttpServletRequest request) {
         return build(HttpStatus.CONFLICT, ex.getMessage(), request);
     }
 

@@ -10,6 +10,7 @@ import com.marmitt.core.dto.portfolio.response.CreatePortfolioResponse;
 import com.marmitt.core.dto.runner.request.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.response.CreateRunnerResponse;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.PositionStatus;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
@@ -269,6 +270,7 @@ class OrderTerminationConciliationIntegrationTest extends AbstractIntegrationTes
                 runnerId,
                 ClientOrderId.generate("x1", type),
                 type,
+                OrderType.LIMIT,
                 SYMBOL,
                 quantity,
                 price,
