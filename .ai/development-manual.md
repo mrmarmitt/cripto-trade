@@ -53,6 +53,7 @@ mecanica (spring) e do provider (adapter), ligadas por um port.
 | Endpoint HTTP | `spring/controller` delega a port inbound | controller fino + `GlobalExceptionHandler` | `RunnerController` -> `QueryRunnerPort` |
 | Persistir agregado | `core` define port; `spring/infrastructure/persistence` implementa | `Jdbc*RepositoryAdapter` + entity + mapper | `JdbcGlobalBalanceRepositoryAdapter` |
 | Decidir BUY/SELL/HOLD/CANCEL | `strategy` | `TradingStrategy` pura | `SimpleMovingAverageStrategy` |
+| Marcar posicao a mercado / equity do portfolio | `core` | `LatestPricePort` (preco), `Position.getUnrealizedPnl` | `PortfolioMarkToMarket` (core) + `InMemoryLatestPriceRepository` (spring) |
 | Normalizar quantidade/preco para filtros | `core` decide **quando**; adapter sabe **como** | `OrderQuantityNormalizerPort` | `OrderNormalizer` (core) + `BinanceOrderNormalizer` (adapter) |
 
 ### 1.2 Anti-padroes ja rejeitados neste projeto

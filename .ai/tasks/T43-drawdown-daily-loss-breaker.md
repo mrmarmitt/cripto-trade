@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T45 (concluída — acionar `HALT` via `ManageSafeModePort.change` com `SafeModeOrigin.AUTOMATIC`).
 Relaciona-se com T25 (gatilhos automáticos de Safe Mode); ver "Relação com T25".
-**Status:** Pendente
+**Status:** Concluído (2026-10-16) — ver "Decisões registradas" e "Entrega".
 
 ---
 
@@ -55,6 +55,57 @@ substitui este breaker (ignora o flutuante e a janela de 24h). Ao implementar, u
 ativação (`SafeModeActivationPort`/motivos) entre T25 e T43 para não haver dois mecanismos paralelos.
 
 ---
+
+## Decisões registradas (2026-10-16)
+
+- **Limite (mantenedor):** drawdown de **10%** sobre o pico da janela de 24h, como no IG.
+- **Só o drawdown 24h (mantenedor):** a perda diária desde a meia-noite UTC ficou fora: sobrepõe-se
+  quase sempre ao drawdown e criaria um segundo monitor com outra âncora. Pode virar task se fizer falta.
+- **Escopo global (mantenedor):** `portfolio.circuit-breaker.max-drawdown-percent` vale para todos os
+  portfolios; limite por portfolio fica para quando houver mais de um em operação.
+- **Equity = `available + reserved + PnL flutuante` (implementação).** O realizado já está dentro de
+  `available` (`confirmExecution`), então somá-lo de novo — como na fórmula original do IG §11.1.2 —
+  contaria duas vezes (IG corrigido). O custo dos lotes abertos e das ordens em voo está em `reserved`
+  (T36); o flutuante é `preço × quantidade − cost_basis` (`Position.getUnrealizedPnl`, fonte única).
+- **Último preço em memória (implementação):** `LatestPricePort`, escrito pelo listener de market data
+  (que já mantinha um cache próprio só para log — agora é o único). Não persiste: após restart o
+  monitor espera os primeiros ticks. Gravar `positions.current_price` a cada tick foi descartado.
+- **Equity incompleto não é avaliado:** se alguma posição ativa não tem preço, o portfolio é pulado
+  naquela rodada (log WARN), para não gravar pico ou vale falso.
+- **Janela reinicia no reset manual:** o pico considera amostras desde `agora − 24h` ou desde a última
+  descida manual para NORMAL, o que for mais recente. Sem isso, o pico antigo reacionaria o HALT logo
+  após a retomada.
+- **Amostras persistidas** em `equity_snapshots` a cada avaliação (10s); amostras com mais de 24h são
+  removidas pelo próprio monitor. O pico sobrevive a restart.
+- **Alertas:** Discord só na ativação (`CIRCUIT_BREAKER_TRIGGERED`); a 50% do limite, log WARN e gauge,
+  para não gerar ruído no canal.
+- **Mesmo cálculo na consulta de PnL:** `QueryPortfolioUseCase` passa a marcar a mercado pelo mesmo
+  colaborador (`PortfolioMarkToMarket`) e a considerar lotes travados (CLOSING), antes ignorados.
+
+## Entrega (2026-10-16)
+
+| Camada | Mudança |
+|---|---|
+| core | `EvaluateDrawdownPort`/`EvaluateDrawdownUseCase` (aciona HALT via `ManageSafeModePort` com `AUTOMATIC`); `PortfolioMarkToMarket`; `LatestPricePort`; `EquitySnapshotRepositoryPort`; `CircuitBreakerMetricsPort`; `StrategyRunnerRepositoryPort.findActivePositionsByPortfolioId`; `Position.getUnrealizedPnl` pelo `cost_basis`; contexto da estratégia marcado ao preço do tick (`RunnerContextAssembler`) |
+| spring | `DrawdownMonitorScheduler` + `CircuitBreakerProperties` (`portfolio.circuit-breaker.*`); `InMemoryLatestPriceRepository`; `JdbcEquitySnapshotRepositoryAdapter`; `MicrometerCircuitBreakerMetricsAdapter` (`circuit_breaker.drawdown.current`, `.peak_24h`, `circuit_breaker.equity.current`, `circuit_breaker.activations.total`); migration `V14__create_equity_snapshots.sql` |
+
+### Validação
+
+- `:core:test` 175 — `EvaluateDrawdownUseCaseTest`: perda realizada acima do limite aciona HALT com
+  motivo, métrica e Discord; perda dentro do limite não aciona; perda flutuante pelo último preço
+  aciona; posição sem preço pula a avaliação; pico com mais de 24h sai da janela; pico sobrevive a
+  restart; reset manual abre nova janela; portfolio já em Safe Mode é medido mas não reacionado;
+  amostras antigas são removidas. `PositionCostBasisTest`: flutuante pelo custo pago.
+- `:spring-application:test` 189 — `DrawdownMonitorIntegrationTest` (Postgres): HALT automático com
+  auditoria em `safe_mode_changes`; reset manual não reaciona; lote travado (CLOSING) entra no equity.
+
+### Riscos residuais
+
+- **Preço parado:** se os ticks de um símbolo param, o último preço fica velho e o flutuante deixa de
+  acompanhar o mercado. A queda de conexão de mercado já é tratada pelo watchdog de conexão.
+- **Após restart**, portfolio com posição aberta só é avaliado depois do primeiro tick de cada símbolo.
+- **Preço por símbolo**, independentemente da exchange de origem do tick.
+- **Volume de amostras:** ~8.640 linhas/dia por portfolio (removidas após 24h).
 
 ## Critérios de aceitação
 

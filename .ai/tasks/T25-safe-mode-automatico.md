@@ -5,6 +5,11 @@
 **Dependências:** T21 (Discord notifications), T23 (signal counter — opcional para trigger por HOLD rate), **T45** (caminho de ativação do Safe Mode)  
 **Status:** Pendente
 
+> **Atualização (2026-10-16, T43):** o drawdown 24h (equity marcado a mercado) já aciona HALT
+> automático pela mesma porta. O gatilho "capital disponível < X% do inicial" abaixo ficou coberto por
+> ele e não deve ser implementado separadamente; esta task trata só dos gatilhos operacionais (DLQ,
+> WebSocket, watchdog).
+
 > **Atualização (2026-10-16, T45):** a porta existe: `ManageSafeModePort.change(portfolioId,
 > SafeModeOrigin.AUTOMATIC, new ChangeSafeModeRequest(HALT, motivo, false))`. Gatilho automático só
 > consegue acionar `HALT` (o domínio recusa níveis acima) e não rebaixa nível manual mais alto; a

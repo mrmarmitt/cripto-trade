@@ -48,7 +48,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T40 | Revisão do contrato do strategy service antes do adapter        | Média | Claude | Pendente  |
 | T41 | Extração mínima da estratégia (port, proxy remoto, catálogo)    | Alta  | Claude | Pendente  |
 | T42 | Mailbox por runner e separação dos executores tick × ordem      | Alta  | Claude | Pendente  |
-| T43 | Circuit breaker de capital: drawdown e perda diária             | Alta  | Claude | Pendente  |
+| T43 | Circuit breaker de capital: drawdown 24h                        | Alta  | Claude | Concluído |
 | T44 | Proteção de posição independente da estratégia                  | Alta  | Claude | Pendente  |
 | T45 | Ativação do Safe Mode e níveis `CANCEL_ALL` / `PANIC_SELL`      | Média | Claude | Concluído |
 | T46 | Ativo da fee e quantidade líquida da posição                    | Alta  | Claude | Concluído |
@@ -226,7 +226,7 @@ T42  Mailbox por runner + executores separados (fill nunca espera tick)
 T45  Ativação do Safe Mode + CANCEL_ALL / PANIC_SELL   ← pré-requisito de T25 e T43 (concluída)
 T48  Proteção LIMIT no PANIC_SELL (configurável na estratégia) ← decisão pendente; após T40
        ↓
-T43  Drawdown 24h / perda diária (inclui marcação a mercado)     T25  Safe Mode automático
+T43  Drawdown 24h + marcação a mercado (concluída; perda diária descartada)     T25  Safe Mode automático
 T44  Proteção de posição independente da estratégia               T24  Circuit breaker REST
        ↓
    perfil de produção + soak testnet com estratégia remota → canário em produção
