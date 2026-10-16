@@ -3,8 +3,8 @@
 **Complexidade:** Média (decisão de negócio + eventual efeito financeiro)
 **Responsável:** Claude
 **Dependências:** nenhuma (independente das estratégias; toca o caminho de reserva de capital)
-**Status:** Parcial — **devolução do excedente (§7.2.3) entregue em 2026-10-16**; a **decisão de
-negócio** sobre o buffer (Opção A ou B) continua pendente com o mantenedor. Ver "Entrega parcial".
+**Status:** Concluído (2026-10-16) — devolução do excedente (§7.2.3) implementada e **Opção B**
+decidida (sem buffer enquanto só houver `LIMIT`). Ver "Decisão registrada" e "Entrega".
 
 ---
 
@@ -93,10 +93,25 @@ Não há nenhum passo compensatório: `release()` só é chamado nos caminhos te
 
 ---
 
-## Entrega parcial (2026-10-16): devolução do excedente §7.2.3
+## Decisão registrada (2026-10-16): Opção B — sem buffer para `LIMIT`
 
-Entregue a parte comum às duas opções. **Nenhum valor reservado mudou**: o buffer não foi
-implementado nem removido do design; isso segue como decisão de negócio.
+Decidido pelo mantenedor, por recomendação da implementação:
+
+- **Por que não há buffer hoje:** o sistema só envia `LIMIT`. Uma BUY `LIMIT` não executa acima do
+  limite, e quantidade/preço são normalizados antes da reserva, então a reserva nominal sempre cobre o
+  custo. A fee de BUY na Binance sai, por padrão, no ativo base (não consome o quote reservado; ver T46).
+  Com a devolução do excedente, um buffer só travaria capital durante a ordem, reduzindo o disponível
+  dos demais runners e antecipando `RUNNER_LIMIT_EXCEEDED`.
+- **Regra para o futuro:** a task que introduzir `MARKET` (ou qualquer ordem com preço de execução
+  desconhecido na reserva) **deve** entregar o buffer de MARKET (IG §7.2.2, `1.005` sugerido) junto.
+- **Detecção:** custo executado acima da reserva gera WARN em `MarginReleaseBuilder.buildFilledExcess`.
+- **Documentos corrigidos:** IG §7.1 (step 5), §7.2, exemplo de fluxo, §7.9 e §7.10; BLUEPRINT
+  (política FIFO de alocação); Javadoc de `CapitalRequest` e de `GlobalBalanceRepositoryPort.reserveAtomic`.
+
+## Entrega (2026-10-16): devolução do excedente §7.2.3
+
+Implementada a parte comum às duas opções. **Nenhum valor reservado mudou**: a reserva continua
+nominal, o que agora é a decisão registrada (Opção B).
 
 ### O que mudou
 

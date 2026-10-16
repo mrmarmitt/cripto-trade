@@ -10,8 +10,9 @@ import java.util.UUID;
  * Payload da solicitação de reserva de capital enviada pelo Runner ao Portfolio.
  * Entrada do método síncrono {@code CapitalManager.reserve()}.
  * <p>
- * {@code amount} inclui o safety buffer aplicado pelo Runner antes da chamada
- * (ex: {@code rawAmount * 1.005} para cobrir slippage e fee estimada).
+ * {@code amount} e o valor nominal da ordem ({@code quantity x price} ja normalizados), sem safety
+ * buffer: so ha ordens LIMIT, que nao executam acima do limite. O excedente por melhora de preco
+ * volta ao disponivel no fill final (T36). Buffer so passa a existir com ordens MARKET (IG §7.2.2).
  *
  * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Seção 5.2.1, 7.2</a>
  */

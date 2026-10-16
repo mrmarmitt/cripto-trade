@@ -1680,8 +1680,8 @@ Step 4: Limites do Runner (Hard Limits)
        │ if (runnerInflightOrders >= maxPendingOrders) → reject MAX_PENDING_REACHED
        │   (inflightOrders = transactions com status IN (PENDING, SUBMITTED, PARTIAL))
        │
-Step 5: Cálculo de Margem com Safety Buffer
-       │ requiredAmount = amount × safetyBufferMultiplier
+Step 5: Cálculo de Margem (sem buffer para LIMIT — ver §7.2, decisão T36)
+       │ requiredAmount = amount   (MARKET, quando existir: amount × bufferMarket)
        │
 Step 6: Validação de Saldo
        │ if (availableBalance < requiredAmount) → reject INSUFFICIENT_FUNDS
@@ -1703,31 +1703,41 @@ Step 7: Reserva Atômica
 ### 7.2 Cálculo de Margem e Safety Buffer
 
 > **Nota de Implementação #14 absorvida.**
+>
+> **Decisão (T36, 2026-10-16): sem safety buffer enquanto o sistema só opera `LIMIT`.** Uma BUY
+> `LIMIT` nunca executa acima do limite e quantidade/preço são normalizados antes da reserva, então a
+> reserva nominal sempre cobre o custo; a fee de BUY na Binance é cobrada, por padrão, no ativo base
+> (não consome o quote reservado). Com a devolução do excedente (§7.2.3), um buffer apenas travaria
+> capital durante a ordem, reduzindo o disponível e antecipando `RUNNER_LIMIT_EXCEEDED`.
+> **Regra:** a task que introduzir `MARKET` (ou qualquer ordem com preço de execução desconhecido na
+> reserva) **deve** entregar o buffer de MARKET de §7.2.2 junto. Custo executado acima da reserva
+> gera WARN em `MarginReleaseBuilder.buildFilledExcess`.
 
 #### 7.2.1 Fórmula de Cálculo (Modo Spot)
 
-O capital requerido para uma ordem spot é:
+O capital requerido para uma ordem spot `LIMIT` (único tipo hoje) é:
 
 ```
-Capital_Requerido = Quantidade × Preço_Estimado × Safety_Buffer_Multiplier
+Capital_Requerido = Quantidade × Preço_Estimado
 ```
 
 | Componente                 | Fonte                      | Notas                                  |
 |----------------------------|----------------------------|----------------------------------------|
-| `Quantidade`               | `StrategyOutputDto.quantity` | Quantidade sugerida pela Strategy    |
-| `Preço_Estimado`           | `StrategyOutputDto.limitPrice` (ou preço de mercado do tick quando `null`) | Preço-limite da estratégia (T34) ou último preço de mercado |
-| `Safety_Buffer_Multiplier` | Configuração               | Default: `1.005` (0.5% de buffer)      |
+| `Quantidade`               | `StrategyOutputDto.quantity` | Quantidade sugerida pela Strategy, normalizada ao `stepSize` |
+| `Preço_Estimado`           | `StrategyOutputDto.limitPrice` (ou preço de mercado do tick quando `null`) | Preço-limite da estratégia (T34) ou último preço de mercado, normalizado ao `tickSize` |
 
-**Justificativa do Safety Buffer:** Entre o momento do cálculo e a execução na exchange, o preço pode variar (slippage). O buffer de 0.5% cobre variações normais de mercado para ordens a mercado. Para ordens limit, o buffer pode ser reduzido (ex: `1.001`) pois o preço é fixo.
+Implementado em `TradeIntentFactory` (`total = quantity × price`), usado como `CapitalRequest.amount`.
 
 #### 7.2.2 Buffer por Tipo de Ordem
 
-| Tipo de Ordem | Buffer Default  | Justificativa                                           |
-|---------------|-----------------|---------------------------------------------------------|
-| **MARKET**    | `1.005` (0.5%)  | Slippage possível — preço de execução pode ser superior |
-| **LIMIT**     | `1.001` (0.1%)  | Preço fixo — buffer cobre apenas arredondamento e fees  |
+| Tipo de Ordem | Buffer         | Estado                                                                 |
+|---------------|----------------|------------------------------------------------------------------------|
+| **LIMIT**     | nenhum (`1.0`) | Vigente. Preço fixo; o excedente por melhora de preço volta em §7.2.3  |
+| **MARKET**    | `1.005` (0.5%) sugerido | **Não existe hoje.** Obrigatório na task que introduzir `MARKET` — slippage pode levar o custo acima do nominal |
 
-**Decisão:** O buffer é aplicado no momento da reserva no Portfolio. O Runner envia a quantidade e preço **originais** à exchange — o buffer é margem de segurança contábil, não afeta a ordem enviada.
+**Decisão (vale para quando houver buffer):** o buffer é aplicado apenas no valor reservado. O
+Runner envia a quantidade e o preço **originais** à exchange; o buffer é margem contábil, não afeta
+a ordem enviada.
 
 #### 7.2.3 Reconciliação do Buffer Pós-Execução
 
@@ -1749,7 +1759,7 @@ Este excedente é devolvido ao `AvailableBalance` como parte do `ConfirmExecutio
 > `release(reserved − executedQty × executedPrice)` via `MarginReleaseEvent` (`ReleaseReason.FILLED_EXCESS`),
 > publicado pelo `BuyFillHandler` no fill final. **As fees não são descontadas**: a venda baixa
 > `reserved` pelo custo executado sem fee (`confirmExecution`), então descontá-las aqui deixaria a
-> reserva menor que o custo. O buffer de §7.2.1–7.2.2 continua **não implementado** (decisão pendente na T36).
+> reserva menor que o custo. Sem buffer para `LIMIT` (decisão T36), o excedente vem só da melhora de preço.
 
 ### 7.3 Validação Pre-Reserve (Runner-Side)
 
@@ -2027,17 +2037,17 @@ Runner ────────────────────────�
    │
    │── persist Transaction(PENDING, clientOrderId=v1r01ft...)
    │
-   │── ReserveCapitalPort.reserve(amount=2500 × 1.005 = 2512.50)
+   │── ReserveCapitalPort.reserve(amount=2500)   (LIMIT, sem buffer — §7.2)
    │                          ──────────────────────────────
 Portfolio ──────────────────────────────────────────────
    │
    ├─ Step 1: safeModeStatus == NORMAL ✓
    ├─ Step 2: runner pertence ao portfolio ✓
    ├─ Step 3: sem reserva duplicada ✓
-   ├─ Step 4: runnerExposure(0) + 2512.50 <= 20% × 50000 = 10000 ✓
-   ├─ Step 5: requiredAmount = 2512.50 (buffer já aplicado)
-   ├─ Step 6: availableBalance(10000) >= 2512.50 ✓
-   ├─ Step 7: available=7487.50, reserved=2512.50
+   ├─ Step 4: runnerExposure(0) + 2500 <= 20% × 50000 = 10000 ✓
+   ├─ Step 5: requiredAmount = 2500
+   ├─ Step 6: availableBalance(10000) >= 2500 ✓
+   ├─ Step 7: available=7500, reserved=2500
    │
    └─ return APPROVED(reservationId=uuid)
        ──────────────────────────────────────────────
@@ -2050,8 +2060,7 @@ Runner (continuação)
 
 | Parâmetro                              | Default  | Descrição                                         |
 |----------------------------------------|----------|---------------------------------------------------|
-| `capital.safety-buffer.market-order`   | 1.005    | Multiplicador de buffer para ordens MARKET (0.5%) |
-| `capital.safety-buffer.limit-order`    | 1.001    | Multiplicador de buffer para ordens LIMIT (0.1%)  |
+| `capital.safety-buffer.market-order`   | 1.005    | **Não implementado** — entra com a task de `MARKET` (§7.2.2) |
 | `capital.pooling-mode`                 | SHARED   | Modo de visibilidade: SHARED ou DEDICATED         |
 | `capital.global-utilization-alert`     | 0.80     | Threshold de alerta de utilização global (80%)    |
 | `capital.lock-timeout-ms`              | 5000     | Timeout do lock pessimista no GlobalBalance       |
@@ -2065,7 +2074,7 @@ Runner (continuação)
 
 | Decisão                                        | Justificativa                                                                      | Trade-off                                                          |
 |------------------------------------------------|------------------------------------------------------------------------------------|--------------------------------------------------------------------|
-| Safety Buffer no reserve (não na ordem)        | Buffer é margem contábil — a exchange recebe a quantidade/preço exatos             | Excedente do buffer precisa ser estornado pós-execução             |
+| Sem buffer para LIMIT; buffer só para MARKET (futuro), no reserve e não na ordem | LIMIT não executa acima do limite; buffer seria só capital travado (T36) | Introduzir MARKET exige entregar o buffer junto; excedente sempre estornado (§7.2.3) |
 | Validação em duas camadas (Runner + Portfolio) | Separação de responsabilidades: Runner valida negócio, Portfolio valida financeiro | Overhead de duas validações por request (negligível)               |
 | Lock pessimista SELECT FOR UPDATE              | Garante atomicidade sem race condition. Lock de escopo mínimo (~1-5ms)             | Serializa requests concorrentes (aceitável para monólito V1)       |
 | Sem fila de espera                             | Previne Stale Orders — preços mudam enquanto aguarda                               | Runner perde sinal se capital insuficiente (custo de oportunidade) |

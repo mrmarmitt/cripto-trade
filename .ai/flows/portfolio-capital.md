@@ -84,7 +84,7 @@ custo executado, e um round trip fechado termina com `reserved = 0`.
 
 A fee nao entra nesse calculo (divergencia consciente do IG §7.2.3), porque a venda baixa
 `reserved` sem fee. A fee da SELL entra no PnL do match; a fee da BUY hoje nao e contabilizada
-(ver T36, "Achado novo"). O safety buffer de §7.2.1-7.2.2 continua nao implementado (decisao pendente na T36).
+(ver T36, "Achado novo"). Nao ha safety buffer: com apenas ordens `LIMIT` a reserva e nominal (decisao T36; buffer obrigatorio so quando existir `MARKET`, IG §7.2.2).
 
 ## Liberacao De Margem
 

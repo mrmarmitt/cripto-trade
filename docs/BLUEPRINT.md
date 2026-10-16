@@ -627,7 +627,7 @@ O sistema gerencia a escassez de recursos através de uma política de **Prioriz
 
 Por padrão, o Portfolio processa os `Capital Requests` seguindo a ordem cronológica de recebimento:
 
-1. **Atendimento Imediato:** Se o `AvailableBalance` for suficiente para cobrir o `Capital_Requerido` (incluindo o buffer de segurança), a reserva é feita instantaneamente.
+1. **Atendimento Imediato:** Se o `AvailableBalance` for suficiente para cobrir o `Capital_Requerido` (nominal para `LIMIT`; com buffer de segurança apenas para `MARKET`, quando existir — IG §7.2), a reserva é feita instantaneamente.
 2. **Rejeição por Insuficiência:** Se o saldo disponível for menor que o solicitado, o Portfolio **rejeita** o pedido imediatamente (`InsufficientFunds`). O sistema não mantém uma "fila de espera" para evitar que ordens sejam enviadas com preços defasados (Stale Orders).
 
 #### B. Proteção contra Starvation (Fome de Capital)
