@@ -315,8 +315,10 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
 
         // Normaliza quantidade e preço às regras de filtro da exchange ANTES de materializar
         // a transação, de modo que o valor persistido, reservado e enviado sejam idênticos.
+        // O preço arredonda a favor do trader conforme o lado (T37).
         OrderNormalizer.NormalizedOrder normalized = orderNormalizer.normalize(
-                runner.getExchangeId(), runner.getSymbol(), signal.quantity(), effectivePrice);
+                runner.getExchangeId(), runner.getSymbol(), tradeIntentFactory.orderSideOf(signal),
+                signal.quantity(), effectivePrice);
 
         Transaction transaction = tradeIntentFactory.buildTransaction(
                 runner, signal, normalized.quantity(), normalized.price());

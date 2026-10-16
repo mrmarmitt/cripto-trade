@@ -1,10 +1,12 @@
 package com.marmitt.binance.filters;
 
+import com.marmitt.core.enums.OrderSide;
 import com.marmitt.core.ports.outbound.exchange.rest.OrderQuantityNormalizerPort;
 import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.Objects;
 
 /**
  * Normaliza quantidade e preço de ordens Binance às regras de filtro do símbolo
@@ -45,16 +47,23 @@ public class BinanceOrderNormalizer implements OrderQuantityNormalizerPort {
     }
 
     @Override
-    public BigDecimal normalizePrice(String symbol, BigDecimal price) {
+    public BigDecimal normalizePrice(String symbol, OrderSide side, BigDecimal price) {
         if (price == null || price.compareTo(BigDecimal.ZERO) == 0) {
             return price;
         }
+        Objects.requireNonNull(side, "side cannot be null");
         BigDecimal tickSize = filterCache.getFilters(symbol).tickSize();
         if (tickSize.compareTo(BigDecimal.ZERO) == 0) {
             return price;
         }
-        return price.divide(tickSize, 0, RoundingMode.HALF_UP)
+        // Arredondamento a favor do trader (T37): BUY nunca acima, SELL nunca abaixo do pretendido.
+        RoundingMode mode = side == OrderSide.BUY ? RoundingMode.FLOOR : RoundingMode.CEILING;
+        BigDecimal aligned = price.divide(tickSize, 0, mode)
                 .multiply(tickSize)
                 .stripTrailingZeros();
+        if (aligned.compareTo(price) != 0) {
+            log.debug("normalizePrice {} {}: {} -> {} (tickSize={})", symbol, side, price, aligned, tickSize);
+        }
+        return aligned;
     }
 }

@@ -1,5 +1,7 @@
 package com.marmitt.core.application.usecase.runner.processsignal;
 
+import com.marmitt.core.enums.OrderSide;
+
 import com.marmitt.core.ports.outbound.exchange.rest.OrderQuantityNormalizerPort;
 
 import java.math.BigDecimal;
@@ -28,14 +30,15 @@ class OrderNormalizer {
         this.byExchange = map;
     }
 
-    NormalizedOrder normalize(String exchangeName, String symbol, BigDecimal quantity, BigDecimal price) {
+    NormalizedOrder normalize(String exchangeName, String symbol, OrderSide side,
+                              BigDecimal quantity, BigDecimal price) {
         OrderQuantityNormalizerPort normalizer = exchangeName == null ? null : byExchange.get(key(exchangeName));
         if (normalizer == null) {
             return new NormalizedOrder(quantity, price);
         }
         return new NormalizedOrder(
                 normalizer.normalizeQuantity(symbol, quantity),
-                normalizer.normalizePrice(symbol, price));
+                normalizer.normalizePrice(symbol, side, price));
     }
 
     private static String key(String exchangeName) {
