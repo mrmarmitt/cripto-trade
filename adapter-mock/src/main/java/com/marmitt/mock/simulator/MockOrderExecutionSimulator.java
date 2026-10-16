@@ -78,9 +78,10 @@ public class MockOrderExecutionSimulator {
 
         int partialCount = Math.max(0, config.flow().partialFillCount());
         if (partialCount == 0) {
-            BigDecimal fee = feeModel.calculateFee(request.getQuantity(), baseExecutedPrice, config);
-            events.add(simulateFilled(request, orderId, baseExecutedPrice, fee));
-            applyBalanceForFill(request, balanceStore, baseExecutedPrice, request.getQuantity(), fee);
+            BigDecimal fee = feeModel.calculateFee(request.getQuantity(), baseExecutedPrice, request.getOrderSide(), config);
+            String feeAsset = feeAssetOf(request, config, fee);
+            events.add(simulateFilled(request, orderId, baseExecutedPrice, fee, feeAsset));
+            applyBalanceForFill(request, balanceStore, baseExecutedPrice, request.getQuantity(), fee, feeAsset);
             return applyOrderingAndDuplicates(events, config, random);
         }
 
@@ -94,9 +95,10 @@ public class MockOrderExecutionSimulator {
             }
             previousExecuted = executedQty;
             BigDecimal eventPrice = slippageModel.calculateEventExecutedPrice(request, baseExecutedPrice, config, random);
-            BigDecimal fee = feeModel.calculateFee(increment, eventPrice, config);
-            events.add(simulatePartial(request, orderId, executedQty, eventPrice, fee));
-            applyBalanceForFill(request, balanceStore, eventPrice, increment, fee);
+            BigDecimal fee = feeModel.calculateFee(increment, eventPrice, request.getOrderSide(), config);
+            String feeAsset = feeAssetOf(request, config, fee);
+            events.add(simulatePartial(request, orderId, executedQty, eventPrice, fee, feeAsset));
+            applyBalanceForFill(request, balanceStore, eventPrice, increment, fee, feeAsset);
         }
 
         BigDecimal finalIncrement = request.getQuantity().subtract(previousExecuted);
@@ -104,9 +106,10 @@ public class MockOrderExecutionSimulator {
             finalIncrement = BigDecimal.ZERO;
         }
         BigDecimal finalPrice = slippageModel.calculateEventExecutedPrice(request, baseExecutedPrice, config, random);
-        BigDecimal finalFee = feeModel.calculateFee(finalIncrement, finalPrice, config);
-        events.add(simulateFilled(request, orderId, finalPrice, finalFee));
-        applyBalanceForFill(request, balanceStore, finalPrice, finalIncrement, finalFee);
+        BigDecimal finalFee = feeModel.calculateFee(finalIncrement, finalPrice, request.getOrderSide(), config);
+        String finalFeeAsset = feeAssetOf(request, config, finalFee);
+        events.add(simulateFilled(request, orderId, finalPrice, finalFee, finalFeeAsset));
+        applyBalanceForFill(request, balanceStore, finalPrice, finalIncrement, finalFee, finalFeeAsset);
         return applyOrderingAndDuplicates(events, config, random);
     }
 
@@ -151,7 +154,8 @@ public class MockOrderExecutionSimulator {
             if (computed.increment().compareTo(BigDecimal.ZERO) > 0
                     && (computed.event().status() == OrderDataDto.OrderStatus.PARTIALLY_FILLED
                     || computed.event().status() == OrderDataDto.OrderStatus.FILLED)) {
-                applyBalanceForFill(request, balanceStore, computed.executedPrice(), computed.increment(), computed.fee());
+                applyBalanceForFill(request, balanceStore, computed.executedPrice(), computed.increment(), computed.fee(),
+                        computed.event().feeAsset());
             }
 
             if (!reservationReleased && isFailedTerminal(computed.event().status())) {
@@ -230,10 +234,11 @@ public class MockOrderExecutionSimulator {
                                                                   MockScenarioConfig config,
                                                                   MockBalanceStore balanceStore) {
         BigDecimal executedPrice = request.getPrice();
-        BigDecimal fee = feeModel.calculateFee(request.getQuantity(), executedPrice, config);
-        applyBalanceForFill(request, balanceStore, executedPrice, request.getQuantity(), fee);
+        BigDecimal fee = feeModel.calculateFee(request.getQuantity(), executedPrice, request.getOrderSide(), config);
+        String feeAsset = feeAssetOf(request, config, fee);
+        applyBalanceForFill(request, balanceStore, executedPrice, request.getQuantity(), fee, feeAsset);
         return List.of(new MockScheduledOrderEvent(
-                simulateFilled(request, orderId, executedPrice, fee), -1L));
+                simulateFilled(request, orderId, executedPrice, fee, feeAsset), -1L));
     }
 
     /**
@@ -267,7 +272,8 @@ public class MockOrderExecutionSimulator {
     }
 
     public OrderDataDto simulatePartial(SendOrderRequest request, String orderId,
-                                        BigDecimal executedQty, BigDecimal executedPrice, BigDecimal fee) {
+                                        BigDecimal executedQty, BigDecimal executedPrice, BigDecimal fee,
+                                        String feeAsset) {
         return new OrderDataDto(
                 orderId,
                 request.getClientOrderId(),
@@ -281,12 +287,13 @@ public class MockOrderExecutionSimulator {
                 fee,
                 OrderDataDto.OrderStatus.PARTIALLY_FILLED,
                 null,
-                Instant.now()
+                Instant.now(),
+                feeAsset
         );
     }
 
     public OrderDataDto simulateFilled(SendOrderRequest request, String orderId,
-                                       BigDecimal executedPrice, BigDecimal fee) {
+                                       BigDecimal executedPrice, BigDecimal fee, String feeAsset) {
         return new OrderDataDto(
                 orderId,
                 request.getClientOrderId(),
@@ -300,7 +307,8 @@ public class MockOrderExecutionSimulator {
                 fee,
                 OrderDataDto.OrderStatus.FILLED,
                 null,
-                Instant.now()
+                Instant.now(),
+                feeAsset
         );
     }
 
@@ -406,15 +414,16 @@ public class MockOrderExecutionSimulator {
         BigDecimal fee = planned.fee();
         if (fee == null) {
             if (status == OrderDataDto.OrderStatus.PARTIALLY_FILLED || status == OrderDataDto.OrderStatus.FILLED) {
-                fee = feeModel.calculateFee(increment, executedPrice, config);
+                fee = feeModel.calculateFee(increment, executedPrice, request.getOrderSide(), config);
             } else {
                 fee = BigDecimal.ZERO;
             }
         }
+        String feeAsset = feeAssetOf(request, config, fee);
 
         OrderDataDto event = switch (status) {
             case NEW -> simulateAccepted(request, orderId);
-            case PARTIALLY_FILLED -> simulatePartial(request, orderId, executedQty, executedPrice, fee);
+            case PARTIALLY_FILLED -> simulatePartial(request, orderId, executedQty, executedPrice, fee, feeAsset);
             case FILLED -> new OrderDataDto(
                     orderId,
                     request.getClientOrderId(),
@@ -428,7 +437,8 @@ public class MockOrderExecutionSimulator {
                     fee,
                     OrderDataDto.OrderStatus.FILLED,
                     null,
-                    Instant.now()
+                    Instant.now(),
+                    feeAsset
             );
             case CANCELED -> new OrderDataDto(
                     orderId,
@@ -551,7 +561,8 @@ public class MockOrderExecutionSimulator {
                                      MockBalanceStore balanceStore,
                                      BigDecimal executedPrice,
                                      BigDecimal increment,
-                                     BigDecimal fee) {
+                                     BigDecimal fee,
+                                     String feeAsset) {
         if (increment == null || increment.compareTo(BigDecimal.ZERO) <= 0) {
             return;
         }
@@ -559,6 +570,12 @@ public class MockOrderExecutionSimulator {
         String base = symbol.getBaseAsset();
         String quote = symbol.getQuoteAsset();
         if (request.getOrderSide() == com.marmitt.core.enums.OrderSide.BUY) {
+            if (base.equals(feeAsset)) {
+                // Fee no ativo recebido (Binance): paga-se o valor bruto em quote e recebe-se a base liquida.
+                balanceStore.debitReserved(quote, increment.multiply(executedPrice).setScale(8, RoundingMode.HALF_UP));
+                balanceStore.credit(base, increment.subtract(fee));
+                return;
+            }
             BigDecimal cost = increment.multiply(executedPrice).add(fee).setScale(8, RoundingMode.HALF_UP);
             balanceStore.debitReserved(quote, cost);
             balanceStore.credit(base, increment);
@@ -568,6 +585,13 @@ public class MockOrderExecutionSimulator {
         balanceStore.debitReserved(base, increment);
         BigDecimal proceeds = increment.multiply(executedPrice).subtract(fee).setScale(8, RoundingMode.HALF_UP);
         balanceStore.credit(quote, proceeds);
+    }
+
+    private String feeAssetOf(SendOrderRequest request, MockScenarioConfig config, BigDecimal fee) {
+        if (fee == null || fee.signum() == 0) {
+            return null;
+        }
+        return feeModel.feeAsset(request.getOrderSide(), request.getSymbol(), config);
     }
 
     private void releaseReservation(SendOrderRequest request,
@@ -581,7 +605,7 @@ public class MockOrderExecutionSimulator {
             if (price == null) {
                 return;
             }
-            BigDecimal estimatedFee = feeModel.calculateFee(request.getQuantity(), price, config);
+            BigDecimal estimatedFee = feeModel.estimatedBuyQuoteFee(request.getQuantity(), price, config);
             BigDecimal reservedAmount = request.getQuantity().multiply(price).add(estimatedFee)
                     .setScale(8, RoundingMode.HALF_UP);
             balanceStore.release(quote, reservedAmount);

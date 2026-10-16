@@ -19,6 +19,7 @@ import java.util.UUID;
  * <ul>
  *   <li>{@code quantity} — em base asset (ex: BTC para BTCUSDT)</li>
  *   <li>{@code averagePrice}, {@code currentPrice} — em quote asset (ex: USDT para BTCUSDT)</li>
+ *   <li>{@code costBasis} — custo total em quote asset das unidades ainda detidas</li>
  *   <li>{@code realizedPnl} — em quote asset</li>
  * </ul>
  * A separação entre base e quote asset é responsabilidade do caller — tipicamente inferida
@@ -49,6 +50,15 @@ public class Position {
      * @see <a href="docs/IMPLEMENTATION_GUIDE.md">IG Blueprint 9.3.C</a>
      */
     private BigDecimal averagePrice;
+
+    /**
+     * Custo total, em quote asset, das unidades ainda detidas (T46). E a fonte de verdade do
+     * custo baixado de {@code reserved} na venda: vendas proporcionais baixam a fracao
+     * correspondente e a venda que zera a posicao baixa exatamente o restante, entao a soma das
+     * baixas e igual ao quote efetivamente pago, sem residuo de arredondamento do preco medio
+     * (relevante quando a fee de BUY reduz a quantidade e o preco medio vira dizima).
+     */
+    private BigDecimal costBasis;
 
     /**
      * Último preço de mercado. Atualizado a cada tick. Nullable.
@@ -92,12 +102,27 @@ public class Position {
         this.symbol = Objects.requireNonNull(symbol, "symbol cannot be null");
         this.quantity = requirePositive(quantity, "quantity");
         this.averagePrice = requirePositive(averagePrice, "averagePrice");
+        this.costBasis = quantity.multiply(averagePrice);
         this.currentPrice = averagePrice;
         this.status = PositionStatus.OPEN;
         this.realizedPnl = BigDecimal.ZERO;
         this.openedAt = Instant.now();
         this.updatedAt = Instant.now();
         this.version = null;
+    }
+
+    /**
+     * Abre uma posicao a partir do custo total pago em quote asset (T46). Usado quando a
+     * quantidade recebida difere da executada (fee de BUY cobrada no ativo base): o custo e o
+     * quote pago e o preco medio e derivado dele.
+     */
+    public static Position openAtCost(UUID runnerId, String symbol, BigDecimal quantity, BigDecimal cost) {
+        requirePositive(quantity, "quantity");
+        requirePositive(cost, "cost");
+        Position position = new Position(runnerId, symbol, quantity,
+                cost.divide(quantity, 8, RoundingMode.HALF_UP));
+        position.costBasis = cost;
+        return position;
     }
 
     /**
@@ -112,6 +137,7 @@ public class Position {
             PositionStatus status,
             BigDecimal quantity,
             BigDecimal averagePrice,
+            BigDecimal costBasis,
             BigDecimal currentPrice,
             BigDecimal realizedPnl,
             Instant openedAt,
@@ -129,6 +155,8 @@ public class Position {
         this.status = Objects.requireNonNull(status, "status cannot be null");
         this.quantity = Objects.requireNonNull(quantity, "quantity cannot be null");
         this.averagePrice = Objects.requireNonNull(averagePrice, "averagePrice cannot be null");
+        // Linhas anteriores ao cost_basis (ou fixtures de teste) derivam o custo do preco medio.
+        this.costBasis = costBasis != null ? costBasis : quantity.multiply(averagePrice);
         this.currentPrice = currentPrice;
         this.realizedPnl = Objects.requireNonNull(realizedPnl, "realizedPnl cannot be null");
         this.openedAt = Objects.requireNonNull(openedAt, "openedAt cannot be null");
@@ -154,13 +182,27 @@ public class Position {
     public void addQuantity(BigDecimal additionalQuantity, BigDecimal purchasePrice) {
         requirePositive(additionalQuantity, "additionalQuantity");
         requirePositive(purchasePrice, "purchasePrice");
+        addQuantityAtCost(additionalQuantity, additionalQuantity.multiply(purchasePrice));
+    }
 
-        BigDecimal currentValue = this.quantity.multiply(this.averagePrice);
-        BigDecimal additionalValue = additionalQuantity.multiply(purchasePrice);
+    /**
+     * Aumenta a posicao com nova compra a partir do custo pago em quote asset (T46). O preco
+     * medio e recalculado a partir do custo total acumulado.
+     *
+     * @param additionalQuantity quantidade efetivamente recebida (base asset)
+     * @param cost               quote asset efetivamente pago por ela
+     */
+    public void addQuantityAtCost(BigDecimal additionalQuantity, BigDecimal cost) {
+        requirePositive(additionalQuantity, "additionalQuantity");
+        // Zero e admitido: o custo de um incremento minusculo pode arredondar para 0 a 8 casas.
+        Objects.requireNonNull(cost, "cost cannot be null");
+        if (cost.signum() < 0) {
+            throw new IllegalArgumentException("cost cannot be negative");
+        }
+
         BigDecimal newQuantity = this.quantity.add(additionalQuantity);
-
-        this.averagePrice = currentValue.add(additionalValue)
-                .divide(newQuantity, 8, RoundingMode.HALF_UP);
+        this.costBasis = this.costBasis.add(cost);
+        this.averagePrice = this.costBasis.divide(newQuantity, 8, RoundingMode.HALF_UP);
         this.quantity = newQuantity;
         this.updatedAt = Instant.now();
     }
@@ -178,8 +220,10 @@ public class Position {
      * @param soldQuantity quantidade vendida (em base asset, ex: BTC)
      * @param salePrice    preço de execução da venda (em quote asset, ex: USDT)
      * @param feePaid      fee já convertida para quote asset (ex: USDT); nunca negativo
+     * @return custo, em quote asset, das unidades vendidas: a fracao proporcional do
+     *         {@code costBasis}, ou o restante exato quando a venda zera a posicao (T46)
      */
-    public void reduceQuantity(BigDecimal soldQuantity, BigDecimal salePrice, BigDecimal feePaid) {
+    public BigDecimal reduceQuantity(BigDecimal soldQuantity, BigDecimal salePrice, BigDecimal feePaid) {
         requirePositive(soldQuantity, "soldQuantity");
         requirePositive(salePrice, "salePrice");
         Objects.requireNonNull(feePaid, "feePaid cannot be null");
@@ -192,17 +236,49 @@ public class Position {
                     "Cannot sell more than current quantity: " + soldQuantity + " > " + this.quantity);
         }
 
-        BigDecimal costBasis = soldQuantity.multiply(this.averagePrice);
+        BigDecimal soldCost = costOf(soldQuantity);
         BigDecimal saleValue = soldQuantity.multiply(salePrice);
-        BigDecimal pnl = saleValue.subtract(costBasis).subtract(feePaid);
+        BigDecimal pnl = saleValue.subtract(soldCost).subtract(feePaid);
 
         this.quantity = this.quantity.subtract(soldQuantity);
+        this.costBasis = this.costBasis.subtract(soldCost);
         this.realizedPnl = this.realizedPnl.add(pnl);
         this.updatedAt = Instant.now();
 
         if (this.quantity.compareTo(BigDecimal.ZERO) == 0) {
             close();
         }
+        return soldCost;
+    }
+
+    /**
+     * Baixa como perda a quantidade residual que nao pode mais ser vendida (abaixo do
+     * {@code stepSize} da exchange) e fecha a posicao (T46). O custo dessa quantidade e
+     * realizado como prejuizo: nao ha valor de venda.
+     *
+     * @return custo, em quote asset, da quantidade baixada (o {@code costBasis} restante)
+     * @throws IllegalStateException se a posicao estiver travada por uma venda
+     */
+    public BigDecimal writeOffDust() {
+        if (isLocked()) {
+            throw new IllegalStateException("Cannot write off dust of a locked position: " + id);
+        }
+        requirePositive(this.quantity, "quantity");
+        BigDecimal dustCost = this.costBasis;
+        this.realizedPnl = this.realizedPnl.subtract(dustCost);
+        this.quantity = BigDecimal.ZERO;
+        this.costBasis = BigDecimal.ZERO;
+        this.updatedAt = Instant.now();
+        close();
+        return dustCost;
+    }
+
+    private BigDecimal costOf(BigDecimal soldQuantity) {
+        if (soldQuantity.compareTo(this.quantity) == 0) {
+            return this.costBasis;
+        }
+        return this.costBasis.multiply(soldQuantity)
+                .divide(this.quantity, 8, RoundingMode.HALF_UP);
     }
 
     /**
@@ -351,6 +427,7 @@ public class Position {
     public PositionStatus getStatus() { return status; }
     public BigDecimal getQuantity() { return quantity; }
     public BigDecimal getAveragePrice() { return averagePrice; }
+    public BigDecimal getCostBasis() { return costBasis; }
     public BigDecimal getCurrentPrice() { return currentPrice; }
     public BigDecimal getRealizedPnl() { return realizedPnl; }
     public Instant getOpenedAt() { return openedAt; }

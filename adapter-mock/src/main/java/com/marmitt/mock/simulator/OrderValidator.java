@@ -62,7 +62,7 @@ public class OrderValidator {
             if (price == null) {
                 return false;
             }
-            BigDecimal estimatedFee = feeModel.calculateFee(qty, price, config);
+            BigDecimal estimatedFee = feeModel.estimatedBuyQuoteFee(qty, price, config);
             BigDecimal required = qty.multiply(price).add(estimatedFee).setScale(8, RoundingMode.HALF_UP);
             return balanceStore.reserve(quote, required);
         }

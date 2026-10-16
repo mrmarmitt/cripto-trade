@@ -221,4 +221,57 @@ class BinanceOrderMapperTest {
         assertEquals("b", result.get(1).clientOrderId());
         assertEquals(OrderDataDto.OrderStatus.FILLED, result.get(1).status());
     }
+
+    @Test
+    void fromJson_shouldSumCommissionFromFillsWithItsAsset() {
+        // T46: a resposta FULL de criacao traz fills[]; a comissao e o ativo chegam ao core.
+        String json = """
+                {
+                  "orderId": 7, "clientOrderId": "f-order", "symbol": "BTCUSDT", "side": "BUY",
+                  "type": "LIMIT", "status": "FILLED", "origQty": "0.002", "executedQty": "0.002",
+                  "price": "66300.00", "cummulativeQuoteQty": "132.40", "transactTime": 1700000000000,
+                  "fills": [
+                    {"price": "66200.00", "qty": "0.001", "commission": "0.00000100", "commissionAsset": "BTC"},
+                    {"price": "66200.00", "qty": "0.001", "commission": "0.00000100", "commissionAsset": "BTC"}
+                  ]
+                }
+                """;
+
+        OrderDataDto dto = mapper.fromJson(json);
+
+        assertEquals(0, dto.fee().compareTo(new BigDecimal("0.00000200")));
+        assertEquals("BTC", dto.feeAsset());
+    }
+
+    @Test
+    void fromJson_withoutFillsHasNoFeeAsset() {
+        String json = """
+                {"orderId": 8, "clientOrderId": "q-order", "symbol": "BTCUSDT", "side": "BUY",
+                 "type": "LIMIT", "status": "FILLED", "origQty": "0.001", "executedQty": "0.001",
+                 "price": "66300.00", "cummulativeQuoteQty": "66.30", "time": 1700000000000}
+                """;
+
+        OrderDataDto dto = mapper.fromJson(json);
+
+        assertEquals(0, dto.fee().compareTo(BigDecimal.ZERO));
+        assertNull(dto.feeAsset());
+    }
+
+    @Test
+    void fromJson_withMixedCommissionAssetsLeavesFeeUnknown() {
+        String json = """
+                {"orderId": 9, "clientOrderId": "m-order", "symbol": "BTCUSDT", "side": "BUY",
+                 "type": "LIMIT", "status": "FILLED", "origQty": "0.002", "executedQty": "0.002",
+                 "price": "66300.00", "cummulativeQuoteQty": "132.40", "transactTime": 1700000000000,
+                 "fills": [
+                   {"price": "66200.00", "qty": "0.001", "commission": "0.00000100", "commissionAsset": "BTC"},
+                   {"price": "66200.00", "qty": "0.001", "commission": "0.00010000", "commissionAsset": "BNB"}
+                 ]}
+                """;
+
+        OrderDataDto dto = mapper.fromJson(json);
+
+        assertEquals(0, dto.fee().compareTo(BigDecimal.ZERO));
+        assertNull(dto.feeAsset());
+    }
 }

@@ -3,7 +3,7 @@
 **Complexidade:** Alta (efeito financeiro em posição, PnL e venda)
 **Responsável:** Claude
 **Dependências:** T36 (devolução do excedente). Independe das demais.
-**Status:** Pendente — **decisão de negócio pendente** sobre fee em terceiro ativo (BNB), ver abaixo.
+**Status:** Concluído (2026-10-16) — ver "Decisões registradas" e "Entrega".
 
 ---
 
@@ -97,6 +97,63 @@ e manter saldo de BNB fora do `GlobalBalance`. Opções:
 - **B:** suportar conversão via preço de mercado. Maior escopo, exige fonte de preço BNB/quote.
 
 ---
+
+## Decisões registradas (2026-10-16)
+
+- **Fee em BNB / terceiro ativo (mantenedor):** não suportada na v1. A opção "pagar taxas com BNB"
+  fica **desligada** na conta (registrado em `docs/OPERATIONS_RUNBOOK.md`). Se chegar fee em outro
+  ativo, o sistema **apenas loga** (ERROR), sem alerta e sem quebrar a conciliação.
+- **Fee de BUY em quote e fee de SELL em base (implementação):** a Binance Spot cobra a comissão no
+  ativo recebido, então esses casos não ocorrem nela. Recebem o mesmo tratamento do BNB (log ERROR,
+  fee fora da contabilidade). Suportá-los exigiria um evento de capital novo para tirar a fee de
+  `available`; fica para quando houver exchange que cobre assim (ex.: Coinbase).
+- **`feeAsset` desconhecido (nulo):** comportamento legado — BUY ignora a fee; SELL assume quote.
+- **Custo do lote (`cost_basis`):** com a fee no ativo base o preço médio vira dízima. Para `reserved`
+  fechar exatamente, a posição passa a guardar o custo em quote das unidades detidas: venda parcial
+  baixa a fração proporcional e a venda que zera baixa o restante exato. O custo de cada incremento
+  de BUY é a diferença dos valores executados cumulativos, então soma exatamente o valor usado na
+  devolução do excedente da T36.
+- **Resíduo invendável:** baixado como perda no fill final da SELL, com a posição fechada, usando
+  `ExecutionConfirmedEvent` (custo = `cost_basis` restante, PnL = −custo, `matchId` determinístico
+  por posição). Reusa idempotência, retry e DLQ do fluxo de capital. Não é gravado em `DustAccount`
+  (não há repositório para ela); fica no log e no PnL realizado.
+- **MOCK:** novo modo `RECEIVED_ASSET` (padrão), que imita a Binance. `SAME_CURRENCY` continua disponível.
+
+## Entrega (2026-10-16)
+
+| Camada | Mudança |
+|---|---|
+| core (contrato) | `OrderDataDto.feeAsset` (último componente; construtor de 13 args mantido com `null`) |
+| core (domínio) | `Position.costBasis`, `openAtCost`, `addQuantityAtCost`, `reduceQuantity` retorna o custo vendido, `writeOffDust` |
+| core (conciliação) | `FeeResolver` (classifica por ativo), `SellableQuantityPolicy` (usa `OrderQuantityNormalizerPort`), `FillCalculator.costIncrement`, `BuyFillHandler` (quantidade líquida), `SellFillHandler` (fee por ativo, custo do `cost_basis`, baixa de resíduo) |
+| spring | `ConciliationOrderUpdate` recebe os normalizadores; migration `V12__add_cost_basis_to_positions.sql` (anulável, backfill `quantity × average_price`); entity/mapper |
+| adapter-binance | `executionReport` mapeia `N`; resposta REST FULL soma `fills[].commission` com o ativo (ativos mistos → desconhecido) |
+| adapter-mock | `FeeMode.RECEIVED_ASSET` padrão; evento com `feeAsset`; saldo do mock credita a base líquida |
+
+### Validação
+
+- `:core:test` — `PositionCostBasisTest`, `FeeResolverTest`, `FeeAccountingConciliationTest`
+  (BUY base → lote líquido; BUY em BNB → ignorada; SELL deixando resíduo abaixo do `stepSize` →
+  baixa com custo exato e `matchId` determinístico; resíduo vendável → lote segue aberto; SELL em
+  BNB → fee pendente de conversão, fora do PnL).
+- `:adapter-binance:test` — `ExecutionReportProcessorFeeTest`, casos novos em `BinanceOrderMapperTest`.
+- `:adapter-mock:test` — `FeeModelTest`.
+- `:spring-application:test` 178/178. O MOCK agora cobra a fee da BUY em base: o round trip fecha
+  o lote líquido, `reserved = 0` continua valendo, e o novo
+  `buyFeeInBaseAssetShouldOpenLotWithNetQuantityAndSellIt` prova que a SELL usa a quantidade recebida.
+
+### Riscos residuais
+
+- **Recovery sem fee:** ordens conciliadas por consulta (`GET /order`, boot recovery/watchdog) não
+  trazem comissão. Uma BUY preenchida enquanto o app estava fora entra com quantidade bruta, e a SELL
+  do lote pode ser rejeitada. Mitigação futura: buscar a comissão via histórico de trades
+  (`BinanceTradeHistoryAdapter`, que já lê `commissionAsset`) no recovery.
+- **REST síncrono após parcial:** se um `executionReport` parcial chegar antes da resposta REST
+  síncrona FILLED, a fee somada dos `fills[]` cobre a ordem inteira e é aplicada só ao incremento
+  restante (lote fica levemente menor que o saldo real; a venda não falha). Caminho raro: o envio
+  preferencial é a WS API, que já adia o FILLED para o `executionReport`.
+- **Resíduo invendável que cresce:** cada lote deixa até um `stepSize` de resíduo na exchange,
+  baixado localmente como perda; na conta ele continua existindo (conversível em BNB pela Binance).
 
 ## Riscos / pontos de atenção
 

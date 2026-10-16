@@ -16,3 +16,14 @@ Este documento define **como operar, monitorar e manter** o sistema em produçã
 
 - **[Blueprint](BLUEPRINT.md):** Define a arquitetura que este runbook monitora
 - **Implementation Guide:** Fornece as decisões técnicas que impactam o comportamento operacional
+
+## Pré-requisitos de conta na exchange
+
+### Binance: pagamento de taxas com BNB desligado (T46)
+
+A opção **"Usar BNB para pagar taxas"** deve ficar **desligada** na conta (testnet e produção). O
+sistema contabiliza a comissão cobrada no ativo recebido (base na compra, cotação na venda) e não
+converte fee de terceiro ativo. Se a opção for ligada, cada fill chega com fee em BNB: o sistema
+segue operando, mas a fee fica fora do PnL e é registrada em log `ERROR` com
+`unsupported BUY fee asset` / `unsupported SELL fee asset` — sinal para desligar a opção.
+

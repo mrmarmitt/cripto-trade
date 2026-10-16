@@ -86,6 +86,14 @@ A fee nao entra nesse calculo (divergencia consciente do IG §7.2.3), porque a v
 `reserved` sem fee. A fee da SELL entra no PnL do match; a fee da BUY hoje nao e contabilizada
 (ver T36, "Achado novo"). Nao ha safety buffer: com apenas ordens `LIMIT` a reserva e nominal (decisao T36; buffer obrigatorio so quando existir `MARKET`, IG §7.2.2).
 
+### Custo do lote e residuo invendavel (T46)
+
+O `totalCost` confirmado na venda vem do `cost_basis` da posicao, nao de `quantidade x preco medio`,
+para que a soma das baixas feche exatamente com o que ficou reservado. Quando sobra na posicao uma
+quantidade abaixo do `stepSize`, o residuo e baixado como perda por um `ExecutionConfirmedEvent`
+com `pnlRealized = -custo`: `reserved` cai pelo custo, `available` nao muda e o realizado registra a
+perda.
+
 ## Liberacao De Margem
 
 `MarginReleasedReaction` processa `MarginReleaseEvent` (terminais de falha e excedente de BUY

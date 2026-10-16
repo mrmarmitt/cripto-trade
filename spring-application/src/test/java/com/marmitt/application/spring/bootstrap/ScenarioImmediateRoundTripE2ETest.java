@@ -97,8 +97,9 @@ class ScenarioImmediateRoundTripE2ETest extends ScenarioStrategyE2ETestSupport {
         // Comprar acima do mercado e vender abaixo, somado a fees, so pode dar prejuizo.
         assertTrue(balance.realized().compareTo(BigDecimal.ZERO) < 0,
                 "Round trip marketable com fees deve realizar prejuizo. Saldo=" + balance);
-        assertEquals(0, totalMatchedQuantity(runnerId).compareTo(new BigDecimal("0.00100000")),
-                "A quantidade casada deve corresponder ao lote fechado");
+        // T46: o MOCK cobra a fee da BUY no ativo base (0,1% por fill), como a Binance; o lote recebe
+        // a quantidade liquida e e ela que a venda fecha.
+        assertNetOfBuyFee(totalMatchedQuantity(runnerId), "quantidade casada");
     }
 
     @Test
@@ -117,5 +118,37 @@ class ScenarioImmediateRoundTripE2ETest extends ScenarioStrategyE2ETestSupport {
                 "Sem ordem viva nem lote aberto, nada pode ficar reservado. Saldo=" + balance);
         assertEquals(0, balance.available().subtract(INITIAL_CAPITAL).compareTo(balance.realized()),
                 "Com tudo fechado, available - capital inicial deve ser o PnL realizado. Saldo=" + balance);
+    }
+
+    @Test
+    void buyFeeInBaseAssetShouldOpenLotWithNetQuantityAndSellIt() {
+        // T46: BUY de 0.001 BTC com fee de 0.000001 BTC credita 0.000999. A venda do lote inteiro
+        // usa a quantidade liquida e e aceita; antes, a SELL pedia 0.001 e a exchange recusaria.
+        UUID runnerId = activateScenario(
+                new ImmediateRoundTripStrategy(ScenarioStrategyConfig.boundedConfig(1)));
+
+        driveTicks(10);
+        awaitStable(runnerId, QUIET_WINDOW);
+
+        TransactionRow buy = transactionsOfType(runnerId, "BUY").getFirst();
+        TransactionRow sell = transactionsOfType(runnerId, "SELL").getFirst();
+        assertEquals(0, buy.executedQuantity().compareTo(new BigDecimal("0.00100000")),
+                "A transacao BUY reflete o executado bruto informado pela exchange");
+        assertEquals("FILLED", sell.status());
+        assertNetOfBuyFee(sell.executedQuantity(), "SELL");
+        assertEquals(0, sell.executedQuantity().compareTo(totalMatchedQuantity(runnerId)),
+                "A SELL vende exatamente a quantidade do lote");
+        assertEquals(1, positionCount(runnerId, "CLOSED"), "O lote liquido deve fechar por inteiro");
+    }
+
+    /**
+     * A quantidade liquida fica abaixo do executado bruto (0.001) e no maximo uma taxa (0,1%) abaixo
+     * dele. O valor exato depende do arredondamento da fee em cada fill parcial do MOCK.
+     */
+    private static void assertNetOfBuyFee(BigDecimal quantity, String what) {
+        BigDecimal gross = new BigDecimal("0.00100000");
+        assertTrue(quantity.compareTo(gross) < 0, what + " deve ser liquida da fee de BUY: " + quantity);
+        assertTrue(quantity.compareTo(new BigDecimal("0.00099900")) >= 0,
+                what + " nao pode descontar mais que a taxa de 0,1%: " + quantity);
     }
 }

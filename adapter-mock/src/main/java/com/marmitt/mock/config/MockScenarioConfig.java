@@ -117,7 +117,7 @@ public record MockScenarioConfig(
                 new Duplicates(0.10, 1),
                 new OutOfOrder(0.05),
                 new Failures(0.02, 0.01),
-                new FeeSettings(FeeMode.SAME_CURRENCY, new BigDecimal("0.0010")),
+                new FeeSettings(FeeMode.RECEIVED_ASSET, new BigDecimal("0.0010")),
                 new SlippageSettings(SlippageMode.MARKET_ONLY, 15, 0.10, 2),
                 new ValidationSettings(new BigDecimal("0.000001"), new BigDecimal("0.00000001"), new BigDecimal("1.0")),
                 new BalanceSettings(java.util.Map.copyOf(initialBalances))
@@ -136,7 +136,10 @@ public record MockScenarioConfig(
 
     public enum FeeMode {
         NONE,
-        SAME_CURRENCY
+        /** Fee em quote asset nos dois lados (comportamento legado do mock). */
+        SAME_CURRENCY,
+        /** Fee no ativo recebido, como a Binance Spot: base na BUY, quote na SELL (T46). */
+        RECEIVED_ASSET
     }
 
     public record FeeSettings(FeeMode mode, BigDecimal feeRate) {}

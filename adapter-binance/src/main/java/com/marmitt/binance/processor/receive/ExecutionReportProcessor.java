@@ -42,6 +42,8 @@ class ExecutionReportProcessor implements BinanceEventProcessor<OrderDataDto> {
             BigDecimal price             = new BigDecimal(data.path("p").asText("0"));
             BigDecimal executedPrice     = computeWap(executedQty, cumulativeQuoteQty);
             BigDecimal fee               = new BigDecimal(data.path("n").asText("0"));
+            // N = ativo da comissao deste trade (null quando nao houve trade no evento)
+            String feeAsset      = data.hasNonNull("N") ? data.path("N").asText() : null;
             String rejectReason  = data.path("r").asText(null);
             long transactionTime = data.path("T").asLong(0);
 
@@ -58,7 +60,8 @@ class ExecutionReportProcessor implements BinanceEventProcessor<OrderDataDto> {
                     fee,
                     mapStatus(statusRaw),
                     "NONE".equals(rejectReason) ? null : rejectReason,
-                    transactionTime > 0 ? Instant.ofEpochMilli(transactionTime) : Instant.now()
+                    transactionTime > 0 ? Instant.ofEpochMilli(transactionTime) : Instant.now(),
+                    feeAsset
             );
 
             log.debug("executionReport processed: orderId={} status={} correlationId={}",

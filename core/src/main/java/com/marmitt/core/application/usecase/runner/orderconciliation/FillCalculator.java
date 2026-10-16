@@ -38,6 +38,7 @@ class FillCalculator {
     public FillComputation compute(Transaction transaction, OrderDataDto orderData, boolean isFinal) {
         BigDecimal prevQty = transaction.getEffectiveExecutedQuantity();
         BigDecimal prevPrice = transaction.getEffectiveExecutedPrice();
+        BigDecimal prevValue = transaction.getExecutedValue();
 
         if (isFinal) {
             transaction.fill(orderData.executedQuantity(), orderData.executedPrice(), orderData.timestamp());
@@ -49,7 +50,12 @@ class FillCalculator {
         BigDecimal fillPrice = computeFillPrice(prevQty, prevPrice,
                 transaction.getExecutedQuantity(), transaction.getExecutedPrice(), fillIncrement);
 
-        return new FillComputation(fillIncrement, fillPrice);
+        // Custo do incremento como diferenca de valores executados cumulativos (ja arredondados):
+        // a soma dos incrementos telescopa para exatamente transaction.getExecutedValue(), o mesmo
+        // valor usado na devolucao do excedente da reserva (T36). Assim o custo que entra no lote
+        // fecha com reserved sem residuo de arredondamento (T46).
+        BigDecimal costIncrement = transaction.getExecutedValue().subtract(prevValue);
+        return new FillComputation(fillIncrement, fillPrice, costIncrement);
     }
 
     private static BigDecimal computeFillPrice(BigDecimal prevQty, BigDecimal prevWap,
@@ -69,7 +75,9 @@ class FillCalculator {
      * @param fillIncrement quantidade marginal executada neste evento (base asset)
      * @param fillPrice     preco medio ponderado do incremento (quote asset),
      *                      calculado a partir da diferenca entre WAPs cumulativos
+     * @param costIncrement custo em quote deste incremento: diferenca entre os valores executados
+     *                      cumulativos (arredondados a 8 casas) depois e antes do evento
      */
-    public record FillComputation(BigDecimal fillIncrement, BigDecimal fillPrice) {
+    public record FillComputation(BigDecimal fillIncrement, BigDecimal fillPrice, BigDecimal costIncrement) {
     }
 }

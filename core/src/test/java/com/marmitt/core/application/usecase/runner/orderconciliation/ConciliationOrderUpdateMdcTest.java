@@ -11,6 +11,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.slf4j.MDC;
 
+import java.util.List;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
@@ -37,7 +38,7 @@ class ConciliationOrderUpdateMdcTest {
     void putsTransactionIdInMdcDuringRoutingAndClearsAfter() {
         StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
         EventPublisherPort publisher = mock(EventPublisherPort.class);
-        ConciliationOrderUpdate conciliation = new ConciliationOrderUpdate(repository, publisher);
+        ConciliationOrderUpdate conciliation = new ConciliationOrderUpdate(repository, publisher, List.of());
 
         Transaction transaction = newBuyTransaction();
         when(repository.findTransactionByClientOrderId(transaction.getClientOrderId()))
