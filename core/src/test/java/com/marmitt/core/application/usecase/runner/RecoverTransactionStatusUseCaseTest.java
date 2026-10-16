@@ -26,6 +26,7 @@ import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
+import java.util.List;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.Optional;
@@ -461,7 +462,7 @@ class RecoverTransactionStatusUseCaseTest {
     }
 
     private static ConciliationOrderUpdateExecutor newExecutor(StrategyRunnerRepositoryPort repository) {
-        ConciliationOrderUpdate conciliation = new ConciliationOrderUpdate(repository, mock(EventPublisherPort.class));
+        ConciliationOrderUpdate conciliation = new ConciliationOrderUpdate(repository, mock(EventPublisherPort.class), List.of());
         return new ConciliationOrderUpdateExecutor() {
             @Override
             public void execute(OrderDataDto orderData) {

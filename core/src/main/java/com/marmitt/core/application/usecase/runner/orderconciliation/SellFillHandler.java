@@ -15,6 +15,7 @@ import lombok.extern.slf4j.Slf4j;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.nio.charset.StandardCharsets;
 import java.util.Optional;
 import java.util.UUID;
 
@@ -41,6 +42,18 @@ import java.util.UUID;
  *       {@link com.marmitt.core.domain.portfolio.GlobalBalance}.</li>
  * </ol>
  *
+ * <p><b>Fee e custo (T46):</b> a fee e classificada pelo ativo ({@link FeeResolver}). Fee em quote
+ * (padrao da Binance para SELL) entra no PnL; sem ativo informado, aplica-se o comportamento legado
+ * (assumida em quote); em ativo base ou terceiro ativo (ex.: BNB) nao e suportada: fica registrada
+ * no match como pendente de conversao, fora do PnL, com log ERROR. O custo baixado de
+ * {@code reserved} vem do {@code costBasis} da posicao, nao de {@code quantidade x preco medio}.
+ *
+ * <p><b>Residuo invendavel (T46):</b> no fill final, se sobrar na posicao uma quantidade que a
+ * exchange nao aceita vender ({@link SellableQuantityPolicy}), ela e baixada como perda
+ * ({@link Position#writeOffDust()}) e a posicao fecha. O custo do residuo sai de {@code reserved}
+ * por um {@link ExecutionConfirmedEvent} com PnL igual a menos o custo, com {@code matchId}
+ * deterministico por posicao para idempotencia.
+ *
  * <p><b>Invariante estrito:</b> posicoes OPEN/CLOSING devem possuir
  * {@code openedByTransactionId}. Se esse vinculo nao existir, o fluxo falha
  * explicitamente com excecao para evitar perda silenciosa de contabilidade.
@@ -50,11 +63,17 @@ class SellFillHandler {
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final EventPublisherPort eventPublisher;
+    private final FeeResolver feeResolver;
+    private final SellableQuantityPolicy sellableQuantityPolicy;
 
     public SellFillHandler(StrategyRunnerRepositoryPort strategyRunnerRepository,
-                           EventPublisherPort eventPublisher) {
+                           EventPublisherPort eventPublisher,
+                           FeeResolver feeResolver,
+                           SellableQuantityPolicy sellableQuantityPolicy) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.eventPublisher = eventPublisher;
+        this.feeResolver = feeResolver;
+        this.sellableQuantityPolicy = sellableQuantityPolicy;
     }
 
     /**
@@ -78,9 +97,10 @@ class SellFillHandler {
         UUID buyTransactionId = position.getOpenedByTransactionId();
 
         String quoteAsset = orderData.symbol().getQuoteAsset();
-        Fee fee = buildFee(orderData.fee(), quoteAsset);
+        Fee fee = buildFee(transaction, orderData, quoteAsset);
 
-        position.reduceQuantity(fillIncrement, fillPrice, fee.getConvertedAmountOrZero());
+        BigDecimal totalCost = position.reduceQuantity(fillIncrement, fillPrice, fee.getConvertedAmountOrZero())
+                .setScale(8, RoundingMode.HALF_UP);
 
         if (isFinal) {
             position.unlockAfterFill();
@@ -102,8 +122,6 @@ class SellFillHandler {
                 fee
         );
 
-        BigDecimal totalCost = fillIncrement.multiply(buyPrice).setScale(8, RoundingMode.HALF_UP);
-
         ExecutionConfirmation confirmation = new ExecutionConfirmation(
                 transaction.getId(),
                 transaction.getRunnerId(),
@@ -117,8 +135,12 @@ class SellFillHandler {
         );
 
         strategyRunnerRepository.saveAtomicTransactionAndMatch(transaction, match);
+        Optional<ExecutionConfirmation> dustWriteOff = isFinal
+                ? writeOffUnsellableRemainder(transaction, position, quoteAsset)
+                : Optional.empty();
         strategyRunnerRepository.savePosition(position);
         eventPublisher.publishEvent(new ExecutionConfirmedEvent(confirmation));
+        dustWriteOff.ifPresent(writeOff -> eventPublisher.publishEvent(new ExecutionConfirmedEvent(writeOff)));
         log.info("orderConciliation: SELL match persisted matchId={} transactionId={} status={} executedQty={}",
                 match.id(), transaction.getId(), isFinal ? "FILLED" : "PARTIAL", fillIncrement);
         log.info("orderConciliation: SELL fill matchId={} runnerId={} increment={} pnl={}",
@@ -146,11 +168,59 @@ class SellFillHandler {
                         transaction.getRunnerId(), transaction.getSymbol()));
     }
 
-    private Fee buildFee(BigDecimal feeAmount, String quoteAsset) {
-        String asset = quoteAsset != null ? quoteAsset : "UNKNOWN";
-        if (feeAmount == null || feeAmount.compareTo(BigDecimal.ZERO) == 0) {
-            return Fee.zero(asset);
+    /**
+     * Baixa como perda a quantidade que sobrou na posicao e que a exchange nao aceita vender.
+     *
+     * @return confirmacao a publicar para tirar o custo do residuo de {@code reserved}, ou vazio
+     *         quando a posicao fechou ou o restante ainda e vendavel
+     */
+    private Optional<ExecutionConfirmation> writeOffUnsellableRemainder(Transaction transaction,
+                                                                       Position position,
+                                                                       String quoteAsset) {
+        BigDecimal remaining = position.getQuantity();
+        if (remaining.signum() <= 0 || position.isLocked()) {
+            return Optional.empty();
         }
-        return Fee.sameBaseCurrency(feeAmount, asset, FeeType.UNKNOWN);
+        String exchangeId = strategyRunnerRepository.findById(transaction.getRunnerId())
+                .map(runner -> runner.getExchangeId())
+                .orElse(null);
+        if (sellableQuantityPolicy.isSellable(exchangeId, position.getSymbol(), remaining)) {
+            return Optional.empty();
+        }
+        BigDecimal averagePrice = position.getAveragePrice();
+        BigDecimal dustCost = position.writeOffDust().setScale(8, RoundingMode.HALF_UP);
+        log.info("orderConciliation: unsellable remainder written off positionId={} transactionId={} quantity={} cost={}",
+                position.getId(), transaction.getId(), remaining, dustCost);
+        if (dustCost.signum() <= 0) {
+            return Optional.empty();
+        }
+        UUID writeOffId = UUID.nameUUIDFromBytes(
+                ("dust-write-off:" + position.getId()).getBytes(StandardCharsets.UTF_8));
+        return Optional.of(new ExecutionConfirmation(
+                transaction.getId(),
+                transaction.getRunnerId(),
+                writeOffId,
+                remaining,
+                averagePrice,
+                Fee.zero(quoteAsset != null ? quoteAsset : "UNKNOWN"),
+                dustCost,
+                dustCost.negate(),
+                true
+        ));
+    }
+
+    private Fee buildFee(Transaction transaction, OrderDataDto orderData, String quoteAsset) {
+        String quote = quoteAsset != null ? quoteAsset : "UNKNOWN";
+        FeeResolver.ResolvedFee fee = feeResolver.resolve(orderData);
+        return switch (fee.kind()) {
+            case NONE -> Fee.zero(quote);
+            // UNKNOWN: comportamento legado (fee assumida em quote) para produtores sem ativo.
+            case QUOTE, UNKNOWN -> Fee.sameBaseCurrency(fee.amount(), quote, FeeType.UNKNOWN);
+            case BASE, UNSUPPORTED -> {
+                log.error("orderConciliation: unsupported SELL fee asset transactionId={} fee={} asset={} - recorded pending conversion, not in PnL (T46)",
+                        transaction.getId(), fee.amount(), fee.asset());
+                yield Fee.pendingConversion(fee.amount(), fee.asset(), FeeType.UNKNOWN);
+            }
+        };
     }
 }

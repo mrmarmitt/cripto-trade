@@ -401,7 +401,8 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
                 fee,
                 queried.status(),
                 queried.rejectReason(),
-                queried.timestamp() != null ? queried.timestamp() : Instant.now()
+                queried.timestamp() != null ? queried.timestamp() : Instant.now(),
+                queried.feeAsset()
         );
     }
 

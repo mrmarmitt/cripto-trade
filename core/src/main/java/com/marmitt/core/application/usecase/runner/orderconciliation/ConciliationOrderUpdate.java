@@ -4,11 +4,13 @@ import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
+import com.marmitt.core.ports.outbound.exchange.rest.OrderQuantityNormalizerPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 
 import java.math.BigDecimal;
+import java.util.List;
 
 /**
  * Nucleo de reconciliacao de atualizacao de ordem.
@@ -41,13 +43,21 @@ public class ConciliationOrderUpdate {
     private final SellFillHandler sellFillHandler;
     private final TerminationHandler terminationHandler;
 
+    /**
+     * @param orderNormalizers normalizadores de quantidade por exchange, usados para decidir se o
+     *                         residuo de uma posicao ainda e vendavel (T46)
+     */
     public ConciliationOrderUpdate(StrategyRunnerRepositoryPort strategyRunnerRepository,
-                                   EventPublisherPort eventPublisher) {
+                                   EventPublisherPort eventPublisher,
+                                   List<OrderQuantityNormalizerPort> orderNormalizers) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         MarginReleaseBuilder marginReleaseBuilder = new MarginReleaseBuilder();
+        FeeResolver feeResolver = new FeeResolver();
         this.fillCalculator = new FillCalculator();
-        this.buyFillHandler = new BuyFillHandler(strategyRunnerRepository, eventPublisher, marginReleaseBuilder);
-        this.sellFillHandler = new SellFillHandler(strategyRunnerRepository, eventPublisher);
+        this.buyFillHandler = new BuyFillHandler(
+                strategyRunnerRepository, eventPublisher, marginReleaseBuilder, feeResolver);
+        this.sellFillHandler = new SellFillHandler(strategyRunnerRepository, eventPublisher, feeResolver,
+                new SellableQuantityPolicy(orderNormalizers));
         this.terminationHandler = new TerminationHandler(
                 strategyRunnerRepository, eventPublisher, marginReleaseBuilder);
     }
@@ -161,7 +171,7 @@ public class ConciliationOrderUpdate {
         }
         FillCalculator.FillComputation computed = fillCalculator.compute(transaction, orderData, isFinal);
         if (transaction.isBuy()) {
-            buyFillHandler.handle(transaction, computed.fillIncrement(), computed.fillPrice());
+            buyFillHandler.handle(transaction, orderData, computed.fillIncrement(), computed.costIncrement());
         } else {
             sellFillHandler.handle(transaction, orderData,
                     computed.fillIncrement(), computed.fillPrice(), isFinal);
