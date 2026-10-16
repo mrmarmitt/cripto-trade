@@ -1745,6 +1745,12 @@ Este excedente é devolvido ao `AvailableBalance` como parte do `ConfirmExecutio
 | PARTIAL + CANCELED | Fatia executada: `confirmExecution()`. Fatia cancelada + buffer restante: `release()` |
 | REJECTED / EXPIRED | `release(totalReserved)` → devolução integral                                         |
 
+> **Estado de implementação (T36, 2026-10-16):** o cenário FILLED está implementado como
+> `release(reserved − executedQty × executedPrice)` via `MarginReleaseEvent` (`ReleaseReason.FILLED_EXCESS`),
+> publicado pelo `BuyFillHandler` no fill final. **As fees não são descontadas**: a venda baixa
+> `reserved` pelo custo executado sem fee (`confirmExecution`), então descontá-las aqui deixaria a
+> reserva menor que o custo. O buffer de §7.2.1–7.2.2 continua **não implementado** (decisão pendente na T36).
+
 ### 7.3 Validação Pre-Reserve (Runner-Side)
 
 Antes de invocar `ReserveCapitalPort.reserve()`, o Runner executa validações locais para evitar chamadas desnecessárias ao Portfolio.

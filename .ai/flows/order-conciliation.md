@@ -42,6 +42,7 @@ O mesmo executor atende o fluxo normal de eventos e os fluxos de boot/recovery.
 - `PARTIALLY_FILLED`: aplica apenas o delta ainda nao processado.
 - `FILLED`: aplica o delta final e finaliza a transacao.
 - `CANCELED`, `EXPIRED`, `REJECTED`: aplica transicao terminal e libera margem.
+- `FILLED` de BUY tambem libera margem: o excedente da reserva sobre o custo executado (T36).
 
 Fills podem submeter uma transacao ainda `PENDING` quando a exchange envia fill
 antes do evento `NEW`.
@@ -62,6 +63,9 @@ persisted`, falha de conciliacao etc. ficam recuperaveis via
 3. Se ainda nao existir, cria nova `Position`.
 4. Associa a transacao de abertura quando necessario.
 5. Salva posicao e transacao na mesma unidade transacional.
+6. No fill final (`FILLED`), publica `MarginReleaseEvent` com o excedente
+   `total reservado - valor executado` (`ReleaseReason.FILLED_EXCESS`, T36), na mesma unidade
+   transacional. Sem excedente (execucao no proprio limite), nada e publicado.
 
 Conflito concorrente ao criar posicao e tratado recarregando a posicao aberta e
 aplicando o incremento.

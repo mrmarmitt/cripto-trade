@@ -72,23 +72,24 @@ SELL:
 Esse metodo reduz reserva, aplica PnL realizado, devolve custo ao disponivel e
 acumula taxa convertida.
 
-### Lacuna conhecida: excedente da reserva nao e devolvido
+### Devolucao do excedente da reserva (T36)
 
 A reserva e feita ao **preco-limite** (`TradeIntentFactory`: `total = quantity x price`) e a baixa
-em `confirmExecution` usa o **preco executado** (`SellFillHandler`:
-`totalCost = fillIncrement x position.getAveragePrice()`). Como `confirmExecution` faz
-`reserved -= cost`, a diferenca `quantity x (limite - executado)` **fica presa em `reserved`**.
+em `confirmExecution` usa o **custo executado** (`SellFillHandler`:
+`totalCost = fillIncrement x position.getAveragePrice()`). Para a diferenca nao ficar presa, no
+fill final de uma BUY o `BuyFillHandler` publica `MarginReleaseEvent` com
+`ReleaseReason.FILLED_EXCESS` e `releaseAmount = total - executedValue`
+(`MarginReleaseBuilder.buildFilledExcess`). Assim o `reserved` de um lote aberto e exatamente o
+custo executado, e um round trip fechado termina com `reserved = 0`.
 
-Nao ha passo compensatorio: `release()` so roda nos terminais de falha (`REJECTED`/`CANCELED`/
-`EXPIRED`); o caminho `FILLED` passa apenas por `confirmExecution`. Toda BUY `LIMIT` que executa
-melhor que o proprio limite acumula residuo, ciclo apos ciclo.
-
-E a reconciliacao §7.2.3 do `docs/IMPLEMENTATION_GUIDE.md` — documentada e nao implementada.
-Medida em 2026-09-18 pelos e2e da T38; decisao e correcao pertencem a `.ai/tasks/T36-capital-reservation-safety-buffer.md`.
+A fee nao entra nesse calculo (divergencia consciente do IG §7.2.3), porque a venda baixa
+`reserved` sem fee. A fee da SELL entra no PnL do match; a fee da BUY hoje nao e contabilizada
+(ver T36, "Achado novo"). O safety buffer de §7.2.1-7.2.2 continua nao implementado (decisao pendente na T36).
 
 ## Liberacao De Margem
 
-`MarginReleasedReaction` processa `MarginReleaseEvent`:
+`MarginReleasedReaction` processa `MarginReleaseEvent` (terminais de falha e excedente de BUY
+`FILLED`):
 
 1. Registra idempotencia por `transactionId`.
 2. Resolve runner e portfolio.
@@ -143,12 +144,14 @@ ou replay.
 - Safe Mode deve impedir novas reservas quando ativo.
 - Limite de exposicao do runner deve considerar exposicao atual mais reserva
   solicitada.
-- Capital reservado por uma transacao terminal deve voltar integralmente ao disponivel.
-  **Hoje esta invariante e violada** no caminho `FILLED` — ver "Lacuna conhecida" acima.
+- Capital reservado por uma transacao terminal deve voltar ao disponivel, exceto o custo executado
+  de um lote ainda aberto, que sai na venda via `confirmExecution` (T36).
 
 ## Validacao
 
 - `core/src/test/java/com/marmitt/core/domain/portfolio/GlobalBalanceInvariantsTest.java`
+- `core/src/test/java/com/marmitt/core/application/usecase/runner/orderconciliation/MarginReleaseBuilderTest.java`
+- `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/ScenarioImmediateRoundTripE2ETest.java` (`reserved = 0` apos round trip)
 - `spring-application/src/test/java/com/marmitt/application/spring/handler/CapitalEventListenerTest.java`
 - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/CapitalDeadLetterReplayIntegrationTest.java`
 - `spring-application/src/test/java/com/marmitt/application/spring/deadletter/CapitalDeadLetterReprocessingAdapterTest.java`
