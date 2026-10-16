@@ -44,6 +44,26 @@ liberacao de margem em encerramentos.
 3. Registra o portfolio.
 4. Cria `GlobalBalance` inicial com capital e moeda base.
 
+## Safe Mode (T45)
+
+Nivel por portfolio, persistido em `portfolios` com origem, motivo e data; cada mudanca grava
+`safe_mode_changes`. Mudanca por `ManageSafeModePort` (`MANUAL` pela API admin, `AUTOMATIC` pelos
+gatilhos de T43/T25). Regras em `Portfolio.changeSafeMode`:
+
+- motivo obrigatorio; mesmo nivel nao muda nada (idempotente);
+- subida pode pular niveis; `CANCEL_ALL` e `PANIC_SELL` exigem confirmacao;
+- descida um nivel por vez (3 -> 2 -> 1 -> NORMAL);
+- `AUTOMATIC` so sobe ate `HALT` e nao rebaixa nivel manual mais alto.
+
+| Nivel | Efeito |
+|---|---|
+| `HALT` | Recusa reserva de BUY. A estrategia segue rodando e pode vender. |
+| `CANCEL_ALL` | HALT + cancela ordens LIMIT em voo; estrategia nao e consultada. |
+| `PANIC_SELL` | CANCEL_ALL + vende a mercado as posicoes abertas. |
+
+A execucao acontece nos ticks (`runner-signal-processing.md`). Capital volta pela conciliacao
+normal do CANCELED/FILLED, sem atalho. Runners fora de operacao (kill switch) nao sao conduzidos.
+
 ## Reserva Para BUY
 
 `CapitalReservationPolicy` decide se um sinal BUY pode seguir:
@@ -135,7 +155,8 @@ ou replay.
 | Componente | Papel |
 | --- | --- |
 | `core/src/main/java/com/marmitt/core/domain/portfolio/GlobalBalance.java` | Regras de saldo disponivel, reservado e realizado. |
-| `core/src/main/java/com/marmitt/core/domain/portfolio/Portfolio.java` | Estado do portfolio e Safe Mode. |
+| `core/src/main/java/com/marmitt/core/domain/portfolio/Portfolio.java` | Estado do portfolio e regras de transicao do Safe Mode. |
+| `core/src/main/java/com/marmitt/core/application/usecase/portfolio/ManageSafeModeUseCase.java` | Muda e consulta o Safe Mode (status com o que falta convergir). |
 | `core/src/main/java/com/marmitt/core/application/usecase/portfolio/CreatePortfolioUseCase.java` | Cria portfolio e saldo inicial. |
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/CapitalReservationPolicy.java` | Reserva capital para BUY. |
 | `core/src/main/java/com/marmitt/core/application/reaction/ExecutionConfirmedReaction.java` | Aplica efeito financeiro de execucao confirmada. |
@@ -150,6 +171,7 @@ ou replay.
 - Liberacao de margem terminal nao pode duplicar efeito financeiro.
 - Eventos de capital precisam ser idempotentes.
 - Safe Mode deve impedir novas reservas quando ativo.
+- Mudanca de nivel do Safe Mode sempre grava auditoria; gatilho automatico nunca passa de HALT.
 - Limite de exposicao do runner deve considerar exposicao atual mais reserva
   solicitada.
 - Capital reservado por uma transacao terminal deve voltar ao disponivel, exceto o custo executado

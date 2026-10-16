@@ -594,12 +594,13 @@ O Safe Mode opera em **três níveis escaláveis**, onde cada nível inclui toda
 
 | Nível | Nome | Ação | Proteção contra Acionamento Acidental |
 |-------|------|------|---------------------------------------|
-| **1 — Halt** | Bloqueio de Sinais | Rejeita todos os novos `TradeSignal`. Ordens em voo (`SUBMITTED`/`PARTIAL`) continuam seu ciclo normal. | Sem confirmação adicional (baixo risco — apenas bloqueia novas entradas). |
-| **2 — Cancel All** | Cancelamento em Massa | Além do Halt, envia comandos de cancelamento para todas as ordens `SUBMITTED` de todos os Runners. | Requer confirmação explícita (ex: flag `--force` ou double-confirmation na API). |
+| **1 — Halt** | Bloqueio de Entradas | Recusa toda nova reserva de capital (nenhum BUY). A estratégia continua rodando e **pode vender** — só reduz exposição (decisão da T45; bloquear tudo é o kill switch, que põe os runners em `HALTED`). Ordens em voo continuam seu ciclo normal. | Sem confirmação adicional (baixo risco — apenas bloqueia novas entradas). |
+| **2 — Cancel All** | Cancelamento em Massa | Além do Halt, envia cancelamento para todas as ordens LIMIT em voo (`PENDING`/`SUBMITTED`/`PARTIAL`) dos Runners operacionais. A estratégia deixa de ser consultada. | Requer confirmação explícita (`confirm=true` na API). |
 | **3 — Panic Sell** | Liquidação Total | Além do Cancel All, gera ordens de fechamento a mercado (Market Orders) para todas as `Positions` abertas. | Requer confirmação explícita com motivo registrado em auditoria. |
 
 * **Acionamento Automático:** Os gatilhos da seção 11.1.A acionam automaticamente o **Nível 1 (Halt)**. A escalação para Níveis 2 e 3 é exclusivamente manual.
-* **Execução Assíncrona com Feedback:** O comando é disparado de forma assíncrona. O operador acompanha o progresso via status (ex: "3/5 ordens canceladas", "2/4 posições liquidadas"). O sistema não bloqueia a API administrativa aguardando conclusão.
+* **Implementação (T45):** `GET/PUT /api/admin/portfolios/{id}/safe-mode`; a execução dos níveis 2 e 3 é reaplicada a cada tick do runner (convergente e retomável após restart). Runners parados pelo kill switch não são conduzidos. A liquidação do nível 3 usa MARKET sem proteção de preço nesta versão (proteção LIMIT: T48).
+* **Execução Assíncrona com Feedback:** O comando é disparado de forma assíncrona. O operador acompanha o progresso via status, que mostra o que ainda falta (ordens LIMIT a cancelar, vendas de liquidação em voo, posições abertas, runners fora de operação). O sistema não bloqueia a API administrativa aguardando conclusão.
 * **Persistência de Estado:** O nível ativo do Safe Mode é persistido no banco de dados para sobreviver a restarts.
 
 #### C. Protocolo de Bloqueio e Retomada

@@ -27,3 +27,26 @@ converte fee de terceiro ativo. Se a opção for ligada, cada fill chega com fee
 segue operando, mas a fee fica fora do PnL e é registrada em log `ERROR` com
 `unsupported BUY fee asset` / `unsupported SELL fee asset` — sinal para desligar a opção.
 
+## Safe Mode do portfolio (T45)
+
+Endpoints protegidos pelo `admin.api.key` (header da T8):
+
+```
+GET /api/admin/portfolios/{id}/safe-mode
+PUT /api/admin/portfolios/{id}/safe-mode
+    {"level": "HALT" | "CANCEL_ALL" | "PANIC_SELL" | "NORMAL", "reason": "...", "confirm": true|false}
+```
+
+| Nível | Quando usar | Efeito |
+|---|---|---|
+| `HALT` | Suspeita de problema; parar de comprar | Nenhum BUY novo. A estratégia segue e pode vender. |
+| `CANCEL_ALL` | Tirar todas as ordens LIMIT do livro | HALT + cancela ordens LIMIT em voo. Estratégia parada. Exige `confirm`. |
+| `PANIC_SELL` | Zerar exposição imediatamente | CANCEL_ALL + vende **a mercado** todas as posições. Exige `confirm`. |
+
+- O `PUT` responde **202** e a execução acontece nos ticks seguintes; acompanhe pelo `GET`
+  (`restingOrders`, `liquidatingOrders`, `openPositions` caindo a zero).
+- `idleRunners > 0`: há runners parados pelo kill switch (ou reconciliando) que o Safe Mode **não**
+  conduz. Para liquidá-los, reative o runner com o portfolio em `PANIC_SELL`.
+- Retomada: desça **um nível por vez** (`PANIC_SELL` → `CANCEL_ALL` → `HALT` → `NORMAL`), cada passo com motivo.
+- `409`: transição recusada (pulo na descida, falta de `confirm`, motivo vazio ou alteração concorrente).
+- Toda mudança fica em `safe_mode_changes` (de/para, origem, motivo, data).

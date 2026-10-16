@@ -459,3 +459,5 @@ Nao usar como precedente; corrigir quando a task tocar a area:
 - `adapter-coinbase` incompleto (sem ordem/consulta).
 - Design no IG/Blueprint sem implementacao: auditoria em T39.
 - Estado de warm-up de estrategia por instancia, nao por runner (T40).
+- Rejeicoes sinteticas (`expirePending*`, `OrderDispatchAdapter.toRejectedOrder`) informam
+  `OrderType.LIMIT` fixo no `OrderDataDto`, mesmo para a liquidacao MARKET (T45).
