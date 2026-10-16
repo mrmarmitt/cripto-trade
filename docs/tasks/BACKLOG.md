@@ -51,6 +51,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T43 | Circuit breaker de capital: drawdown e perda diária             | Alta  | Claude | Pendente  |
 | T44 | Proteção de posição independente da estratégia                  | Alta  | Claude | Pendente  |
 | T45 | Ativação do Safe Mode e níveis `CANCEL_ALL` / `PANIC_SELL`      | Média | Claude | Pendente  |
+| T46 | Ativo da fee e quantidade líquida da posição                    | Alta  | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 
 ## Ordem de execução
@@ -206,6 +207,7 @@ T36  Safety buffer na reserva de capital   ← decisão de negócio pendente
 
 ```
 T36  Devolução do excedente da reserva   T37  Preço side-aware      ← correção financeira (já mapeadas)
+T46  Ativo da fee + quantidade líquida   ← BUY com fee em base hoje deixa a SELL do lote sem saldo na exchange
 T39  Auditoria design × código            ← independente; pode gerar novas tasks
        ↓
 T40  Revisão do contrato (warm-up por runner, tickId, sem retry, idade da decisão)
