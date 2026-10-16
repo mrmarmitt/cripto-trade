@@ -63,8 +63,8 @@ posições.
   reaplicação a cada tick torna a execução convergente, idempotente (lock de posição + cooldown de
   cancel do dispatch) e retomável após restart só com o nível persistido — sem tabela de progresso.
 - **Kill switch tem precedência (implementação).** Runner `HALTED`, pausado ou reconciliando não é
-  conduzido pelo Safe Mode; o status mostra quantos estão nessa situação (`idleRunners`). Para
-  liquidar um runner halted, o operador o reativa com o portfolio em PANIC_SELL.
+  conduzido pelo Safe Mode; o status mostra quantos estão nessa situação (`idleRunners`). Reativar
+  um runner halted ainda não tem API (achado da T39 → T49).
 - **Ordens MARKET não são canceladas** pelo CANCEL_ALL: executam de imediato e são a própria liquidação.
 - **Progresso = o que falta** (`restingOrders`, `liquidatingOrders`, `openPositions`), derivado do
   estado atual, em vez de "n/total" (o total no instante da ativação exigiria estado próprio).

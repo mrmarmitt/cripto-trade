@@ -44,7 +44,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T36 | Safety buffer na reserva de capital (documentado vs. não implementado) | Média | Claude | Concluído |
 | T37 | Normalização de preço side-aware (BUY floor / SELL ceiling)     | Média | Claude | Concluído |
 | T38 | Testes E2E das estratégias de cenário                           | Média | Claude | Concluído |
-| T39 | Auditoria design × código (capital, risco, concorrência)        | Média | Claude | Pendente  |
+| T39 | Auditoria design × código (capital, risco, concorrência)        | Média | Claude | Concluído |
 | T40 | Revisão do contrato do strategy service antes do adapter        | Média | Claude | Pendente  |
 | T41 | Extração mínima da estratégia (port, proxy remoto, catálogo)    | Alta  | Claude | Pendente  |
 | T42 | Mailbox por runner e separação dos executores tick × ordem      | Alta  | Claude | Pendente  |
@@ -54,6 +54,9 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T46 | Ativo da fee e quantidade líquida da posição                    | Alta  | Claude | Concluído |
 | T47 | Um caminho por operação (limpeza pós-T46)                       | Baixa | Claude | Concluído |
 | T48 | Proteção LIMIT na liquidação do PANIC_SELL                      | Média | Claude | Pendente  |
+| T49 | Ciclo de vida do runner por API (start, resume, terminate)      | Alta  | Claude | Pendente  |
+| T50 | Limites de risco pré-trade (posições, ordens, preço, utilização) | Média | Claude | Pendente  |
+| T51 | Observabilidade de capital, Safe Mode e lifecycle                | Baixa | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 
 ## Ordem de execução
@@ -215,7 +218,8 @@ T36  Safety buffer na reserva de capital   ← concluída (2026-10-16)
 ```
 T36  Devolução do excedente da reserva   T37  Preço side-aware      ← correção financeira (já mapeadas)
 T46  Ativo da fee + quantidade líquida   ← BUY com fee em base hoje deixa a SELL do lote sem saldo na exchange
-T39  Auditoria design × código            ← independente; pode gerar novas tasks
+T39  Auditoria design × código            ← concluída; gerou T49, T50, T51
+T49  Ciclo de vida do runner por API     ← crítica: sem ela runner halted não volta
        ↓
 T40  Revisão do contrato (warm-up por runner, tickId, sem retry, idade da decisão)
        ↓

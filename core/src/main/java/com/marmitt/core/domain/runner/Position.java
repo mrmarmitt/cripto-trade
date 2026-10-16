@@ -193,12 +193,9 @@ public class Position {
     /**
      * Reduz a posição após execução de venda e acumula PnL realizado.
      * <p>
-     * {@code feePaid} deve estar <b>já convertida para a quote currency do símbolo</b>
-     * (ex: USDT para BTCUSDT) antes de ser passada. Se a exchange cobrou a fee em outro
-     * ativo (ex: BNB), a conversão é responsabilidade do caller — tipicamente o StrategyRunner
-     * ao processar o callback da exchange via {@code Fee.convertedAmount()}.
-     * Em caso de falha na conversão, o débito deve ser registrado na {@code DustAccount}
-     * como {@code TECHNICAL_DEBT} e {@code feePaid = ZERO} usado aqui.
+     * {@code feePaid} deve estar <b>já em quote asset</b> (ex: USDT para BTCUSDT). Fee cobrada
+     * em outro ativo (ex: BNB) não é convertida: o caller passa {@code ZERO} e a fee fica no
+     * match como pendente de conversão, fora do PnL (T46).
      *
      * @param soldQuantity quantidade vendida (em base asset, ex: BTC)
      * @param salePrice    preço de execução da venda (em quote asset, ex: USDT)

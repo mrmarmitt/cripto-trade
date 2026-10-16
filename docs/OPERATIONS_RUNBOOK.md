@@ -46,7 +46,8 @@ PUT /api/admin/portfolios/{id}/safe-mode
 - O `PUT` responde **202** e a execução acontece nos ticks seguintes; acompanhe pelo `GET`
   (`restingOrders`, `liquidatingOrders`, `openPositions` caindo a zero).
 - `idleRunners > 0`: há runners parados pelo kill switch (ou reconciliando) que o Safe Mode **não**
-  conduz. Para liquidá-los, reative o runner com o portfolio em `PANIC_SELL`.
+  conduz. **Ainda não há API para reativar um runner halted** (T49); até lá, as posições desses
+  runners precisam ser tratadas manualmente na exchange.
 - Retomada: desça **um nível por vez** (`PANIC_SELL` → `CANCEL_ALL` → `HALT` → `NORMAL`), cada passo com motivo.
 - `409`: transição recusada (pulo na descida, falta de `confirm`, motivo vazio ou alteração concorrente).
 - Toda mudança fica em `safe_mode_changes` (de/para, origem, motivo, data).

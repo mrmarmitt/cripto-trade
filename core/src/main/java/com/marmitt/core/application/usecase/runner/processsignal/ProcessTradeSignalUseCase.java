@@ -137,10 +137,9 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     /**
      * Corpo da persistencia BUY executado dentro da fronteira transacional.
      *
-     * <p>Salva a transacao com status PENDING <em>antes</em> de tentar reservar capital.
-     * Se a reserva falhar (saldo insuficiente, limite de exposicao, Safe Mode), a transacao
-     * PENDING fica gravada mas o {@link BuySignalHandler} captura a excecao e descarta o sinal
-     * — a transacao e entao tratada como intencao nao materializada e expirada pelo watchdog.
+     * <p>Salva a transacao com status PENDING e reserva o capital na mesma transacao de banco.
+     * Se a reserva falhar (saldo insuficiente, limite de exposicao, Safe Mode), a excecao faz
+     * rollback de tudo — nada fica gravado — e o {@link BuySignalHandler} descarta o sinal.
      *
      * <p>A persistencia previa garante rastreabilidade: se o processo cair apos o dispatch
      * mas antes do ACK da exchange, o sistema pode recuperar o estado pelo clientOrderId.
