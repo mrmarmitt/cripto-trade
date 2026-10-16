@@ -85,3 +85,15 @@ não são confiáveis e que a app deve calcular PnL de lote a partir de `input.c
 - `strategy/src/main/java/com/marmitt/strategy/impl/simple_moving_avager/SimpleMovingAverageStrategy.java` (`priceHistory` por instância).
 - `spring-application/src/main/java/com/marmitt/application/spring/repository/InMemoryStrategyRepository.java`.
 - `core/src/main/java/com/marmitt/core/domain/runner/Position.java` (`updateCurrentPrice` sem chamador).
+
+---
+
+## Achados da T39 (2026-10-16)
+
+- **`totalCapital` no contexto:** IG §14.7/§14.8 decidem que a estratégia não vê o capital total do
+  portfolio, mas `RunnerContextAssembler` envia `totalCapital`. Decidir no contrato: remover ou
+  documentar a exceção.
+- **Estratégia stateless (IG §14.11)** já coberta pelo item de warm-up por runner.
+- **Idade da decisão / stale signal (IG §12.3)** já coberta; o descarte efetivo no runner acontece na T42.
+- **`orderType` no contrato (IG §14.5.2):** a decisão de tipo é do core (T45); a proteção LIMIT
+  configurável fica na T48.

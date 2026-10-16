@@ -5,6 +5,13 @@
 **Dependências:** T21 (Discord notifications), T23 (signal counter — opcional para trigger por HOLD rate), **T45** (caminho de ativação do Safe Mode)  
 **Status:** Pendente
 
+> **Escopo ampliado (2026-10-16, T39):** além dos gatilhos operacionais, esta task passa a cobrir os
+> gatilhos 2–4 do BLUEPRINT §11.1.A ainda inexistentes: **rejeições consecutivas** (circuit breaker por
+> runner com retomada após cooldown, IG §11.6), **divergência crítica de saldo** (`FAIL_DEFICIT` da
+> sanidade de boot hoje só loga — passa a acionar HALT) e **anomalia de latência** (HALT com warm-up
+> automático, IG §11.5.3). Todos pela porta `ManageSafeModePort` com `AUTOMATIC`; o por runner usa o
+> halt do runner (T8), não o Safe Mode.
+
 > **Atualização (2026-10-16, T43):** o drawdown 24h (equity marcado a mercado) já aciona HALT
 > automático pela mesma porta. O gatilho "capital disponível < X% do inicial" abaixo ficou coberto por
 > ele e não deve ser implementado separadamente; esta task trata só dos gatilhos operacionais (DLQ,

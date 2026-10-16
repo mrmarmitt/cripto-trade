@@ -107,3 +107,11 @@ Adicionar painel no Grafana e alert rule: `circuitbreaker_state == OPEN` → `#a
 3. Métrica `resilience4j_circuitbreaker_state` visível no Prometheus.
 4. Boot recovery e watchdog continuam funcionando corretamente quando o circuito está fechado.
 5. Nenhuma mudança de comportamento funcional — só proteção contra cascata de falhas.
+
+---
+
+## Achados da T39 (2026-10-16)
+
+- **Rate limit por peso (IG §6.7, §12.9):** nenhuma chamada respeita o peso da Binance
+  (`X-MBX-USED-WEIGHT`). Com CANCEL_ALL/PANIC_SELL (T45) disparando várias chamadas, avaliar um
+  limitador no adapter junto do circuit breaker. Key pooling e failover entre chaves ficam fora (conta única).

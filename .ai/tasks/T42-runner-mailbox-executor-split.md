@@ -90,3 +90,12 @@ na implementação se o `ProcessTradeSignalUseCase.execute(MarketDataDto)` passa
 - `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/ProcessTradeSignalUseCase.java`.
 - `docs/IMPLEMENTATION_GUIDE.md` §12.1, §12.2, §12.8.
 - `.ai/tasks/T19-conciliation-striped-lock.md`.
+
+---
+
+## Achados da T39 (2026-10-16)
+
+- **Timeout por fase (IG §12.7):** processamento total do sinal, reserva e dispatch não têm timeout
+  próprio além do cliente HTTP. Incluir junto da mailbox.
+- **Stale signal check (IG §12.3):** descartar o tick/decisão mais velho que o limite ao iniciar a
+  avaliação (a idade vem do contrato revisado na T40).

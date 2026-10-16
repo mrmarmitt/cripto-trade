@@ -95,6 +95,8 @@ O Portfolio no modelo alvo é o **mestre financeiro** — responsável exclusiva
 
 #### 3.2.2 GlobalBalance (substitui Balance)
 
+> **Estado (T39, 2026-10-16):** Semântica real: `confirmExecution` faz `reserved −= custo`, `available += custo + pnl` e `realized += pnl`. O realizado é um contador **já contido** em `available`; não existe débito de dust.
+
 O `GlobalBalance` é um **atributo do Portfolio** (1:1) que substitui o `Balance` atual. A principal mudança é a decomposição de `invested` em `reservedBalance` (capital congelado para ordens em voo) e o rastreio explícito de fees pagas.
 
 | Campo               | Tipo         | Constraint          | Origem                                        | Notas                                                                       |
@@ -120,6 +122,8 @@ O `GlobalBalance` é um **atributo do Portfolio** (1:1) que substitui o `Balance
 
 #### 3.2.3 MarginAccount (Nova — 1:N com Portfolio)
 
+> **Estado (T39, 2026-10-16):** **Descartada na v1.** A classe existe sem repositório nem uso; a exposição por runner é calculada por consulta (`RunnerExposureService`).
+
 O `MarginAccount` controla o capital reservado por exchange/sub-conta. Permite que um Portfolio opere em múltiplas exchanges simultaneamente, cada uma com sua própria contabilidade de margem.
 
 > **Referência:** Blueprint Seção 3, 7.A.
@@ -139,6 +143,8 @@ O `MarginAccount` controla o capital reservado por exchange/sub-conta. Permite q
 **Constraint de unicidade:** `UNIQUE(portfolioId, exchangeId)` — no máximo uma conta por exchange por portfolio.
 
 #### 3.2.4 DustAccount (Sub-entidade do Portfolio — Nova)
+
+> **Estado (T39, 2026-10-16):** **Descartada na v1.** Sem repositório. O resíduo invendável é baixado como perda no PnL (T46); fee em terceiro ativo é só logada.
 
 A `DustAccount` é o receptor universal de débitos não resolvidos e resíduos operacionais. Seus valores são **excluídos** do `AvailableBalance`, mantendo o capital de giro "limpo".
 
@@ -274,6 +280,8 @@ A Transaction migra do Portfolio para o StrategyRunner. Principais mudanças: FK
 
 #### 3.3.4 TransactionMatch (Enriquecida)
 
+> **Estado (T39, 2026-10-16):** A unicidade `(buyTransactionId, sellTransactionId)` foi removida na V5: cada fill gera seu próprio match.
+
 O TransactionMatch ganha PK próprio, Fee VO embutido, PnL realizado e preços denormalizados para permitir cálculos rápidos sem JOINs.
 
 > **Referência:** Blueprint Seção 4.D, 9.1, 9.3.
@@ -326,6 +334,8 @@ Chave única de roteamento e idempotência, gerada pelo StrategyRunner antes do 
 **Regra de validação no parsing (Blueprint 4.C):** Antes de interpretar qualquer campo, o parser deve extrair e validar o prefixo de versão. Se a versão for desconhecida, abortar o processamento e encaminhar para a DLQ.
 
 #### 3.4.2 Fee (Value Object embutido no TransactionMatch)
+
+> **Estado (T39, 2026-10-16):** **Conversão cross-currency descartada na v1** (T46): fee em terceiro ativo não entra no PnL e gera log ERROR; o runbook exige BNB desligado.
 
 Representa o custo operacional imutável de uma execução.
 
@@ -1227,6 +1237,8 @@ A Transaction segue uma máquina de estados linear e determinística. Cada trans
 
 #### 6.1.1 Definição de Estados
 
+> **Estado (T39, 2026-10-16):** Na BUY não há `confirmExecution` por parcial: o custo executado fica em `reserved` até a venda do lote (T36). A coluna "Ação de Margem" vale para a SELL.
+
 | Estado        | Significado                                                                                                              | Quem Transiciona                   | Ação de Margem (via Seção 5)                                                               |
 |---------------|--------------------------------------------------------------------------------------------------------------------------|------------------------------------|--------------------------------------------------------------------------------------------|
 | **PENDING**   | Intenção criada e persistida no DB. Lotes de venda travados (se SELL). Capital Request ainda não enviado ou em andamento | Runner (criação)                   | `ReserveCapitalPort.reserve()` → Reserved                                                      |
@@ -1355,6 +1367,8 @@ O risco de crash entre a geração do ID e a persistência é eliminado pela ord
 | Após passo 9 (antes de SUBMITTED) | PENDING com `exchangeOrderId`  | Ordem aceita       | Boot: atualiza para SUBMITTED, fluxo normal             |
 
 ### 6.3 Estratégia de Retry e Timeout
+
+> **Estado (T39, 2026-10-16):** Implementado de outra forma: falha no dispatch deixa a transação `PENDING`; o `RunnerTransactionRecoveryWatchdog` (`runner.recovery.transaction.*`, ciclo 60s, carência de PENDING 10 min) consulta a exchange antes de expirar. Não há marcação otimista nem backoff 5/10/20/60s; as chaves `runner.watchdog.*`/`runner.dispatch.*` não existem e SUBMITTED antigo **não** é cancelado (ordens LIMIT podem descansar por design).
 
 > **Nota de Implementação #3 absorvida.**
 
@@ -1513,6 +1527,8 @@ O `clientOrderId` (Seção 3.4.1) é a chave primária de idempotência perante 
 
 ### 6.6 Reconciliação no Boot Sequence (Safe Mode)
 
+> **Estado (T39, 2026-10-16):** PENDING sem `exchangeOrderId` não expira direto: o boot consulta a exchange antes (T31), respeitando `runner.boot.phase3.pending-grace-ms`.
+
 > **Nota de Implementação #4 absorvida.**
 > **Referência:** Blueprint Seção 6.D.
 
@@ -1600,6 +1616,8 @@ Step 6: isReconciling = false, status = ACTIVE
 
 ### 6.7 Topologia de Acesso à Exchange
 
+> **Estado (T39, 2026-10-16):** Key pooling, fila de prioridade e failover **descartados na v1** (conta única). Rate limit por peso registrado na T24.
+
 > **Referência:** Blueprint Seção 10.1.D, 10.4.
 
 O StrategyRunner **nunca** acessa a Exchange diretamente. Todo acesso é centralizado no `ExchangeAdapter`:
@@ -1658,6 +1676,8 @@ Esta seção detalha **como implementar** a alocação de capital, a validação
 > **Dependência:** Seção 5 (`ReserveCapitalPort`) define o contrato de comunicação. Esta seção detalha a **lógica interna** do Portfolio ao processar um `reserve()`.
 
 ### 7.1 Cadeia de Validação do Capital Request
+
+> **Estado (T39, 2026-10-16):** Passo 2 implementado como releitura de `canAcceptSignals` na transação; passo 3 descartado (reserva na mesma transação do persist); passo 4 só tem `maxAllocationPercent` — `maxOpenPositions`/`maxPendingOrders` pendentes na **T50**.
 
 Quando o Runner invoca `ReserveCapitalPort.reserve()`, o Portfolio executa uma cadeia de validações ordenada. A falha em qualquer passo resulta em rejeição imediata — não há "continue apesar do erro".
 
@@ -1763,6 +1783,8 @@ Este excedente é devolvido ao `AvailableBalance` como parte do `ConfirmExecutio
 
 ### 7.3 Validação Pre-Reserve (Runner-Side)
 
+> **Estado (T39, 2026-10-16):** V2 (confiança mínima) descartada; V3/V4 acontecem como normalização ao `stepSize` no core e `OrderFilterValidator` no adapter Binance; V5 (sanidade de preço) pendente na **T50**.
+
 Antes de invocar `ReserveCapitalPort.reserve()`, o Runner executa validações locais para evitar chamadas desnecessárias ao Portfolio.
 
 > **Nota de Implementação #17 absorvida.**
@@ -1807,6 +1829,8 @@ O Runner valida regras de negócio da strategy e da exchange. O Portfolio valida
 | Circuit Breaker      | Portfolio    | Safe Mode é decisão do Portfolio                     |
 
 ### 7.4 Limites de Exposição por Runner
+
+> **Estado (T39, 2026-10-16):** Só `maxAllocationPercent` é aplicado. `maxOpenPositions`/`maxPendingOrders`: **T50**; cancel rate: **T51**; alteração em runtime: **T49**. A exposição é calculada por consulta, não por `MarginAccount`.
 
 > **Referência:** Blueprint Seção 11.2.B.
 
@@ -1866,6 +1890,8 @@ Regras de alteração:
 ```
 
 ### 7.5 Modos de Capital Pooling
+
+> **Estado (T39, 2026-10-16):** **DEDICATED descartado na v1**: só SHARED tem comportamento.
 
 > **Referência:** Blueprint Seção 11.2.C.
 
@@ -1946,6 +1972,8 @@ O Portfolio processa Capital Requests na **ordem cronológica de recebimento**. 
 
 #### 7.6.2 Concorrência no `reserve()`
 
+> **Estado (T39, 2026-10-16):** Implementado como `UPDATE global_balances … WHERE available_balance >= :amount` atômico (`GlobalBalanceJdbcRepository.reserveAtomic`), sem `SELECT … FOR UPDATE` nem tabela de reservas.
+
 **Problema:** Se 10 Runners chamam `reserve()` simultaneamente, como garantir atomicidade?
 
 **Solução:** Lock pessimista no nível do banco de dados. O `reserve()` executa um `SELECT ... FOR UPDATE` na linha do `GlobalBalance`, garantindo serialização sem deadlock:
@@ -1985,6 +2013,8 @@ BEGIN TRANSACTION;
 - Deadlock-free: o lock é sempre na mesma tabela/linha, sem dependências cruzadas
 
 ### 7.7 Monitoramento e Métricas de Capital
+
+> **Estado (T39, 2026-10-16):** Métricas pendentes na **T51**.
 
 > **Nota de Implementação #20 absorvida.**
 
@@ -2057,6 +2087,8 @@ Runner (continuação)
 ```
 
 ### 7.9 Configuração
+
+> **Estado (T39, 2026-10-16):** Nenhuma chave desta tabela existe hoje; as de limites e métricas nascem na T50/T51.
 
 | Parâmetro                              | Default  | Descrição                                         |
 |----------------------------------------|----------|---------------------------------------------------|
@@ -3451,6 +3483,8 @@ LatencyMonitor (integrado ao Watchdog):
 
 ### 11.2 Níveis do Safe Mode
 
+> **Estado (T39, 2026-10-16):** Implementado na T45 com diferenças: **HALT ainda permite SELL da estratégia** (bloqueia só a reserva de BUY); CANCEL_ALL cancela ordens LIMIT em voo (inclui PENDING); a estratégia deixa de ser consultada a partir de CANCEL_ALL.
+
 O Safe Mode opera em **três níveis escaláveis** onde cada nível inclui todas as ações do anterior.
 
 #### 11.2.1 Definição dos Níveis
@@ -3515,6 +3549,8 @@ Portfolio Boot (Phase 2, Seção 10.2):
 **Regra:** O Safe Mode **nunca** é resetado automaticamente no boot. Se o sistema crashou durante um Circuit Breaker, o motivo que causou o break provavelmente ainda existe. O operador deve investigar e resetar manualmente.
 
 ### 11.3 Execução dos Níveis
+
+> **Estado (T39, 2026-10-16):** Implementado de outra forma (T45): sem tarefa assíncrona própria; o `SafeModeHandler` reaplica o nível a cada tick dos runners operacionais e a liquidação passa pelo pipeline normal de SELL com `OrderType.MARKET`. Runners halted pelo kill switch não são conduzidos.
 
 #### 11.3.1 Nível 1 — Halt
 
@@ -3626,6 +3662,8 @@ activatePanicSell(confirmationToken, auditReason):
 
 ### 11.4 Kill-Switch Externo
 
+> **Estado (T39, 2026-10-16):** Endpoint real: `GET/PUT /api/admin/portfolios/{id}/safe-mode` (por portfolio, PUT → 202). A regra de escalação é a do Blueprint 11.1.C: **subida pode pular níveis** (com `confirm`), **descida é um nível por vez**. Health com Safe Mode: **T51**.
+
 > **Nota #13 absorvida:** "O sistema deve possuir um endpoint que, se sinalizado, aciona o cancelamento em massa (Panic Sell / Cancel All) em caso de emergência externa."
 
 #### 11.4.1 Endpoint REST
@@ -3679,6 +3717,8 @@ Para cenários onde o sistema não consegue acionar o kill-switch internamente (
 | **Heartbeat invertido**   | Se o sistema não enviar heartbeat por `N` segundos, monitoramento externo assume crash | Cloud watchdog (ex: AWS CloudWatch Alarm) dispara ação de emergência          |
 
 ### 11.5 Protocolo de Retomada
+
+> **Estado (T39, 2026-10-16):** Reset sem pré-condição de ordens em voo (a descida passo a passo e o status cobrem). Retomada automática por rejeições/latência: **T25**.
 
 #### 11.5.1 Regras de Retomada
 
@@ -3755,6 +3795,8 @@ LatencyWarmup (Portfolio, periódico — apenas se reason == LATENCY_ANOMALY):
 
 ### 11.6 Circuit Breaker por Runner (Isolamento)
 
+> **Estado (T39, 2026-10-16):** Pendente na **T25** (escopo ampliado pela T39).
+
 Além do Circuit Breaker global (Portfolio), o Portfolio implementa isolamento por Runner para evitar que um Runner defeituoso afete os demais.
 
 ```
@@ -3801,6 +3843,8 @@ RunnerCircuitBreaker (Portfolio, event-driven):
 | **Persistência** | `portfolios.safe_mode_status`   | `strategy_runners.status = HALTED` |
 
 ### 11.7 Observabilidade
+
+> **Estado (T39, 2026-10-16):** Existem `circuit_breaker.drawdown.current`, `.drawdown.peak_24h`, `circuit_breaker.equity.current` e `circuit_breaker.activations.total` (T43). As demais: **T51**.
 
 | Métrica                                  | Tipo    | Descrição                                                      |
 |------------------------------------------|---------|----------------------------------------------------------------|
@@ -3862,6 +3906,8 @@ Esta seção detalha **como implementar** o modelo de concorrência de cada Stra
 > **Dependência:** Seção 9.5 (processamento sequencial previne deadlocks de locks), Seção 11.6 (Circuit Breaker por Runner).
 
 ### 12.1 Modelo de Processamento: Fila Sequencial com Drop Policy
+
+> **Estado (T39, 2026-10-16):** **Não implementado** (§12.1–12.3, §12.6–12.8): ticks são processados no `messageProcessingExecutor` compartilhado. Ver **T42** (mailbox, timeouts, backpressure) e **T40** (idade da decisão). Em SINGLE, só o BUY é barrado com ordem em voo; SELL concorrente é barrada pelo lock de posição.
 
 Cada Runner opera sob o padrão **Actor/Mailbox** — uma fila de entrada com capacidade limitada e processamento estritamente sequencial.
 
@@ -4041,6 +4087,8 @@ private boolean shouldAcceptSignal(TradeSignal signal) {
 ```
 
 ### 12.5 Prioridade de Comandos Admin
+
+> **Estado (T39, 2026-10-16):** Só existem o halt de runner (T8) e o Safe Mode (T45). FORCE_CANCEL, FORCE_CLOSE_POSITION e RESUME: **T49**.
 
 > **Nota #25 absorvida:** "Comandos manuais via Portfolio/Admin (ex: Force Cancel) têm prioridade máxima e devem furar a fila ou interromper o processamento do sinal atual."
 
@@ -4288,6 +4336,8 @@ Esta seção detalha **como implementar** a máquina de estados do StrategyRunne
 
 ### 13.1 Máquina de Estados do Runner
 
+> **Estado (T39, 2026-10-16):** As transições existem no domínio, mas **não há API** para start/resume/terminate: runner criado só fica ACTIVE no próximo boot e runner halted não volta sem editar o banco. Ver **T49**.
+
 ```
                               API Create
                                   │
@@ -4431,6 +4481,8 @@ public class RunnerFactory {
 
 ### 13.3 Health Check de Ativação
 
+> **Estado (T39, 2026-10-16):** Pendente na **T49**.
+
 > **Nota #28 absorvida:** "Ao passar para ACTIVE, o Runner deve obrigatoriamente realizar um ping na API da Exchange e validar o tickSize do ativo. Se falhar, o status deve retroceder para HALTED."
 
 #### 13.3.1 Protocolo
@@ -4518,6 +4570,8 @@ public void startRunner(UUID runnerId) {
 ```
 
 ### 13.4 Graceful Shutdown (Encerramento com Posições Abertas)
+
+> **Estado (T39, 2026-10-16):** Pendente na **T49**.
 
 Quando o operador solicita o encerramento de um Runner ativo:
 
@@ -4636,6 +4690,8 @@ SELECT * FROM strategy_runners WHERE status != 'ARCHIVED'
 ```
 
 ### 13.6 API Administrativa
+
+> **Estado (T39, 2026-10-16):** Existem só `POST /api/portfolios/{id}/runners` (criar), `POST /api/admin/runners/{id}/halt`, `POST /api/admin/runners/halt` e `GET /api/admin/runners/status`. O restante: **T49**. `portfolio.max-runners` descartado na v1.
 
 #### 13.6.1 Endpoints
 
@@ -4976,6 +5032,8 @@ public record StrategyOutputDto(
 
 #### 14.5.2 Campos para Avaliação Futura (V2+)
 
+> **Estado (T39, 2026-10-16):** Desatualizado: LIMIT é o tipo padrão (T34 `limitPrice`) e MARKET existe só na liquidação do PANIC_SELL (T45). Proteção LIMIT configurável: **T48**.
+
 | Campo            | Propósito                 | Quando Implementar                             |
 |------------------|---------------------------|------------------------------------------------|
 | `orderType`      | MARKET vs LIMIT           | Quando suporte a LIMIT orders for implementado |
@@ -5057,6 +5115,8 @@ public class RunnerContextAssembler {
 
 ### 14.7 Regras de Isolamento da Strategy
 
+> **Estado (T39, 2026-10-16):** Divergência: o contexto envia `totalCapital` — decisão na **T40**.
+
 A TradeStrategy é **stateless** — não mantém estado entre invocações:
 
 | Regra                           | Descrição                                                         | Motivo                                                              |
@@ -5089,6 +5149,8 @@ A TradeStrategy é **stateless** — não mantém estado entre invocações:
 | —                                  | `unrealizedPnl`                  | **NEW**                                                   |
 
 ### 14.9 Cooldown (Frequência de Sinais)
+
+> **Estado (T39, 2026-10-16):** Só o cooldown implícito existe; `runner.cooldown.explicit-ms` e `runner.context.*` (§14.10) descartados na v1.
 
 > **Questão aberta respondida:** "Como funciona exatamente o cooldown entre operações?" (IMPLEMENTATION_GUIDE_QUESTOES.md — Cooldown Implementation).
 
@@ -5898,7 +5960,7 @@ Esta seção consolida todas as questões de implementação identificadas duran
 
 | Status        | Significado                                                                                         |
 |---------------|-----------------------------------------------------------------------------------------------------|
-| **RESOLVIDA** | Questão completamente respondida em uma seção do IG                                                |
+| **RESOLVIDA** | Questão respondida em uma seção do IG (decisão documentada — o estado de implementação está na matriz da T39)                                                |
 | **PARCIAL**   | Questão parcialmente endereçada — aspectos principais cobertos, detalhes de implementação pendentes |
 | **ABERTA**    | Questão ainda não endereçada — requer decisão arquitetural ou investigação durante implementação    |
 | **ADIADA**    | Questão explicitamente adiada para V2+ ou escopo futuro                                             |
