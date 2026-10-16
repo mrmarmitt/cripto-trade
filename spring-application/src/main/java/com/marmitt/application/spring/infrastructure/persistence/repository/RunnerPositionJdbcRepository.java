@@ -17,6 +17,14 @@ public interface RunnerPositionJdbcRepository extends CrudRepository<RunnerPosit
     @Query("SELECT * FROM positions WHERE runner_id = :runnerId AND status = 'OPEN'")
     List<RunnerPositionEntity> findOpenByRunnerId(@Param("runnerId") UUID runnerId);
 
+    @Query("""
+            SELECT p.* FROM positions p
+              JOIN strategy_runners r ON r.id = p.runner_id
+             WHERE r.portfolio_id = :portfolioId
+               AND p.status IN ('OPEN','CLOSING')
+            """)
+    List<RunnerPositionEntity> findActiveByPortfolioId(@Param("portfolioId") UUID portfolioId);
+
     @Query("SELECT * FROM positions WHERE runner_id = :runnerId AND UPPER(symbol) = UPPER(:symbol) AND status = 'OPEN' AND locked_by_transaction_id IS NULL")
     Optional<RunnerPositionEntity> findOpenByRunnerIdAndSymbol(
             @Param("runnerId") UUID runnerId,

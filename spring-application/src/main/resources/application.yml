@@ -102,6 +102,14 @@ runner:
       pending-grace-ms: 600000   # carencia maior p/ PENDING (reserva orfa) — > dispatch+ACK
       max-per-run: 50
 
+portfolio:
+  circuit-breaker:
+    # T43: HALT automatico quando o equity (available + reserved + PnL flutuante) cai mais que
+    # max-drawdown-percent em relacao ao pico das ultimas 24h (ou desde o ultimo reset manual).
+    enabled: true
+    max-drawdown-percent: 0.10
+    check-interval-ms: 10000
+
 admin:
   api:
     key: ${ADMIN_API_KEY:}

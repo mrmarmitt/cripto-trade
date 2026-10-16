@@ -578,7 +578,7 @@ O sistema implementa um mecanismo de interrupção em cascata para proteger o `G
 
 O Circuit Breaker é acionado automaticamente pelo **Portfolio** ao detectar as seguintes anomalias:
 
-1. **Max Daily Drawdown:** Queda do `GlobalBalance` (realizado + flutuante) abaixo de um percentual pré-configurado nas últimas 24h.
+1. **Max Daily Drawdown:** Queda do `GlobalBalance` (realizado + flutuante) abaixo de um percentual pré-configurado nas últimas 24h. *Implementado na T43: equity = available + reserved + flutuante ao último preço; limite global de 10%; a janela reinicia no reset manual.*
 2. **Rejeições Consecutivas:** Se um Runner acumular $N$ estados `REJECTED` da Exchange em um curto intervalo, sinalizando erro de parâmetro ou falta de liquidez.
 3. **Divergência Crítica de Saldo:** Se, durante a reconciliação, a diferença entre o saldo da Exchange e o local exceder o limite de segurança.
 4. **Anomalia de Latência:** Timeouts excessivos detectados pelo Watchdog, sugerindo instabilidade na API da Exchange ou infraestrutura.

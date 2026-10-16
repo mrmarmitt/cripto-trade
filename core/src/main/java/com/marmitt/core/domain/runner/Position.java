@@ -385,11 +385,16 @@ public class Position {
      * PnL não realizado calculado com o preço de mercado atual.
      * Retorna ZERO se currentPrice não disponível.
      */
+    /**
+     * PnL flutuante ao {@code currentPrice}: valor de mercado das unidades detidas menos o custo pago
+     * por elas ({@code costBasis}, T46). Fonte unica do flutuante para contexto da estrategia,
+     * consultas e monitor de drawdown (T43).
+     */
     public BigDecimal getUnrealizedPnl() {
         if (currentPrice == null || quantity.compareTo(BigDecimal.ZERO) == 0) {
             return BigDecimal.ZERO;
         }
-        return currentPrice.subtract(averagePrice).multiply(quantity);
+        return currentPrice.multiply(quantity).subtract(costBasis).setScale(8, RoundingMode.HALF_UP);
     }
 
     public boolean isClosed() {

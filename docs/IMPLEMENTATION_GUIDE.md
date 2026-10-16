@@ -3402,10 +3402,10 @@ O Circuit Breaker é acionado automaticamente pelo **Portfolio** ao detectar ano
 DrawdownMonitor (Portfolio, periódico):
 
     // Executado a cada check-interval (ex: 10s)
+    // T43: realizedBalance NAO entra — ja esta dentro de availableBalance (confirmExecution).
     currentBalance = globalBalance.availableBalance
                    + globalBalance.reservedBalance
-                   + globalBalance.realizedBalance
-                   + calculateUnrealizedPnl()
+                   + calculateUnrealizedPnl()      // preco x quantidade - cost_basis, ultimo preco
 
     peakBalance24h = metricsStore.getPeakBalance(Duration.ofHours(24))
 

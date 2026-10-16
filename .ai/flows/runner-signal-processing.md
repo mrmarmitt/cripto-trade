@@ -32,7 +32,8 @@ adaptadores externos.
    Le o nivel do Safe Mode de cada portfolio uma vez por tick. Em `CANCEL_ALL`/`PANIC_SELL` o runner
    segue o ramo "Safe Mode" abaixo e a estrategia nao e consultada (T45).
 4. `RunnerContextAssembler` monta `StrategyContextDto` com portfolio,
-   posicoes, ordens pendentes, limites e PnL.
+   posicoes, ordens pendentes, limites e PnL. A posicao e marcada ao preco do tick (em memoria):
+   `unrealizedPnl` e o percentual do lote refletem o mercado (T43).
 5. `StrategySignalEvaluator` avalia a estrategia.
 6. Sinal `HOLD` encerra o fluxo sem efeito.
 7. `OrderNormalizer` alinha quantidade e preco as regras de filtro da exchange

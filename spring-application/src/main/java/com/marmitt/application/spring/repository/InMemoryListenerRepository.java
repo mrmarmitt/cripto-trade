@@ -7,6 +7,7 @@ import com.marmitt.core.application.usecase.runner.OrderConciliationUseCase;
 import com.marmitt.core.ports.inbound.runner.ProcessTradeSignalPort;
 import com.marmitt.core.ports.outbound.listener.OrderUpdateListener;
 import com.marmitt.core.ports.outbound.listener.PriceUpdateListener;
+import com.marmitt.core.ports.outbound.marketdata.LatestPricePort;
 import com.marmitt.core.ports.outbound.repository.ListenerRepositoryPort;
 import jakarta.annotation.PostConstruct;
 import lombok.extern.slf4j.Slf4j;
@@ -29,13 +30,16 @@ public class InMemoryListenerRepository implements ListenerRepositoryPort {
 
     private final ProcessTradeSignalPort processTradeSignal;
     private final OrderConciliationUseCase orderConciliation;
+    private final LatestPricePort latestPrices;
 
     public InMemoryListenerRepository(
             ProcessTradeSignalPort processTradeSignal,
-            OrderConciliationUseCase orderConciliation) {
+            OrderConciliationUseCase orderConciliation,
+            LatestPricePort latestPrices) {
 
         this.processTradeSignal = processTradeSignal;
         this.orderConciliation = orderConciliation;
+        this.latestPrices = latestPrices;
 
         this.orderUpdateListeners = new ConcurrentHashMap<>();
         this.priceUpdateListeners = new ConcurrentHashMap<>();
@@ -51,7 +55,7 @@ public class InMemoryListenerRepository implements ListenerRepositoryPort {
 
         addOrderUpdateListener(runnerOrderUpdateListener);
 
-        addPriceUpdateListener(new MarketDataPriceUpdateListener());
+        addPriceUpdateListener(new MarketDataPriceUpdateListener(latestPrices));
         addPriceUpdateListener(runnerPriceUpdateListener);
 
         log.info("Listeners initialized - OrderUpdateListeners: {}, PriceUpdateListeners: {}",

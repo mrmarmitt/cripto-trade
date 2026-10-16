@@ -50,3 +50,18 @@ PUT /api/admin/portfolios/{id}/safe-mode
 - Retomada: desça **um nível por vez** (`PANIC_SELL` → `CANCEL_ALL` → `HALT` → `NORMAL`), cada passo com motivo.
 - `409`: transição recusada (pulo na descida, falta de `confirm`, motivo vazio ou alteração concorrente).
 - Toda mudança fica em `safe_mode_changes` (de/para, origem, motivo, data).
+
+## Circuit breaker de drawdown (T43)
+
+- O monitor roda a cada 10s (`portfolio.circuit-breaker.check-interval-ms`). Equity =
+  `available + reserved + PnL flutuante` das posições ao último preço.
+- Queda acima de **10%** (`max-drawdown-percent`) em relação ao pico das últimas 24h coloca o
+  portfolio em **HALT automático** (motivo `MAX_DRAWDOWN_EXCEEDED`), com aviso no Discord e registro
+  em `safe_mode_changes` (origem `AUTOMATIC`). A 50% do limite há log WARN.
+- **Não há retomada automática.** Depois de analisar a perda, desça para `NORMAL` pela API do Safe
+  Mode; o pico é recalculado a partir do reset, então o breaker não reaciona pelo pico antigo.
+- Gauges: `circuit_breaker.drawdown.current`, `circuit_breaker.drawdown.peak_24h`,
+  `circuit_breaker.equity.current` (tag `portfolioId`); contador `circuit_breaker.activations.total`.
+- Log `drawdown: no market price ... skipped` logo após subir é esperado até o primeiro tick do
+  símbolo; se persistir, o símbolo da posição não está recebendo market data.
+- Para desligar (ex.: teste controlado): `portfolio.circuit-breaker.enabled=false`.

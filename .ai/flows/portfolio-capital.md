@@ -64,6 +64,18 @@ gatilhos de T43/T25). Regras em `Portfolio.changeSafeMode`:
 A execucao acontece nos ticks (`runner-signal-processing.md`). Capital volta pela conciliacao
 normal do CANCELED/FILLED, sem atalho. Runners fora de operacao (kill switch) nao sao conduzidos.
 
+## Circuit Breaker De Drawdown (T43)
+
+`DrawdownMonitorScheduler` (spring, a cada `portfolio.circuit-breaker.check-interval-ms`) chama
+`EvaluateDrawdownUseCase`. Por portfolio ativo:
+
+1. Equity = `available + reserved + PnL flutuante` (`PortfolioMarkToMarket`: posicoes OPEN e CLOSING
+   ao ultimo preco do `LatestPricePort`). Sem preco para alguma posicao, o portfolio e pulado.
+2. Grava a amostra em `equity_snapshots`; pico = maior amostra desde `agora - 24h` ou desde o ultimo
+   reset manual para NORMAL, o que for mais recente.
+3. Em NORMAL, `(pico - equity) / pico > max-drawdown-percent` (10%) aciona HALT `AUTOMATIC` pelo
+   `ManageSafeModePort`, com motivo `MAX_DRAWDOWN_EXCEEDED`, metrica e Discord. Sem retomada automatica.
+
 ## Reserva Para BUY
 
 `CapitalReservationPolicy` decide se um sinal BUY pode seguir:
@@ -172,6 +184,7 @@ ou replay.
 - Eventos de capital precisam ser idempotentes.
 - Safe Mode deve impedir novas reservas quando ativo.
 - Mudanca de nivel do Safe Mode sempre grava auditoria; gatilho automatico nunca passa de HALT.
+- Equity do breaker nunca soma `realizedBalance` (ja contido em `available`).
 - Limite de exposicao do runner deve considerar exposicao atual mais reserva
   solicitada.
 - Capital reservado por uma transacao terminal deve voltar ao disponivel, exceto o custo executado

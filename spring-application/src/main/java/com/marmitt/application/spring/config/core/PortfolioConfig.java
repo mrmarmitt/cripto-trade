@@ -1,6 +1,13 @@
 package com.marmitt.application.spring.config.core;
 
+import com.marmitt.application.spring.bootstrap.CircuitBreakerProperties;
 import com.marmitt.application.spring.service.TransactionalManageDeadLetterPort;
+import com.marmitt.core.application.usecase.portfolio.EvaluateDrawdownUseCase;
+import com.marmitt.core.ports.inbound.portfolio.EvaluateDrawdownPort;
+import com.marmitt.core.ports.outbound.marketdata.LatestPricePort;
+import com.marmitt.core.ports.outbound.metrics.CircuitBreakerMetricsPort;
+import com.marmitt.core.ports.outbound.notification.ErrorNotificationPort;
+import com.marmitt.core.ports.outbound.repository.EquitySnapshotRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterReprocessingPort;
 import com.marmitt.core.application.usecase.portfolio.CreatePortfolioUseCase;
 import com.marmitt.core.application.usecase.portfolio.ManageDeadLetterUseCase;
@@ -16,6 +23,8 @@ import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import java.time.Clock;
 
 @Configuration
 public class PortfolioConfig {
@@ -35,12 +44,14 @@ public class PortfolioConfig {
     public QueryPortfolioPort queryPortfolio(
             PortfolioRepositoryPort portfolioRepository,
             StrategyRunnerRepositoryPort strategyRunnerRepository,
-            GlobalBalanceRepositoryPort globalBalanceRepository
+            GlobalBalanceRepositoryPort globalBalanceRepository,
+            LatestPricePort latestPrices
     ) {
         return new QueryPortfolioUseCase(
                 portfolioRepository,
                 strategyRunnerRepository,
-                globalBalanceRepository
+                globalBalanceRepository,
+                latestPrices
         );
     }
 
@@ -50,6 +61,23 @@ public class PortfolioConfig {
             StrategyRunnerRepositoryPort strategyRunnerRepository
     ) {
         return new ManageSafeModeUseCase(portfolioRepository, strategyRunnerRepository);
+    }
+
+    @Bean
+    public EvaluateDrawdownPort evaluateDrawdown(
+            PortfolioRepositoryPort portfolioRepository,
+            GlobalBalanceRepositoryPort globalBalanceRepository,
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            LatestPricePort latestPrices,
+            EquitySnapshotRepositoryPort equitySnapshots,
+            ManageSafeModePort manageSafeMode,
+            ErrorNotificationPort errorNotification,
+            CircuitBreakerMetricsPort circuitBreakerMetrics,
+            CircuitBreakerProperties circuitBreakerProperties
+    ) {
+        return new EvaluateDrawdownUseCase(portfolioRepository, globalBalanceRepository, strategyRunnerRepository,
+                latestPrices, equitySnapshots, manageSafeMode, errorNotification, circuitBreakerMetrics,
+                circuitBreakerProperties.getMaxDrawdownPercent(), Clock.systemUTC());
     }
 
     @Bean

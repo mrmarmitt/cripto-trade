@@ -120,6 +120,10 @@ Pontos criticos:
 - `tryLockPositionForSell` usa update condicional e aceita estado ja lockado pela
   mesma transacao como sucesso idempotente.
 - positions `OPEN` ou `CLOSING` precisam de `openedByTransactionId`.
+- `equity_snapshots` (V14, T43): amostra por portfolio a cada avaliacao do breaker; PK
+  `(portfolio_id, sampled_at)`; o proprio monitor remove amostras com mais de 24h.
+- `findActivePositionsByPortfolioId` junta `positions` e `strategy_runners` e inclui `CLOSING`
+  (lote travado por venda em voo ainda e do portfolio).
 - `transactions.order_type` (V13, T45) `NOT NULL DEFAULT 'LIMIT'`; o dominio sempre informa.
 - `portfolios.safe_mode_*` + tabela `safe_mode_changes` (V13, T45): a mudanca de nivel e um
   `UPDATE ... WHERE version = :lida` seguido do INSERT da auditoria na mesma transacao

@@ -5,9 +5,9 @@ import com.marmitt.core.dto.portfolio.response.GlobalBalanceDto;
 import com.marmitt.core.dto.portfolio.response.PortfolioPnlDto;
 import com.marmitt.core.dto.portfolio.response.TransactionDto;
 import com.marmitt.core.domain.portfolio.GlobalBalance;
-import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.ports.inbound.portfolio.QueryPortfolioPort;
+import com.marmitt.core.ports.outbound.marketdata.LatestPricePort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
@@ -35,15 +35,18 @@ public class QueryPortfolioUseCase implements QueryPortfolioPort {
     private final PortfolioRepositoryPort portfolioRepository;
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final GlobalBalanceRepositoryPort globalBalanceRepository;
+    private final PortfolioMarkToMarket markToMarket;
 
     public QueryPortfolioUseCase(
             PortfolioRepositoryPort portfolioRepository,
             StrategyRunnerRepositoryPort strategyRunnerRepository,
-            GlobalBalanceRepositoryPort globalBalanceRepository
+            GlobalBalanceRepositoryPort globalBalanceRepository,
+            LatestPricePort latestPrices
     ) {
         this.portfolioRepository = portfolioRepository;
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.globalBalanceRepository = globalBalanceRepository;
+        this.markToMarket = new PortfolioMarkToMarket(strategyRunnerRepository, latestPrices);
     }
 
     @Override
@@ -113,10 +116,8 @@ public class QueryPortfolioUseCase implements QueryPortfolioPort {
         }
 
         BigDecimal realized = balanceOpt.get().getRealizedBalance();
-        BigDecimal unrealized = strategyRunnerRepository.findByPortfolioId(portfolioId).stream()
-                .flatMap(runner -> strategyRunnerRepository.findOpenPositionsByRunnerId(runner.getId()).stream())
-                .map(Position::getUnrealizedPnl)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // Flutuante ao ultimo preco (T43); posicao ainda sem preco conhecido nao entra na soma.
+        BigDecimal unrealized = markToMarket.value(portfolioId).unrealizedPnl();
 
         return Optional.of(PortfolioPnlDto.builder()
                 .portfolioId(portfolioId)
