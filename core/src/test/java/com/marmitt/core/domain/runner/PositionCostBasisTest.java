@@ -21,8 +21,8 @@ class PositionCostBasisTest {
     private static final BigDecimal PAID = new BigDecimal("66.23370000");
 
     @Test
-    void openAtCostKeepsPaidCostAndDerivesAveragePrice() {
-        Position position = Position.openAtCost(UUID.randomUUID(), "BTCUSDT", NET_QTY, PAID);
+    void openKeepsPaidCostAndDerivesAveragePrice() {
+        Position position = Position.open(UUID.randomUUID(), "BTCUSDT", NET_QTY, PAID);
 
         assertAmount("66.23370000", position.getCostBasis());
         assertAmount("66300.00000000", position.getAveragePrice());
@@ -30,7 +30,7 @@ class PositionCostBasisTest {
 
     @Test
     void sellingTheWholeLotReleasesExactlyThePaidCost() {
-        Position position = Position.openAtCost(UUID.randomUUID(), "BTCUSDT", new BigDecimal("0.0007"),
+        Position position = Position.open(UUID.randomUUID(), "BTCUSDT", new BigDecimal("0.0007"),
                 new BigDecimal("46.36359000"));
 
         BigDecimal soldCost = position.reduceQuantity(new BigDecimal("0.0007"), new BigDecimal("66300"), BigDecimal.ZERO);
@@ -45,7 +45,7 @@ class PositionCostBasisTest {
         // Custo que deixa o preco medio sem representacao exata (dizima): a soma das baixas ainda
         // fecha com o pago, porque a ultima baixa e o restante do costBasis.
         BigDecimal paid = new BigDecimal("66.23371234");
-        Position position = Position.openAtCost(UUID.randomUUID(), "BTCUSDT", NET_QTY, paid);
+        Position position = Position.open(UUID.randomUUID(), "BTCUSDT", NET_QTY, paid);
 
         BigDecimal soldCost = position.reduceQuantity(new BigDecimal("0.00099"), new BigDecimal("66400"), BigDecimal.ZERO);
         BigDecimal dustCost = position.writeOffDust();
@@ -58,7 +58,7 @@ class PositionCostBasisTest {
 
     @Test
     void dustWriteOffIsRealizedAsLossOfItsCost() {
-        Position position = Position.openAtCost(UUID.randomUUID(), "BTCUSDT", NET_QTY, PAID);
+        Position position = Position.open(UUID.randomUUID(), "BTCUSDT", NET_QTY, PAID);
         position.reduceQuantity(new BigDecimal("0.00099"), new BigDecimal("66300"), BigDecimal.ZERO);
         BigDecimal pnlBefore = position.getRealizedPnl();
 
@@ -70,17 +70,17 @@ class PositionCostBasisTest {
 
     @Test
     void dustWriteOffRejectsLockedPosition() {
-        Position position = Position.openAtCost(UUID.randomUUID(), "BTCUSDT", NET_QTY, PAID);
+        Position position = Position.open(UUID.randomUUID(), "BTCUSDT", NET_QTY, PAID);
         position.lock(UUID.randomUUID(), NET_QTY);
 
         assertThrows(IllegalStateException.class, position::writeOffDust);
     }
 
     @Test
-    void addQuantityAtCostAccumulatesCostAcrossBuys() {
-        Position position = Position.openAtCost(UUID.randomUUID(), "BTCUSDT", NET_QTY, PAID);
+    void addQuantityAccumulatesCostAcrossBuys() {
+        Position position = Position.open(UUID.randomUUID(), "BTCUSDT", NET_QTY, PAID);
 
-        position.addQuantityAtCost(NET_QTY, new BigDecimal("66.13370000"));
+        position.addQuantity(NET_QTY, new BigDecimal("66.13370000"));
 
         assertAmount("132.36740000", position.getCostBasis());
         assertAmount("0.001998", position.getQuantity());

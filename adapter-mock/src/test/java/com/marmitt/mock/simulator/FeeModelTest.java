@@ -28,16 +28,6 @@ class FeeModelTest {
         assertEquals("BTC", feeModel.feeAsset(OrderSide.BUY, "BTCUSDT", config));
         assertAmount("0.06630000", feeModel.calculateFee(QTY, PRICE, OrderSide.SELL, config));
         assertEquals("USDT", feeModel.feeAsset(OrderSide.SELL, "BTCUSDT", config));
-        assertAmount("0", feeModel.estimatedBuyQuoteFee(QTY, PRICE, config));
-    }
-
-    @Test
-    void sameCurrencyKeepsLegacyQuoteFeeOnBothSides() {
-        MockScenarioConfig config = config(MockScenarioConfig.FeeMode.SAME_CURRENCY);
-
-        assertAmount("0.06630000", feeModel.calculateFee(QTY, PRICE, OrderSide.BUY, config));
-        assertEquals("USDT", feeModel.feeAsset(OrderSide.BUY, "BTCUSDT", config));
-        assertAmount("0.06630000", feeModel.estimatedBuyQuoteFee(QTY, PRICE, config));
     }
 
     @Test

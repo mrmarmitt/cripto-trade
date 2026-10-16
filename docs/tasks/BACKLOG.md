@@ -52,6 +52,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T44 | Proteção de posição independente da estratégia                  | Alta  | Claude | Pendente  |
 | T45 | Ativação do Safe Mode e níveis `CANCEL_ALL` / `PANIC_SELL`      | Média | Claude | Pendente  |
 | T46 | Ativo da fee e quantidade líquida da posição                    | Alta  | Claude | Concluído |
+| T47 | Um caminho por operação (limpeza pós-T46)                       | Baixa | Claude | Concluído |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 
 ## Ordem de execução

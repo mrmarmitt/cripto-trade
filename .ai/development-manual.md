@@ -69,7 +69,7 @@ Nao reintroduza. Cada um foi corrigido com custo:
 | Colapsar use cases em metodos privados de um orquestrador | `RunBootSequenceUseCase` virou God Object (PR #73) | Classes separadas, reposicionadas em `usecase.boot.phase2` |
 | Efeito colateral escondido (metrica registrada dentro de handler) | fluxo de sinal (T23) | Handlers retornam `BuyOutcome`/`SellOutcome`; registro centralizado no orquestrador |
 | Design documentado como se estivesse implementado | safety buffer (T36), mailbox, drawdown, Safe Mode (T39) | Doc deve marcar o que ainda nao existe |
-| Dois caminhos para a mesma operacao | `Position` com construtor por preco + `openAtCost`, `addQuantity` + `addQuantityAtCost`; `OrderDataDto` com construtor legado que preenche `feeAsset = null` (T46) | Um unico caminho canonico; o antigo e migrado e removido (ver 1.3) |
+| Dois caminhos para a mesma operacao | `Position` com construtor por preco + `openAtCost`, `addQuantity` + `addQuantityAtCost`; `OrderDataDto` com construtor legado que preenche `feeAsset = null` (T46) | `Position.open`/`addQuantity` por custo; `OrderDataDto` so com construtor canonico (T47, ver 1.3) |
 
 ### 1.3 Um fluxo, um caminho (poucas bifurcacoes)
 

@@ -632,7 +632,8 @@ public class MockExchangeRuntime {
                 java.math.BigDecimal.ZERO,
                 OrderDataDto.OrderStatus.REJECTED,
                 reason,
-                java.time.Instant.now()
+                java.time.Instant.now(),
+                null
         );
     }
 
@@ -650,7 +651,8 @@ public class MockExchangeRuntime {
                 java.math.BigDecimal.ZERO,
                 OrderDataDto.OrderStatus.REJECTED,
                 reason,
-                java.time.Instant.now()
+                java.time.Instant.now(),
+                null
         );
     }
 

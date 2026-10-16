@@ -124,7 +124,7 @@ e manter saldo de BNB fora do `GlobalBalance`. Opções:
 | Camada | Mudança |
 |---|---|
 | core (contrato) | `OrderDataDto.feeAsset` (último componente; construtor de 13 args mantido com `null`) |
-| core (domínio) | `Position.costBasis`, `openAtCost`, `addQuantityAtCost`, `reduceQuantity` retorna o custo vendido, `writeOffDust` |
+| core (domínio) | `Position.costBasis`, `openAtCost`/`addQuantityAtCost` (unificados em `open`/`addQuantity` na T47), `reduceQuantity` retorna o custo vendido, `writeOffDust` |
 | core (conciliação) | `FeeResolver` (classifica por ativo), `SellableQuantityPolicy` (usa `OrderQuantityNormalizerPort`), `FillCalculator.costIncrement`, `BuyFillHandler` (quantidade líquida), `SellFillHandler` (fee por ativo, custo do `cost_basis`, baixa de resíduo) |
 | spring | `ConciliationOrderUpdate` recebe os normalizadores; migration `V12__add_cost_basis_to_positions.sql` (anulável, backfill `quantity × average_price`); entity/mapper |
 | adapter-binance | `executionReport` mapeia `N`; resposta REST FULL soma `fills[].commission` com o ativo (ativos mistos → desconhecido) |

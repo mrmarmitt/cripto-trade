@@ -439,7 +439,8 @@ class ConciliationOrderUpdateIdempotencyTest {
                 BigDecimal.ZERO,
                 status,
                 rejectReason,
-                Instant.now()
+                Instant.now(),
+                null
         );
     }
 

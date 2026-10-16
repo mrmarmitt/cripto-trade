@@ -60,7 +60,7 @@ persisted`, falha de conciliacao etc. ficam recuperaveis via
 
 1. Procura posicao por `openedByTransactionId`.
 2. Se nao existir, procura posicao aberta do mesmo runner/simbolo.
-3. Se ainda nao existir, cria nova `Position` (`Position.openAtCost`).
+3. Se ainda nao existir, cria nova `Position` (`Position.open`, com quantidade recebida e custo pago).
 4. Associa a transacao de abertura quando necessario.
 5. Salva posicao e transacao na mesma unidade transacional.
 Fee e custo (T46): a posicao recebe a quantidade efetivamente recebida e o custo em quote

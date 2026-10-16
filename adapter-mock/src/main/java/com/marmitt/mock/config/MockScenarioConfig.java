@@ -136,8 +136,6 @@ public record MockScenarioConfig(
 
     public enum FeeMode {
         NONE,
-        /** Fee em quote asset nos dois lados (comportamento legado do mock). */
-        SAME_CURRENCY,
         /** Fee no ativo recebido, como a Binance Spot: base na BUY, quote na SELL (T46). */
         RECEIVED_ASSET
     }

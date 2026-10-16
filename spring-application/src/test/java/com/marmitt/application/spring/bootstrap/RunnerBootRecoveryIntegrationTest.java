@@ -169,7 +169,8 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
                 BigDecimal.ZERO,
                 OrderDataDto.OrderStatus.NEW,
                 null,
-                Instant.now()
+                Instant.now(),
+                null
         ));
 
         RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
@@ -321,7 +322,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         strategyRunnerRepository.saveTransaction(partialBuy);
         assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, totalReserved));
 
-        Position partialPosition = new Position(runner.getId(), SYMBOL, partialQuantity, partialPrice);
+        Position partialPosition = Position.open(runner.getId(), SYMBOL, partialQuantity, partialQuantity.multiply(partialPrice));
         partialPosition.associateBuyTransaction(partialBuy.getId());
         strategyRunnerRepository.savePosition(partialPosition);
 
@@ -602,7 +603,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         strategyRunnerRepository.saveTransaction(partialBuy);
         assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, totalReserved));
 
-        Position partialPosition = new Position(runner.getId(), SYMBOL, partialQuantity, partialPrice);
+        Position partialPosition = Position.open(runner.getId(), SYMBOL, partialQuantity, partialQuantity.multiply(partialPrice));
         partialPosition.associateBuyTransaction(partialBuy.getId());
         strategyRunnerRepository.savePosition(partialPosition);
 
@@ -767,7 +768,8 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
                 fee,
                 status,
                 null,
-                Instant.now()
+                Instant.now(),
+                null
         );
     }
 

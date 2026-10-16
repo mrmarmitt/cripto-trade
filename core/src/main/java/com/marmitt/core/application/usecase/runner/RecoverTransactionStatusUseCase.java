@@ -422,7 +422,8 @@ public class RecoverTransactionStatusUseCase implements RecoverTransactionStatus
                 BigDecimal.ZERO,
                 status,
                 reason,
-                Instant.now()
+                Instant.now(),
+                null
         );
     }
 

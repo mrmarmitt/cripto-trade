@@ -193,7 +193,7 @@ class OrderTerminationConciliationIntegrationTest extends AbstractIntegrationTes
         openedByBuy.fill(quantity, buyPrice);
         strategyRunnerRepository.saveTransaction(openedByBuy);
 
-        Position position = new Position(runnerId, SYMBOL, quantity, buyPrice);
+        Position position = Position.open(runnerId, SYMBOL, quantity, quantity.multiply(buyPrice));
         position.associateBuyTransaction(openedByBuy.getId());
 
         Transaction sellPending = newTransaction(
@@ -297,7 +297,8 @@ class OrderTerminationConciliationIntegrationTest extends AbstractIntegrationTes
                 BigDecimal.ZERO,
                 status,
                 rejectReason,
-                Instant.now()
+                Instant.now(),
+                null
         );
     }
 

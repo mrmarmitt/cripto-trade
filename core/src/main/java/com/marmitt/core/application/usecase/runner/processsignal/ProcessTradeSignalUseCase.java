@@ -170,7 +170,8 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                 BigDecimal.ZERO,
                 OrderDataDto.OrderStatus.REJECTED,
                 "Runner halted mid-flight — signal expired before dispatch",
-                Instant.now()
+                Instant.now(),
+                null
         );
         orderConciliation.execute(rejected);
     }
@@ -190,7 +191,8 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                 BigDecimal.ZERO,
                 OrderDataDto.OrderStatus.REJECTED,
                 "Runner halted mid-flight — signal expired before dispatch",
-                Instant.now()
+                Instant.now(),
+                null
         );
         orderConciliation.execute(rejected);
     }

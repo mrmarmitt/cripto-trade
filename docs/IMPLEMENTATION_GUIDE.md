@@ -5312,7 +5312,8 @@ O Mock Adapter deve simular o **ciclo completo** de uma ordem (e nao apenas o AC
 
 **Configuracao sugerida (exemplo):**
 - `partialFillRatio`, `cancelRatio`, `rejectRatio`, `duplicateRatio`, `outOfOrderRatio`
-- `feeMode`: NONE | SAME_CURRENCY | CROSS_CURRENCY | FAIL_CONVERSION
+- `feeMode`: implementado `NONE` | `RECEIVED_ASSET` (fee no ativo recebido, como a Binance; T46/T47).
+  Fee em terceiro ativo e falha de conversao nao estao implementadas no mock.
 - `feeRate`, `latencyMinMs`, `latencyMaxMs`
 
 **Pontos de integracao:**

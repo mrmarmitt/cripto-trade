@@ -565,7 +565,8 @@ class RecoverTransactionStatusUseCaseTest {
                 BigDecimal.ZERO,
                 status,
                 rejectReason,
-                Instant.now()
+                Instant.now(),
+                null
         );
     }
 }

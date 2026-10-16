@@ -10,10 +10,12 @@ import java.math.RoundingMode;
 
 public class OrderValidator {
 
-    private final FeeModel feeModel;
-
-    public OrderValidator(FeeModel feeModel) {
-        this.feeModel = feeModel;
+    /**
+     * Quote reservado por uma BUY do mock: o valor bruto, ja que a fee da BUY e cobrada no ativo
+     * base ({@link FeeModel}). Unica fonte para reservar e liberar.
+     */
+    static BigDecimal buyReservation(BigDecimal quantity, BigDecimal price) {
+        return quantity.multiply(price).setScale(8, RoundingMode.HALF_UP);
     }
 
     public OrderValidationResult validate(SendOrderRequest request,
@@ -62,9 +64,7 @@ public class OrderValidator {
             if (price == null) {
                 return false;
             }
-            BigDecimal estimatedFee = feeModel.estimatedBuyQuoteFee(qty, price, config);
-            BigDecimal required = qty.multiply(price).add(estimatedFee).setScale(8, RoundingMode.HALF_UP);
-            return balanceStore.reserve(quote, required);
+            return balanceStore.reserve(quote, buyReservation(qty, price));
         }
         return balanceStore.reserve(base, qty);
     }

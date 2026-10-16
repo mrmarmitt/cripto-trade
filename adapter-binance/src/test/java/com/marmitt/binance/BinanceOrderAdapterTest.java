@@ -41,7 +41,8 @@ class BinanceOrderAdapterTest {
         return new OrderDataDto("123", clientOrderId, Symbol.of(SYMBOL),
                 OrderDataDto.OrderSide.BUY, OrderDataDto.OrderType.LIMIT,
                 QTY, BigDecimal.ZERO, PRICE, BigDecimal.ZERO, BigDecimal.ZERO,
-                status, null, Instant.now());
+                status, null, Instant.now(),
+                null);
     }
 
     @Test
@@ -118,7 +119,8 @@ class BinanceOrderAdapterTest {
         OrderDataDto responseWithBlankId = new OrderDataDto("123", "", Symbol.of(SYMBOL),
                 OrderDataDto.OrderSide.BUY, OrderDataDto.OrderType.LIMIT,
                 QTY, BigDecimal.ZERO, PRICE, BigDecimal.ZERO, BigDecimal.ZERO,
-                OrderDataDto.OrderStatus.NEW, null, Instant.now());
+                OrderDataDto.OrderStatus.NEW, null, Instant.now(),
+                null);
         StubRestPort rest = new StubRestPort(responseWithBlankId);
 
         BinanceOrderAdapter adapter = new BinanceOrderAdapter(userStreamWs, marketWs, streaming, rest);
