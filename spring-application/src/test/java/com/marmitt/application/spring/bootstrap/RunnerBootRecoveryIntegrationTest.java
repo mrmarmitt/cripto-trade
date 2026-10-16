@@ -13,6 +13,7 @@ import com.marmitt.core.dto.portfolio.response.CreatePortfolioResponse;
 import com.marmitt.core.dto.runner.request.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.response.CreateRunnerResponse;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.DlqReason;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
@@ -732,6 +733,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
                 runner.getId(),
                 ClientOrderId.generate(runner.getShortCode(), type),
                 type,
+                OrderType.LIMIT,
                 SYMBOL,
                 quantity,
                 price,

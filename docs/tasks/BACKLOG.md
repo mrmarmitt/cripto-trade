@@ -50,9 +50,10 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T42 | Mailbox por runner e separação dos executores tick × ordem      | Alta  | Claude | Pendente  |
 | T43 | Circuit breaker de capital: drawdown e perda diária             | Alta  | Claude | Pendente  |
 | T44 | Proteção de posição independente da estratégia                  | Alta  | Claude | Pendente  |
-| T45 | Ativação do Safe Mode e níveis `CANCEL_ALL` / `PANIC_SELL`      | Média | Claude | Pendente  |
+| T45 | Ativação do Safe Mode e níveis `CANCEL_ALL` / `PANIC_SELL`      | Média | Claude | Concluído |
 | T46 | Ativo da fee e quantidade líquida da posição                    | Alta  | Claude | Concluído |
 | T47 | Um caminho por operação (limpeza pós-T46)                       | Baixa | Claude | Concluído |
+| T48 | Proteção LIMIT na liquidação do PANIC_SELL                      | Média | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 
 ## Ordem de execução
@@ -222,7 +223,8 @@ T41  Extração mínima: StrategyEvaluationPort + RemoteTradingStrategy + catál
        (código pode andar em paralelo à T42; ATIVAR em ambiente real só após T42 e T44)
 T42  Mailbox por runner + executores separados (fill nunca espera tick)
 
-T45  Ativação do Safe Mode + CANCEL_ALL / PANIC_SELL   ← pré-requisito de T25 e T43
+T45  Ativação do Safe Mode + CANCEL_ALL / PANIC_SELL   ← pré-requisito de T25 e T43 (concluída)
+T48  Proteção LIMIT no PANIC_SELL (configurável na estratégia) ← decisão pendente; após T40
        ↓
 T43  Drawdown 24h / perda diária (inclui marcação a mercado)     T25  Safe Mode automático
 T44  Proteção de posição independente da estratégia               T24  Circuit breaker REST

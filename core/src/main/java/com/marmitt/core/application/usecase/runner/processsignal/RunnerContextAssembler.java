@@ -133,7 +133,7 @@ class RunnerContextAssembler {
     private List<PendingOrderDto> buildPendingOrders(StrategyRunner runner) {
         return strategyRunnerRepository
                 .findByRunnerIdAndStatuses(runner.getId(),
-                        List.of(TransactionStatus.PENDING, TransactionStatus.SUBMITTED, TransactionStatus.PARTIAL))
+                        TransactionStatus.IN_FLIGHT)
                 .stream()
                 .map(t -> PendingOrderDto.builder()
                         .transactionId(t.getId())

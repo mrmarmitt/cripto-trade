@@ -1,5 +1,6 @@
 package com.marmitt.core.dto.runner;
 
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.TransactionType;
 
 import java.math.BigDecimal;
@@ -27,12 +28,14 @@ public record OrderDispatchCommand(
         String symbol,
         String exchangeId,
         TransactionType type,
+        OrderType orderType,
         BigDecimal quantity,
         BigDecimal price
 ) {
     public OrderDispatchCommand {
         Objects.requireNonNull(clientOrderId, "clientOrderId cannot be null");
         Objects.requireNonNull(runnerId, "runnerId cannot be null");
+        Objects.requireNonNull(orderType, "orderType cannot be null");
         Objects.requireNonNull(symbol, "symbol cannot be null");
         Objects.requireNonNull(exchangeId, "exchangeId cannot be null");
         Objects.requireNonNull(type, "type cannot be null");

@@ -2,6 +2,7 @@ package com.marmitt.core.application.usecase.runner.processsignal;
 
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.dto.capital.CapitalRequest;
 import com.marmitt.core.dto.runner.OrderDispatchCommand;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
@@ -62,7 +63,7 @@ class SideAwarePriceNormalizationTest {
     private Transaction materialize(StrategyOutputDto signal) {
         OrderNormalizer.NormalizedOrder normalized = normalizer.normalize(
                 "BINANCE", "BTCUSDT", factory.orderSideOf(signal), signal.quantity(), signal.limitPrice());
-        return factory.buildTransaction(runner, signal, normalized.quantity(), normalized.price());
+        return factory.buildTransaction(runner, signal, OrderType.LIMIT, normalized.quantity(), normalized.price());
     }
 
     private static StrategyRunner runner() {

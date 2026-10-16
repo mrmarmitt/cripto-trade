@@ -92,6 +92,20 @@ class BinanceRestRequestBuilderTest {
         assertTrue(req.body().contains("type=MARKET"));
     }
 
+    @Test
+    void buildSubmitOrder_marketOrderWithReferencePrice_shouldStillOmitPriceAndTimeInForce() {
+        // T45: a liquidacao do PANIC_SELL envia MARKET carregando o preco de referencia do tick.
+        var request = new SendOrderRequest("BINANCE", "BTCUSDT",
+                new BigDecimal("0.00099"), new BigDecimal("65000.00"),
+                OrderType.MARKET, OrderSide.SELL, "panic-1");
+
+        RestRequest req = builder.buildSubmitOrder(request);
+
+        assertFalse(req.body().contains("price="));
+        assertFalse(req.body().contains("timeInForce="));
+        assertTrue(req.body().contains("type=MARKET"));
+    }
+
     // ── cancelOrder ───────────────────────────────────────────────────────
 
     @Test

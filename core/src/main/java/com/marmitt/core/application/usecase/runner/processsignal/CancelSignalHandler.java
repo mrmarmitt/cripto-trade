@@ -2,14 +2,11 @@ package com.marmitt.core.application.usecase.runner.processsignal;
 
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
-import com.marmitt.core.dto.runner.OrderCancelCommand;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
-import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
-import java.util.List;
 import java.util.UUID;
 
 /**
@@ -27,17 +24,14 @@ import java.util.UUID;
 @Slf4j
 class CancelSignalHandler {
 
-    private static final List<TransactionStatus> CANCELABLE_STATUSES = List.of(
-            TransactionStatus.PENDING,
-            TransactionStatus.SUBMITTED,
-            TransactionStatus.PARTIAL
-    );
-
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
+    private final TradeIntentFactory intentFactory;
     private final OrderDispatchPort orderDispatch;
 
-    CancelSignalHandler(StrategyRunnerRepositoryPort strategyRunnerRepository, OrderDispatchPort orderDispatch) {
+    CancelSignalHandler(StrategyRunnerRepositoryPort strategyRunnerRepository, TradeIntentFactory intentFactory,
+                        OrderDispatchPort orderDispatch) {
         this.strategyRunnerRepository = strategyRunnerRepository;
+        this.intentFactory = intentFactory;
         this.orderDispatch = orderDispatch;
     }
 
@@ -62,7 +56,7 @@ class CancelSignalHandler {
             return;
         }
 
-        if (!CANCELABLE_STATUSES.contains(transaction.getStatus())) {
+        if (!transaction.getStatus().isInFlight()) {
             log.info("processCancelSignal: target not cancelable transactionId={} status={} runnerId={} - no-op",
                     targetTransactionId, transaction.getStatus(), runner.getId());
             return;
@@ -71,8 +65,7 @@ class CancelSignalHandler {
         // De-dup de reenvios (estrategia deterministica reemite SHOULD_CANCEL a cada tick enquanto o
         // CANCELED async nao chega) e tratado no OrderDispatchAdapter, que marca o cooldown apenas
         // apos um envio REAL (blocked/unsupported nao consomem a janela).
-        orderDispatch.cancel(new OrderCancelCommand(
-                transaction.getClientOrderId(), runner.getId(), runner.getSymbol(), runner.getExchangeId()));
+        orderDispatch.cancel(intentFactory.buildCancelCommand(runner, transaction));
 
         log.info("processCancelSignal: cancel dispatched transactionId={} clientOrderId={} runnerId={} reason={}",
                 targetTransactionId, transaction.getClientOrderId(), runner.getId(), signal.reasoning());

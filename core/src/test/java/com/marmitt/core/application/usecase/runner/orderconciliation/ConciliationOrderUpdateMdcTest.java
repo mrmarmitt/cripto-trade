@@ -4,6 +4,7 @@ import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
@@ -64,6 +65,7 @@ class ConciliationOrderUpdateMdcTest {
                 UUID.randomUUID(),
                 ClientOrderId.generate("x1", TransactionType.BUY),
                 TransactionType.BUY,
+                OrderType.LIMIT,
                 "BTCUSDT",
                 quantity,
                 price,

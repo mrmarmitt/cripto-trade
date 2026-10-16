@@ -2,6 +2,7 @@ package com.marmitt.binance.processor.send;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.binance.auth.BinanceRequestSigner;
+import com.marmitt.binance.request.BinanceOrderTypeRules;
 import com.marmitt.core.dto.websocket.request.MessageRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.enums.MessageType;
@@ -36,16 +37,8 @@ public class OrderProcessor implements BinanceSenderProcessor {
             params.put("quantity", orderRequest.getQuantity().toPlainString());
             params.put("newClientOrderId", orderRequest.getClientOrderId());
 
-            if (orderRequest.getPrice() != null &&
-                (orderRequest.getOrderType() == OrderType.LIMIT ||
-                 orderRequest.getOrderType() == OrderType.STOP_LOSS_LIMIT ||
-                 orderRequest.getOrderType() == OrderType.TAKE_PROFIT_LIMIT)) {
+            if (BinanceOrderTypeRules.hasLimitPrice(orderRequest.getOrderType())) {
                 params.put("price", orderRequest.getPrice().toPlainString());
-            }
-
-            if (orderRequest.getOrderType() == OrderType.LIMIT ||
-                orderRequest.getOrderType() == OrderType.STOP_LOSS_LIMIT ||
-                orderRequest.getOrderType() == OrderType.TAKE_PROFIT_LIMIT) {
                 params.put("timeInForce", "GTC");
             }
 

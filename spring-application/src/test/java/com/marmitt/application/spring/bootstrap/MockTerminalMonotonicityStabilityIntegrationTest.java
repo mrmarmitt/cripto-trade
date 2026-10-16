@@ -5,6 +5,7 @@ import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
 import com.marmitt.mock.config.MockOrderScenarioOverride;
@@ -43,6 +44,7 @@ class MockTerminalMonotonicityStabilityIntegrationTest extends MockOrderOverride
                 runner.getId(),
                 clientOrderId,
                 TransactionType.BUY,
+                OrderType.LIMIT,
                 SYMBOL,
                 quantity,
                 price,
@@ -175,6 +177,7 @@ class MockTerminalMonotonicityStabilityIntegrationTest extends MockOrderOverride
                 runner.getId(),
                 clientOrderId,
                 TransactionType.BUY,
+                OrderType.LIMIT,
                 SYMBOL,
                 quantity,
                 price,

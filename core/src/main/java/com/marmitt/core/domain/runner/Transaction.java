@@ -1,5 +1,6 @@
 package com.marmitt.core.domain.runner;
 
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
 import lombok.Builder;
@@ -46,6 +47,13 @@ public class Transaction {
 
     private TransactionStatus status;
     private final TransactionType type;
+
+    /**
+     * Tipo da ordem enviada a exchange (T45). {@code LIMIT} para sinais da estrategia;
+     * {@code MARKET} para a liquidacao do Safe Mode {@code PANIC_SELL}. Em MARKET, {@link #price}
+     * e apenas o preco de referencia do tick; o valor real vem dos fills.
+     */
+    private final OrderType orderType;
 
     /** Par de trading (ex: "BTCUSDT"). */
     private final String symbol;
@@ -106,6 +114,7 @@ public class Transaction {
             UUID runnerId,
             String clientOrderId,
             TransactionType type,
+            OrderType orderType,
             String symbol,
             BigDecimal quantity,
             BigDecimal price,
@@ -118,6 +127,7 @@ public class Transaction {
         this.runnerId = Objects.requireNonNull(runnerId, "runnerId cannot be null");
         this.clientOrderId = Objects.requireNonNull(clientOrderId, "clientOrderId cannot be null");
         this.type = Objects.requireNonNull(type, "type cannot be null");
+        this.orderType = Objects.requireNonNull(orderType, "orderType cannot be null");
         this.symbol = requireNonBlank(symbol, "symbol");
         this.quantity = requirePositive(quantity, "quantity");
         this.price = requirePositive(price, "price");
@@ -143,6 +153,7 @@ public class Transaction {
             String exchangeOrderId,
             TransactionStatus status,
             TransactionType type,
+            OrderType orderType,
             String symbol,
             BigDecimal quantity,
             BigDecimal executedQuantity,
@@ -165,6 +176,7 @@ public class Transaction {
         this.exchangeOrderId = exchangeOrderId;
         this.status = Objects.requireNonNull(status, "status cannot be null");
         this.type = Objects.requireNonNull(type, "type cannot be null");
+        this.orderType = Objects.requireNonNull(orderType, "orderType cannot be null");
         this.symbol = Objects.requireNonNull(symbol, "symbol cannot be null");
         this.quantity = Objects.requireNonNull(quantity, "quantity cannot be null");
         this.executedQuantity = executedQuantity;

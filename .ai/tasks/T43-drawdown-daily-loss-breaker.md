@@ -2,7 +2,7 @@
 
 **Complexidade:** Alta (efeito financeiro + nova fonte de verdade de preço)
 **Responsável:** Claude
-**Dependências:** T45 (ativação do Safe Mode — o breaker precisa de um caminho para acionar `HALT`).
+**Dependências:** T45 (concluída — acionar `HALT` via `ManageSafeModePort.change` com `SafeModeOrigin.AUTOMATIC`).
 Relaciona-se com T25 (gatilhos automáticos de Safe Mode); ver "Relação com T25".
 **Status:** Pendente
 

@@ -1,5 +1,7 @@
 package com.marmitt.core.enums;
 
+import java.util.List;
+
 /**
  * Status do ciclo de vida de uma transação/ordem
  */
@@ -47,6 +49,16 @@ public enum TransactionStatus {
      * Transação expirou sem ser executada
      */
     EXPIRED;
+
+    /**
+     * Ordem ainda viva na exchange (ou prestes a ser enviada): pode executar, ser cancelada e
+     * precisa de recuperacao se o processo cair. Fonte unica para "em voo" (T45).
+     */
+    public static final List<TransactionStatus> IN_FLIGHT = List.of(PENDING, SUBMITTED, PARTIAL);
+
+    public boolean isInFlight() {
+        return IN_FLIGHT.contains(this);
+    }
 
     /**
      * Verifica se o status é final (não haverá mais mudanças)

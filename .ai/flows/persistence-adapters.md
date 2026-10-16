@@ -120,6 +120,10 @@ Pontos criticos:
 - `tryLockPositionForSell` usa update condicional e aceita estado ja lockado pela
   mesma transacao como sucesso idempotente.
 - positions `OPEN` ou `CLOSING` precisam de `openedByTransactionId`.
+- `transactions.order_type` (V13, T45) `NOT NULL DEFAULT 'LIMIT'`; o dominio sempre informa.
+- `portfolios.safe_mode_*` + tabela `safe_mode_changes` (V13, T45): a mudanca de nivel e um
+  `UPDATE ... WHERE version = :lida` seguido do INSERT da auditoria na mesma transacao
+  (`saveSafeModeChange`); versao divergente vira `SafeModeTransitionException` (409).
 - `positions.cost_basis` (V12, T46) e anulavel de proposito: o dominio sempre grava; linha sem valor
   cai no fallback `quantity x average_price` em vez de assumir custo zero.
 - `saveAtomicTransactionAndMatch` mantem status de transaction e match no mesmo

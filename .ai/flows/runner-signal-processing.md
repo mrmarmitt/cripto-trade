@@ -29,6 +29,8 @@ adaptadores externos.
 1. `ProcessTradeSignalUseCase` recebe um tick de mercado.
 2. Busca runners operacionais por `symbol` e `exchange`.
 3. `RunnerSignalPolicy` filtra runners que podem avaliar o sinal.
+   Le o nivel do Safe Mode de cada portfolio uma vez por tick. Em `CANCEL_ALL`/`PANIC_SELL` o runner
+   segue o ramo "Safe Mode" abaixo e a estrategia nao e consultada (T45).
 4. `RunnerContextAssembler` monta `StrategyContextDto` com portfolio,
    posicoes, ordens pendentes, limites e PnL.
 5. `StrategySignalEvaluator` avalia a estrategia.
@@ -64,6 +66,22 @@ Se a reserva for rejeitada, o sinal e descartado sem dispatch.
 Se nao houver posicao aberta, o sinal e descartado. Se outra venda travou a
 mesma posicao, o fluxo falha com `ConcurrentPositionLockException`.
 
+## Safe Mode (T45)
+
+Nos niveis `CANCEL_ALL` e `PANIC_SELL`, a cada tick do runner:
+
+1. `checkRunnerNotHalted` (kill switch tem precedencia).
+2. `SafeModeHandler.cancelRestingOrders` envia cancelamento para cada ordem LIMIT em voo
+   (`TransactionStatus.IN_FLIGHT`), pelo mesmo comando do `SHOULD_CANCEL`
+   (`TradeIntentFactory.buildCancelCommand`). Ordens MARKET nao sao canceladas.
+3. Em `PANIC_SELL`, cada posicao aberta sem lock vira sinal de venda do lote inteiro e passa pelo
+   ramo SELL acima com `OrderType.MARKET`. Posicao travada por SELL LIMIT espera o cancelamento a
+   destravar; posicao travada pela propria liquidacao nao e vendida de novo.
+
+`HALT` nao muda este fluxo: a estrategia roda e pode vender; o BUY e recusado na reserva de capital.
+O tipo da ordem e decidido aqui (`Transaction.orderType`): `LIMIT` para sinais da estrategia,
+`MARKET` para a liquidacao.
+
 ## Componentes Principais
 
 | Componente | Papel |
@@ -74,6 +92,7 @@ mesma posicao, o fluxo falha com `ConcurrentPositionLockException`.
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/BuySignalHandler.java` | Persiste BUY, reserva capital e faz dispatch. |
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/SellSignalHandler.java` | Persiste SELL, trava posicao e faz dispatch. |
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/CapitalReservationPolicy.java` | Valida Safe Mode, fundos e limite de exposicao por runner. |
+| `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/SafeModeHandler.java` | Cancela ordens LIMIT em voo e gera a liquidacao MARKET nos niveis CANCEL_ALL/PANIC_SELL (T45). |
 | `spring-application/src/main/java/com/marmitt/application/spring/config/core/RunnerConfig.java` | Injeta fronteiras transacionais com `TransactionTemplate`. |
 
 ## Invariantes

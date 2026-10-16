@@ -5,10 +5,12 @@ import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.capital.BuyExecutionContext;
 import com.marmitt.core.dto.capital.CapitalRequest;
+import com.marmitt.core.dto.runner.OrderCancelCommand;
 import com.marmitt.core.dto.runner.OrderDispatchCommand;
 import com.marmitt.core.dto.strategy.StrategyInputDto;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.dto.websocket.data.MarketDataDto;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.OrderSide;
 import com.marmitt.core.enums.TradingAction;
 import com.marmitt.core.enums.TransactionType;
@@ -72,7 +74,7 @@ class TradeIntentFactory {
         return signal.decision() == TradingAction.SHOULD_BUY ? OrderSide.BUY : OrderSide.SELL;
     }
 
-    public Transaction buildTransaction(StrategyRunner runner, StrategyOutputDto signal,
+    public Transaction buildTransaction(StrategyRunner runner, StrategyOutputDto signal, OrderType orderType,
                                         BigDecimal quantity, BigDecimal price) {
         TransactionType type = signal.decision() == TradingAction.SHOULD_BUY
                 ? TransactionType.BUY : TransactionType.SELL;
@@ -83,6 +85,7 @@ class TradeIntentFactory {
                 runner.getId(),
                 clientOrderId,
                 type,
+                orderType,
                 runner.getSymbol(),
                 quantity,
                 price,
@@ -127,6 +130,15 @@ class TradeIntentFactory {
     }
 
     /**
+     * Comando de cancelamento de uma ordem em voo do runner. Fonte unica para o SHOULD_CANCEL da
+     * estrategia e para o Safe Mode (T45).
+     */
+    public OrderCancelCommand buildCancelCommand(StrategyRunner runner, Transaction transaction) {
+        return new OrderCancelCommand(
+                transaction.getClientOrderId(), runner.getId(), runner.getSymbol(), runner.getExchangeId());
+    }
+
+    /**
      * Constroi o comando de envio para o adapter de exchange.
      * Contem apenas os dados necessarios para o dispatch: nao expoe internos do dominio
      * ao adapter, mantendo o desacoplamento entre nucleo e infraestrutura.
@@ -138,6 +150,7 @@ class TradeIntentFactory {
                 runner.getSymbol(),
                 runner.getExchangeId(),
                 transaction.getType(),
+                transaction.getOrderType(),
                 transaction.getQuantity(),
                 transaction.getPrice()
         );

@@ -1,5 +1,6 @@
 package com.marmitt.core.domain.runner;
 
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
 import org.junit.jupiter.api.Test;
@@ -83,6 +84,7 @@ class TransactionInvariantsTest {
                 UUID.randomUUID(),
                 "client-order-id-1",
                 TransactionType.BUY,
+                OrderType.LIMIT,
                 "BTCUSDT",
                 quantity,
                 price,

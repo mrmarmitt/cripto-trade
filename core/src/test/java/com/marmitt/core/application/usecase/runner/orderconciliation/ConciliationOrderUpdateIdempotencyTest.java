@@ -6,6 +6,7 @@ import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.capital.MarginRelease;
 import com.marmitt.core.dto.events.MarginReleaseEvent;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.ReleaseReason;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
@@ -404,6 +405,7 @@ class ConciliationOrderUpdateIdempotencyTest {
                 UUID.randomUUID(),
                 ClientOrderId.generate("x1", TransactionType.BUY),
                 TransactionType.BUY,
+                OrderType.LIMIT,
                 "BTCUSDT",
                 quantity,
                 price,

@@ -8,6 +8,7 @@ import com.marmitt.core.dto.runner.OrderDispatchCommand;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
 import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
@@ -37,7 +38,7 @@ class OrderDispatchAdapterTest {
     private OrderDispatchCommand command() {
         return new OrderDispatchCommand(
                 ClientOrderId.generate("t01", TransactionType.BUY),
-                UUID.randomUUID(), SYMBOL, EXCHANGE, TransactionType.BUY, QTY, PRICE);
+                UUID.randomUUID(), SYMBOL, EXCHANGE, TransactionType.BUY, OrderType.LIMIT, QTY, PRICE);
     }
 
     private OrderDataDto sampleDto(OrderDataDto.OrderStatus status) {

@@ -1,6 +1,7 @@
 package com.marmitt.application.spring.infrastructure.persistence.entity;
 
 import com.marmitt.core.enums.CapitalPoolingMode;
+import com.marmitt.core.enums.SafeModeOrigin;
 import com.marmitt.core.enums.SafeModeStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -29,6 +30,9 @@ public class PortfolioEntity {
     private boolean isActive;
     private SafeModeStatus safeModeStatus;
     private CapitalPoolingMode capitalPoolingMode;
+    private SafeModeOrigin safeModeOrigin;
+    private String safeModeReason;
+    private Instant safeModeChangedAt;
     private Instant createdAt;
 
     @Version

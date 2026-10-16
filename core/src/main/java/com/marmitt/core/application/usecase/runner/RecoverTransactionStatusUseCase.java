@@ -28,11 +28,7 @@ import java.util.UUID;
 @Slf4j
 public class RecoverTransactionStatusUseCase implements RecoverTransactionStatusPort {
 
-    private static final List<TransactionStatus> ELIGIBLE_STATUSES = List.of(
-            TransactionStatus.PENDING,
-            TransactionStatus.SUBMITTED,
-            TransactionStatus.PARTIAL
-    );
+    private static final List<TransactionStatus> ELIGIBLE_STATUSES = TransactionStatus.IN_FLIGHT;
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;

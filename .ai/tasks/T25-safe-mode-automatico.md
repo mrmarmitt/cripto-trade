@@ -5,6 +5,11 @@
 **Dependências:** T21 (Discord notifications), T23 (signal counter — opcional para trigger por HOLD rate), **T45** (caminho de ativação do Safe Mode)  
 **Status:** Pendente
 
+> **Atualização (2026-10-16, T45):** a porta existe: `ManageSafeModePort.change(portfolioId,
+> SafeModeOrigin.AUTOMATIC, new ChangeSafeModeRequest(HALT, motivo, false))`. Gatilho automático só
+> consegue acionar `HALT` (o domínio recusa níveis acima) e não rebaixa nível manual mais alto; a
+> retomada é sempre manual. A API manual é `GET/PUT /api/admin/portfolios/{id}/safe-mode`.
+
 > **Correção (2026-10-15):** a seção "Safe Mode atual" abaixo estava factualmente errada. Não existe
 > ativação manual por API: `Portfolio.setSafeModeStatus` não tem chamador e o endpoint
 > `PUT /api/admin/portfolios/{id}/safe-mode` não existe. O campo é `SafeModeStatus` (enum de níveis),
@@ -26,7 +31,7 @@ O Safe Mode hoje é ativado exclusivamente de forma manual via API. Em um sistem
 
 - `Portfolio.safeModeStatus` — enum `SafeModeStatus` (`NORMAL`, `HALT`, `CANCEL_ALL`, `PANIC_SELL`)
 - Quando ativo: `CapitalReservationPolicy` bloqueia toda nova reserva de capital → nenhum BUY é executado
-- ~~Ativação atual: manual via `PUT /api/admin/portfolios/{id}/safe-mode`~~ — não existe; ver T45
+- Ativação manual via `PUT /api/admin/portfolios/{id}/safe-mode` — entregue pela T45
 - Escopo: por portfolio
 
 ### Invariante relevante

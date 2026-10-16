@@ -1,6 +1,7 @@
 package com.marmitt.core.application.usecase.runner;
 
 import com.marmitt.core.domain.runner.Transaction;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
 import org.junit.jupiter.api.Test;
@@ -56,6 +57,7 @@ class RunnerBootRecoverySelectionTest {
                 .exchangeOrderId(status == TransactionStatus.PENDING ? null : "EX_ORDER")
                 .status(status)
                 .type(TransactionType.BUY)
+                .orderType(OrderType.LIMIT)
                 .symbol("BTCUSDT")
                 .quantity(new BigDecimal("0.00150000"))
                 .price(new BigDecimal("60000.00000000"))

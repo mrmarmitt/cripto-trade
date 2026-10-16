@@ -8,7 +8,6 @@ import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.dto.websocket.request.SendCancelOrderRequest;
 import com.marmitt.core.dto.websocket.request.SendOrderRequest;
 import com.marmitt.core.enums.OrderSide;
-import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.ports.inbound.runner.OrderConciliationPort;
 import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
@@ -138,7 +137,7 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
                 command.symbol(),
                 command.quantity(),
                 command.price(),
-                OrderType.LIMIT,
+                command.orderType(),
                 side,
                 command.clientOrderId()
         );
