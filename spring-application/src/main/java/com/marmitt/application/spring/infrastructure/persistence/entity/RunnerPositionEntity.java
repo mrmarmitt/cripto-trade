@@ -31,6 +31,7 @@ public class RunnerPositionEntity {
 
     private BigDecimal quantity;
     private BigDecimal averagePrice;
+    private BigDecimal costBasis;
     private BigDecimal currentPrice;
     private BigDecimal realizedPnl;
 
