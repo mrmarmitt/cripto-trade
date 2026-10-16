@@ -46,8 +46,8 @@ PUT /api/admin/portfolios/{id}/safe-mode
 - O `PUT` responde **202** e a execução acontece nos ticks seguintes; acompanhe pelo `GET`
   (`restingOrders`, `liquidatingOrders`, `openPositions` caindo a zero).
 - `idleRunners > 0`: há runners parados pelo kill switch (ou reconciliando) que o Safe Mode **não**
-  conduz. **Ainda não há API para reativar um runner halted** (T49); até lá, as posições desses
-  runners precisam ser tratadas manualmente na exchange.
+  conduz. Para liquidá-los, retome o runner (`POST /api/admin/runners/{id}/resume`, T49) com o
+  portfolio em `PANIC_SELL`.
 - Retomada: desça **um nível por vez** (`PANIC_SELL` → `CANCEL_ALL` → `HALT` → `NORMAL`), cada passo com motivo.
 - `409`: transição recusada (pulo na descida, falta de `confirm`, motivo vazio ou alteração concorrente).
 - Toda mudança fica em `safe_mode_changes` (de/para, origem, motivo, data).
@@ -66,3 +66,22 @@ PUT /api/admin/portfolios/{id}/safe-mode
 - Log `drawdown: no market price ... skipped` logo após subir é esperado até o primeiro tick do
   símbolo; se persistir, o símbolo da posição não está recebendo market data.
 - Para desligar (ex.: teste controlado): `portfolio.circuit-breaker.enabled=false`.
+
+## Ciclo de vida do runner (T49)
+
+Endpoints protegidos pelo `admin.api.key`:
+
+| Ação | Endpoint | Efeito |
+|---|---|---|
+| Iniciar runner criado | `POST /api/admin/runners/{id}/start` | Reconcilia e ativa (CREATED → ACTIVE), sem restart |
+| Parar | `POST /api/admin/runners/{id}/halt` | Kill switch (T8): nenhuma ordem nova |
+| Retomar | `POST /api/admin/runners/{id}/resume` | Reconcilia; só volta a ACTIVE se não houver erro nem DLQ pendente |
+| Encerrar | `POST /api/admin/runners/{id}/terminate` | TERMINATING: sem compras, a estratégia ainda vende; arquivado sozinho quando zerado |
+| Ajustar limites | `PATCH /api/admin/runners/{id}` `{"maxAllocationPercent":0.2,"maxOpenPositions":1,"maxPendingOrders":1}` | Campo omitido mantém o valor |
+| Cancelar ordem | `POST /api/admin/runners/{id}/orders/{transactionId}/cancel` | 202; o CANCELED chega pelo stream |
+| Fechar posição | `POST /api/admin/runners/{id}/positions/{positionId}/close` | 202; SELL MARKET do lote inteiro |
+
+- `409` = operação recusada pelo estado (transição inválida, exchange indisponível, reconciliação
+  incompleta, posição travada por uma SELL em voo, sem preço de mercado ainda). A mensagem diz o motivo.
+- Fechar posição exige runner ACTIVE ou TERMINATING; runner halted: retome antes.
+- Posição travada por SELL LIMIT: cancele a ordem e depois feche a posição.

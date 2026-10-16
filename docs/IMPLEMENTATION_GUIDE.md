@@ -1830,7 +1830,7 @@ O Runner valida regras de negócio da strategy e da exchange. O Portfolio valida
 
 ### 7.4 Limites de Exposição por Runner
 
-> **Estado (T39, 2026-10-16):** Só `maxAllocationPercent` é aplicado. `maxOpenPositions`/`maxPendingOrders`: **T50**; cancel rate: **T51**; alteração em runtime: **T49**. A exposição é calculada por consulta, não por `MarginAccount`.
+> **Estado (T39, 2026-10-16):** Só `maxAllocationPercent` é aplicado. `maxOpenPositions`/`maxPendingOrders`: **T50**; cancel rate: **T51**; alteração em runtime: `PATCH /api/admin/runners/{id}` (T49). A exposição é calculada por consulta, não por `MarginAccount`.
 
 > **Referência:** Blueprint Seção 11.2.B.
 
@@ -4088,7 +4088,7 @@ private boolean shouldAcceptSignal(TradeSignal signal) {
 
 ### 12.5 Prioridade de Comandos Admin
 
-> **Estado (T39, 2026-10-16):** Só existem o halt de runner (T8) e o Safe Mode (T45). FORCE_CANCEL, FORCE_CLOSE_POSITION e RESUME: **T49**.
+> **Estado (T39, 2026-10-16):** Implementados na T49 como endpoints síncronos (sem fila de comandos, que depende da mailbox da T42): `POST /api/admin/runners/{id}/orders/{tx}/cancel`, `POST /api/admin/runners/{id}/positions/{pos}/close` (SELL MARKET pelo pipeline normal) e `POST /api/admin/runners/{id}/resume`.
 
 > **Nota #25 absorvida:** "Comandos manuais via Portfolio/Admin (ex: Force Cancel) têm prioridade máxima e devem furar a fila ou interromper o processamento do sinal atual."
 
@@ -4336,7 +4336,7 @@ Esta seção detalha **como implementar** a máquina de estados do StrategyRunne
 
 ### 13.1 Máquina de Estados do Runner
 
-> **Estado (T39, 2026-10-16):** As transições existem no domínio, mas **não há API** para start/resume/terminate: runner criado só fica ACTIVE no próximo boot e runner halted não volta sem editar o banco. Ver **T49**.
+> **Estado (T39, 2026-10-16):** Implementado na T49. Diferenças: TERMINATING continua no pipeline só para vender (`canAcceptSignals` × `canOpenPositions`); o kill switch também para um runner TERMINATING; start/resume reconciliam pelo mesmo caminho do boot.
 
 ```
                               API Create
@@ -4481,7 +4481,7 @@ public class RunnerFactory {
 
 ### 13.3 Health Check de Ativação
 
-> **Estado (T39, 2026-10-16):** Pendente na **T49**.
+> **Estado (T49, 2026-10-16):** Implementado de forma mínima: adapter registrado e envio de ordens liberado (`isDispatchBlocked`).
 
 > **Nota #28 absorvida:** "Ao passar para ACTIVE, o Runner deve obrigatoriamente realizar um ping na API da Exchange e validar o tickSize do ativo. Se falhar, o status deve retroceder para HALTED."
 
@@ -4571,7 +4571,7 @@ public void startRunner(UUID runnerId) {
 
 ### 13.4 Graceful Shutdown (Encerramento com Posições Abertas)
 
-> **Estado (T39, 2026-10-16):** Pendente na **T49**.
+> **Estado (T49, 2026-10-16):** Implementado sem liquidação automática nem "detach" (decisão do mantenedor): o runner para de comprar, a estratégia vende e o `RunnerArchiveScheduler` arquiva quando não há posição nem ordem em voo; o operador pode fechar a posição a mercado pelo comando.
 
 Quando o operador solicita o encerramento de um Runner ativo:
 
@@ -4691,7 +4691,7 @@ SELECT * FROM strategy_runners WHERE status != 'ARCHIVED'
 
 ### 13.6 API Administrativa
 
-> **Estado (T39, 2026-10-16):** Existem só `POST /api/portfolios/{id}/runners` (criar), `POST /api/admin/runners/{id}/halt`, `POST /api/admin/runners/halt` e `GET /api/admin/runners/status`. O restante: **T49**. `portfolio.max-runners` descartado na v1.
+> **Estado (T39, 2026-10-16):** Endpoints reais (T49): criar `POST /api/portfolios/{id}/runners`; `POST /api/admin/runners/{id}/start|resume|terminate|halt`, `POST /api/admin/runners/halt`, `PATCH /api/admin/runners/{id}`, `GET /api/admin/runners/status`. `GET /api/admin/runners/{id}` e filtros de listagem não existem. `portfolio.max-runners` descartado na v1.
 
 #### 13.6.1 Endpoints
 
