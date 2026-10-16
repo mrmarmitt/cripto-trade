@@ -24,5 +24,13 @@ public enum ReleaseReason {
      * Ordem expirou (timeout do Watchdog) ou intenção não materializada (crash recovery).
      * executedAmount = 0 → estorno total.
      */
-    EXPIRED
+    EXPIRED,
+
+    /**
+     * BUY executada por completo a um custo menor que o reservado (ex.: LIMIT preenchida abaixo do
+     * preço-limite). A reserva é feita a {@code quantity × limitPrice} e a baixa na venda ocorre ao
+     * preço executado; a diferença {@code reservado − executado} é devolvida ao disponível
+     * (IG §7.2.3, T36). executedAmount = valor executado da BUY.
+     */
+    FILLED_EXCESS
 }

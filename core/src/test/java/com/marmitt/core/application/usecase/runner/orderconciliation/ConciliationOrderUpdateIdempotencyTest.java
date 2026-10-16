@@ -3,12 +3,16 @@ package com.marmitt.core.application.usecase.runner.orderconciliation;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.Transaction;
+import com.marmitt.core.dto.capital.MarginRelease;
+import com.marmitt.core.dto.events.MarginReleaseEvent;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
+import com.marmitt.core.enums.ReleaseReason;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.junit.jupiter.api.Test;
+import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -19,8 +23,10 @@ import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -244,6 +250,48 @@ class ConciliationOrderUpdateIdempotencyTest {
         assertAmount("2.50000000", transaction.getExecutedQuantity());
         assertAmount("10.20000000", transaction.getExecutedPrice());
         verifyNoInteractions(repository, publisher);
+    }
+
+    @Test
+    void processFillFinalBuyBelowLimitPublishesExcessReleaseOnce() {
+        StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
+        EventPublisherPort publisher = mock(EventPublisherPort.class);
+        ConciliationOrderUpdate conciliation = new ConciliationOrderUpdate(repository, publisher);
+        when(repository.trySavePosition(any())).thenReturn(true);
+
+        // Reserva 2.5 x 10.00 = 25.00; executada a 9.80 -> 24.50; excedente 0.50.
+        Transaction transaction = newBuyTransaction();
+        transaction.submit("EX_ORDER_1");
+        OrderDataDto filled = orderData(transaction.getClientOrderId(), OrderDataDto.OrderStatus.FILLED,
+                new BigDecimal("2.50000000"), new BigDecimal("9.80000000"));
+
+        conciliation.processFill(transaction, filled, true);
+        conciliation.processFill(transaction, filled, true); // FILLED duplicado
+
+        ArgumentCaptor<Object> captor = ArgumentCaptor.forClass(Object.class);
+        verify(publisher, times(1)).publishEvent(captor.capture());
+        MarginRelease release = ((MarginReleaseEvent) captor.getValue()).release();
+        assertEquals(ReleaseReason.FILLED_EXCESS, release.reason());
+        assertAmount("0.50000000", release.releaseAmount());
+        assertAmount("24.50000000", release.executedAmount());
+    }
+
+    @Test
+    void processFillPartialBuyDoesNotReleaseExcess() {
+        StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
+        EventPublisherPort publisher = mock(EventPublisherPort.class);
+        ConciliationOrderUpdate conciliation = new ConciliationOrderUpdate(repository, publisher);
+        when(repository.trySavePosition(any())).thenReturn(true);
+
+        Transaction transaction = newBuyTransaction();
+        transaction.submit("EX_ORDER_1");
+
+        conciliation.processFill(transaction,
+                orderData(transaction.getClientOrderId(), OrderDataDto.OrderStatus.PARTIALLY_FILLED,
+                        new BigDecimal("1.00000000"), new BigDecimal("9.80000000")),
+                false);
+
+        verify(publisher, never()).publishEvent(any());
     }
 
     @Test
