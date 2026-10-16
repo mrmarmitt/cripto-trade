@@ -44,7 +44,8 @@ class OrderDispatchAdapterTest {
         return new OrderDataDto("123", "t01-BUY-001", Symbol.of(SYMBOL),
                 OrderDataDto.OrderSide.BUY, OrderDataDto.OrderType.LIMIT,
                 QTY, BigDecimal.ZERO, PRICE, BigDecimal.ZERO, BigDecimal.ZERO,
-                status, null, Instant.now());
+                status, null, Instant.now(),
+                null);
     }
 
     @Test

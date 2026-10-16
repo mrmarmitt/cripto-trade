@@ -243,7 +243,7 @@ class ConcurrentSellLockIntegrationTest extends AbstractIntegrationTest {
         Transaction buy = newBuyTransaction(runner);
         strategyRunnerRepository.saveTransaction(buy);
 
-        Position position = new Position(runner.getId(), SYMBOL, quantity, POSITION_PRICE);
+        Position position = Position.open(runner.getId(), SYMBOL, quantity, quantity.multiply(POSITION_PRICE));
         position.associateBuyTransaction(buy.getId());
         strategyRunnerRepository.savePosition(position);
         return position;

@@ -18,13 +18,13 @@ import java.math.BigDecimal;
  * pela exchange. O handler atualiza a posicao local para refletir o ativo adquirido:
  * <ul>
  *   <li><b>Primeira execucao:</b> nenhuma posicao aberta existe para o runner/simbolo.
- *       Uma nova {@link com.marmitt.core.domain.runner.Position} e criada com a quantidade
- *       e preco do fill, e associada a transacao BUY de origem via
+ *       Uma nova {@link com.marmitt.core.domain.runner.Position} e aberta com a quantidade
+ *       recebida e o custo pago, e associada a transacao BUY de origem via
  *       {@code associateBuyTransaction} — vinculo necessario para criar o
  *       {@link com.marmitt.core.domain.runner.TransactionMatch} quando a posicao for
  *       eventualmente vendida.</li>
  *   <li><b>Fill adicional (PARTIALLY_FILLED → FILLED):</b> posicao aberta ja existe.
- *       A quantidade e o preco medio ponderado sao acumulados via {@code addQuantity}.</li>
+ *       Quantidade e custo sao acumulados via {@code addQuantity}; o preco medio deriva do custo.</li>
  * </ul>
  *
  * <p>Posicao e transacao sao persistidas juntas ao final — ambas precisam refletir
@@ -117,7 +117,7 @@ class BuyFillHandler {
         if (position != null) {
             log.debug("orderConciliation: position found by openedByTransactionId positionId={} - adding quantity for transactionId={}",
                     position.getId(), transaction.getId());
-            position.addQuantityAtCost(received, cost);
+            position.addQuantity(received, cost);
             strategyRunnerRepository.savePosition(position);
             strategyRunnerRepository.saveTransaction(transaction);
             log.info("orderConciliation: BUY fill positionId={} runnerId={} received={} cost={}",
@@ -132,7 +132,7 @@ class BuyFillHandler {
         if (position == null) {
             log.debug("orderConciliation: no open position found - creating new position for transactionId={}",
                     transaction.getId());
-            position = Position.openAtCost(transaction.getRunnerId(), transaction.getSymbol(),
+            position = Position.open(transaction.getRunnerId(), transaction.getSymbol(),
                     received, cost);
             position.associateBuyTransaction(transaction.getId());
             boolean inserted = strategyRunnerRepository.trySavePosition(position);
@@ -147,13 +147,13 @@ class BuyFillHandler {
                 if (position == null) {
                     throw new IllegalStateException("Open position not found after unique constraint conflict");
                 }
-                position.addQuantityAtCost(received, cost);
+                position.addQuantity(received, cost);
                 strategyRunnerRepository.savePosition(position);
             }
         } else {
             log.debug("orderConciliation: open position found positionId={} - adding quantity for transactionId={}",
                     position.getId(), transaction.getId());
-            position.addQuantityAtCost(received, cost);
+            position.addQuantity(received, cost);
             strategyRunnerRepository.savePosition(position);
         }
         strategyRunnerRepository.saveTransaction(transaction);

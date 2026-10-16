@@ -31,7 +31,7 @@ public class MockOrderExecutionSimulator {
     public MockOrderExecutionSimulator() {
         this.feeModel = new FeeModel();
         this.slippageModel = new SlippageModel();
-        this.orderValidator = new OrderValidator(feeModel);
+        this.orderValidator = new OrderValidator();
     }
 
     /**
@@ -67,7 +67,7 @@ public class MockOrderExecutionSimulator {
 
         OrderDataDto.OrderStatus failureStatus = pickFailureStatus(config, random);
         if (failureStatus != null) {
-            releaseReservation(request, balanceStore, config);
+            releaseReservation(request, balanceStore);
             if (failureStatus == OrderDataDto.OrderStatus.CANCELED) {
                 events.add(simulateCanceled(request, orderId, baseExecutedPrice));
             } else {
@@ -159,7 +159,7 @@ public class MockOrderExecutionSimulator {
             }
 
             if (!reservationReleased && isFailedTerminal(computed.event().status())) {
-                releaseReservation(request, balanceStore, config);
+                releaseReservation(request, balanceStore);
                 reservationReleased = true;
             }
 
@@ -250,7 +250,7 @@ public class MockOrderExecutionSimulator {
     public void releaseReservationForOpenOrder(SendOrderRequest request,
                                                MockBalanceStore balanceStore,
                                                MockScenarioConfig config) {
-        releaseReservation(request, balanceStore, config);
+        releaseReservation(request, balanceStore);
     }
 
     public OrderDataDto simulateAccepted(SendOrderRequest request, String orderId) {
@@ -267,7 +267,8 @@ public class MockOrderExecutionSimulator {
                 BigDecimal.ZERO,
                 OrderDataDto.OrderStatus.NEW,
                 null,
-                Instant.now()
+                Instant.now(),
+                null
         );
     }
 
@@ -326,7 +327,8 @@ public class MockOrderExecutionSimulator {
                 BigDecimal.ZERO,
                 OrderDataDto.OrderStatus.CANCELED,
                 null,
-                Instant.now()
+                Instant.now(),
+                null
         );
     }
 
@@ -344,7 +346,8 @@ public class MockOrderExecutionSimulator {
                 BigDecimal.ZERO,
                 OrderDataDto.OrderStatus.EXPIRED,
                 null,
-                Instant.now()
+                Instant.now(),
+                null
         );
     }
 
@@ -362,7 +365,8 @@ public class MockOrderExecutionSimulator {
                 BigDecimal.ZERO,
                 OrderDataDto.OrderStatus.REJECTED,
                 reason,
-                Instant.now()
+                Instant.now(),
+                null
         );
     }
 
@@ -453,7 +457,8 @@ public class MockOrderExecutionSimulator {
                     BigDecimal.ZERO,
                     OrderDataDto.OrderStatus.CANCELED,
                     null,
-                    Instant.now()
+                    Instant.now(),
+                    null
             );
             case EXPIRED -> new OrderDataDto(
                     orderId,
@@ -468,7 +473,8 @@ public class MockOrderExecutionSimulator {
                     BigDecimal.ZERO,
                     OrderDataDto.OrderStatus.EXPIRED,
                     null,
-                    Instant.now()
+                    Instant.now(),
+                    null
             );
             case REJECTED -> simulateRejected(
                     request,
@@ -594,9 +600,7 @@ public class MockOrderExecutionSimulator {
         return feeModel.feeAsset(request.getOrderSide(), request.getSymbol(), config);
     }
 
-    private void releaseReservation(SendOrderRequest request,
-                                    MockBalanceStore balanceStore,
-                                    MockScenarioConfig config) {
+    private void releaseReservation(SendOrderRequest request, MockBalanceStore balanceStore) {
         Symbol symbol = Symbol.of(request.getSymbol());
         String base = symbol.getBaseAsset();
         String quote = symbol.getQuoteAsset();
@@ -605,10 +609,7 @@ public class MockOrderExecutionSimulator {
             if (price == null) {
                 return;
             }
-            BigDecimal estimatedFee = feeModel.estimatedBuyQuoteFee(request.getQuantity(), price, config);
-            BigDecimal reservedAmount = request.getQuantity().multiply(price).add(estimatedFee)
-                    .setScale(8, RoundingMode.HALF_UP);
-            balanceStore.release(quote, reservedAmount);
+            balanceStore.release(quote, OrderValidator.buyReservation(request.getQuantity(), price));
             return;
         }
         balanceStore.release(base, request.getQuantity());

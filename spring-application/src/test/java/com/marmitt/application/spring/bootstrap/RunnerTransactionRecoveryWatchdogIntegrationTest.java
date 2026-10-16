@@ -283,7 +283,8 @@ class RunnerTransactionRecoveryWatchdogIntegrationTest extends AbstractIntegrati
                 BigDecimal.ZERO,
                 OrderDataDto.OrderStatus.NEW,
                 null,
-                Instant.now()
+                Instant.now(),
+                null
         ));
 
         RecoverStaleTransactionsResponse response = watchdog.runRecoveryCycle();
@@ -668,7 +669,8 @@ class RunnerTransactionRecoveryWatchdogIntegrationTest extends AbstractIntegrati
                 fee,
                 status,
                 null,
-                Instant.now()
+                Instant.now(),
+                null
         );
     }
 

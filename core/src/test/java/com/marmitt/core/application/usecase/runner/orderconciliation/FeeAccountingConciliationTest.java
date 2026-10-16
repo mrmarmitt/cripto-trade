@@ -76,7 +76,7 @@ class FeeAccountingConciliationTest {
         ConciliationOrderUpdate conciliation = new ConciliationOrderUpdate(repository, publisher,
                 List.of(new StepSizeNormalizer("BINANCE", new BigDecimal("0.00001"))));
         Transaction sell = submitted(TransactionType.SELL, "0.00099000", "66400.00000000");
-        Position lot = Position.openAtCost(runnerId, "BTCUSDT", new BigDecimal("0.000999"), new BigDecimal("66.23370000"));
+        Position lot = Position.open(runnerId, "BTCUSDT", new BigDecimal("0.000999"), new BigDecimal("66.23370000"));
         lot.associateBuyTransaction(UUID.randomUUID());
         lot.lock(sell.getId(), new BigDecimal("0.00099"));
         when(repository.findPositionLockedByTransactionIdForUpdate(sell.getId())).thenReturn(Optional.of(lot));
@@ -102,7 +102,7 @@ class FeeAccountingConciliationTest {
         // Sem normalizador (ex.: MOCK) qualquer quantidade e vendavel: nada e baixado.
         ConciliationOrderUpdate conciliation = new ConciliationOrderUpdate(repository, publisher, List.of());
         Transaction sell = submitted(TransactionType.SELL, "0.00099000", "66400.00000000");
-        Position lot = Position.openAtCost(runnerId, "BTCUSDT", new BigDecimal("0.000999"), new BigDecimal("66.23370000"));
+        Position lot = Position.open(runnerId, "BTCUSDT", new BigDecimal("0.000999"), new BigDecimal("66.23370000"));
         lot.associateBuyTransaction(UUID.randomUUID());
         lot.lock(sell.getId(), new BigDecimal("0.00099"));
         when(repository.findPositionLockedByTransactionIdForUpdate(sell.getId())).thenReturn(Optional.of(lot));
@@ -121,7 +121,7 @@ class FeeAccountingConciliationTest {
     void sellFeeInThirdAssetIsRecordedPendingConversionAndKeptOutOfPnl() {
         ConciliationOrderUpdate conciliation = new ConciliationOrderUpdate(repository, publisher, List.of());
         Transaction sell = submitted(TransactionType.SELL, "0.00100000", "66400.00000000");
-        Position lot = Position.openAtCost(runnerId, "BTCUSDT", new BigDecimal("0.001"), new BigDecimal("66.30000000"));
+        Position lot = Position.open(runnerId, "BTCUSDT", new BigDecimal("0.001"), new BigDecimal("66.30000000"));
         lot.associateBuyTransaction(UUID.randomUUID());
         lot.lock(sell.getId(), new BigDecimal("0.001"));
         when(repository.findPositionLockedByTransactionIdForUpdate(sell.getId())).thenReturn(Optional.of(lot));

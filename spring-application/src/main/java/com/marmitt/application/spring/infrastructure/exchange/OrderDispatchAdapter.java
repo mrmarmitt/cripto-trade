@@ -160,7 +160,8 @@ public class OrderDispatchAdapter implements OrderDispatchPort {
                 BigDecimal.ZERO,
                 OrderDataDto.OrderStatus.REJECTED,
                 rejectReason,
-                Instant.now()
+                Instant.now(),
+                null
         );
     }
 }

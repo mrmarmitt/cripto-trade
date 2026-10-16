@@ -239,15 +239,18 @@ class UserDataStreamConciliationIntegrationTest {
         OrderDataDto newDto = new OrderDataDto("9876543", clientOrderId, symbol,
                 OrderDataDto.OrderSide.BUY, OrderDataDto.OrderType.LIMIT,
                 QUANTITY, BigDecimal.ZERO, PRICE, BigDecimal.ZERO, BigDecimal.ZERO,
-                OrderDataDto.OrderStatus.NEW, null, now);
+                OrderDataDto.OrderStatus.NEW, null, now,
+                null);
         OrderDataDto partialDto = new OrderDataDto("9876543", clientOrderId, symbol,
                 OrderDataDto.OrderSide.BUY, OrderDataDto.OrderType.LIMIT,
                 QUANTITY, partialQty, PRICE, PRICE, BigDecimal.ZERO,
-                OrderDataDto.OrderStatus.PARTIALLY_FILLED, null, now);
+                OrderDataDto.OrderStatus.PARTIALLY_FILLED, null, now,
+                null);
         OrderDataDto filledDto = new OrderDataDto("9876543", clientOrderId, symbol,
                 OrderDataDto.OrderSide.BUY, OrderDataDto.OrderType.LIMIT,
                 QUANTITY, QUANTITY, PRICE, PRICE, BigDecimal.ZERO,
-                OrderDataDto.OrderStatus.FILLED, null, now);
+                OrderDataDto.OrderStatus.FILLED, null, now,
+                null);
 
         CountDownLatch ready = new CountDownLatch(3);
         CountDownLatch start = new CountDownLatch(1);

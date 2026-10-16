@@ -93,17 +93,14 @@ public class Position {
 
     private Long version;
 
-    /**
-     * Construtor para abertura de nova posição.
-     */
-    public Position(UUID runnerId, String symbol, BigDecimal quantity, BigDecimal averagePrice) {
+    private Position(UUID runnerId, String symbol, BigDecimal quantity, BigDecimal cost) {
         this.id = UUID.randomUUID();
         this.runnerId = Objects.requireNonNull(runnerId, "runnerId cannot be null");
         this.symbol = Objects.requireNonNull(symbol, "symbol cannot be null");
         this.quantity = requirePositive(quantity, "quantity");
-        this.averagePrice = requirePositive(averagePrice, "averagePrice");
-        this.costBasis = quantity.multiply(averagePrice);
-        this.currentPrice = averagePrice;
+        this.costBasis = requirePositive(cost, "cost");
+        this.averagePrice = cost.divide(quantity, 8, RoundingMode.HALF_UP);
+        this.currentPrice = this.averagePrice;
         this.status = PositionStatus.OPEN;
         this.realizedPnl = BigDecimal.ZERO;
         this.openedAt = Instant.now();
@@ -112,17 +109,15 @@ public class Position {
     }
 
     /**
-     * Abre uma posicao a partir do custo total pago em quote asset (T46). Usado quando a
-     * quantidade recebida difere da executada (fee de BUY cobrada no ativo base): o custo e o
-     * quote pago e o preco medio e derivado dele.
+     * Abre uma nova posicao a partir da quantidade recebida e do custo total pago em quote asset.
+     * O preco medio e derivado do custo (T46: com fee no ativo base, quantidade recebida e
+     * executada diferem, e so o custo fecha exatamente com a reserva).
+     *
+     * @param quantity quantidade efetivamente recebida (base asset)
+     * @param cost     quote asset efetivamente pago por ela
      */
-    public static Position openAtCost(UUID runnerId, String symbol, BigDecimal quantity, BigDecimal cost) {
-        requirePositive(quantity, "quantity");
-        requirePositive(cost, "cost");
-        Position position = new Position(runnerId, symbol, quantity,
-                cost.divide(quantity, 8, RoundingMode.HALF_UP));
-        position.costBasis = cost;
-        return position;
+    public static Position open(UUID runnerId, String symbol, BigDecimal quantity, BigDecimal cost) {
+        return new Position(runnerId, symbol, quantity, cost);
     }
 
     /**
@@ -174,25 +169,13 @@ public class Position {
     // ============================================================
 
     /**
-     * Aumenta a posição com nova compra, recalculando o preço médio ponderado (WAP).
-     *
-     * @param additionalQuantity quantidade comprada
-     * @param purchasePrice      preço de execução da compra
-     */
-    public void addQuantity(BigDecimal additionalQuantity, BigDecimal purchasePrice) {
-        requirePositive(additionalQuantity, "additionalQuantity");
-        requirePositive(purchasePrice, "purchasePrice");
-        addQuantityAtCost(additionalQuantity, additionalQuantity.multiply(purchasePrice));
-    }
-
-    /**
-     * Aumenta a posicao com nova compra a partir do custo pago em quote asset (T46). O preco
-     * medio e recalculado a partir do custo total acumulado.
+     * Aumenta a posicao com nova compra a partir do custo pago em quote asset. O preco medio e
+     * recalculado a partir do custo total acumulado (T46).
      *
      * @param additionalQuantity quantidade efetivamente recebida (base asset)
      * @param cost               quote asset efetivamente pago por ela
      */
-    public void addQuantityAtCost(BigDecimal additionalQuantity, BigDecimal cost) {
+    public void addQuantity(BigDecimal additionalQuantity, BigDecimal cost) {
         requirePositive(additionalQuantity, "additionalQuantity");
         // Zero e admitido: o custo de um incremento minusculo pode arredondar para 0 a 8 casas.
         Objects.requireNonNull(cost, "cost cannot be null");

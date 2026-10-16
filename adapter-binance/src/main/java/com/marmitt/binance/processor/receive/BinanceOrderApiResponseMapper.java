@@ -30,7 +30,8 @@ class BinanceOrderApiResponseMapper {
                 BigDecimal.ZERO,
                 mapStatus(result.path("status").asText()),
                 null,
-                transactTime > 0 ? Instant.ofEpochMilli(transactTime) : Instant.now()
+                transactTime > 0 ? Instant.ofEpochMilli(transactTime) : Instant.now(),
+                null
         );
     }
 
@@ -49,7 +50,8 @@ class BinanceOrderApiResponseMapper {
                 BigDecimal.ZERO,
                 OrderDataDto.OrderStatus.REJECTED,
                 rejectReason,
-                Instant.now()
+                Instant.now(),
+                null
         );
     }
 
