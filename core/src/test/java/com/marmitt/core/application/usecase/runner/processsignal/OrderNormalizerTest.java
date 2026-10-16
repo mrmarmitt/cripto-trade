@@ -1,5 +1,6 @@
 package com.marmitt.core.application.usecase.runner.processsignal;
 
+import com.marmitt.core.enums.OrderSide;
 import com.marmitt.core.ports.outbound.exchange.rest.OrderQuantityNormalizerPort;
 import org.junit.jupiter.api.Test;
 
@@ -18,17 +19,28 @@ class OrderNormalizerTest {
     void normalize_appliesRegisteredNormalizerForExchange() {
         OrderNormalizer normalizer = new OrderNormalizer(List.of(new FixedNormalizer("BINANCE")));
 
-        OrderNormalizer.NormalizedOrder result = normalizer.normalize("BINANCE", SYMBOL, RAW_QTY, RAW_PRICE);
+        OrderNormalizer.NormalizedOrder result = normalizer.normalize("BINANCE", SYMBOL, OrderSide.BUY, RAW_QTY, RAW_PRICE);
 
         assertSameValue("0.00123", result.quantity());
         assertSameValue("43521.75", result.price());
     }
 
     @Test
+    void normalize_propagatesSideToPriceNormalization() {
+        // T37: o lado chega ao normalizador da exchange; o fake arredonda SELL para cima.
+        OrderNormalizer normalizer = new OrderNormalizer(List.of(new FixedNormalizer("BINANCE")));
+
+        OrderNormalizer.NormalizedOrder sell = normalizer.normalize("BINANCE", SYMBOL, OrderSide.SELL, RAW_QTY, RAW_PRICE);
+
+        assertSameValue("43521.76", sell.price());
+        assertSameValue("0.00123", sell.quantity());
+    }
+
+    @Test
     void normalize_resolvesExchangeNameCaseInsensitively() {
         OrderNormalizer normalizer = new OrderNormalizer(List.of(new FixedNormalizer("BINANCE")));
 
-        OrderNormalizer.NormalizedOrder result = normalizer.normalize("binance", SYMBOL, RAW_QTY, RAW_PRICE);
+        OrderNormalizer.NormalizedOrder result = normalizer.normalize("binance", SYMBOL, OrderSide.BUY, RAW_QTY, RAW_PRICE);
 
         assertSameValue("0.00123", result.quantity());
     }
@@ -37,7 +49,7 @@ class OrderNormalizerTest {
     void normalize_returnsOriginalWhenNoNormalizerForExchange() {
         OrderNormalizer normalizer = new OrderNormalizer(List.of(new FixedNormalizer("BINANCE")));
 
-        OrderNormalizer.NormalizedOrder result = normalizer.normalize("MOCK", SYMBOL, RAW_QTY, RAW_PRICE);
+        OrderNormalizer.NormalizedOrder result = normalizer.normalize("MOCK", SYMBOL, OrderSide.BUY, RAW_QTY, RAW_PRICE);
 
         assertEquals(RAW_QTY, result.quantity());
         assertEquals(RAW_PRICE, result.price());
@@ -47,7 +59,7 @@ class OrderNormalizerTest {
     void normalize_returnsOriginalWhenNoNormalizersRegistered() {
         OrderNormalizer normalizer = new OrderNormalizer(List.of());
 
-        OrderNormalizer.NormalizedOrder result = normalizer.normalize("BINANCE", SYMBOL, RAW_QTY, RAW_PRICE);
+        OrderNormalizer.NormalizedOrder result = normalizer.normalize("BINANCE", SYMBOL, OrderSide.BUY, RAW_QTY, RAW_PRICE);
 
         assertEquals(RAW_QTY, result.quantity());
         assertEquals(RAW_PRICE, result.price());
@@ -57,7 +69,7 @@ class OrderNormalizerTest {
     void normalize_returnsOriginalWhenExchangeNameIsNull() {
         OrderNormalizer normalizer = new OrderNormalizer(List.of(new FixedNormalizer("BINANCE")));
 
-        OrderNormalizer.NormalizedOrder result = normalizer.normalize(null, SYMBOL, RAW_QTY, RAW_PRICE);
+        OrderNormalizer.NormalizedOrder result = normalizer.normalize(null, SYMBOL, OrderSide.BUY, RAW_QTY, RAW_PRICE);
 
         assertEquals(RAW_QTY, result.quantity());
     }
@@ -68,8 +80,9 @@ class OrderNormalizerTest {
     }
 
     /**
-     * Normalizador fake que floor de quantidade para 5 casas e preço para 2 casas,
-     * suficiente para verificar a delegação sem depender de regras reais de exchange.
+     * Normalizador fake que faz floor da quantidade para 5 casas e arredonda o preço para 2 casas
+     * por lado (BUY floor, SELL ceiling), suficiente para verificar a delegação sem depender de
+     * regras reais de exchange.
      */
     private record FixedNormalizer(String exchangeName) implements OrderQuantityNormalizerPort {
         @Override
@@ -83,8 +96,13 @@ class OrderNormalizerTest {
         }
 
         @Override
-        public BigDecimal normalizePrice(String symbol, BigDecimal price) {
-            return price == null ? null : price.setScale(2, java.math.RoundingMode.FLOOR);
+        public BigDecimal normalizePrice(String symbol, OrderSide side, BigDecimal price) {
+            if (price == null) {
+                return null;
+            }
+            return price.setScale(2, side == OrderSide.BUY
+                    ? java.math.RoundingMode.FLOOR
+                    : java.math.RoundingMode.CEILING);
         }
     }
 }

@@ -3,7 +3,7 @@
 **Complexidade:** Média
 **Responsável:** Claude
 **Dependências:** T34 (introduziu `limitPrice` dirigido pela estratégia, que dá relevância prática ao arredondamento)
-**Status:** Pendente
+**Status:** Concluído (2026-10-16) — ver "Entrega"
 
 ---
 
@@ -67,6 +67,42 @@ inclusive a `SimpleMovingAverageStrategy` a preço de mercado — por isso não 
   reajustar. Confirmar que preços FLOOR/CEILING passam na validação.
 - **Compatibilidade do port:** mudar a assinatura de `normalizePrice` obriga revisar todos os
   chamadores e implementadores (hoje: `OrderNormalizer` e `BinanceOrderNormalizer`).
+
+---
+
+## Entrega (2026-10-16)
+
+### O que mudou
+
+- `OrderQuantityNormalizerPort.normalizePrice(symbol, side, price)`: o lado passa a fazer parte do
+  contrato. Tipo escolhido: `core.enums.OrderSide` — o mesmo enum que o `SendOrderRequest` já carrega,
+  então o caminho de dispatch repassa o lado sem conversão. `side` é obrigatório para preço não nulo.
+- `BinanceOrderNormalizer`: `FLOOR` para BUY, `CEILING` para SELL (antes `HALF_UP`); log `debug`
+  quando o preço é deslocado. `normalizeQuantity` inalterado (`FLOOR`).
+- `OrderNormalizer.normalize(exchange, symbol, side, quantity, price)` repassa o lado.
+- `TradeIntentFactory.orderSideOf(signal)`: deriva o lado da decisão antes de existir a transação
+  (mesmo mapeamento já usado para `TransactionType`). `ProcessTradeSignalUseCase` usa esse lado.
+
+### Chamador que a spec não listava
+
+`BinanceMarketStreamAdapter.normalizeForDispatch` também chama `normalizePrice` (ordens manuais e
+reenvio idempotente no dispatch). Passou a repassar `request.getOrderSide()`. Para o fluxo de runner
+o preço já chega alinhado, e FLOOR/CEILING de um preço alinhado é a identidade — a etapa continua
+idempotente (coberto por teste).
+
+### Invariante T34 preservada
+
+A normalização continua num ponto único antes do persist; `SideAwarePriceNormalizationTest` prova
+que o preço normalizado por lado é o mesmo persistido, reservado (`CapitalRequest.amount`) e enviado
+(`OrderDispatchCommand.price`).
+
+### Validação
+
+- `:core:test` (134): `OrderNormalizerTest` (lado propagado) e `SideAwarePriceNormalizationTest` (novo).
+- `:adapter-binance:test` (68): `BinanceOrderNormalizerTest` — BUY floor, SELL ceiling, nunca contra o
+  trader e deslocamento < 1 tick, preço alinhado inalterado nos dois lados, `side` obrigatório, e
+  preços normalizados aceitos pelo `OrderFilterValidator` sem reajuste.
+- `:spring-application:test` 177/177; `adapter-mock`/`adapter-coinbase` compilam (não implementam o port).
 
 ---
 

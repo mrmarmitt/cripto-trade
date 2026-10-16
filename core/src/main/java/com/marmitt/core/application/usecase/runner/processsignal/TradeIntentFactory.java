@@ -9,6 +9,7 @@ import com.marmitt.core.dto.runner.OrderDispatchCommand;
 import com.marmitt.core.dto.strategy.StrategyInputDto;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.dto.websocket.data.MarketDataDto;
+import com.marmitt.core.enums.OrderSide;
 import com.marmitt.core.enums.TradingAction;
 import com.marmitt.core.enums.TransactionType;
 
@@ -63,6 +64,14 @@ class TradeIntentFactory {
      * de filtro da exchange (ver {@link OrderNormalizer}), garantindo que o valor persistido e
      * reservado seja identico ao enviado para a exchange.
      */
+    /**
+     * Lado da ordem derivado da decisao da estrategia. Usado antes de existir a transacao
+     * (ex.: normalizacao de preco por lado, T37).
+     */
+    public OrderSide orderSideOf(StrategyOutputDto signal) {
+        return signal.decision() == TradingAction.SHOULD_BUY ? OrderSide.BUY : OrderSide.SELL;
+    }
+
     public Transaction buildTransaction(StrategyRunner runner, StrategyOutputDto signal,
                                         BigDecimal quantity, BigDecimal price) {
         TransactionType type = signal.decision() == TradingAction.SHOULD_BUY

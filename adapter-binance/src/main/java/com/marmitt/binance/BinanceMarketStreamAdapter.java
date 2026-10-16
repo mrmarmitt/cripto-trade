@@ -121,7 +121,7 @@ public class BinanceMarketStreamAdapter implements
      */
     private SendOrderRequest normalizeForDispatch(SendOrderRequest request) {
         BigDecimal quantity = orderNormalizer.normalizeQuantity(request.getSymbol(), request.getQuantity());
-        BigDecimal price = orderNormalizer.normalizePrice(request.getSymbol(), request.getPrice());
+        BigDecimal price = orderNormalizer.normalizePrice(request.getSymbol(), request.getOrderSide(), request.getPrice());
         if (quantity.compareTo(request.getQuantity()) == 0
                 && (price == null ? request.getPrice() == null : price.compareTo(request.getPrice()) == 0)) {
             return request;

@@ -1,5 +1,7 @@
 package com.marmitt.core.ports.outbound.exchange.rest;
 
+import com.marmitt.core.enums.OrderSide;
+
 import java.math.BigDecimal;
 
 /**
@@ -30,8 +32,12 @@ public interface OrderQuantityNormalizerPort {
     BigDecimal normalizeQuantity(String symbol, BigDecimal quantity);
 
     /**
-     * Alinha o preço ao {@code tickSize} do símbolo. Retorna o próprio preço quando ele
-     * for {@code null}/zero (ex.: ordem a mercado) ou não houver regra aplicável.
+     * Alinha o preço ao {@code tickSize} do símbolo, sempre a favor do trader (T37):
+     * BUY arredonda para baixo (nunca paga acima do preço pretendido) e SELL arredonda para
+     * cima (nunca vende abaixo do preço pretendido). Retorna o próprio preço quando ele for
+     * {@code null}/zero (ex.: ordem a mercado) ou não houver regra aplicável.
+     *
+     * @param side lado da ordem; obrigatório, pois define a direção do arredondamento
      */
-    BigDecimal normalizePrice(String symbol, BigDecimal price);
+    BigDecimal normalizePrice(String symbol, OrderSide side, BigDecimal price);
 }

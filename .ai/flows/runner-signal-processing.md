@@ -35,7 +35,9 @@ adaptadores externos.
 6. Sinal `HOLD` encerra o fluxo sem efeito.
 7. `OrderNormalizer` alinha quantidade e preco as regras de filtro da exchange
    (`stepSize`/`tickSize`) ANTES de materializar a transacao, via
-   `OrderQuantityNormalizerPort`. Exchange sem normalizador (ex.: MOCK) usa os
+   `OrderQuantityNormalizerPort`. O preco arredonda a favor do trader conforme o lado
+   (BUY para baixo, SELL para cima; T37), com o lado derivado por
+   `TradeIntentFactory.orderSideOf`. Exchange sem normalizador (ex.: MOCK) usa os
    valores originais.
 8. Sinal `BUY` passa por `BuySignalHandler`.
 9. Sinal `SELL` passa por `SellSignalHandler`.
@@ -81,6 +83,8 @@ mesma posicao, o fluxo falha com `ConcurrentPositionLockException`.
 - Quantidade e preco persistidos/reservados devem ser identicos aos enviados a
   exchange: a normalizacao acontece antes do persist, e o `OrderFilterValidator`
   no dispatch apenas valida (rejeita desalinhamento), sem reajustar valores.
+- Preco normalizado nunca fica contra a intencao do trader: BUY nunca acima e SELL
+  nunca abaixo do preco pretendido, com deslocamento menor que um tick (T37).
 - SELL so pode seguir para dispatch depois de posicao travada.
 - Falha em um runner nao deve impedir a avaliacao dos demais runners do tick.
 - `RunnerContextAssembler` exige `GlobalBalance`; sem ele a avaliacao nao deve
