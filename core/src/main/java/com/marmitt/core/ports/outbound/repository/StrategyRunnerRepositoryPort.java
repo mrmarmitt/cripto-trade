@@ -126,6 +126,12 @@ public interface StrategyRunnerRepositoryPort {
     Optional<Position> findActivePositionByRunnerIdAndSymbol(UUID runnerId, String symbol);
 
     /**
+     * Posicoes ativas (OPEN ou CLOSING) de todos os runners do portfolio. Inclui lotes travados por
+     * venda em voo: continuam sendo do portfolio ate o fill (T43, equity marcado a mercado).
+     */
+    List<Position> findActivePositionsByPortfolioId(UUID portfolioId);
+
+    /**
      * Busca todas as Positions OPEN de um Runner.
      * Usado pelo Runner para verificar posições abertas antes de novos sinais.
      */

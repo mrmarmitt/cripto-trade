@@ -35,6 +35,12 @@ public record ErrorNotificationEvent(
                 correlationId, runnerId, dlqId, occurredAt);
     }
 
+    public static ErrorNotificationEvent circuitBreakerTriggered(String title, String description,
+                                                                 Instant occurredAt) {
+        return new ErrorNotificationEvent(ErrorNotificationType.CIRCUIT_BREAKER_TRIGGERED, title, description,
+                null, null, null, occurredAt);
+    }
+
     public static ErrorNotificationEvent bootFailFast(String title, String description,
                                                       String correlationId, Instant occurredAt) {
         return new ErrorNotificationEvent(ErrorNotificationType.BOOT_FAIL_FAST, title, description,

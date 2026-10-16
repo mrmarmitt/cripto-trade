@@ -10,5 +10,7 @@ package com.marmitt.core.dto.notification;
  */
 public enum ErrorNotificationType {
     DLQ_PERSISTED,
-    BOOT_FAIL_FAST
+    BOOT_FAIL_FAST,
+    /** Monitor de capital acionou o Safe Mode automaticamente (T43). */
+    CIRCUIT_BREAKER_TRIGGERED
 }

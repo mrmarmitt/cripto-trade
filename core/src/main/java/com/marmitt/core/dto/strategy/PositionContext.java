@@ -52,6 +52,7 @@ public record PositionContext(
                                        BigDecimal quantity,
                                        BigDecimal averagePrice,
                                        BigDecimal currentPrice,
+                                       BigDecimal unrealizedPnl,
                                        BigDecimal realizedPnl,
                                        Instant openedAt,
                                        List<OpenLotDto> openLots) {
@@ -59,11 +60,11 @@ public record PositionContext(
         Objects.requireNonNull(symbol, "symbol cannot be null");
         Objects.requireNonNull(quantity, "quantity cannot be null");
         Objects.requireNonNull(averagePrice, "averagePrice cannot be null");
+        Objects.requireNonNull(unrealizedPnl, "unrealizedPnl cannot be null");
         Objects.requireNonNull(realizedPnl, "realizedPnl cannot be null");
         Objects.requireNonNull(openLots, "openLots cannot be null");
 
         BigDecimal marketPrice = currentPrice != null ? currentPrice : averagePrice;
-        BigDecimal unrealized = marketPrice.subtract(averagePrice).multiply(quantity);
 
         return PositionContext.builder()
                 .positionId(positionId)
@@ -71,7 +72,7 @@ public record PositionContext(
                 .quantity(quantity)
                 .averagePrice(averagePrice)
                 .currentPrice(marketPrice)
-                .unrealizedPnl(unrealized)
+                .unrealizedPnl(unrealizedPnl)
                 .realizedPnl(realizedPnl)
                 .openLots(openLots)
                 .build();

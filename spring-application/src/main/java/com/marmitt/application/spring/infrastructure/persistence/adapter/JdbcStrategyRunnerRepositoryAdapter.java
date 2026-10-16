@@ -205,6 +205,17 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     }
 
     @Override
+    public List<Position> findActivePositionsByPortfolioId(UUID portfolioId) {
+        long start = System.nanoTime();
+        List<Position> result = positionRepo.findActiveByPortfolioId(portfolioId).stream()
+                .map(StrategyRunnerEntityMapper::toDomain)
+                .toList();
+        log.trace("[REPO] position.findActiveByPortfolioId({}) - {}ms - {} results",
+                portfolioId, RepoTiming.elapsedMs(start), result.size());
+        return result;
+    }
+
+    @Override
     public List<Position> findOpenPositionsByRunnerId(UUID runnerId) {
         long start = System.nanoTime();
         List<Position> result = positionRepo.findOpenByRunnerId(runnerId).stream()

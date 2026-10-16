@@ -103,6 +103,16 @@ class PositionCostBasisTest {
         assertAmount("60", position.getCostBasis());
     }
 
+    @Test
+    void unrealizedPnlIsMarketValueMinusPaidCost() {
+        // T43: o flutuante usa o custo pago, nao o preco medio arredondado.
+        Position position = Position.open(UUID.randomUUID(), "BTCUSDT", NET_QTY, PAID);
+
+        position.updateCurrentPrice(new BigDecimal("60000"));
+
+        assertAmount("-6.29370000", position.getUnrealizedPnl());
+    }
+
     private static void assertAmount(String expected, BigDecimal actual) {
         assertEquals(0, new BigDecimal(expected).compareTo(actual),
                 () -> "expected " + expected + " but was " + actual);

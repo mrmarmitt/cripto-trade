@@ -54,7 +54,7 @@ class RunnerContextAssembler {
      * @throws IllegalStateException se o {@link com.marmitt.core.domain.portfolio.GlobalBalance}
      *         do portfolio nao existir - indica inconsistencia de dados, nao cenario normal
      */
-    public StrategyContextDto assemble(StrategyRunner runner) {
+    public StrategyContextDto assemble(StrategyRunner runner, BigDecimal marketPrice) {
         GlobalBalance balance = globalBalanceRepository
                 .findByPortfolioId(runner.getPortfolioId())
                 .orElseThrow(() -> new IllegalStateException(
@@ -63,6 +63,9 @@ class RunnerContextAssembler {
         Symbol symbol = Symbol.of(runner.getSymbol());
         Optional<Position> runnerPositionOpt =
                 strategyRunnerRepository.findActivePositionByRunnerIdAndSymbol(runner.getId(), runner.getSymbol());
+        // Marca a mercado ao preco do tick (em memoria, sem persistir): PnL flutuante e percentual
+        // do lote refletem o mercado atual (T43).
+        runnerPositionOpt.ifPresent(position -> position.updateCurrentPrice(marketPrice));
 
         List<OpenLotDto> openLots = runnerPositionOpt
                 .map(this::buildOpenLot)
@@ -78,6 +81,7 @@ class RunnerContextAssembler {
                         position.getQuantity(),
                         position.getAveragePrice(),
                         position.getCurrentPrice(),
+                        position.getUnrealizedPnl(),
                         position.getRealizedPnl(),
                         position.getOpenedAt(),
                         openLots
