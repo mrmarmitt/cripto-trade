@@ -60,9 +60,14 @@ persisted`, falha de conciliacao etc. ficam recuperaveis via
 
 1. Procura posicao por `openedByTransactionId`.
 2. Se nao existir, procura posicao aberta do mesmo runner/simbolo.
-3. Se ainda nao existir, cria nova `Position`.
+3. Se ainda nao existir, cria nova `Position` (`Position.openAtCost`).
 4. Associa a transacao de abertura quando necessario.
 5. Salva posicao e transacao na mesma unidade transacional.
+Fee e custo (T46): a posicao recebe a quantidade efetivamente recebida e o custo em quote
+efetivamente pago (`FillCalculator.costIncrement`, diferenca dos valores executados cumulativos).
+Fee no ativo base reduz a quantidade (padrao Binance para BUY); fee em quote ou terceiro ativo e
+ignorada com log ERROR; sem ativo informado, a fee e ignorada (legado).
+
 6. No fill final (`FILLED`), publica `MarginReleaseEvent` com o excedente
    `total reservado - valor executado` (`ReleaseReason.FILLED_EXCESS`, T36), na mesma unidade
    transacional. Sem excedente (execucao no proprio limite), nada e publicado.
@@ -79,7 +84,15 @@ aplicando o incremento.
 2. Aplica reducao incremental.
 3. Destrava a posicao no fill final.
 4. Cria `TransactionMatch`.
-5. Publica `ExecutionConfirmedEvent`.
+5. Publica `ExecutionConfirmedEvent` com `totalCost` vindo do `cost_basis` da posicao (fracao
+   proporcional; restante exato quando a venda zera a posicao).
+6. No fill final, se sobrar quantidade que a exchange nao aceita vender (`SellableQuantityPolicy`,
+   via `OrderQuantityNormalizerPort`), baixa o residuo como perda (`Position.writeOffDust`), fecha a
+   posicao e publica um segundo `ExecutionConfirmedEvent` (custo do residuo, PnL = -custo,
+   `matchId` deterministico por posicao).
+
+Fee da SELL (T46): em quote entra no PnL; sem ativo, assumida em quote (legado); em base ou
+terceiro ativo fica no match como pendente de conversao, fora do PnL, com log ERROR.
 
 Posicoes ativas precisam ter `openedByTransactionId`; ausencia dessa origem e
 erro de consistencia.
@@ -117,6 +130,8 @@ erro de consistencia.
   pela exchange.
 - SELL nao pode vender quantidade indisponivel.
 - Posicao travada por SELL deve ser destravada no encerramento final.
+- A soma dos custos baixados de um lote (vendas + residuo) e exatamente o quote pago por ele (T46).
+- Quantidade do lote = quantidade recebida, liquida de fee cobrada no ativo base (T46).
 
 ## Validacao
 

@@ -88,7 +88,9 @@ executado para `MOCK`.
 - chance de duplicatas;
 - chance de out-of-order;
 - chance de cancelamento/expiracao;
-- fee em mesma moeda;
+- fee no ativo recebido (`FeeMode.RECEIVED_ASSET`, como a Binance Spot): base na BUY, quote na
+  SELL; o evento informa `feeAsset` e o saldo do mock credita a base liquida (T46).
+  `SAME_CURRENCY` (fee em quote nos dois lados) segue disponivel;
 - slippage para market orders;
 - validacao basica de quantidade, step size e notional;
 - saldos iniciais.

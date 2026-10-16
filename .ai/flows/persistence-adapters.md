@@ -120,6 +120,8 @@ Pontos criticos:
 - `tryLockPositionForSell` usa update condicional e aceita estado ja lockado pela
   mesma transacao como sucesso idempotente.
 - positions `OPEN` ou `CLOSING` precisam de `openedByTransactionId`.
+- `positions.cost_basis` (V12, T46) e anulavel de proposito: o dominio sempre grava; linha sem valor
+  cai no fallback `quantity x average_price` em vez de assumir custo zero.
 - `saveAtomicTransactionAndMatch` mantem status de transaction e match no mesmo
   limite transacional.
 - `transaction_matches` sao registros de execucao; nao trate como estado

@@ -85,7 +85,8 @@ A mensagem e enviada via `PostConnectionEstablishHandler` apos cada conexao
 - `z` -> quantidade executada acumulada
 - `Z` -> quote acumulado
 - `p` -> preco informado
-- `n` -> fee
+- `n` -> fee (comissao deste trade)
+- `N` -> ativo da fee (`feeAsset`; nulo quando o evento nao tem trade, T46)
 - `r` -> reject reason
 - `T` -> timestamp
 
