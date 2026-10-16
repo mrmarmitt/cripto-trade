@@ -69,6 +69,32 @@ Nao reintroduza. Cada um foi corrigido com custo:
 | Colapsar use cases em metodos privados de um orquestrador | `RunBootSequenceUseCase` virou God Object (PR #73) | Classes separadas, reposicionadas em `usecase.boot.phase2` |
 | Efeito colateral escondido (metrica registrada dentro de handler) | fluxo de sinal (T23) | Handlers retornam `BuyOutcome`/`SellOutcome`; registro centralizado no orquestrador |
 | Design documentado como se estivesse implementado | safety buffer (T36), mailbox, drawdown, Safe Mode (T39) | Doc deve marcar o que ainda nao existe |
+| Dois caminhos para a mesma operacao | `Position` com construtor por preco + `openAtCost`, `addQuantity` + `addQuantityAtCost`; `OrderDataDto` com construtor legado que preenche `feeAsset = null` (T46) | Um unico caminho canonico; o antigo e migrado e removido (ver 1.3) |
+
+### 1.3 Um fluxo, um caminho (poucas bifurcacoes)
+
+Segunda regra em importancia, depois da disposicao de responsabilidades. O sistema deve ter um
+fluxo bem definido e poucas derivadas. Funcoes que fazem quase a mesma coisa acabam divergindo e
+geram comportamentos diferentes onde deveria haver um so.
+
+Antes de criar funcao, metodo, construtor, factory, modo ou flag nova:
+
+1. **Procure o caminho existente.** Se a operacao ja existe, estenda-a ou troque a assinatura.
+   Nao crie uma variante ao lado (`fooAtCost`, `fooV2`, `fooWithX`, sobrecarga de conveniencia).
+2. **Mudou o modelo, migre os chamadores.** Ao trocar o dado canonico (ex.: preco -> custo),
+   atualize todos os usos e remova a forma antiga no mesmo PR. Construtor/sobrecarga "legado"
+   que preenche um default silencioso so com aprovacao explicita e com prazo de remocao no backlog.
+3. **Bifurcacao so por regra de negocio real.** Cada `if`/`switch`/enum novo precisa corresponder
+   a um caso que acontece de fato e estar escrito na spec. Caso hipotetico ("outra exchange um dia
+   cobra assim") nao ganha ramo proprio: falha explicita ou log, e a task futura cria o ramo.
+4. **Mesmo resultado, mesma funcao.** Dois fluxos que calculam a mesma coisa (custo, quantidade
+   vendavel, status) chamam o mesmo colaborador. Nao reimplemente o calculo localmente.
+5. **Sem codigo morto.** Metodo sem chamador em producao sai no mesmo PR; teste nao justifica API
+   publica que producao nao usa.
+6. **Modos e flags de configuracao** so quando os dois valores sao usados de verdade (perfil,
+   cenario, exchange). Modo mantido "por compatibilidade" sem consumidor e removido.
+
+Na duvida entre criar e reaproveitar, reaproveite e registre a escolha no PR.
 
 ---
 
@@ -417,6 +443,9 @@ executada, impacto documental, riscos residuais e proxima task recomendada.
 - [ ] Testes no nivel certo; validacao executada e reportada.
 - [ ] Spec, backlog, flow map e docs atualizados ou "sem impacto" declarado.
 - [ ] Nenhum anti-padrao da secao 1.2 reintroduzido.
+- [ ] Nenhuma variante paralela de funcao/construtor/factory; caminho antigo migrado e removido (1.3).
+- [ ] Cada bifurcacao nova (`if`, enum, modo, flag) corresponde a caso real descrito na spec (1.3).
+- [ ] Nenhum metodo publico sem chamador em producao.
 
 ---
 

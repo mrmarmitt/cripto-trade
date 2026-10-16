@@ -54,6 +54,8 @@ Identificar primeiro os riscos reais da mudanca, com prioridade para:
 3. Algum payload, DTO ou schema externo vazou para dentro do `core`?
 4. Alguma estrategia deixou de ser calculo puro?
 5. O `spring-application` acumulou decisao de dominio?
+6. Surgiu funcao, construtor, factory, modo ou flag paralela a um caminho existente, ou bifurcacao
+   sem caso real na spec (manual, secao 1.3)?
 6. Os adapters continuam focados em traducao e isolamento de provider?
 7. A validacao executada e suficiente para o risco introduzido?
 
