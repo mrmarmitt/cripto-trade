@@ -44,11 +44,12 @@ public class ConciliationOrderUpdate {
     public ConciliationOrderUpdate(StrategyRunnerRepositoryPort strategyRunnerRepository,
                                    EventPublisherPort eventPublisher) {
         this.strategyRunnerRepository = strategyRunnerRepository;
+        MarginReleaseBuilder marginReleaseBuilder = new MarginReleaseBuilder();
         this.fillCalculator = new FillCalculator();
-        this.buyFillHandler = new BuyFillHandler(strategyRunnerRepository);
+        this.buyFillHandler = new BuyFillHandler(strategyRunnerRepository, eventPublisher, marginReleaseBuilder);
         this.sellFillHandler = new SellFillHandler(strategyRunnerRepository, eventPublisher);
         this.terminationHandler = new TerminationHandler(
-                strategyRunnerRepository, eventPublisher, new MarginReleaseBuilder());
+                strategyRunnerRepository, eventPublisher, marginReleaseBuilder);
     }
 
     /**

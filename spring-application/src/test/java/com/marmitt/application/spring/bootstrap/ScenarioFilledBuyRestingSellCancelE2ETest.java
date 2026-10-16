@@ -5,6 +5,7 @@ import com.marmitt.strategy.impl.scenario.ScenarioStrategyConfig;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.util.List;
 import java.util.UUID;
 
@@ -72,5 +73,26 @@ class ScenarioFilledBuyRestingSellCancelE2ETest extends ScenarioStrategyE2ETestS
         assertFalse(hasLockedPosition(runnerId), "Nenhuma posicao pode ficar travada apos o teto");
         assertTrue(signalEvaluatedCount(runnerId, "HOLD") >= 1.0,
                 "Depois do teto a estrategia deve holdar");
+    }
+
+    @Test
+    void openLotShouldKeepOnlyTheExecutedBuyCostReserved() {
+        // T36: com o lote aberto, reserved deve ser exatamente o custo executado da BUY — o mesmo
+        // valor que a venda futura baixara em confirmExecution. Excedente do limite volta ao disponivel.
+        UUID runnerId = activateScenario(
+                new FilledBuyRestingSellCancelStrategy(ScenarioStrategyConfig.boundedConfig(1)));
+        UUID portfolioId = portfolioIdOf(runnerId);
+
+        driveTicks(14);
+        awaitStable(runnerId, QUIET_WINDOW);
+
+        TransactionRow buy = transactionsOfType(runnerId, "BUY").getFirst();
+        BigDecimal executedCost = buy.executedQuantity().multiply(buy.executedPrice())
+                .setScale(8, RoundingMode.HALF_UP);
+        BalanceRow balance = balance(portfolioId);
+        assertEquals(0, balance.reserved().compareTo(executedCost),
+                "reserved deve igualar o custo executado da BUY. buy=" + buy + " saldo=" + balance);
+        assertEquals(0, balance.available().add(balance.reserved()).compareTo(INITIAL_CAPITAL),
+                "Sem PnL realizado, available + reserved deve ser o capital inicial. Saldo=" + balance);
     }
 }

@@ -3,9 +3,8 @@
 **Complexidade:** Média (decisão de negócio + eventual efeito financeiro)
 **Responsável:** Claude
 **Dependências:** nenhuma (independente das estratégias; toca o caminho de reserva de capital)
-**Status:** Pendente — **decisão de negócio pendente** (implementar o buffer ou remover do design).
-Escopo ampliado por evidência: a devolução do excedente (§7.2.3) não existe e é necessária em
-qualquer das duas opções — ver "Evidência" abaixo.
+**Status:** Concluído (2026-10-16) — devolução do excedente (§7.2.3) implementada e **Opção B**
+decidida (sem buffer enquanto só houver `LIMIT`). Ver "Decisão registrada" e "Entrega".
 
 ---
 
@@ -91,6 +90,74 @@ Não há nenhum passo compensatório: `release()` só é chamado nos caminhos te
 
 > Correção **não** aplicada na T38 de propósito: é aritmética de reserva com efeito financeiro e
 > pertence a esta task. Ver `.ai/tasks/T38-scenario-strategies-e2e.md`, seção "Achados dos e2e".
+
+---
+
+## Decisão registrada (2026-10-16): Opção B — sem buffer para `LIMIT`
+
+Decidido pelo mantenedor, por recomendação da implementação:
+
+- **Por que não há buffer hoje:** o sistema só envia `LIMIT`. Uma BUY `LIMIT` não executa acima do
+  limite, e quantidade/preço são normalizados antes da reserva, então a reserva nominal sempre cobre o
+  custo. A fee de BUY na Binance sai, por padrão, no ativo base (não consome o quote reservado; ver T46).
+  Com a devolução do excedente, um buffer só travaria capital durante a ordem, reduzindo o disponível
+  dos demais runners e antecipando `RUNNER_LIMIT_EXCEEDED`.
+- **Regra para o futuro:** a task que introduzir `MARKET` (ou qualquer ordem com preço de execução
+  desconhecido na reserva) **deve** entregar o buffer de MARKET (IG §7.2.2, `1.005` sugerido) junto.
+- **Detecção:** custo executado acima da reserva gera WARN em `MarginReleaseBuilder.buildFilledExcess`.
+- **Documentos corrigidos:** IG §7.1 (step 5), §7.2, exemplo de fluxo, §7.9 e §7.10; BLUEPRINT
+  (política FIFO de alocação); Javadoc de `CapitalRequest` e de `GlobalBalanceRepositoryPort.reserveAtomic`.
+
+## Entrega (2026-10-16): devolução do excedente §7.2.3
+
+Implementada a parte comum às duas opções. **Nenhum valor reservado mudou**: a reserva continua
+nominal, o que agora é a decisão registrada (Opção B).
+
+### O que mudou
+
+- `MarginReleaseBuilder.buildFilledExcess(Transaction)`: para BUY em `FILLED`, calcula
+  `excedente = total reservado − valor executado` (mesma fórmula que o CANCELED parcial já usava).
+- `BuyFillHandler`: no fill final publica `MarginReleaseEvent` com `ReleaseReason.FILLED_EXCESS`,
+  na mesma unidade transacional do fill (mesmo padrão do `SellFillHandler` com
+  `ExecutionConfirmedEvent`). O `MarginReleasedReaction` existente aplica `release()`.
+- Novos `MarginRelease.filledExcess(...)` e `ReleaseReason.FILLED_EXCESS`.
+
+Resultado: com o lote aberto, `reserved` passa a ser exatamente o custo executado da BUY, que é o
+mesmo valor que as vendas daquele lote baixam em `confirmExecution`. Depois do round trip, `reserved = 0`.
+
+### Decisões tomadas na implementação
+
+- **Idempotência:** reaproveita a chave `transactionId` do `MarginReleasedReaction`. FILLED e
+  CANCELED são terminais mutuamente exclusivos, então uma transação nunca gera duas devoluções;
+  FILLED duplicado já é descartado antes do fill.
+- **Fee fora do cálculo (divergência consciente do IG §7.2.3):** o IG manda devolver
+  `reserved − (executado + fees)`. Não foi feito porque a venda baixa `reserved` pelo custo
+  executado **sem** fee; descontar a fee aqui deixaria `reserved` menor que o custo e quebraria
+  `confirmExecution`. A fee da SELL entra no PnL do match. IG §7.2.3 anotado.
+- **Custo acima da reserva:** não gera devolução negativa; loga WARN. Só com `LIMIT`, não ocorre.
+
+### Resíduo histórico
+
+A devolução vale para fills novos. O capital já preso em `reserved` em bancos de testnet/dev **não**
+é recuperado, e por decisão do mantenedor (2026-10-16) não haverá script de correção: os dados de
+testnet são descartáveis e serão limpos antes de recomeçar os testes. Para produção essa regra não
+se aplica.
+
+### Achado novo (fora do escopo, registrado)
+
+A fee da **BUY** é ignorada: o `BuyFillHandler` não lê `orderData.fee()`, então ela não aparece no
+PnL nem em `totalFeesPaid`. Na Binance, a fee de BUY costuma vir no ativo base e reduz a quantidade
+realmente recebida; a posição local registra a quantidade bruta. Tratado na
+**T46** (`.ai/tasks/T46-fee-asset-and-net-position.md`).
+
+### Validação
+
+- `:core:test`: `MarginReleaseBuilderTest` (5 casos novos) e `ConciliationOrderUpdateIdempotencyTest`
+  (fill final publica uma única vez mesmo com FILLED duplicado; fill parcial não publica).
+- `:spring-application:test`: 177/177. Novos e2e:
+  `ScenarioImmediateRoundTripE2ETest.closedRoundTripShouldLeaveNoCapitalReserved`
+  (`reserved = 0` e `available − capital inicial = PnL realizado`) e
+  `ScenarioFilledBuyRestingSellCancelE2ETest.openLotShouldKeepOnlyTheExecutedBuyCostReserved`.
 
 ---
 

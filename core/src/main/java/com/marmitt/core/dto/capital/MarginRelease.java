@@ -8,12 +8,13 @@ import java.util.UUID;
 
 /**
  * Payload da devolução de margem enviada pelo Runner ao Portfolio quando uma
- * Transaction atinge estado terminal sem execução total.
+ * Transaction atinge estado terminal sem consumir toda a reserva.
  * Entrada do método assíncrono {@code CapitalManager.release()}.
  * <p>
  * {@code releaseAmount = originalReserved - executedAmount}.<br>
  * Para REJECTED/EXPIRED: {@code executedAmount = ZERO} → estorno total da reserva.<br>
- * Para CANCELED parcial: {@code executedAmount > ZERO} → estorno proporcional.
+ * Para CANCELED parcial: {@code executedAmount > ZERO} → estorno proporcional.<br>
+ * Para FILLED com custo abaixo do reservado (BUY): estorno do excedente (IG §7.2.3, T36).
  * <p>
  * O Portfolio usa {@code transactionId} para garantir idempotência — duplicatas descartadas.
  * Este evento <b>nunca pode ser perdido</b> — o Runner persiste localmente e reenvia em retry.
@@ -56,5 +57,14 @@ public record MarginRelease(
     public static MarginRelease partialRelease(UUID transactionId, UUID runnerId,
                                                BigDecimal releaseAmount, BigDecimal executedAmount) {
         return new MarginRelease(transactionId, runnerId, releaseAmount, ReleaseReason.CANCELED, executedAmount);
+    }
+
+    /**
+     * Cria a devolução do excedente de uma BUY totalmente executada abaixo do valor reservado
+     * (IG §7.2.3, T36).
+     */
+    public static MarginRelease filledExcess(UUID transactionId, UUID runnerId,
+                                             BigDecimal releaseAmount, BigDecimal executedAmount) {
+        return new MarginRelease(transactionId, runnerId, releaseAmount, ReleaseReason.FILLED_EXCESS, executedAmount);
     }
 }

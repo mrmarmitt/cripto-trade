@@ -41,7 +41,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T33 | Fundação de cancelamento outbound (`OrderDispatchPort.cancel`)  | Baixa | Claude | Concluído |
 | T34 | Preço de ordem dirigido pela estratégia (`limitPrice`)          | Média | Claude | Concluído |
 | T35 | Estratégias de cenário para testnet                             | Média | Claude | Concluído |
-| T36 | Safety buffer na reserva de capital (documentado vs. não implementado) | Média | Claude | Pendente  |
+| T36 | Safety buffer na reserva de capital (documentado vs. não implementado) | Média | Claude | Concluído |
 | T37 | Normalização de preço side-aware (BUY floor / SELL ceiling)     | Média | Claude | Pendente  |
 | T38 | Testes E2E das estratégias de cenário                           | Média | Claude | Concluído |
 | T39 | Auditoria design × código (capital, risco, concorrência)        | Média | Claude | Pendente  |
@@ -179,8 +179,13 @@ T38  Testes E2E por estratégia (sobe app → ativa com teto de ciclos → valid
 ## Débito — Divergência design vs. código no capital
 
 ```
-T36  Safety buffer na reserva de capital   ← decisão de negócio pendente
+T36  Safety buffer na reserva de capital   ← concluída (2026-10-16)
 ```
+
+> **Resolução (2026-10-16):** §7.2.3 implementado (devolução do excedente no fill final de BUY) e
+> **Opção B** decidida: sem buffer enquanto só houver `LIMIT`; a task que introduzir `MARKET` deve
+> entregar o buffer junto. Documentos corrigidos; detalhes na spec da T36. O texto abaixo é o
+> histórico da divergência.
 
 > Divergência detectada ao especificar a T34: `docs/IMPLEMENTATION_GUIDE.md` §7.2.1–7.2.3 e o
 > Javadoc de `CapitalRequest` descrevem um safety buffer (`quantity × price × 1.005`/`1.001`) que

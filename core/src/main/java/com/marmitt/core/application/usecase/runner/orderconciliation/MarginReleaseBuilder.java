@@ -23,6 +23,10 @@ import java.util.Optional;
  * a reserva (cenario improvavel mas possivel em precos de mercado), nao ha margem a liberar
  * e o metodo retorna vazio.
  *
+ * <p><b>FILLED (BUY) — devolucao do excedente:</b> ver {@link #buildFilledExcess(Transaction)}.
+ * A reserva e feita a {@code quantity x preco-limite}, mas a baixa na venda usa o preco executado;
+ * sem esta devolucao, a diferenca ficaria presa em {@code reserved} para sempre (IG §7.2.3, T36).
+ *
  * <p>O {@link com.marmitt.core.dto.capital.MarginRelease} resultante e publicado como
  * {@link com.marmitt.core.dto.events.MarginReleaseEvent} pelo {@link TerminationHandler}
  * para que o {@link com.marmitt.core.domain.portfolio.GlobalBalance} atualize o saldo
@@ -80,6 +84,44 @@ class MarginReleaseBuilder {
                 transaction.getId(),
                 transaction.getRunnerId(),
                 toRelease,
+                executedValue
+        ));
+    }
+
+    /**
+     * Calcula a devolucao do excedente de uma BUY totalmente executada.
+     *
+     * <p>Usa a mesma formula do CANCELED parcial ({@code reservado - valorExecutado}): o que a BUY
+     * nao consumiu volta ao disponivel, e o que ficou em {@code reserved} passa a ser exatamente o
+     * custo executado — o mesmo valor que as vendas daquele lote baixam em {@code confirmExecution}.
+     * A chave de idempotencia continua sendo o {@code transactionId}; como FILLED e CANCELED sao
+     * terminais mutuamente exclusivos, uma transacao nunca gera duas devolucoes.
+     *
+     * @param transaction transacao recem-finalizada pelo fill
+     * @return devolucao a publicar, ou vazio para SELL, para status diferente de FILLED ou quando
+     *         a execucao consumiu toda a reserva
+     */
+    public Optional<MarginRelease> buildFilledExcess(Transaction transaction) {
+        if (transaction.isSell() || transaction.getStatus() != TransactionStatus.FILLED) {
+            return Optional.empty();
+        }
+        BigDecimal reserved = transaction.getTotal();
+        BigDecimal executedValue = transaction.getExecutedValue();
+        BigDecimal excess = reserved.subtract(executedValue).setScale(8, RoundingMode.HALF_UP);
+        if (excess.signum() < 0) {
+            // LIMIT nao executa acima do limite; custo maior que a reserva indica reserva
+            // insuficiente (ex.: futuro MARKET sem buffer). Nao ha o que devolver.
+            log.warn("orderConciliation: executed value exceeds reservation transactionId={} reserved={} executedValue={}",
+                    transaction.getId(), reserved, executedValue);
+            return Optional.empty();
+        }
+        if (excess.signum() == 0) {
+            return Optional.empty();
+        }
+        return Optional.of(MarginRelease.filledExcess(
+                transaction.getId(),
+                transaction.getRunnerId(),
+                excess,
                 executedValue
         ));
     }
