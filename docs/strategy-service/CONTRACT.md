@@ -11,6 +11,11 @@ O ctrade é o cliente; a app da estratégia é o servidor.
 
 > Status: **proposta de contrato** para o desacoplamento out-of-process das estratégias (Fase 2 do
 > roadmap de decoupling). Ainda não há adapter consumindo isto; ver "Onde isto se encaixa".
+>
+> **Revisão 1.1 (T40, 2026-10-19):** estado de warm-up chaveado por `(strategyRef, runnerId)`;
+> `tickId`/`sequence` no request com deduplicação e **sem retry** do ctrade; descarte por idade da
+> decisão do lado do ctrade; campos de PnL do contexto marcados a mercado (T43) e `totalCapital`
+> documentado. Como não há consumidor, a revisão fica em `/v1`.
 
 ---
 
@@ -72,12 +77,29 @@ Strings `date-time` (`2026-07-03T14:22:05.123Z`). Sem epoch, sem timezone local.
 ### Request (`EvaluateRequest`)
 
 - `strategyRef` — identidade da versão alvo (== `strategyId` de `/meta`). Permite que uma única app
-  sirva múltiplas versões e é a **chave do estado de warm-up** interno.
+  sirva múltiplas versões. Junto com `context.runnerId`, forma a **chave do estado de warm-up**
+  (ver "Estado, warm-up e readiness").
+- `tickId` — identificador opaco do tick (string), único por runner. Mesma `tickId` ⇒ mesma decisão
+  (ver "Entrega e idempotência").
+- `sequence` — inteiro monotônico crescente por runner. A app só acrescenta ao warm-up um tick com
+  `sequence` maior que o último visto daquele runner.
 - `input` (`MarketInput`) — dados do tick. `currentPrice` é obrigatório e positivo; os demais preços
   são opcionais. A validação semântica rica (spread, faixa diária, idade do dado) é do ctrade — a app
   recebe o dado já aceito.
 - `context` (`StrategyContext`) — estado operacional **read-only**: capital, posição agregada, lotes
   abertos e ordens em trânsito. `availableQuantity` de cada lote é o teto de SELL daquele lote.
+
+#### Campos do contexto que pedem atenção
+
+- **PnL marcado a mercado (T43).** `positionContext.currentPrice` é o preço do tick;
+  `positionContext.unrealizedPnl` = `currentPrice × quantity − custo pago` (o custo já desconta a fee
+  cobrada no ativo base, T46); `openLots[].currentPnlPercent` é a variação de `currentPrice` sobre o
+  `entryPrice` do lote. São confiáveis para decisão. `context.unrealizedPnl` repete o da posição do
+  símbolo do runner.
+- **`totalCapital`** é `available + reserved` do portfolio, exposto para **dimensionar** a ordem (ex.:
+  "alocar X% do capital"). Não é um limite: o teto de exposição do runner (`maxAllocationPercent`) e
+  o saldo disponível são aplicados pelo ctrade na reserva, e uma ordem acima deles é recusada. Para o
+  máximo que o runner pode gastar agora, use `maxOperationAmount`/`availableCapital`.
 
 ### Response (`Decision`) — regras de coerência por `decision`
 
@@ -109,8 +131,12 @@ genérico: são dados que o ctrade **envia** já validados, não saída remota n
 ## Estado, warm-up e readiness
 
 A app **pode** manter estado de warm-up (ex.: janela de histórico de uma média móvel) chaveado por
-`strategyRef`. Esse é o único efeito colateral admitido — nada de I/O externo, rede ou persistência
-na decisão. A decisão deve ser função de `(input, context)` + estado de warm-up acumulado.
+**`(strategyRef, context.runnerId)`**. Esse é o único efeito colateral admitido — nada de I/O externo,
+rede ou persistência na decisão. A decisão deve ser função de `(input, context)` + estado de warm-up
+acumulado **daquele runner**.
+
+Chavear só por `strategyRef` misturaria o histórico de dois runners que usam a mesma versão em
+símbolos diferentes (BTCUSDT e ETHUSDT) — a média móvel de um contaminaria o outro.
 
 `GET /health` reporta `ready`:
 
@@ -124,18 +150,35 @@ endpoints, com **schemas de resposta distintos**:
 - `GET /health` — readiness **agregada** (`Health`): `ready=true` só se **todas** as versões servidas
   estão prontas. Serve como probe de liveness e para apps de versão única. Não ecoa `strategyRef`.
 - `GET /health/{strategyRef}` — readiness **escopada** (`ScopedHealth`): `ready` fala pela versão do
-  path e a resposta **ecoa `strategyRef` (obrigatório e não-nulo)**.
+  path e a resposta **ecoa `strategyRef` (obrigatório e não-nulo)**. Com `?runnerId=`, `ready` fala
+  pelo warm-up **daquele runner** naquela versão e a resposta ecoa também o `runnerId`; sem ele,
+  `ready=true` só quando todos os runners vistos pela versão terminaram o warm-up.
 
 A separação é o que dá **prova de schema**: uma resposta agregada não pode se passar por escopada
 (faltaria o `strategyRef` obrigatório), então o portão de promoção não corre o risco de tomar um
 `ready` app-wide como se fosse da V2 e promover uma versão fria.
 
-**O portão de promoção do ctrade consulta `GET /health/{strategyRef}` da versão alvo e não vira o
-ponteiro do runner para uma versão com `ready=false`.** Isso é o que torna o deploy-ao-lado seguro: a
+**O portão de promoção do ctrade consulta `GET /health/{strategyRef}?runnerId=` da versão alvo para o
+runner que vai trocar e não vira o ponteiro dele para uma versão com `ready=false`.** Isso é o que torna o deploy-ao-lado seguro: a
 V2 sobe e aquece em paralelo enquanto a V1 opera, e a troca só ocorre quando a V2 se declara pronta —
 sem janela cega.
 
 ---
+
+## Entrega e idempotência
+
+Cada chamada a `/evaluate` acrescenta o tick ao warm-up — por isso ela **não é segura de repetir**
+cegamente. As regras:
+
+- **O ctrade não faz retry de `/evaluate`.** Falha de transporte, timeout ou `5xx` viram HOLD
+  implícito naquele tick (ver "Falha e timeout"); o próximo tick segue normalmente.
+- **`tickId` deduplica a decisão.** Se a mesma `tickId` chegar de novo para o mesmo runner (ex.:
+  retry de uma camada de transporte), a app devolve a decisão já calculada, sem recalcular.
+- **`sequence` protege o warm-up.** A app só acrescenta ao histórico um tick com `sequence` maior que
+  o último aceito daquele `(strategyRef, runnerId)`; um `sequence` menor ou igual é avaliado sem mexer
+  no warm-up (ou respondido do cache, se a `tickId` já foi vista).
+
+Assim, nem retry de transporte nem reordenação contam o mesmo tick duas vezes.
 
 ## Falha e timeout
 
@@ -147,6 +190,12 @@ o runner simplesmente não age naquele tick, sem penalizar os demais runners. Is
 normalização que o `StrategySignalEvaluator` já aplica hoje para retorno nulo/exceção da estratégia
 in-process. Ou seja: uma app de estratégia indisponível degrada para "não opera", nunca para erro no
 pipeline financeiro.
+
+**Decisão velha também vira HOLD.** A decisão calculada para o tick de `input.timestamp` é aplicada
+depois da latência da chamada. O ctrade descarta, como HOLD implícito e com métrica, a decisão cuja
+idade (`agora − input.timestamp`, medida quando a resposta chega) excede
+`ctrade.strategy.remote.max-decision-age`. É validação do lado do ctrade, sem campo novo na resposta;
+o risco é maior em `SHOULD_BUY`/`SHOULD_SELL` sem `limitPrice`, que usam o preço do tick.
 
 ---
 
@@ -170,6 +219,8 @@ pipeline financeiro.
 ```json
 {
   "strategyRef": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+  "tickId": "11111111-1111-1111-1111-111111111111:1751552525123:4182",
+  "sequence": 4182,
   "input": {
     "symbol": "BTCUSDT",
     "currentPrice": "64150.75000000",
@@ -189,7 +240,7 @@ pipeline financeiro.
       "symbol": "BTCUSDT",
       "quantity": "0",
       "averagePrice": "0",
-      "currentPrice": "64150.75000000",
+      "currentPrice": "0",
       "unrealizedPnl": "0",
       "realizedPnl": "0",
       "openLots": []

@@ -21,12 +21,14 @@ openapi: 3.0.3
 
 info:
   title: CTrade Strategy Service Contract
-  version: 1.0.0
+  version: 1.1.0
   description: >
     Superficie de rede de uma app de estrategia. Uma decisao pura por tick:
     dado market data (input) e contexto operacional consolidado (context),
     a app devolve uma decisao de trade. Sem I/O externo, sem efeito colateral
-    alem do warm-up de estado interno chaveado por strategyRef.
+    alem do warm-up de estado interno chaveado por (strategyRef, runnerId).
+    1.1 (T40): tickId/sequence com deduplicacao, sem retry do ctrade, idade
+    maxima da decisao validada pelo ctrade, PnL do contexto marcado a mercado.
 
 servers:
   - url: http://{host}:{port}/v1
@@ -43,7 +45,9 @@ paths:
         Chamado pelo ctrade a cada price update do runner. A resposta DEVE ser
         sempre uma decisao valida. Falha de transporte, timeout ou erro 5xx sao
         tratados pelo ctrade como HOLD implicito (ver CONTRACT.md); ainda assim
-        a app deve preferir devolver HOLD explicito a estourar erro.
+        a app deve preferir devolver HOLD explicito a estourar erro. O ctrade
+        NAO faz retry desta chamada; a mesma tickId deve devolver a mesma
+        decisao e sequence <= ultimo visto nao altera o warm-up.
       requestBody:
         required: true
         content:
@@ -100,6 +104,16 @@ paths:
           in: path
           required: true
           description: Versao alvo (== strategyId de /meta).
+          schema:
+            type: string
+            format: uuid
+        - name: runnerId
+          in: query
+          required: false
+          description: >
+            Runner cujo warm-up interessa. Informado, `ready` fala pelo estado
+            (strategyRef, runnerId) e a resposta ecoa runnerId; omitido, `ready`
+            so e true quando todos os runners vistos pela versao estao prontos.
           schema:
             type: string
             format: uuid
@@ -234,15 +248,28 @@ components:
 
     EvaluateRequest:
       type: object
-      required: [strategyRef, input, context]
+      required: [strategyRef, tickId, sequence, input, context]
       properties:
         strategyRef:
           type: string
           format: uuid
           description: >
             Identidade da estrategia/versao alvo (== strategyId de /meta).
-            Permite uma unica app servir multiplas versoes e chaveia o estado
-            de warm-up interno.
+            Permite uma unica app servir multiplas versoes. Com context.runnerId,
+            chaveia o estado de warm-up interno.
+        tickId:
+          type: string
+          minLength: 1
+          description: >
+            Identificador opaco do tick, unico por runner. A mesma tickId para o
+            mesmo runner deve receber a mesma decisao (cache), sem recalcular.
+        sequence:
+          type: integer
+          format: int64
+          minimum: 0
+          description: >
+            Contador monotonico crescente por runner. So um sequence maior que o
+            ultimo aceito daquele (strategyRef, runnerId) entra no warm-up.
         input: { $ref: '#/components/schemas/MarketInput' }
         context: { $ref: '#/components/schemas/StrategyContext' }
 
@@ -306,14 +333,20 @@ components:
         pendingOrders:
           type: array
           items: { $ref: '#/components/schemas/PendingOrder' }
-        totalCapital: { $ref: '#/components/schemas/Decimal' }
+        totalCapital:
+          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          description: >
+            available + reserved do portfolio, para dimensionar a ordem. Nao e
+            limite: teto do runner e saldo sao aplicados pelo ctrade na reserva.
         availableCapital: { $ref: '#/components/schemas/Decimal' }
         maxOperationAmount: { $ref: '#/components/schemas/Decimal' }
         minOperationAmount: { $ref: '#/components/schemas/Decimal' }
         maxOpenPositions: { type: integer }
         currentOpenPositions: { type: integer }
         realizedPnl: { $ref: '#/components/schemas/Decimal' }
-        unrealizedPnl: { $ref: '#/components/schemas/Decimal' }
+        unrealizedPnl:
+          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          description: Flutuante da posicao do simbolo do runner, marcado ao preco do tick.
 
     PositionContext:
       type: object
@@ -327,8 +360,12 @@ components:
         symbol: { $ref: '#/components/schemas/Symbol' }
         quantity: { $ref: '#/components/schemas/Decimal' }
         averagePrice: { $ref: '#/components/schemas/Decimal' }
-        currentPrice: { $ref: '#/components/schemas/Decimal' }
-        unrealizedPnl: { $ref: '#/components/schemas/Decimal' }
+        currentPrice:
+          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          description: Preco do tick (marcacao a mercado); "0" sem posicao aberta.
+        unrealizedPnl:
+          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          description: currentPrice x quantity - custo pago pelas unidades detidas.
         realizedPnl: { $ref: '#/components/schemas/Decimal' }
         openLots:
           type: array
@@ -343,7 +380,9 @@ components:
         quantity: { $ref: '#/components/schemas/Decimal' }
         availableQuantity: { $ref: '#/components/schemas/Decimal' }
         entryPrice: { $ref: '#/components/schemas/Decimal' }
-        currentPnlPercent: { $ref: '#/components/schemas/Decimal' }
+        currentPnlPercent:
+          allOf: [{ $ref: '#/components/schemas/Decimal' }]
+          description: Variacao percentual do preco do tick sobre o entryPrice do lote.
         openedAt:
           type: string
           format: date-time
@@ -537,6 +576,13 @@ components:
               description: >
                 Versao a que `ready` se refere (eco do path). Obrigatorio e
                 nao-nulo; aqui `ready` e escopado a esta versao, nao agregado.
+            runnerId:
+              type: string
+              format: uuid
+              nullable: true
+              description: >
+                Eco do query param runnerId quando informado: `ready` fala pelo
+                warm-up deste runner nesta versao.
 
     Meta:
       type: object

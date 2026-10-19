@@ -5115,7 +5115,7 @@ public class RunnerContextAssembler {
 
 ### 14.7 Regras de Isolamento da Strategy
 
-> **Estado (T39, 2026-10-16):** Divergência: o contexto envia `totalCapital` — decisão na **T40**.
+> **Estado (T40, 2026-10-19):** A estratégia **vê** `totalCapital` (`available + reserved` do portfolio) para dimensionar a ordem — o SMA aloca um percentual dele. Não é limite: o isolamento entre runners é garantido pelo ctrade na reserva (`maxAllocationPercent` e saldo disponível). A linha "Sem acesso ao GlobalBalance" e o DROP de `totalCapital` no §14.8 estão superados.
 
 A TradeStrategy é **stateless** — não mantém estado entre invocações:
 
@@ -5186,6 +5186,8 @@ if (lastTerminalStateAt != null) {
 | `runner.cooldown.explicit-ms`           | `0`      | Cooldown explícito entre operações (0 = desabilitado, usa implícito via Execution Policy)            |
 
 ### 14.11 Implicações Arquiteturais
+
+> **Estado (T40, 2026-10-19):** "Strategy stateless" vale para a decisão; o warm-up é estado admitido, chaveado por `(strategyRef, runnerId)` no contrato out-of-process. O SMA in-process ainda compartilha o histórico entre runners — correção na T41.
 
 | Decisão                                         | Justificativa                                                                                       | Trade-off                                                                                                     |
 |-------------------------------------------------|-----------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------------------|

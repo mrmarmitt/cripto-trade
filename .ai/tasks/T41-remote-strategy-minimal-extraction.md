@@ -66,6 +66,9 @@ máquina de promoção `REGISTERED → SHADOW → ACTIVE → DRAINING → RETIRE
 ### 4. Convivência
 
 - Estratégias in-process (SMA e cenários da T35/T38) continuam registradas; nada é removido.
+- **Warm-up in-process por runner (T40):** o `SimpleMovingAverageStrategy` guarda um único
+  `priceHistory` por instância; dois runners com a mesma estratégia misturam o histórico. Chavear pelo
+  mesmo `(strategyId, runnerId)` do contrato — senão a paridade in-process × remoto só vale para um runner.
 - Remover a dependência `spring-application → strategy` **não** faz parte desta task — só após a
   paridade comprovada em soak de testnet.
 

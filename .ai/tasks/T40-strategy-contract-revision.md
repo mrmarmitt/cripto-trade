@@ -3,7 +3,7 @@
 **Complexidade:** Média (contrato; sem código de produção)
 **Responsável:** Claude
 **Dependências:** nenhuma (contrato v1 entregue no PR #134)
-**Status:** Pendente
+**Status:** Concluído (2026-10-19) — ver "Entrega".
 
 ---
 
@@ -97,3 +97,32 @@ não são confiáveis e que a app deve calcular PnL de lote a partir de `input.c
 - **Idade da decisão / stale signal (IG §12.3)** já coberta; o descarte efetivo no runner acontece na T42.
 - **`orderType` no contrato (IG §14.5.2):** a decisão de tipo é do core (T45); a proteção LIMIT
   configurável fica na T48.
+
+---
+
+## Entrega (2026-10-19)
+
+Contrato revisado para **1.1** (ainda `/v1`: não há consumidor).
+
+| Ponto | Resolução |
+|---|---|
+| 1. Chave de warm-up | `(strategyRef, context.runnerId)`; `GET /health/{strategyRef}?runnerId=` responde pelo runner e `ScopedHealth` ecoa `runnerId`; sem o parâmetro, `ready` só quando todos os runners vistos pela versão estão prontos. O portão de promoção consulta por runner. |
+| 2. `/evaluate` repetível | `EvaluateRequest` ganha `tickId` (obrigatório, decisão em cache por runner) e `sequence` (obrigatório, só `sequence` maior entra no warm-up). Nova seção "Entrega e idempotência": **o ctrade não faz retry**. |
+| 3. Decisão velha | Descarte do lado do ctrade, como HOLD implícito com métrica, quando `agora − input.timestamp > ctrade.strategy.remote.max-decision-age`; sem campo novo na resposta. Implementação na T41/T42. |
+| 4. PnL do contexto | Resolvido pela T43: `currentPrice` é o preço do tick, `unrealizedPnl = preço × quantidade − custo pago`, `currentPnlPercent` sobre o `entryPrice`. Documentado como confiável no contrato e no spec. |
+| Achado T39: `totalCapital` | **Mantido e documentado**: `available + reserved` do portfolio para dimensionar a ordem (o SMA aloca um percentual dele). Não é limite — teto do runner e saldo são aplicados pelo ctrade na reserva. IG §14.7/§14.8 corrigidos. |
+
+### Validação
+
+- `@redocly/cli@1.25.11 lint --extends=minimal`: spec válido. Com o perfil `recommended` restam só
+  `security-defined` (o contrato não define autenticação — já era assim) e dois avisos de estilo.
+- Exemplos do `CONTRACT.md` (request e response) validados contra `EvaluateRequest`/`Decision` com
+  `ajv@8.17.1` (conversão de `nullable` do OpenAPI 3.0); o mesmo exemplo sem `tickId` é rejeitado.
+
+### Pendências repassadas
+
+- **T41:** gerar `tickId`/`sequence` por runner, não fazer retry, aplicar `max-decision-age`, consultar
+  readiness por runner — e **corrigir o warm-up in-process do SMA** para a mesma chave
+  `(strategyRef, runnerId)`: hoje o `priceHistory` é único por instância, e a paridade in-process ×
+  remoto só valeria para um runner.
+
