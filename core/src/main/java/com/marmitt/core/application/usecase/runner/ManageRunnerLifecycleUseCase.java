@@ -8,10 +8,13 @@ import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.exceptions.RunnerNotFoundException;
 import com.marmitt.core.exceptions.RunnerOperationException;
 import com.marmitt.core.ports.inbound.runner.ManageRunnerLifecyclePort;
+import com.marmitt.core.ports.outbound.metrics.OperationalMetricsPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Duration;
+import java.time.Instant;
 import java.util.UUID;
 
 /**
@@ -33,13 +36,16 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
     private final RunnerBootRecoveryUseCase runnerRecovery;
+    private final OperationalMetricsPort metrics;
 
     public ManageRunnerLifecycleUseCase(StrategyRunnerRepositoryPort strategyRunnerRepository,
                                         ExchangeAdapterRepositoryPort exchangeAdapterRepository,
-                                        RunnerBootRecoveryUseCase runnerRecovery) {
+                                        RunnerBootRecoveryUseCase runnerRecovery,
+                                        OperationalMetricsPort metrics) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.exchangeAdapterRepository = exchangeAdapterRepository;
         this.runnerRecovery = runnerRecovery;
+        this.metrics = metrics;
     }
 
     @Override
@@ -49,6 +55,9 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
         requireExchangeAvailable(runner);
         runner.startInitializing();
         strategyRunnerRepository.save(runner);
+        if (previous != RunnerStatus.INITIALIZING) {
+            metrics.recordTransition(previous, RunnerStatus.INITIALIZING);
+        }
 
         reconcile(runner, "start");
         StrategyRunner started = load(runnerId);
@@ -69,6 +78,7 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
         StrategyRunner reconciled = load(runnerId);
         reconciled.resume();
         strategyRunnerRepository.save(reconciled);
+        metrics.recordTransition(RunnerStatus.HALTED, RunnerStatus.ACTIVE);
         log.info("runnerLifecycle: resumed runnerId={} HALTED -> ACTIVE", runnerId);
         return RunnerTransitionResult.of(reconciled, RunnerStatus.HALTED);
     }
@@ -79,6 +89,7 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
         RunnerStatus previous = runner.getStatus();
         runner.startTerminating();
         strategyRunnerRepository.save(runner);
+        metrics.recordTransition(previous, RunnerStatus.TERMINATING);
         log.info("runnerLifecycle: terminating runnerId={} {} -> TERMINATING", runnerId, previous);
         archiveIfFlat(runner);
         return RunnerTransitionResult.of(runner, previous);
@@ -144,8 +155,11 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
         if (hasPosition || hasInFlight) {
             return;
         }
+        Instant terminatingSince = runner.getStatusChangedAt();
         runner.archive();
         strategyRunnerRepository.save(runner);
+        metrics.recordTransition(RunnerStatus.TERMINATING, RunnerStatus.ARCHIVED);
+        metrics.recordTerminatingDuration(Duration.between(terminatingSince, runner.getStatusChangedAt()));
         log.info("runnerLifecycle: archived runnerId={} (no position, no order in flight)", runner.getId());
     }
 

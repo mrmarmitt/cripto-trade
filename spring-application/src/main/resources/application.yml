@@ -57,6 +57,9 @@ management:
       exposure:
         include: health,info,prometheus,metrics
   endpoint:
+    health:
+      # T51: mostra o nivel do Safe Mode por portfolio (componente safeMode).
+      show-details: always
     prometheus:
       enabled: true
   metrics:
@@ -129,6 +132,11 @@ notification:
     explore-url-template: ${GRAFANA_EXPLORE_URL_TEMPLATE:}
 
 ctrade:
+  observability:
+    # T51: amostra de Safe Mode, utilizacao de capital e lifecycle para o Prometheus.
+    enabled: true
+    report-interval-ms: 15000
+    termination-timeout-ms: 600000
   scenario-strategies:
     # Estrategias de cenario deterministicas p/ testes em testnet (T35). Default OFF: nunca
     # registradas em producao. Ligar apenas em testnet/dev via CTRADE_SCENARIO_STRATEGIES_ENABLED=true.

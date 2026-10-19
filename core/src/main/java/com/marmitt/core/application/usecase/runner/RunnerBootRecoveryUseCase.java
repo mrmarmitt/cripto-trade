@@ -12,6 +12,7 @@ import com.marmitt.core.exceptions.ExchangeQueryException;
 import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeAccountQueryPort;
 import com.marmitt.core.ports.outbound.exchange.rest.ExchangeOrderQueryPort;
+import com.marmitt.core.ports.outbound.metrics.OperationalMetricsPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
@@ -60,6 +61,7 @@ public class RunnerBootRecoveryUseCase {
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
     private final DeadLetterEntryRepositoryPort deadLetterEntryRepository;
     private final RecoverTransactionStatusUseCase recoverTransactionStatusUseCase;
+    private final OperationalMetricsPort metrics;
     private final long pendingReconcileGraceMs;
     private final long exchangeQueryTimeoutMs;
     private final int exchangeQueryMaxAttempts;
@@ -72,6 +74,7 @@ public class RunnerBootRecoveryUseCase {
                                      ExchangeAdapterRepositoryPort exchangeAdapterRepository,
                                      DeadLetterEntryRepositoryPort deadLetterEntryRepository,
                                      RecoverTransactionStatusUseCase recoverTransactionStatusUseCase,
+                                     OperationalMetricsPort metrics,
                                      long pendingReconcileGraceMs,
                                      long exchangeQueryTimeoutMs,
                                      int exchangeQueryMaxAttempts,
@@ -83,6 +86,7 @@ public class RunnerBootRecoveryUseCase {
         this.exchangeAdapterRepository = exchangeAdapterRepository;
         this.deadLetterEntryRepository = deadLetterEntryRepository;
         this.recoverTransactionStatusUseCase = recoverTransactionStatusUseCase;
+        this.metrics = metrics;
         this.pendingReconcileGraceMs = Math.max(0L, pendingReconcileGraceMs);
         this.exchangeQueryTimeoutMs = Math.max(0L, exchangeQueryTimeoutMs);
         this.exchangeQueryMaxAttempts = Math.max(1, exchangeQueryMaxAttempts);
@@ -420,9 +424,12 @@ public class RunnerBootRecoveryUseCase {
             if (currentStatus == RunnerStatus.CREATED) {
                 latestRunner.startInitializing();
                 latestRunner.activate();
+                metrics.recordTransition(RunnerStatus.CREATED, RunnerStatus.INITIALIZING);
+                metrics.recordTransition(RunnerStatus.INITIALIZING, RunnerStatus.ACTIVE);
                 recovery.note("Step 6: runner activated CREATED->ACTIVE.");
             } else if (currentStatus == RunnerStatus.INITIALIZING) {
                 latestRunner.activate();
+                metrics.recordTransition(RunnerStatus.INITIALIZING, RunnerStatus.ACTIVE);
                 recovery.note("Step 6: runner activated INITIALIZING->ACTIVE.");
             } else {
                 latestRunner.completeReconciliation();
@@ -435,6 +442,7 @@ public class RunnerBootRecoveryUseCase {
         if (latestRunner.getStatus() == RunnerStatus.ACTIVE) {
             latestRunner.halt();
             strategyRunnerRepository.save(latestRunner);
+            metrics.recordTransition(RunnerStatus.ACTIVE, RunnerStatus.HALTED);
             recovery.note("Step 6: runner moved ACTIVE->HALTED due to reconciliation errors.");
             // Sentinel emitido apenas quando este step de fato halta o runner por DLQ pendente,
             // para o alerta #alerts-error nao disparar em runners nao-ACTIVE (CREATED/INITIALIZING)
