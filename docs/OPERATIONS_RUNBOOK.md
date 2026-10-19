@@ -101,6 +101,19 @@ Endpoints protegidos pelo `admin.api.key`:
   - **Rejection rate > 50%** → ver `signal_evaluated_total` por `decision` (capital, preço, limites).
   - **Utilização global > 80%** → capital quase todo reservado; novos BUYs tendem a ser recusados.
 
+## Circuit breaker das consultas REST (T24)
+
+As consultas REST de ordens à Binance (boot recovery, watchdog de transações) passam por um circuit
+breaker: 5 falhas de instabilidade (rede, 5xx, rate limit) abrem o circuito por 60s; erro de requisição
+ou de autenticação não conta. Aberto, a consulta falha na hora como falha transitória — o boot repete
+com backoff e o watchdog tenta no próximo ciclo.
+
+- Sinais: alerta Grafana **Circuit breaker da exchange aberto**,
+  `resilience4j_circuitbreaker_state{name="binance-order-query",state="open"} = 1`.
+- Ação: conferir a disponibilidade da Binance (status, credenciais, rate limit). O circuito testa de
+  novo sozinho na próxima consulta depois dos 60s.
+- Config: `exchange.order-query.circuit-breaker.*` (`enabled: false` desliga).
+
 ## Processamento de ticks (T42)
 
 - `runner.ticks.discarded{runnerId, reason}`: `COALESCED` cresce quando a avaliação é mais lenta que o

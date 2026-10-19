@@ -32,6 +32,10 @@ dependencies {
     implementation project(':strategy')
     implementation project(':core')
 
+    // T24: circuit breaker nas consultas REST a exchange, com metricas no Micrometer.
+    implementation 'io.github.resilience4j:resilience4j-circuitbreaker:2.3.0'
+    implementation 'io.github.resilience4j:resilience4j-micrometer:2.3.0'
+
     implementation 'com.google.guava:guava:33.4.0-jre'
     implementation 'com.github.loki4j:loki-logback-appender:1.5.2'
 

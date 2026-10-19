@@ -111,6 +111,18 @@ runner:
     stale-tick-threshold-ms: 5000    # tick mais velho que isto ao iniciar a avaliacao e descartado
     slow-processing-warn-ms: 1000    # avaliacao mais longa gera WARN (nao aborta)   # T49: arquiva runners TERMINATING sem posicao nem ordem em voo
 
+exchange:
+  order-query:
+    circuit-breaker:
+      # T24: consultas REST de ordens (boot recovery, watchdog). Abre com 5 falhas de instabilidade
+      # (rede, 5xx, rate limit) e testa de novo apos 60s; erro de requisicao/autenticacao nao conta.
+      enabled: true
+      sliding-window-size: 10
+      minimum-number-of-calls: 5
+      failure-rate-threshold: 50
+      wait-duration-in-open-state-ms: 60000
+      permitted-number-of-calls-in-half-open-state: 3
+
 portfolio:
   circuit-breaker:
     # T43: HALT automatico quando o equity (available + reserved + PnL flutuante) cai mais que

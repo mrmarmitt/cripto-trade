@@ -3,7 +3,7 @@
 **Complexidade:** Média  
 **Responsável:** Claude  
 **Dependências:** Nenhuma  
-**Status:** Pendente
+**Status:** Concluído (2026-10-19) — ver "Entrega".
 
 ---
 
@@ -115,3 +115,34 @@ Adicionar painel no Grafana e alert rule: `circuitbreaker_state == OPEN` → `#a
 - **Rate limit por peso (IG §6.7, §12.9):** nenhuma chamada respeita o peso da Binance
   (`X-MBX-USED-WEIGHT`). Com CANCEL_ALL/PANIC_SELL (T45) disparando várias chamadas, avaliar um
   limitador no adapter junto do circuit breaker. Key pooling e failover entre chaves ficam fora (conta única).
+
+---
+
+## Entrega (2026-10-19)
+
+### Decisões de implementação
+
+- **Opção B (decorator explícito):** `CircuitBreakerExchangeOrderQuery` decora o `ExchangeOrderQueryPort`
+  da Binance no `BinanceAdapterConfiguration`, via `ExchangeOrderQueryDecorator` (um circuito por
+  exchange, `<exchange>-order-query`). Core e adapter sem mudança. MOCK (em memória) e Coinbase (stub)
+  ficam sem decorator.
+- **Resilience4j programático** (`resilience4j-circuitbreaker` + `resilience4j-micrometer` 2.3.0), sem o
+  starter de autoconfiguração: config em `exchange.order-query.circuit-breaker.*`.
+- **O que conta como falha:** `ExchangeQueryException` retryable (TEMPORARY, RATE_LIMIT) e exceção
+  inesperada. Erro de requisição/autenticação/não suportado não abre o circuito (a exchange respondeu).
+- **Circuito aberto = falha transitória:** `CallNotPermittedException` vira `ExchangeQueryException`
+  `TEMPORARY`, o que o retry do boot e o watchdog já tratam — nenhum caminho novo no core.
+- **Janela por contagem:** 10 chamadas, mínimo 5, 50% de falha → 5 falhas seguidas abrem (critério 1);
+  60s aberto; 3 chamadas de teste no meio-aberto, que acontece na próxima consulta após a espera.
+- **Fora:** limitador por peso da Binance (`X-MBX-USED-WEIGHT`, achado da T39) e painel no dashboard;
+  o estado está no Prometheus e tem alerta.
+
+### Validação
+
+- `./scripts/gradle-run.ps1 test` verde (core 224, spring-application 216).
+- `CircuitBreakerExchangeOrderQueryTest`: fechado = adapter; 5 falhas abrem e a 6ª falha rápida como
+  TEMPORARY sem chamar o adapter, com o gauge `state=open`; erro de requisição não abre; após a espera,
+  3 sucessos fecham; desligado devolve o próprio adapter.
+- Slices da Binance (`BinanceAdapterConfigurationIntegrationTest`, `BinanceTestnetProfileIntegrationTest`)
+  sobem com o decorator.
+

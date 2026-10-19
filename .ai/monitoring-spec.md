@@ -250,6 +250,10 @@
 - Health `/actuator/health` com o componente `safeMode` (nível por portfolio)
 - Alertas Grafana (grupo `ctrade-operational`): Safe Mode ativo, runner travado em TERMINATING, cancel rate > 10/min, rejection rate > 50% em 5 min, utilização global > 80%
 
+### ✅ Entregue pela T24
+- `resilience4j_circuitbreaker_state{name="binance-order-query"}` e `resilience4j_circuitbreaker_calls_*` (Resilience4j)
+- Alerta Grafana `ctrade-exchange-circuit-open` (grupo `ctrade-operational`)
+
 ### Ainda requer task própria
 - `portfolio.balance.available` gauge — alertar em drift de saldo
 - `capital.event.retry.count` counter — detectar retry loop silencioso de margem

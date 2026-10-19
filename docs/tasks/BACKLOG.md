@@ -29,7 +29,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T21 | Active Error Reporting via Discord                               | Média | Claude | Concluído |
 | T22 | Estudo e Desenho do Sistema de Monitoramento                    | Média | Claude | Concluído |
 | T23 | Instrumentação: Gaps Críticos de Observabilidade                | Média | Claude | Concluído |
-| T24 | Circuit Breaker nas Chamadas REST à Exchange                    | Média | Claude | Pendente  |
+| T24 | Circuit Breaker nas Chamadas REST à Exchange                    | Média | Claude | Concluído |
 | T25 | Safe Mode Automático                                            | Média | Claude | Pendente  |
 | T26 | Rastreamento End-to-End de um Sinal                             | Alta  | Claude | Concluído |
 | T27 | Padronização do Retorno das Controllers (camada Spring)         | Média | Claude | Concluído |

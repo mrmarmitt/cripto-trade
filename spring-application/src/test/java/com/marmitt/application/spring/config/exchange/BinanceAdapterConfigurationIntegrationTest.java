@@ -1,5 +1,7 @@
 package com.marmitt.application.spring.config.exchange;
 
+import io.micrometer.core.instrument.MeterRegistry;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.application.spring.repository.InMemoryExchangeAdapterRepository;
 import com.marmitt.application.spring.repository.InMemoryWebSocketPortRegistry;
@@ -80,9 +82,16 @@ class BinanceAdapterConfigurationIntegrationTest {
             InMemoryWebSocketPortRegistry.class,
             MockAdapterConfiguration.class,
             CoinbaseAdapterConfiguration.class,
-            BinanceAdapterConfiguration.class
+            BinanceAdapterConfiguration.class,
+            ExchangeCircuitBreakerConfiguration.class,
+            ExchangeCircuitBreakerProperties.class
     })
     static class TestApplication {
+
+        @Bean
+        MeterRegistry meterRegistry() {
+            return new SimpleMeterRegistry();
+        }
 
         @Bean
         ObjectMapper objectMapper() {
