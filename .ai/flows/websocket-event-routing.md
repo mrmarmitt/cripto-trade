@@ -54,7 +54,7 @@ O roteamento separa dois canais:
 10. `PostConnectionEstablishHandler` envia mensagem de subscribe se o adapter
     exigir post-connection.
 11. Mensagens recebidas publicam `RawMarketMessageReceivedEvent`.
-12. `ProcessMessageEventListener` chama `ProcessMessageHandler`.
+12. `ProcessMessageEventListener` (no `marketDataExecutor`, thread unica — T42) chama `ProcessMessageHandler`.
 13. `ProcessMessageHandler` processa a mensagem via `ExchangeStreamingPort`.
 14. Resultado `MarketDataDto` notifica `PriceUpdateListener`.
 15. Resultado `OrderDataDto` notifica `OrderUpdateListener`.
@@ -65,10 +65,21 @@ O roteamento separa dois canais:
    stream.
 2. O WebSocket usa listener convertido com canal `USER_DATA`.
 3. Mensagens recebidas publicam `RawUserDataMessageReceivedEvent`.
-4. `ProcessUserMessageEventListener` chama `ProcessUserMessageHandler`.
+4. `ProcessUserMessageEventListener` (no `userDataExecutor`, separado do market data — T42) chama
+   `ProcessUserMessageHandler`.
 5. O handler processa via `ExchangeUserStreamPort`.
 6. Resultado processavel precisa conter `OrderDataDto`.
 7. O handler notifica apenas `OrderUpdateListener`.
+
+## Executores (T42)
+
+| Executor | Uso | Cheio |
+|---|---|---|
+| `marketDataExecutor` (1 thread, fila 10.000) | parsing de market data e respostas da WS API; roteia ticks para as mailboxes | descarta com log ERROR (nao bloqueia o socket) |
+| `userDataExecutor` (2–4 threads, fila 1.000) | fills, cancels, rejects | `CallerRunsPolicy` — fill nunca se perde |
+| `runnerSignalExecutor` (`runner.signal.threads`) | avaliacao dos runners (mailbox) | fila ilimitada, no maximo uma tarefa por runner |
+
+Fill nunca espera tick; nenhuma avaliacao de estrategia roda na thread do socket.
 
 ## Listeners Registrados
 

@@ -47,7 +47,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T39 | Auditoria design × código (capital, risco, concorrência)        | Média | Claude | Concluído |
 | T40 | Revisão do contrato do strategy service antes do adapter        | Média | Claude | Concluído |
 | T41 | Extração mínima da estratégia (port, proxy remoto, catálogo)    | Alta  | Claude | Pendente  |
-| T42 | Mailbox por runner e separação dos executores tick × ordem      | Alta  | Claude | Pendente  |
+| T42 | Mailbox por runner e separação dos executores tick × ordem      | Alta  | Claude | Concluído |
 | T43 | Circuit breaker de capital: drawdown 24h                        | Alta  | Claude | Concluído |
 | T44 | Proteção de posição independente da estratégia                  | Alta  | Claude | Pendente  |
 | T45 | Ativação do Safe Mode e níveis `CANCEL_ALL` / `PANIC_SELL`      | Média | Claude | Concluído |

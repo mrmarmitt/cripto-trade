@@ -27,7 +27,10 @@ adaptadores externos.
 ## Fluxo Principal
 
 1. `ProcessTradeSignalUseCase` recebe um tick de mercado.
-2. Busca runners operacionais por `symbol` e `exchange`.
+2. Busca runners operacionais por `symbol` e `exchange` e deposita o tick na **mailbox** de cada um
+   (`RunnerMailbox`, T42): capacidade 1, latest-wins, um runner por vez, tick fora de ordem
+   descartado. A avaliacao abaixo roda no `runnerSignalExecutor`, ja com o runner relido; tick mais
+   velho que `runner.signal.stale-tick-threshold-ms` e descartado antes de avaliar.
 3. `RunnerSignalPolicy` filtra runners que podem avaliar o sinal.
    Le o nivel do Safe Mode de cada portfolio uma vez por tick. Em `CANCEL_ALL`/`PANIC_SELL` o runner
    segue o ramo "Safe Mode" abaixo e a estrategia nao e consultada (T45).

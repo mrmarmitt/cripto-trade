@@ -85,3 +85,13 @@ Endpoints protegidos pelo `admin.api.key`:
   incompleta, posição travada por uma SELL em voo, sem preço de mercado ainda). A mensagem diz o motivo.
 - Fechar posição exige runner ACTIVE ou TERMINATING; runner halted: retome antes.
 - Posição travada por SELL LIMIT: cancele a ordem e depois feche a posição.
+
+## Processamento de ticks (T42)
+
+- `runner.ticks.discarded{runnerId, reason}`: `COALESCED` cresce quando a avaliação é mais lenta que o
+  feed (normal em rajadas); `STALE` indica tick que esperou mais que
+  `runner.signal.stale-tick-threshold-ms` (5s) — fila de runners saturada; `OUT_OF_ORDER` deve ser raro.
+- `runner.signal.processing.time{runnerId}`: duração de cada avaliação; acima de
+  `runner.signal.slow-processing-warn-ms` (1s) há WARN `slow evaluation`.
+- Muitos `STALE`: aumentar `runner.signal.threads` ou investigar a estratégia lenta.
+- Log ERROR `marketDataExecutor: queue full`: parsing de market data não acompanha o feed.

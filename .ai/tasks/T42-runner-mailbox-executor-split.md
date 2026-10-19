@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** nenhuma para implementar; pré-requisito para ativar estratégia remota (T41) em
 ambiente real.
-**Status:** Pendente
+**Status:** Concluído (2026-10-19) — ver "Entrega".
 
 ---
 
@@ -99,3 +99,55 @@ na implementação se o `ProcessTradeSignalUseCase.execute(MarketDataDto)` passa
   próprio além do cliente HTTP. Incluir junto da mailbox.
 - **Stale signal check (IG §12.3):** descartar o tick/decisão mais velho que o limite ao iniciar a
   avaliação (a idade vem do contrato revisado na T40).
+
+---
+
+## Entrega (2026-10-19)
+
+### Decisões registradas
+
+- **Três executores (implementação):** `marketDataExecutor` (thread única: preserva a ordem de
+  chegada; só faz parsing e roteia para as mailboxes), `userDataExecutor` (fills; nunca descarta —
+  `CallerRunsPolicy` aplica pressão no socket de user data, pois fill não pode se perder) e
+  `runnerSignalExecutor` (`runner.signal.threads`, avalia os runners). O `messageProcessingExecutor`
+  compartilhado foi removido.
+- **Market data não descarta mensagem:** o canal MARKET também carrega respostas de ordem da WS API
+  (`OrderDataDto` conciliado pelo mesmo handler). A coalescência acontece só na mailbox de cada
+  runner. A fila de parsing é grande (10.000); se transbordar, a mensagem é descartada com log ERROR
+  em vez de bloquear a thread do socket (a ordem ainda converge pelo `executionReport` do user data).
+- **Mailbox no core (`RunnerMailbox`), sem framework:** capacidade 1, latest-wins, um runner por vez,
+  descarte de tick com timestamp anterior ao último aceito, e reagendamento ao fim da fila depois de
+  cada avaliação (runner com feed intenso não monopoliza thread). Recebe só um `java.util.concurrent.Executor`.
+- **`execute(MarketDataDto)` só roteia;** a avaliação (`evaluateTick`) relê o runner — kill switch,
+  encerramento ou reconciliação que aconteceram enquanto o tick esperava descartam a avaliação — e lê
+  o nível do Safe Mode por avaliação.
+- **Stale check (IG §12.3):** tick mais velho que `runner.signal.stale-tick-threshold-ms` (5000, padrão
+  do IG) ao começar a avaliação é descartado. A idade é medida desde o recebimento (todos os
+  produtores usam `Instant.now()`), então não depende do relógio da exchange; `MarketDataDto.timestamp`
+  passou a ser obrigatório.
+- **Timeout por fase (IG §12.7) vira alerta, não aborto:** abortar uma avaliação no meio pode deixar
+  persist/reserva/dispatch pela metade. A duração vai para `runner.signal.processing.time` e acima de
+  `runner.signal.slow-processing-warn-ms` (1000) gera WARN. O timeout da chamada remota à estratégia
+  é do cliente HTTP da T41.
+- **Uma métrica de descarte:** `runner.ticks.discarded{runnerId, reason=COALESCED|STALE|OUT_OF_ORDER}`,
+  pelo mesmo `SignalMetricsPort`.
+- **Comandos do operador (T49) seguem síncronos** na thread HTTP, concorrentes com a mailbox; a
+  duplicidade de venda continua barrada pelo lock de posição.
+
+### Validação
+
+- `:core:test` 194 — `RunnerMailboxTest`: coalescência no mais recente (2 descartes contados), tick
+  fora de ordem descartado, runner ocupado cede a thread a outro runner, 200 ticks com pool de 4 threads
+  sem avaliação paralela do mesmo runner, em ordem crescente e fora da thread que entrega.
+- `:spring-application:test` 199 — `MessageExecutorIsolationTest`: com o market data travado, o fill é
+  conciliado na hora, e nenhum dos dois roda na thread que publica o evento; `RunnerMailboxE2ETest`:
+  tick velho descartado sem consultar a estratégia. As demais suítes (Fases 0–4, T38, T45, T49)
+  passaram sem ajuste — já esperavam convergência.
+- `:adapter-binance:test` 76, `:adapter-mock:test` 24.
+
+### Riscos residuais
+
+- **Thread única de market data:** parsing lento de um adapter atrasa os demais símbolos. Hoje o
+  parsing é leve; se virar gargalo, particionar por conexão.
+- **Estratégia que precisa de todo tick** perde ticks coalescidos (decisão já assumida pelo IG); a
+  métrica mostra quanto.

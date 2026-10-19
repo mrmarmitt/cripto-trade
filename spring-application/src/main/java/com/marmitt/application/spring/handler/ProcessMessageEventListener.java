@@ -20,7 +20,7 @@ public class ProcessMessageEventListener {
     }
 
     @EventListener
-    @Async("messageProcessingExecutor")
+    @Async("marketDataExecutor")
     public void handleRawMessage(RawMarketMessageReceivedEvent event) {
         MDC.put("correlationId", event.getContext().correlationId().toString());
         MDC.put("exchangeName", event.getContext().exchangeName());

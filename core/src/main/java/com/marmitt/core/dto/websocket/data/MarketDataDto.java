@@ -4,6 +4,7 @@ import com.marmitt.core.domain.Symbol;
 
 import java.math.BigDecimal;
 import java.time.Instant;
+import java.util.Objects;
 
 public record MarketDataDto(
         String exchangeName,
@@ -18,6 +19,14 @@ public record MarketDataDto(
         BigDecimal priceChangePercent24h,
         Instant timestamp
 ) implements ProcessorResponse {
+
+    /**
+     * {@code timestamp} e o instante de recebimento do tick e e obrigatorio: a mailbox do runner o
+     * usa para ordem e idade (T42).
+     */
+    public MarketDataDto {
+        Objects.requireNonNull(timestamp, "timestamp cannot be null");
+    }
 
     public BigDecimal getSpread() {
         if (bidPrice == null || askPrice == null) {

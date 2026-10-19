@@ -1,5 +1,6 @@
 package com.marmitt.core.ports.outbound.metrics;
 
+import java.time.Duration;
 import java.util.UUID;
 
 /**
@@ -18,4 +19,10 @@ public interface SignalMetricsPort {
      * @param decision desfecho da avaliacao (vira tag {@code decision})
      */
     void recordSignalEvaluated(UUID runnerId, SignalDecision decision);
+
+    /** Tick que nao chegou a ser avaliado pelo runner (T42): coalescido, velho ou fora de ordem. */
+    void recordTickDiscarded(UUID runnerId, TickDiscardReason reason);
+
+    /** Duracao de uma avaliacao do runner, do inicio ao fim do processamento do tick (T42). */
+    void recordProcessingTime(UUID runnerId, Duration duration);
 }
