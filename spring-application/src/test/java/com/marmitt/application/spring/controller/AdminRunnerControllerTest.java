@@ -18,6 +18,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.List;
 import java.util.UUID;
 
@@ -71,13 +72,17 @@ class AdminRunnerControllerTest {
 
     @Test
     void patchForwardsTheMutableLimits() throws Exception {
-        when(lifecycle.updateLimits(runnerId, new UpdateRunnerLimitsRequest(new BigDecimal("0.3"), 2, null)))
+        when(lifecycle.updateLimits(runnerId, new UpdateRunnerLimitsRequest(new BigDecimal("0.3"), 2, null,
+                new BigDecimal("0.08"), Duration.ofHours(24))))
                 .thenReturn(new RunnerTransitionResult(runnerId, "s", "BTCUSDT", RunnerStatus.ACTIVE, RunnerStatus.ACTIVE));
 
         mockMvc.perform(patch("/api/admin/runners/{id}", runnerId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"maxAllocationPercent\":0.3,\"maxOpenPositions\":2}"))
+                        .content("{\"maxAllocationPercent\":0.3,\"maxOpenPositions\":2,"
+                                + "\"maxLossPercentPerLot\":0.08,\"maxHoldingDuration\":\"PT24H\"}"))
                 .andExpect(status().isOk());
+        verify(lifecycle).updateLimits(runnerId, new UpdateRunnerLimitsRequest(new BigDecimal("0.3"), 2, null,
+                new BigDecimal("0.08"), Duration.ofHours(24)));
     }
 
     @Test

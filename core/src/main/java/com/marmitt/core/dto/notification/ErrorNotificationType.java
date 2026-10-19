@@ -12,5 +12,7 @@ public enum ErrorNotificationType {
     DLQ_PERSISTED,
     BOOT_FAIL_FAST,
     /** Monitor de capital acionou o Safe Mode automaticamente (T43). */
-    CIRCUIT_BREAKER_TRIGGERED
+    CIRCUIT_BREAKER_TRIGGERED,
+    /** Protecao do lote vendeu a posicao sem a estrategia (T44). */
+    PROTECTIVE_EXIT
 }

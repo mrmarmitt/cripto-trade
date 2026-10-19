@@ -5,6 +5,7 @@ import com.marmitt.core.application.usecase.runner.orderconciliation.Conciliatio
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
 import com.marmitt.core.domain.runner.ClientOrderId;
+import com.marmitt.core.domain.runner.PositionProtection;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.runner.request.RecoverTransactionStatusRequest;
@@ -523,6 +524,7 @@ class RecoverTransactionStatusUseCaseTest {
                 1,
                 1,
                 null,
+                PositionProtection.defaults(),
                 false,
                 Instant.now(),
                 Instant.now(),

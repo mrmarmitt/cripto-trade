@@ -41,6 +41,12 @@ public record ErrorNotificationEvent(
                 null, null, null, occurredAt);
     }
 
+    public static ErrorNotificationEvent protectiveExit(String title, String description, String correlationId,
+                                                        UUID runnerId, Instant occurredAt) {
+        return new ErrorNotificationEvent(ErrorNotificationType.PROTECTIVE_EXIT, title, description,
+                correlationId, runnerId, null, occurredAt);
+    }
+
     public static ErrorNotificationEvent bootFailFast(String title, String description,
                                                       String correlationId, Instant occurredAt) {
         return new ErrorNotificationEvent(ErrorNotificationType.BOOT_FAIL_FAST, title, description,

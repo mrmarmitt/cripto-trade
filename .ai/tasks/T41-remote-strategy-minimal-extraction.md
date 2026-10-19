@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T40 (contrato revisado). T42 é pré-requisito para **ativar** estratégia remota em
 testnet/produção, não para o código desta task.
-**Status:** Concluído (2026-10-19) — código entregue; **ativação em ambiente real aguarda a T44**.
+**Status:** Concluído (2026-10-19) — código entregue; a T44 (proteção do lote), pré-requisito da ativação em ambiente real, também foi entregue.
 
 ---
 

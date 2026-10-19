@@ -198,6 +198,11 @@ idade (`agora − input.timestamp`, medida quando a resposta chega) excede
 `ctrade.strategy.remote.max-decision-age`. É validação do lado do ctrade, sem campo novo na resposta;
 o risco é maior em `SHOULD_BUY`/`SHOULD_SELL` sem `limitPrice`, que usam o preço do tick.
 
+**HOLD implícito não deixa o lote sem saída.** A proteção do lote (T44) roda no ctrade a cada tick,
+antes e independente da estratégia: lote com perda acima de `maxLossPercentPerLot` do runner (padrão
+5% do custo) é vendido a mercado mesmo com a app fora do ar. Ela não faz parte deste contrato, e a
+estratégia não é avisada além do que já vê no contexto (o lote some de `openLots`).
+
 ---
 
 ## Versionamento e identidade

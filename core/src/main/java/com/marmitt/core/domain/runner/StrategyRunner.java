@@ -7,6 +7,7 @@ import com.marmitt.core.exceptions.RunnerOperationException;
 import lombok.Getter;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.Objects;
@@ -56,6 +57,9 @@ public class StrategyRunner {
     private BigDecimal maxAllocationPercent;
     private int maxOpenPositions;
     private int maxPendingOrders;
+
+    /** Proteção do lote independente da estratégia (T44). */
+    private PositionProtection positionProtection;
 
     /**
      * Fatia fixa reservada para este Runner em modo DEDICATED.
@@ -118,6 +122,7 @@ public class StrategyRunner {
         this.maxOpenPositions = maxOpenPositions > 0 ? maxOpenPositions : 1;
         this.maxPendingOrders = maxPendingOrders > 0 ? maxPendingOrders : 1;
         this.dedicatedBudget = dedicatedBudget;
+        this.positionProtection = PositionProtection.defaults();
         this.status = RunnerStatus.CREATED;
         this.isReconciling = false;
         this.createdAt = Instant.now();
@@ -146,6 +151,7 @@ public class StrategyRunner {
             int maxOpenPositions,
             int maxPendingOrders,
             BigDecimal dedicatedBudget,
+            PositionProtection positionProtection,
             boolean isReconciling,
             Instant createdAt,
             Instant statusChangedAt,
@@ -170,6 +176,7 @@ public class StrategyRunner {
         this.maxOpenPositions = maxOpenPositions;
         this.maxPendingOrders = maxPendingOrders;
         this.dedicatedBudget = dedicatedBudget;
+        this.positionProtection = Objects.requireNonNull(positionProtection, "positionProtection cannot be null");
         this.isReconciling = isReconciling;
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt cannot be null");
         this.statusChangedAt = statusChangedAt != null ? statusChangedAt : createdAt;
@@ -297,25 +304,41 @@ public class StrategyRunner {
     }
 
     /**
-     * Altera os limites mutáveis em runtime (IG §13.2.2, T49). {@code null} mantém o valor atual;
-     * vale a partir da próxima reserva. Políticas, estratégia e símbolo são imutáveis.
+     * Altera os limites mutáveis em runtime (IG §13.2.2, T49) e a proteção do lote (T44). {@code null}
+     * mantém o valor atual; vale a partir da próxima reserva ou do próximo tick. {@code maxHoldingDuration}
+     * zero desliga a idade máxima. Políticas, estratégia e símbolo são imutáveis.
      */
-    public void updateLimits(BigDecimal maxAllocationPercent, Integer maxOpenPositions, Integer maxPendingOrders) {
+    public void updateLimits(BigDecimal maxAllocationPercent, Integer maxOpenPositions, Integer maxPendingOrders,
+                             BigDecimal maxLossPercentPerLot, Duration maxHoldingDuration) {
         if (this.status == RunnerStatus.ARCHIVED) {
             throw new RunnerOperationException("Cannot change limits of an archived runner: " + id);
         }
+        if (maxAllocationPercent != null
+                && (maxAllocationPercent.signum() <= 0 || maxAllocationPercent.compareTo(BigDecimal.ONE) > 0)) {
+            throw new IllegalArgumentException("maxAllocationPercent must be in (0, 1]: " + maxAllocationPercent);
+        }
+        if (maxOpenPositions != null) {
+            requirePositiveLimit(maxOpenPositions, "maxOpenPositions");
+        }
+        if (maxPendingOrders != null) {
+            requirePositiveLimit(maxPendingOrders, "maxPendingOrders");
+        }
+        // Valida tudo antes de alterar: pedido com um campo inválido não aplica os demais.
+        PositionProtection protection = new PositionProtection(
+                maxLossPercentPerLot != null ? maxLossPercentPerLot : positionProtection.maxLossPercentPerLot(),
+                maxHoldingDuration == null ? positionProtection.maxHoldingDuration()
+                        : maxHoldingDuration.isZero() ? null : maxHoldingDuration);
+
         if (maxAllocationPercent != null) {
-            if (maxAllocationPercent.signum() <= 0 || maxAllocationPercent.compareTo(BigDecimal.ONE) > 0) {
-                throw new IllegalArgumentException("maxAllocationPercent must be in (0, 1]: " + maxAllocationPercent);
-            }
             this.maxAllocationPercent = maxAllocationPercent;
         }
         if (maxOpenPositions != null) {
-            this.maxOpenPositions = requirePositiveLimit(maxOpenPositions, "maxOpenPositions");
+            this.maxOpenPositions = maxOpenPositions;
         }
         if (maxPendingOrders != null) {
-            this.maxPendingOrders = requirePositiveLimit(maxPendingOrders, "maxPendingOrders");
+            this.maxPendingOrders = maxPendingOrders;
         }
+        this.positionProtection = protection;
     }
 
     /**

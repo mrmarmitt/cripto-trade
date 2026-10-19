@@ -2,6 +2,7 @@ package com.marmitt.core.application.usecase.runner.processsignal;
 
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
@@ -71,6 +72,29 @@ class CancelSignalHandler {
         log.info("processCancelSignal: cancel dispatched transactionId={} clientOrderId={} runnerId={} reason={}",
                 targetTransactionId, transaction.getClientOrderId(), runner.getId(), reason);
         return CancelOutcome.DISPATCHED;
+    }
+
+    /**
+     * Cancela a ordem se ela for LIMIT e estiver em voo; MARKET nao e cancelada (executa de imediato e
+     * costuma ser a propria saida). Fonte unica do cancelamento decidido pelo core: Safe Mode (T45) e
+     * protecao do lote (T44). Falha de envio e logada e nao propaga: o proximo tick tenta de novo.
+     *
+     * @return {@code true} quando o cancelamento foi enviado
+     */
+    boolean cancelResting(StrategyRunner runner, Transaction transaction, String reason) {
+        if (transaction.getOrderType() != OrderType.LIMIT || !transaction.getStatus().isInFlight()) {
+            return false;
+        }
+        try {
+            orderDispatch.cancel(intentFactory.buildCancelCommand(runner, transaction));
+            log.info("cancelResting: cancel dispatched runnerId={} transactionId={} clientOrderId={} reason={}",
+                    runner.getId(), transaction.getId(), transaction.getClientOrderId(), reason);
+            return true;
+        } catch (RuntimeException e) {
+            log.warn("cancelResting: cancel failed runnerId={} transactionId={} - retried next tick: {}",
+                    runner.getId(), transaction.getId(), e.getMessage());
+            return false;
+        }
     }
 
     /**

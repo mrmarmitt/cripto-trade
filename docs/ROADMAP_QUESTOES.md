@@ -12,6 +12,12 @@
 
 **Origem:** BLUEPRINT_QUESTOES.md #7
 
+**Resposta (T44, 2026-10-19):** gerenciado localmente pelo core, não delegado à exchange. A cada tick
+do runner, antes da estratégia, o lote com perda acima de `maxLossPercentPerLot` (padrão 5% do custo,
+por runner) é vendido com ordem `MARKET` pelo pipeline normal de SELL — aceita slippage em troca de
+execução certa. Depende do feed de market data: sem ticks não há avaliação (a ordem stop nativa da
+exchange segue como evolução possível, junto da proteção LIMIT da T48).
+
 ---
 
 ## 8. Dependências Cruzadas entre Runners

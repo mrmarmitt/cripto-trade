@@ -5,6 +5,7 @@ import com.marmitt.application.spring.deadletter.CapitalDeadLetterPayloadCodec;
 import com.marmitt.core.application.reaction.ExecutionConfirmedReaction;
 import com.marmitt.core.application.reaction.MarginReleasedReaction;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
+import com.marmitt.core.domain.runner.PositionProtection;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.shared.Fee;
 import com.marmitt.core.dto.capital.ExecutionConfirmation;
@@ -269,6 +270,7 @@ class CapitalEventListenerTest {
                 1,
                 1,
                 null,
+                PositionProtection.defaults(),
                 false,
                 Instant.now(),
                 Instant.now(),
