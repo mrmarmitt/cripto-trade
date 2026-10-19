@@ -35,6 +35,8 @@ class DecisionValidatorTest {
                 "decision desconhecida");
         assertFalse(DecisionValidator.violations(decision("SHOULD_BUY", "0.5", "1e3", null, null)).isEmpty(),
                 "notacao cientifica nao e decimal do contrato");
+        assertFalse(DecisionValidator.violations(new WireTypes.Decision("SMA", "SHOULD_HOLD", null, null, null,
+                null, null, "why", "not-a-time", null)).isEmpty(), "timestamp fora do ISO-8601");
     }
 
     private static WireTypes.Decision decision(String action, String confidence, String quantity,

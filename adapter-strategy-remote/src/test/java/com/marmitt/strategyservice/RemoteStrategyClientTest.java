@@ -124,6 +124,20 @@ class RemoteStrategyClientTest {
     }
 
     @Test
+    void numericDecimalsAndBadTimestampAreOutsideTheContract() {
+        RemoteStrategyClient client = client(Duration.ofSeconds(1));
+
+        // Decimal como numero JSON (float) nao pode virar valor financeiro.
+        http.reply = request -> new StrategyServiceHttpPort.Response(200, BUY.replace("\"0.00100000\"", "0.001"));
+        assertReason(Reason.INVALID_RESPONSE, client);
+        http.reply = request -> new StrategyServiceHttpPort.Response(200, BUY.replace("\"0.80\"", "0.8"));
+        assertReason(Reason.INVALID_RESPONSE, client);
+        http.reply = request -> new StrategyServiceHttpPort.Response(200,
+                BUY.replace("\"reasoning\":\"cross\"", "\"reasoning\":\"cross\",\"timestamp\":\"not-a-time\""));
+        assertReason(Reason.INVALID_RESPONSE, client);
+    }
+
+    @Test
     void decisionOlderThanTheLimitIsDiscarded() {
         http.reply = request -> new StrategyServiceHttpPort.Response(200, BUY);
         RemoteStrategyClient client = new RemoteStrategyClient(http, objectMapper, endpoints(),

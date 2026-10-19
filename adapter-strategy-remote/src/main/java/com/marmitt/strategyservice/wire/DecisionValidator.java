@@ -1,5 +1,7 @@
 package com.marmitt.strategyservice.wire;
 
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
@@ -35,6 +37,13 @@ public final class DecisionValidator {
         }
         if (decision.reasoning() == null) {
             violations.add("reasoning is required");
+        }
+        if (decision.timestamp() != null) {
+            try {
+                Instant.parse(decision.timestamp());
+            } catch (DateTimeParseException e) {
+                violations.add("timestamp is not ISO-8601: " + decision.timestamp());
+            }
         }
         if (decision.decision() == null || !ACTIONS.contains(decision.decision())) {
             violations.add("decision must be one of " + ACTIONS + " but was " + decision.decision());

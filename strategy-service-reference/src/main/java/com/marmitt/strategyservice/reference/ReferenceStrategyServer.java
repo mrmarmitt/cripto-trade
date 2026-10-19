@@ -130,17 +130,28 @@ public class ReferenceStrategyServer {
 
     // ---------------------------------------------------------------- infraestrutura HTTP
 
+    /**
+     * Resolve a resposta (inclusive o 400 de payload invalido — JSON malformado e IOException do
+     * Jackson) antes de escrever, e so fecha a exchange depois de enviar.
+     */
     private void handle(HttpExchange exchange, Endpoint endpoint) throws IOException {
-        try (exchange) {
-            if (token != null && !token.isBlank()
-                    && !("Bearer " + token).equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
-                send(exchange, new Reply(401, new WireTypes.Error("invalid token")));
-                return;
-            }
-            send(exchange, endpoint.reply(exchange));
-        } catch (RuntimeException e) {
-            log.error("reference: request failed {} - {}", exchange.getRequestURI(), e.getMessage(), e);
-            send(exchange, new Reply(400, new WireTypes.Error(e.getMessage())));
+        try {
+            send(exchange, reply(exchange, endpoint));
+        } finally {
+            exchange.close();
+        }
+    }
+
+    private Reply reply(HttpExchange exchange, Endpoint endpoint) {
+        if (token != null && !token.isBlank()
+                && !("Bearer " + token).equals(exchange.getRequestHeaders().getFirst("Authorization"))) {
+            return new Reply(401, new WireTypes.Error("invalid token"));
+        }
+        try {
+            return endpoint.reply(exchange);
+        } catch (IOException | RuntimeException e) {
+            log.warn("reference: invalid request {} - {}", exchange.getRequestURI(), e.getMessage());
+            return new Reply(400, new WireTypes.Error(String.valueOf(e.getMessage())));
         }
     }
 

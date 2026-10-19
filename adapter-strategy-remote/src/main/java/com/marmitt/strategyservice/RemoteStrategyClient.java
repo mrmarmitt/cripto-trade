@@ -2,6 +2,9 @@ package com.marmitt.strategyservice;
 
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.cfg.CoercionAction;
+import com.fasterxml.jackson.databind.cfg.CoercionInputShape;
+import com.fasterxml.jackson.databind.type.LogicalType;
 import com.marmitt.core.dto.strategy.StrategyContextDto;
 import com.marmitt.core.dto.strategy.StrategyInputDto;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
@@ -53,7 +56,7 @@ public class RemoteStrategyClient implements StrategyEvaluationPort {
     public RemoteStrategyClient(StrategyServiceHttpPort http, ObjectMapper objectMapper,
                                 List<RemoteStrategyEndpoint> endpoints, Duration maxDecisionAge, Clock clock) {
         this.http = http;
-        this.objectMapper = objectMapper;
+        this.objectMapper = strictTextual(objectMapper);
         Map<UUID, RemoteStrategyEndpoint> byRef = new HashMap<>();
         endpoints.forEach(endpoint -> byRef.put(endpoint.strategyRef(), endpoint));
         this.endpoints = Map.copyOf(byRef);
@@ -83,7 +86,26 @@ public class RemoteStrategyClient implements StrategyEvaluationPort {
                     "decision for " + strategyRef + " arrived " + age.toMillis() + "ms after the tick (max "
                             + maxDecisionAge.toMillis() + "ms)");
         }
-        return StrategyContractMapper.toCore(decision);
+        try {
+            return StrategyContractMapper.toCore(decision);
+        } catch (RuntimeException e) {
+            throw new StrategyUnavailableException(Reason.INVALID_RESPONSE,
+                    "decision for " + strategyRef + " cannot be mapped: " + e.getMessage(), e);
+        }
+    }
+
+    /**
+     * Copia do mapper que recusa numero/booleano JSON onde o contrato exige string (decimal como
+     * string, uuid, timestamp): sem isso o Jackson converteria {@code 0.1} em {@code "0.1"} e um valor
+     * financeiro vindo de float passaria pela validacao.
+     */
+    private static ObjectMapper strictTextual(ObjectMapper source) {
+        ObjectMapper strict = source.copy();
+        strict.coercionConfigFor(LogicalType.Textual)
+                .setCoercion(CoercionInputShape.Integer, CoercionAction.Fail)
+                .setCoercion(CoercionInputShape.Float, CoercionAction.Fail)
+                .setCoercion(CoercionInputShape.Boolean, CoercionAction.Fail);
+        return strict;
     }
 
     /**
