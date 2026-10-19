@@ -23,7 +23,6 @@ import java.util.concurrent.ConcurrentHashMap;
 public class InMemoryStrategyRepository implements StrategyRepositoryPort {
 
     private final Map<UUID, TradingStrategy> strategiesById = new ConcurrentHashMap<>();
-    private final Map<String, TradingStrategy> strategiesByName = new ConcurrentHashMap<>();
 
     /**
      * Habilita o registro das estratégias de cenário (T35). Default {@code false} — elas nunca
@@ -50,7 +49,7 @@ public class InMemoryStrategyRepository implements StrategyRepositoryPort {
 
         log.info("InMemoryStrategyRepository initialized with {} strategy(ies): {}",
                 strategiesById.size(),
-                strategiesByName.keySet());
+                strategiesById.keySet());
     }
 
     @Override
@@ -60,17 +59,6 @@ public class InMemoryStrategyRepository implements StrategyRepositoryPort {
             log.debug("Strategy found by ID: {} -> {}", strategyId, strategy.getStrategyName());
         } else {
             log.debug("Strategy not found by ID: {}", strategyId);
-        }
-        return Optional.ofNullable(strategy);
-    }
-
-    @Override
-    public Optional<TradingStrategy> findByName(String strategyName) {
-        TradingStrategy strategy = strategiesByName.get(strategyName);
-        if (strategy != null) {
-            log.debug("Strategy found by name: {} -> {}", strategyName, strategy.getStrategyId());
-        } else {
-            log.debug("Strategy not found by name: {}", strategyName);
         }
         return Optional.ofNullable(strategy);
     }
@@ -90,13 +78,8 @@ public class InMemoryStrategyRepository implements StrategyRepositoryPort {
             return;
         }
 
-        if (strategiesByName.containsKey(strategyName)) {
-            log.warn("Strategy with name {} already registered, skipping", strategyName);
-            return;
-        }
-
+        // Identidade = strategyId (T41): duas versoes podem ter o mesmo nome.
         strategiesById.put(strategyId, strategy);
-        strategiesByName.put(strategyName, strategy);
 
         log.info("Strategy registered - ID: {}, Name: {}, Version: {}, Enabled: {}",
                 strategyId, strategyName, strategy.getStrategyVersion(), strategy.isEnabled());

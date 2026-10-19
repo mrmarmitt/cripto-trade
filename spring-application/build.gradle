@@ -28,6 +28,7 @@ dependencies {
     implementation project(':adapter-binance')
     implementation project(':adapter-coinbase')
     implementation project(':adapter-mock')
+    implementation project(':adapter-strategy-remote')
     implementation project(':strategy')
     implementation project(':core')
 

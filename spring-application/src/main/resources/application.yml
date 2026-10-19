@@ -133,3 +133,18 @@ ctrade:
     # Estrategias de cenario deterministicas p/ testes em testnet (T35). Default OFF: nunca
     # registradas em producao. Ligar apenas em testnet/dev via CTRADE_SCENARIO_STRATEGIES_ENABLED=true.
     enabled: ${CTRADE_SCENARIO_STRATEGIES_ENABLED:false}
+  strategy:
+    remote:
+      # T41: estrategias fora do processo (docs/strategy-service/CONTRACT.md). Sem catalogo = nada a registrar.
+      # Ativar em ambiente real so com T42 (mailbox) e T44 (protecao de posicao) prontas.
+      timeout-ms: 250                    # timeout rigido da chamada /evaluate (sem retry)
+      max-decision-age-ms: 2000          # decisao mais velha que isto (desde o tick) vira HOLD
+      registration-retry-interval-ms: 30000
+      token: ${CTRADE_STRATEGY_REMOTE_TOKEN:}
+      catalog: []
+      # catalog:
+      #   - strategy-ref: 5ea5e0a0-0000-4000-a000-000000000001
+      #     base-url: http://localhost:8090/v1
+      #     name: SimpleMovingAverageStrategy
+      #     version: 1.0.0
+      #     enabled: true
