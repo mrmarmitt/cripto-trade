@@ -83,6 +83,12 @@ class RunnerSignalPolicy {
             return false;
         }
 
+        if (signal.decision() == TradingAction.SHOULD_BUY && !runner.canOpenPositions()) {
+            log.info("processTradeSignal: BUY signal rejected - runner={} status={} cannot open positions",
+                    runner.getId(), runner.getStatus());
+            return false;
+        }
+
         if (runner.getExecutionPolicy() == ExecutionPolicy.SINGLE
                 && signal.decision() == TradingAction.SHOULD_BUY
                 && hasOpenPositionOrInFlight) {

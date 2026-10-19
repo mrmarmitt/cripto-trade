@@ -1,10 +1,12 @@
 package com.marmitt.application.spring.web;
 
+import com.marmitt.core.exceptions.ConcurrentPositionLockException;
 import com.marmitt.core.exceptions.DeadLetterConflictException;
 import com.marmitt.core.exceptions.DeadLetterNotFoundException;
 import com.marmitt.core.exceptions.ExchangeQueryException;
 import com.marmitt.core.exceptions.PortfolioNotFoundException;
 import com.marmitt.core.exceptions.RunnerNotFoundException;
+import com.marmitt.core.exceptions.RunnerOperationException;
 import com.marmitt.core.exceptions.SafeModeTransitionException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -74,7 +76,8 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.NOT_FOUND, ex.getMessage(), request);
     }
 
-    @ExceptionHandler({DeadLetterConflictException.class, SafeModeTransitionException.class})
+    @ExceptionHandler({DeadLetterConflictException.class, SafeModeTransitionException.class,
+            RunnerOperationException.class, ConcurrentPositionLockException.class})
     public ResponseEntity<ApiError> handleConflict(RuntimeException ex, HttpServletRequest request) {
         return build(HttpStatus.CONFLICT, ex.getMessage(), request);
     }

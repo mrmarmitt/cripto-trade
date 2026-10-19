@@ -52,10 +52,9 @@ public interface StrategyRunnerRepositoryPort {
     List<StrategyRunner> findByPortfolioId(UUID portfolioId);
 
     /**
-     * Busca Runners operacionais de um Portfolio (status ACTIVE ou HALTED).
+     * Busca Runners operacionais de um Portfolio (status ACTIVE, HALTED ou TERMINATING).
      * Usado pelo Portfolio para roteamento de callbacks da exchange.
-     *
-     * @see com.marmitt.core.enums.RunnerStatus#isOperational()
+
      */
     List<StrategyRunner> findOperationalByPortfolioId(UUID portfolioId);
 
@@ -71,8 +70,8 @@ public interface StrategyRunnerRepositoryPort {
      *
      * @param symbol     par de trading (ex: "BTCUSDT")
      * @param exchangeId identificador da exchange (ex: "BINANCE")
-     * @return lista de Runners com {@code status.isOperational()} de portfolios ativos
-     * @see com.marmitt.core.enums.RunnerStatus#isOperational()
+     * @return Runners ACTIVE, HALTED ou TERMINATING de portfolios ativos (o filtro fino e
+     *         {@code StrategyRunner.canAcceptSignals()})
      */
     List<StrategyRunner> findOperationalBySymbol(String symbol, String exchangeId);
 

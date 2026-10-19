@@ -1,7 +1,7 @@
 package com.marmitt.core.application.handler.connection;
 
 import com.marmitt.core.dto.events.WebSocketFailedEvent;
-import com.marmitt.core.dto.runner.response.RunnerHaltResult;
+import com.marmitt.core.dto.runner.response.RunnerTransitionResult;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.inbound.runner.HaltRunnerPort;
 import org.junit.jupiter.api.Test;
@@ -46,13 +46,13 @@ class CriticalConnectionFailureHandlerTest {
         boolean haltAllCalled = false;
 
         @Override
-        public List<RunnerHaltResult> haltAll() {
+        public List<RunnerTransitionResult> haltAll() {
             haltAllCalled = true;
             return new ArrayList<>();
         }
 
         @Override
-        public RunnerHaltResult haltById(UUID id) {
+        public RunnerTransitionResult haltById(UUID id) {
             return null;
         }
     }

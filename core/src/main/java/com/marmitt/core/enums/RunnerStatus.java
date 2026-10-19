@@ -35,18 +35,4 @@ public enum RunnerStatus {
      * Runner arquivado (soft delete — nunca removido fisicamente)
      */
     ARCHIVED;
-
-    /**
-     * Verifica se o Runner está operacional (pode receber sinais)
-     */
-    public boolean isOperational() {
-        return this == ACTIVE;
-    }
-
-    /**
-     * Verifica se o Runner está em estado terminal
-     */
-    public boolean isTerminal() {
-        return this == TERMINATING || this == ARCHIVED;
-    }
 }

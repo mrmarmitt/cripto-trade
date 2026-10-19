@@ -16,7 +16,7 @@ public interface StrategyRunnerJdbcRepository extends CrudRepository<StrategyRun
     @Query("SELECT * FROM strategy_runners WHERE portfolio_id = :portfolioId")
     List<StrategyRunnerEntity> findByPortfolioId(@Param("portfolioId") UUID portfolioId);
 
-    @Query("SELECT * FROM strategy_runners WHERE portfolio_id = :portfolioId AND status IN ('ACTIVE', 'HALTED')")
+    @Query("SELECT * FROM strategy_runners WHERE portfolio_id = :portfolioId AND status IN ('ACTIVE', 'HALTED', 'TERMINATING')")
     List<StrategyRunnerEntity> findOperationalByPortfolioId(@Param("portfolioId") UUID portfolioId);
 
     /**
@@ -31,7 +31,7 @@ public interface StrategyRunnerJdbcRepository extends CrudRepository<StrategyRun
               FROM strategy_runners sr
              INNER JOIN portfolios p ON p.id = sr.portfolio_id
              WHERE UPPER(sr.symbol) = UPPER(:symbol)
-               AND sr.status IN ('ACTIVE', 'HALTED')
+               AND sr.status IN ('ACTIVE', 'HALTED', 'TERMINATING')
                AND p.is_active = true
                AND (
                     EXISTS (
