@@ -3907,7 +3907,7 @@ Esta seção detalha **como implementar** o modelo de concorrência de cada Stra
 
 ### 12.1 Modelo de Processamento: Fila Sequencial com Drop Policy
 
-> **Estado (T39, 2026-10-16):** **Não implementado** (§12.1–12.3, §12.6–12.8): ticks são processados no `messageProcessingExecutor` compartilhado. Ver **T42** (mailbox, timeouts, backpressure) e **T40** (idade da decisão). Em SINGLE, só o BUY é barrado com ordem em voo; SELL concorrente é barrada pelo lock de posição.
+> **Estado (T42, 2026-10-19):** Implementado com diferenças. Mailbox por runner no core (`RunnerMailbox`: capacidade 1, latest-wins, sequencial, descarte fora de ordem) drenada por um pool compartilhado (`runnerSignalExecutor`), não uma thread virtual por runner; market data e user data em executores separados. Stale check medido desde o recebimento do tick (`runner.signal.stale-tick-threshold-ms`). Timeouts por fase (§12.7) viram alerta (`runner.signal.processing.time` + WARN), não aborto. Backpressure: `runner.ticks.discarded{reason}`. Comandos admin (§12.5) são endpoints síncronos (T49), sem fila de prioridade. Em SINGLE, só o BUY é barrado com ordem em voo; SELL concorrente é barrada pelo lock de posição.
 
 Cada Runner opera sob o padrão **Actor/Mailbox** — uma fila de entrada com capacidade limitada e processamento estritamente sequencial.
 
