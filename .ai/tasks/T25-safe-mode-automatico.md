@@ -29,6 +29,16 @@
 > **T45**; esta task passa a apenas plugar os gatilhos nessa porta. O gatilho "capital disponível <
 > X% do inicial" não substitui o breaker de drawdown da **T43** — unificar os motivos/porta entre as duas.
 
+> **Decisões de negócio (usuário, 2026-10-19):**
+> - Gatilhos de HALT automático do portfolio: **DLQ acumulando** (≥ 3 não resolvidas), **divergência
+>   de saldo** (`FAIL_DEFICIT` da sanidade de boot) e **watchdog travado** (mesma transação sem resolver
+>   em 3 ciclos).
+> - **Reconexões de WebSocket não acionam HALT** (oscilação normal de rede geraria falso positivo).
+> - **Rejeições consecutivas por runner:** 5 ordens REJECTED seguidas → halt **só do runner**, retomada
+>   **manual** pelo `resume` (T49); sem cooldown automático.
+> - **Anomalia de latência: fora do escopo** (sem medição de ponta a ponta hoje).
+> - Retomada do portfolio continua manual.
+
 ---
 
 ## Descrição
