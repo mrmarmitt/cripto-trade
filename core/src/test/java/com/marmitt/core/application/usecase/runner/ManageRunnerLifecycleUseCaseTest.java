@@ -18,6 +18,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.List;
 import java.util.Optional;
 import java.util.Set;
@@ -146,11 +147,14 @@ class ManageRunnerLifecycleUseCaseTest {
     void updateLimitsAppliesTheInformedFields() {
         activate(runner);
 
-        useCase.updateLimits(runner.getId(), new UpdateRunnerLimitsRequest(new BigDecimal("0.25"), 2, 2));
+        useCase.updateLimits(runner.getId(), new UpdateRunnerLimitsRequest(new BigDecimal("0.25"), 2, 2,
+                new BigDecimal("0.08"), Duration.ofHours(24)));
 
         assertEquals(0, new BigDecimal("0.25").compareTo(runner.getMaxAllocationPercent()));
         assertEquals(2, runner.getMaxOpenPositions());
         assertEquals(2, runner.getMaxPendingOrders());
+        assertEquals(0, new BigDecimal("0.08").compareTo(runner.getPositionProtection().maxLossPercentPerLot()));
+        assertEquals(Duration.ofHours(24), runner.getPositionProtection().maxHoldingDuration());
     }
 
     @Test

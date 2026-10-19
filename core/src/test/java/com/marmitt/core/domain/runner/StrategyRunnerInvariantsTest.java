@@ -7,6 +7,7 @@ import com.marmitt.core.exceptions.RunnerOperationException;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.util.Set;
 import java.util.UUID;
 
@@ -145,13 +146,49 @@ class StrategyRunnerInvariantsTest {
         StrategyRunner runner = activeRunner();
         int pendingBefore = runner.getMaxPendingOrders();
 
-        runner.updateLimits(new BigDecimal("0.30"), 3, null);
+        runner.updateLimits(new BigDecimal("0.30"), 3, null, null, null);
 
         assertEquals(0, new BigDecimal("0.30").compareTo(runner.getMaxAllocationPercent()));
         assertEquals(3, runner.getMaxOpenPositions());
         assertEquals(pendingBefore, runner.getMaxPendingOrders());
-        assertThrows(IllegalArgumentException.class, () -> runner.updateLimits(new BigDecimal("1.5"), null, null));
-        assertThrows(IllegalArgumentException.class, () -> runner.updateLimits(null, 0, null));
+        assertThrows(IllegalArgumentException.class, () -> runner.updateLimits(new BigDecimal("1.5"), null, null, null, null));
+        assertThrows(IllegalArgumentException.class, () -> runner.updateLimits(null, 0, null, null, null));
+    }
+
+    @Test
+    void newRunnerIsProtectedByTheDefaultLossLimit() {
+        PositionProtection protection = newRunner().getPositionProtection();
+
+        assertEquals(0, PositionProtection.DEFAULT_MAX_LOSS_PERCENT_PER_LOT.compareTo(protection.maxLossPercentPerLot()));
+        assertEquals(null, protection.maxHoldingDuration(), "Idade maxima do lote desligada por padrao");
+    }
+
+    @Test
+    void updateLimitsChangesTheLotProtectionAndZeroDisablesTheHoldingLimit() {
+        StrategyRunner runner = activeRunner();
+
+        runner.updateLimits(null, null, null, new BigDecimal("0.03"), Duration.ofHours(6));
+        assertEquals(0, new BigDecimal("0.03").compareTo(runner.getPositionProtection().maxLossPercentPerLot()));
+        assertEquals(Duration.ofHours(6), runner.getPositionProtection().maxHoldingDuration());
+
+        runner.updateLimits(null, null, null, null, Duration.ZERO);
+        assertEquals(null, runner.getPositionProtection().maxHoldingDuration());
+        assertEquals(0, new BigDecimal("0.03").compareTo(runner.getPositionProtection().maxLossPercentPerLot()));
+    }
+
+    @Test
+    void invalidLotProtectionIsRejectedWithoutApplyingOtherFields() {
+        StrategyRunner runner = activeRunner();
+        BigDecimal allocationBefore = runner.getMaxAllocationPercent();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> runner.updateLimits(new BigDecimal("0.40"), null, null, BigDecimal.ONE, null));
+        assertThrows(IllegalArgumentException.class,
+                () -> runner.updateLimits(null, null, null, BigDecimal.ZERO, null));
+        assertThrows(IllegalArgumentException.class,
+                () -> runner.updateLimits(null, null, null, null, Duration.ofMillis(500)));
+        assertEquals(0, allocationBefore.compareTo(runner.getMaxAllocationPercent()),
+                "Pedido invalido nao aplica os outros campos");
     }
 
     private static StrategyRunner activeRunner() {

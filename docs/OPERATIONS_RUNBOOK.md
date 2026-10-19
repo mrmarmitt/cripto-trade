@@ -96,10 +96,25 @@ Endpoints protegidos pelo `admin.api.key`:
 - Muitos `STALE`: aumentar `runner.signal.threads` ou investigar a estratégia lenta.
 - Log ERROR `marketDataExecutor: queue full`: parsing de market data não acompanha o feed.
 
+## Proteção do lote (T44)
+
+Cada runner vende o lote a mercado, sem consultar a estratégia, quando a perda passa de
+`maxLossPercentPerLot` do custo (padrão 0.05) ou, se configurado, quando o lote passa de
+`maxHoldingDuration`. Vale com a estratégia fora do ar e sob Safe Mode `HALT`.
+
+- Sinais: log WARN `protection: MAX_LOSS ...`, alerta Discord `[PROTECTIVE_EXIT]`, outcome
+  `signal.evaluated.total{decision=PROTECTIVE_EXIT}`. A venda é uma SELL `MARKET` com reasoning
+  `protective exit ...`.
+- Ajustar por runner: `PATCH /api/admin/runners/{id}` com `{"maxLossPercentPerLot": 0.08}` ou
+  `{"maxHoldingDuration": "PT24H"}`; `"PT0S"` desliga a idade máxima. O limite de perda não desliga
+  (valores em (0, 1)).
+- SELL LIMIT da estratégia descansando sobre o lote é cancelada primeiro; a venda protetiva sai no
+  tick seguinte ao `CANCELED`.
+
 ## Estratégia remota (T41)
 
-> Não ativar em testnet/produção antes da T44 (proteção de posição): com a estratégia fora do ar, o
-> runner não vende.
+> Com a estratégia fora do ar, o runner não opera (HOLD implícito); a saída do lote em queda fica com
+> a proteção do lote (T44).
 
 1. Subir a app da estratégia (referência: `gradle :strategy-service-reference:run`, variáveis `PORT`,
    `STRATEGY_REF`, `STRATEGY_TOKEN`).

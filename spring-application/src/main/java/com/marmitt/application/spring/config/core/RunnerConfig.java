@@ -28,6 +28,7 @@ import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.exchange.rest.OrderQuantityNormalizerPort;
 import com.marmitt.core.ports.outbound.marketdata.LatestPricePort;
+import com.marmitt.core.ports.outbound.notification.ErrorNotificationPort;
 import com.marmitt.core.ports.outbound.metrics.SignalMetricsPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
@@ -138,6 +139,7 @@ public class RunnerConfig {
             List<OrderQuantityNormalizerPort> orderNormalizers,
             SignalMetricsPort signalMetrics,
             LatestPricePort latestPrices,
+            ErrorNotificationPort errorNotification,
             @Qualifier("runnerSignalExecutor") Executor runnerSignalExecutor,
             RunnerSignalProperties runnerSignalProperties) {
 
@@ -151,6 +153,7 @@ public class RunnerConfig {
                 orderNormalizers,
                 signalMetrics,
                 latestPrices,
+                errorNotification,
                 runnerSignalExecutor,
                 Duration.ofMillis(runnerSignalProperties.getStaleTickThresholdMs()),
                 Duration.ofMillis(runnerSignalProperties.getSlowProcessingWarnMs())) {

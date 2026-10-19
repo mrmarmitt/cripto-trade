@@ -5,6 +5,7 @@ import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.capital.BuyExecutionContext;
+import com.marmitt.core.dto.notification.ErrorNotificationEvent;
 import com.marmitt.core.dto.strategy.StrategyContextDto;
 import com.marmitt.core.dto.strategy.StrategyInputDto;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
@@ -23,6 +24,7 @@ import com.marmitt.core.ports.outbound.marketdata.LatestPricePort;
 import com.marmitt.core.ports.outbound.metrics.SignalDecision;
 import com.marmitt.core.ports.outbound.metrics.SignalMetricsPort;
 import com.marmitt.core.ports.outbound.metrics.TickDiscardReason;
+import com.marmitt.core.ports.outbound.notification.ErrorNotificationPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
@@ -51,6 +53,8 @@ import java.util.function.Predicate;
  *   <li>Localiza todos os {@link com.marmitt.core.domain.runner.StrategyRunner runners}
  *       operacionais para o simbolo/exchange do tick.</li>
  *   <li>Filtra runners inapta (status, exchange bloqueada) via {@link RunnerSignalPolicy}.</li>
+ *   <li>Aplica a protecao do lote ({@link PositionProtectionHandler}, T44) antes da estrategia e do
+ *       Safe Mode; quando ela age, a estrategia nao e consultada no tick.</li>
  *   <li>Monta o {@link com.marmitt.core.dto.strategy.StrategyContextDto contexto operacional}
  *       com saldo, posicoes abertas e ordens pendentes de venda.</li>
  *   <li>Executa a estrategia configurada no runner para obter a decisao (BUY/SELL/HOLD).</li>
@@ -79,6 +83,7 @@ import java.util.function.Predicate;
 public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPort, RunnerOrderCommandPort {
 
     private static final BigDecimal MINIMUM_OPERATION_AMOUNT = BigDecimal.valueOf(10);
+    private static final String ADMIN_SOURCE = "ADMIN";
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final PortfolioRepositoryPort portfolioRepository;
@@ -98,6 +103,8 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     private final SellSignalHandler sellSignalHandler;
     private final CancelSignalHandler cancelSignalHandler;
     private final SafeModeHandler safeModeHandler;
+    private final PositionProtectionHandler protectionHandler;
+    private final ErrorNotificationPort notification;
     private final RunnerExposureService runnerExposureService;
     private final CapitalReservationPolicy capitalReservationPolicy;
 
@@ -110,6 +117,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                                         List<OrderQuantityNormalizerPort> orderNormalizers,
                                         SignalMetricsPort signalMetrics,
                                         LatestPricePort latestPrices,
+                                        ErrorNotificationPort notification,
                                         Executor runnerExecutor,
                                         Duration staleTickThreshold,
                                         Duration slowProcessingWarning) {
@@ -118,6 +126,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         this.orderConciliation = orderConciliation;
         this.signalMetrics = signalMetrics;
         this.latestPrices = latestPrices;
+        this.notification = notification;
         this.mailbox = new RunnerMailbox(runnerExecutor, this::evaluateTick, signalMetrics);
         this.staleTickThreshold = staleTickThreshold;
         this.slowProcessingWarning = slowProcessingWarning;
@@ -131,7 +140,10 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         this.buySignalHandler = new BuySignalHandler(this.tradeIntentFactory, orderDispatch);
         this.sellSignalHandler = new SellSignalHandler(strategyRunnerRepository, this.tradeIntentFactory, orderDispatch);
         this.cancelSignalHandler = new CancelSignalHandler(strategyRunnerRepository, this.tradeIntentFactory, orderDispatch);
-        this.safeModeHandler = new SafeModeHandler(strategyRunnerRepository, this.tradeIntentFactory, orderDispatch);
+        this.safeModeHandler = new SafeModeHandler(strategyRunnerRepository, this.tradeIntentFactory,
+                this.cancelSignalHandler);
+        this.protectionHandler = new PositionProtectionHandler(strategyRunnerRepository, this.tradeIntentFactory,
+                this.cancelSignalHandler);
         this.runnerExposureService = new RunnerExposureService(strategyRunnerRepository);
         this.capitalReservationPolicy = new CapitalReservationPolicy(
                 portfolioRepository, globalBalanceRepository, this.runnerExposureService);
@@ -298,10 +310,13 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
 
         long start = System.nanoTime();
         try {
+            // T44: a protecao do lote vem antes de tudo e vale em qualquer nivel do Safe Mode (so reduz
+            // exposicao). Quando ela age, vence a estrategia no tick.
+            boolean protectionActed = protectPosition(runner, marketData.price());
             SafeModeStatus safeMode = loadSafeMode(runner.getPortfolioId());
             if (safeMode.cancelsOrders()) {
                 enforceSafeMode(runner, safeMode, marketData.price());
-            } else {
+            } else if (!protectionActed) {
                 processRunner(runner, tradeIntentFactory.buildStrategyInput(marketData), marketData.price());
             }
         } catch (RunnerHaltedException e) {
@@ -335,6 +350,48 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     }
 
     /**
+     * Protecao do lote independente da estrategia (T44). Lote que viola um limite e vendido a mercado
+     * pelo pipeline normal de SELL; travado por uma SELL LIMIT, recebe o cancelamento dela antes.
+     *
+     * @return {@code true} quando a protecao agiu no tick (venda ou cancelamento enviados)
+     */
+    private boolean protectPosition(StrategyRunner runner, BigDecimal currentPrice) {
+        Optional<PositionProtectionHandler.Trigger> found =
+                protectionHandler.findTrigger(runner, currentPrice, Instant.now());
+        if (found.isEmpty()) {
+            return false;
+        }
+        PositionProtectionHandler.Trigger trigger = found.get();
+        checkRunnerNotHalted(runner.getId());
+        if (trigger.lot().isLocked()) {
+            if (!protectionHandler.releaseLot(runner, trigger)) {
+                // Travado pela propria saida MARKET (ou PANIC_SELL): aguardando o fill.
+                return false;
+            }
+            signalMetrics.recordSignalEvaluated(runner.getId(), SignalDecision.PROTECTIVE_EXIT);
+            log.warn("protection: {} on locked lot - canceling resting SELL positionId={} runnerId={} sellId={} - {}",
+                    trigger.violation().reason(), trigger.lot().getId(), runner.getId(),
+                    trigger.lot().getLockedByTransactionId(), trigger.violation().detail());
+            return true;
+        }
+        signalMetrics.recordSignalEvaluated(runner.getId(), SignalDecision.PROTECTIVE_EXIT);
+        log.warn("protection: {} - selling lot at market positionId={} runnerId={} quantity={} price={} - {}",
+                trigger.violation().reason(), trigger.lot().getId(), runner.getId(), trigger.lot().getQuantity(),
+                currentPrice, trigger.violation().detail());
+        SignalDecision outcome = processTradeSignal(runner, protectionHandler.exitSignal(trigger), currentPrice,
+                tradeIntentFactory.liquidationOrderType());
+        if (outcome == SignalDecision.SELL) {
+            notification.notifyError(ErrorNotificationEvent.protectiveExit(
+                    "Protective exit " + trigger.violation().reason() + " on " + runner.getSymbol(),
+                    "Lot " + trigger.lot().getId() + " (" + trigger.lot().getQuantity().toPlainString()
+                            + ") sold at market near " + currentPrice.toPlainString() + ": "
+                            + trigger.violation().detail(),
+                    MDC.get("correlationId"), runner.getId(), Instant.now()));
+        }
+        return true;
+    }
+
+    /**
      * Niveis CANCEL_ALL e PANIC_SELL (T45): o Safe Mode conduz o runner no lugar da estrategia.
      * Cancela as ordens LIMIT em voo e, em PANIC_SELL, vende a mercado cada posicao aberta sem lock
      * pelo pipeline normal de SELL. Reaplicado a cada tick ate nao restar ordem nem posicao.
@@ -349,7 +406,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         for (StrategyOutputDto liquidation : safeModeHandler.liquidationSignals(runner)) {
             log.warn("safeMode: PANIC_SELL liquidating positionId={} runnerId={} quantity={}",
                     liquidation.targetLotId(), runner.getId(), liquidation.quantity());
-            processTradeSignal(runner, liquidation, currentPrice, safeModeHandler.liquidationOrderType());
+            processTradeSignal(runner, liquidation, currentPrice, tradeIntentFactory.liquidationOrderType());
         }
     }
 
@@ -389,8 +446,9 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                         "No market price yet for " + runner.getSymbol() + " - wait for the first tick"));
         log.warn("adminCommand: FORCE_CLOSE_POSITION positionId={} runnerId={} quantity={} referencePrice={}",
                 positionId, runnerId, position.getQuantity(), referencePrice);
-        processTradeSignal(runner, safeModeHandler.liquidationSignal(position, "admin FORCE_CLOSE_POSITION"),
-                referencePrice, safeModeHandler.liquidationOrderType());
+        processTradeSignal(runner,
+                tradeIntentFactory.liquidationSignal(ADMIN_SOURCE, position, "admin FORCE_CLOSE_POSITION"),
+                referencePrice, tradeIntentFactory.liquidationOrderType());
     }
 
     private StrategyRunner loadRunner(UUID runnerId) {
@@ -438,8 +496,13 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         processTradeSignal(runner, strategyOutput, currentPrice, OrderType.LIMIT);
     }
 
-    private void processTradeSignal(StrategyRunner runner, StrategyOutputDto signal, BigDecimal currentPrice,
-                                    OrderType orderType) {
+    /**
+     * Pipeline de BUY/SELL de um sinal ja decidido.
+     *
+     * @return o desfecho registrado em {@code signal.evaluated.total} para o sinal
+     */
+    private SignalDecision processTradeSignal(StrategyRunner runner, StrategyOutputDto signal, BigDecimal currentPrice,
+                                              OrderType orderType) {
         RunnerExposureService.ExposureSnapshot exposureSnapshot = null;
         boolean hasOpenOrInflight = false;
         if (signalPolicy.requiresOpenPositionCheck(runner, signal)) {
@@ -451,7 +514,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
             // posição/ordem já aberta): registra REJECTED_POLICY para o tick não parecer
             // "avaliação parada" no monitoramento.
             signalMetrics.recordSignalEvaluated(runner.getId(), SignalDecision.REJECTED_POLICY);
-            return;
+            return SignalDecision.REJECTED_POLICY;
         }
 
         // Preço efetivo da ordem: a estratégia pode fixar um limitPrice (ex.: ordem que descansa
@@ -487,10 +550,11 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                 if (outcome == BuySignalHandler.BuyOutcome.DISPATCHED) {
                     logTransactionCreated(transaction, runner);
                 }
-                signalMetrics.recordSignalEvaluated(runner.getId(),
-                        outcome == BuySignalHandler.BuyOutcome.DISPATCHED
-                                ? SignalDecision.BUY
-                                : SignalDecision.REJECTED_CAPITAL);
+                SignalDecision decision = outcome == BuySignalHandler.BuyOutcome.DISPATCHED
+                        ? SignalDecision.BUY
+                        : SignalDecision.REJECTED_CAPITAL;
+                signalMetrics.recordSignalEvaluated(runner.getId(), decision);
+                return decision;
             } else {
                 SellSignalHandler.SellOutcome outcome = sellSignalHandler.handle(runner, signal, transaction,
                         this::transactionalPersistSellAndLockPosition, this::checkRunnerNotHalted,
@@ -500,10 +564,11 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                 }
                 // NO_OPEN_POSITION tambem e registrado (REJECTED_NO_POSITION): um runner que recebe
                 // ticks e tenta vender sem inventario nao pode parecer "avaliacao parada" no monitoramento.
-                signalMetrics.recordSignalEvaluated(runner.getId(),
-                        outcome == SellSignalHandler.SellOutcome.DISPATCHED
-                                ? SignalDecision.SELL
-                                : SignalDecision.REJECTED_NO_POSITION);
+                SignalDecision decision = outcome == SellSignalHandler.SellOutcome.DISPATCHED
+                        ? SignalDecision.SELL
+                        : SignalDecision.REJECTED_NO_POSITION;
+                signalMetrics.recordSignalEvaluated(runner.getId(), decision);
+                return decision;
             }
         } catch (RunnerHaltedException | ConcurrentPositionLockException e) {
             // Halt pos-persist: a transacao ja foi expirada/conciliada (rastreavel pelos logs da

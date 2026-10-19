@@ -32,6 +32,8 @@ adaptadores externos.
    descartado. A avaliacao abaixo roda no `runnerSignalExecutor`, ja com o runner relido; tick mais
    velho que `runner.signal.stale-tick-threshold-ms` e descartado antes de avaliar.
 3. `RunnerSignalPolicy` filtra runners que podem avaliar o sinal.
+   Antes de tudo roda a **protecao do lote** (ramo abaixo, T44), em qualquer nivel do Safe Mode;
+   quando ela age no tick, a estrategia nao e consultada.
    Le o nivel do Safe Mode de cada portfolio uma vez por tick. Em `CANCEL_ALL`/`PANIC_SELL` o runner
    segue o ramo "Safe Mode" abaixo e a estrategia nao e consultada (T45).
 4. `RunnerContextAssembler` monta `StrategyContextDto` com portfolio,
@@ -73,21 +75,43 @@ Se a reserva for rejeitada, o sinal e descartado sem dispatch.
 Se nao houver posicao aberta, o sinal e descartado. Se outra venda travou a
 mesma posicao, o fluxo falha com `ConcurrentPositionLockException`.
 
+## Protecao Do Lote (T44)
+
+A cada tick, antes da estrategia e do Safe Mode, `PositionProtectionHandler` avalia o lote ativo do
+runner (no maximo um por simbolo) contra `StrategyRunner.positionProtection`:
+
+- `maxLossPercentPerLot` — perda em relacao ao `costBasis` do lote (fracao, default `0.05`);
+- `maxHoldingDuration` — idade maxima do lote (desligada por padrao).
+
+Lote que viola um limite:
+
+1. `checkRunnerNotHalted` (kill switch tem precedencia).
+2. Sem lock: vira sinal de venda MARKET do lote inteiro (`TradeIntentFactory.liquidationSignal`) e
+   segue o ramo SELL acima. Despachada, gera alerta `PROTECTIVE_EXIT` pelo `ErrorNotificationPort`.
+3. Travado por SELL LIMIT em voo: `CancelSignalHandler.cancelResting` envia o cancelamento; a venda
+   sai num tick seguinte, quando o `CANCELED` destrava o lote.
+4. Travado por SELL MARKET (a propria saida ou o PANIC_SELL): nada a fazer; a estrategia segue.
+
+Quando age (2 ou 3), a protecao registra `PROTECTIVE_EXIT` e a estrategia nao e consultada no tick.
+Lotes abertos antes da feature entram na protecao. Sem estado proprio: cada tick reavalia o lote.
+Limites alterados por `PATCH /api/admin/runners/{id}` (`maxLossPercentPerLot`, `maxHoldingDuration`
+ISO-8601, `PT0S` desliga a idade).
+
 ## Safe Mode (T45)
 
 Nos niveis `CANCEL_ALL` e `PANIC_SELL`, a cada tick do runner:
 
 1. `checkRunnerNotHalted` (kill switch tem precedencia).
 2. `SafeModeHandler.cancelRestingOrders` envia cancelamento para cada ordem LIMIT em voo
-   (`TransactionStatus.IN_FLIGHT`), pelo mesmo comando do `SHOULD_CANCEL`
-   (`TradeIntentFactory.buildCancelCommand`). Ordens MARKET nao sao canceladas.
+   (`TransactionStatus.IN_FLIGHT`) por `CancelSignalHandler.cancelResting`, o mesmo caminho da
+   protecao do lote. Ordens MARKET nao sao canceladas.
 3. Em `PANIC_SELL`, cada posicao aberta sem lock vira sinal de venda do lote inteiro e passa pelo
    ramo SELL acima com `OrderType.MARKET`. Posicao travada por SELL LIMIT espera o cancelamento a
    destravar; posicao travada pela propria liquidacao nao e vendida de novo.
 
 `HALT` nao muda este fluxo: a estrategia roda e pode vender; o BUY e recusado na reserva de capital.
 O tipo da ordem e decidido aqui (`Transaction.orderType`): `LIMIT` para sinais da estrategia,
-`MARKET` para a liquidacao.
+`MARKET` para as saidas decididas pelo core (liquidacao, fechar posicao, protecao do lote).
 
 ## Ciclo De Vida E Comandos Do Operador (T49)
 
@@ -96,8 +120,10 @@ O tipo da ordem e decidido aqui (`Transaction.orderType`): `LIMIT` para sinais d
   (`RunnerSignalPolicy` e releitura `requireRunner` antes do persist e do dispatch).
 - `RunnerOrderCommandPort`, implementado pelo `ProcessTradeSignalUseCase`:
   - `cancelOrder` passa pelo mesmo `CancelSignalHandler` do `SHOULD_CANCEL`;
-  - `closePosition` gera o sinal de liquidacao MARKET da T45 e segue o ramo SELL, com o ultimo preco
-    (`LatestPricePort`) como referencia. Runner halted e recusado.
+  - `closePosition` gera o sinal de liquidacao MARKET (`TradeIntentFactory.liquidationSignal`) e
+    segue o ramo SELL, com o ultimo preco (`LatestPricePort`) como referencia. Runner halted e recusado.
+  - `PATCH` altera limites de capital e a protecao do lote; pedido com um campo invalido nao aplica
+    os demais.
 
 ## Componentes Principais
 
@@ -110,6 +136,8 @@ O tipo da ordem e decidido aqui (`Transaction.orderType`): `LIMIT` para sinais d
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/SellSignalHandler.java` | Persiste SELL, trava posicao e faz dispatch. |
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/CapitalReservationPolicy.java` | Valida Safe Mode, fundos e limite de exposicao por runner. |
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/SafeModeHandler.java` | Cancela ordens LIMIT em voo e gera a liquidacao MARKET nos niveis CANCEL_ALL/PANIC_SELL (T45). |
+| `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/PositionProtectionHandler.java` | Detecta lote que viola a protecao, gera a saida MARKET ou cancela a SELL LIMIT que o trava (T44). |
+| `core/src/main/java/com/marmitt/core/domain/runner/PositionProtection.java` | Limites do lote por runner e a regra de violacao (perda sobre o custo, idade). |
 | `spring-application/src/main/java/com/marmitt/application/spring/config/core/RunnerConfig.java` | Injeta fronteiras transacionais com `TransactionTemplate`. |
 
 ## Invariantes
@@ -143,6 +171,9 @@ As tags `decision` sao **outcomes mutuamente exclusivos**, nao a decisao bruta d
 - `REJECTED_NO_POSITION` — SELL sem posicao aberta para vender.
 - `REJECTED_POLICY` — sinal barrado pela guarda de execucao (sobretudo politica
   SINGLE com posicao/ordem ja aberta) antes do pipeline de trade.
+- `SAFE_MODE` — tick conduzido pelo Safe Mode (T45).
+- `STRATEGY_UNAVAILABLE` — estrategia sem decisao utilizavel (T41).
+- `PROTECTIVE_EXIT` — a protecao do lote agiu no tick (T44); a venda despachada tambem conta `SELL`.
 
 Para distinguir despacho de rejeicao sem efeito colateral escondido, `BuySignalHandler` e
 `SellSignalHandler` retornam `BuyOutcome`/`SellOutcome`; o registro fica centralizado no
@@ -159,6 +190,8 @@ texto da mensagem, recuperaveis por `{app="ctrade"} |= "transactionId=X"`.
 ## Validacao
 
 - `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/ProcessTradeSignalMockIntegrationTest.java`
+- `spring-application/src/test/java/com/marmitt/application/spring/bootstrap/PositionProtectionE2ETest.java`
+- `core/src/test/java/com/marmitt/core/domain/runner/PositionProtectionTest.java`
 - `core/src/test/java/com/marmitt/core/domain/runner/StrategyRunnerInvariantsTest.java`
 - `core/src/test/java/com/marmitt/core/domain/portfolio/GlobalBalanceInvariantsTest.java`
 - Comando recomendado para mudancas neste fluxo:

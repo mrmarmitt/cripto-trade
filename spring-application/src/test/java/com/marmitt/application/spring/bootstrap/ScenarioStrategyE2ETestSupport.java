@@ -307,7 +307,8 @@ abstract class ScenarioStrategyE2ETestSupport extends AbstractIntegrationTest {
         dump.append("deadLetters=").append(deadLetters).append(System.lineSeparator());
         dump.append("outcomes:");
         for (String decision : List.of("HOLD", "BUY", "SELL", "CANCEL",
-                "REJECTED_CAPITAL", "REJECTED_LOCK", "REJECTED_NO_POSITION", "REJECTED_POLICY")) {
+                "REJECTED_CAPITAL", "REJECTED_LOCK", "REJECTED_NO_POSITION", "REJECTED_POLICY",
+                "SAFE_MODE", "STRATEGY_UNAVAILABLE", "PROTECTIVE_EXIT")) {
             double count = signalEvaluatedCount(runnerId, decision);
             if (count > 0) {
                 dump.append(' ').append(decision).append('=').append(count);

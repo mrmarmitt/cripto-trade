@@ -6,12 +6,14 @@ import com.marmitt.application.spring.infrastructure.persistence.entity.RunnerTr
 import com.marmitt.application.spring.infrastructure.persistence.entity.RunnerTransactionMatchEntity;
 import com.marmitt.application.spring.infrastructure.persistence.entity.StrategyRunnerEntity;
 import com.marmitt.core.domain.runner.Position;
+import com.marmitt.core.domain.runner.PositionProtection;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.domain.runner.TransactionMatch;
 import com.marmitt.core.domain.shared.Fee;
 import com.marmitt.core.enums.FeeType;
 
+import java.time.Duration;
 import java.util.Collections;
 import java.util.Set;
 import java.util.stream.Collectors;
@@ -36,6 +38,9 @@ public class StrategyRunnerEntityMapper {
                 .maxAllocationPercent(domain.getMaxAllocationPercent())
                 .maxOpenPositions(domain.getMaxOpenPositions())
                 .maxPendingOrders(domain.getMaxPendingOrders())
+                .maxLossPercentPerLot(domain.getPositionProtection().maxLossPercentPerLot())
+                .maxHoldingSeconds(domain.getPositionProtection().maxHoldingDuration() != null
+                        ? domain.getPositionProtection().maxHoldingDuration().toSeconds() : null)
                 .dedicatedBudget(domain.getDedicatedBudget())
                 .isReconciling(domain.isReconciling())
                 .createdAt(domain.getCreatedAt())
@@ -63,6 +68,8 @@ public class StrategyRunnerEntityMapper {
                 entity.getMaxOpenPositions(),
                 entity.getMaxPendingOrders(),
                 entity.getDedicatedBudget(),
+                new PositionProtection(entity.getMaxLossPercentPerLot(),
+                        entity.getMaxHoldingSeconds() != null ? Duration.ofSeconds(entity.getMaxHoldingSeconds()) : null),
                 entity.isReconciling(),
                 entity.getCreatedAt(),
                 entity.getStatusChangedAt(),

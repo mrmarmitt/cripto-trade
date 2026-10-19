@@ -55,6 +55,7 @@ mecanica (spring) e do provider (adapter), ligadas por um port.
 | Decidir BUY/SELL/HOLD/CANCEL | `strategy` | `TradingStrategy` pura | `SimpleMovingAverageStrategy` |
 | Falar com estrategia fora do processo | `adapter-strategy-remote` (rede) + `core` (falha = HOLD, catalogo) | `StrategyEvaluationPort`, `RegisterRemoteStrategiesPort` | `RemoteStrategyClient` + `RegisterRemoteStrategiesUseCase` |
 | Marcar posicao a mercado / equity do portfolio | `core` | `LatestPricePort` (preco), `Position.getUnrealizedPnl` | `PortfolioMarkToMarket` (core) + `InMemoryLatestPriceRepository` (spring) |
+| Saida decidida pelo core sem a estrategia (stop do lote, liquidacao, fechar posicao) | `core` | `TradeIntentFactory.liquidationSignal` + ramo SELL normal; cancelamento por `CancelSignalHandler.cancelResting` | `PositionProtection` + `PositionProtectionHandler`, `SafeModeHandler` |
 | Normalizar quantidade/preco para filtros | `core` decide **quando**; adapter sabe **como** | `OrderQuantityNormalizerPort` | `OrderNormalizer` (core) + `BinanceOrderNormalizer` (adapter) |
 
 ### 1.2 Anti-padroes ja rejeitados neste projeto

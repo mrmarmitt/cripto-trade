@@ -32,7 +32,9 @@ class SafeModeHandlerTest {
 
     private final StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
     private final OrderDispatchPort orderDispatch = mock(OrderDispatchPort.class);
-    private final SafeModeHandler handler = new SafeModeHandler(repository, new TradeIntentFactory(), orderDispatch);
+    private final TradeIntentFactory intentFactory = new TradeIntentFactory();
+    private final SafeModeHandler handler = new SafeModeHandler(repository, intentFactory,
+            new CancelSignalHandler(repository, intentFactory, orderDispatch));
     private final StrategyRunner runner = runner();
 
     @Test
@@ -74,7 +76,7 @@ class SafeModeHandlerTest {
         assertEquals(free.getId(), sell.targetLotId());
         assertEquals(0, new BigDecimal("0.00099900").compareTo(sell.quantity()));
         assertEquals(SafeModeHandler.STRATEGY_NAME, sell.strategyName());
-        assertEquals(OrderType.MARKET, handler.liquidationOrderType());
+        assertEquals(OrderType.MARKET, intentFactory.liquidationOrderType());
     }
 
     private static StrategyRunner runner() {
@@ -90,6 +92,7 @@ class SafeModeHandlerTest {
         when(transaction.getId()).thenReturn(UUID.randomUUID());
         when(transaction.getClientOrderId()).thenReturn(clientOrderId);
         when(transaction.getOrderType()).thenReturn(orderType);
+        when(transaction.getStatus()).thenReturn(TransactionStatus.SUBMITTED);
         return transaction;
     }
 

@@ -60,6 +60,11 @@ public class StrategyRunnerEntity {
     private int maxOpenPositions;
     private int maxPendingOrders;
 
+    /** Proteção do lote (T44): fração em (0, 1) do custo. */
+    private BigDecimal maxLossPercentPerLot;
+    /** Proteção do lote (T44): idade máxima em segundos; null desliga. */
+    private Long maxHoldingSeconds;
+
     /** Null em modo SHARED. */
     private BigDecimal dedicatedBudget;
 

@@ -20,5 +20,10 @@ public enum SignalDecision {
     /** Tick conduzido pelo Safe Mode (CANCEL_ALL/PANIC_SELL): a estrategia nao foi consultada (T45). */
     SAFE_MODE,
     /** A estrategia nao produziu decisao utilizavel (falha, indisponivel, resposta invalida, velha) — T41. */
-    STRATEGY_UNAVAILABLE
+    STRATEGY_UNAVAILABLE,
+    /**
+     * A protecao do lote agiu no tick (venda MARKET ou cancelamento da SELL LIMIT que travava o lote) e
+     * a estrategia nao foi consultada — T44. A venda em si tambem conta como {@link #SELL}.
+     */
+    PROTECTIVE_EXIT
 }

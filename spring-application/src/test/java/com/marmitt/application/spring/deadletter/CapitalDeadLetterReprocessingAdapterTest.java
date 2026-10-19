@@ -5,6 +5,7 @@ import com.marmitt.core.application.reaction.ExecutionConfirmedReaction;
 import com.marmitt.core.application.reaction.MarginReleasedReaction;
 import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
+import com.marmitt.core.domain.runner.PositionProtection;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.shared.Fee;
 import com.marmitt.core.dto.capital.ExecutionConfirmation;
@@ -248,6 +249,7 @@ class CapitalDeadLetterReprocessingAdapterTest {
                 1,
                 1,
                 null,
+                PositionProtection.defaults(),
                 false,
                 Instant.now(),
                 Instant.now(),

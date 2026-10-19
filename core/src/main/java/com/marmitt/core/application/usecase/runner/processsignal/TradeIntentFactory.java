@@ -1,6 +1,7 @@
 package com.marmitt.core.application.usecase.runner.processsignal;
 
 import com.marmitt.core.domain.runner.ClientOrderId;
+import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.capital.BuyExecutionContext;
@@ -17,6 +18,8 @@ import com.marmitt.core.enums.TransactionType;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.Instant;
+import java.util.Map;
 
 /**
  * Fabrica responsavel por construir todos os objetos que representam a "intencao de trade"
@@ -127,6 +130,23 @@ class TradeIntentFactory {
                 runner,
                 precomputedExposure
         );
+    }
+
+    /**
+     * Sinal de venda do lote inteiro, executado a {@link #liquidationOrderType()}. Fonte unica das saidas
+     * que o core decide sem a estrategia: Safe Mode PANIC_SELL (T45), fechar posicao pelo admin (T49) e
+     * protecao do lote (T44). Segue o pipeline normal de SELL (normalizacao, lock, persistencia, dispatch).
+     *
+     * @param source nome registrado como estrategia de origem da transacao
+     */
+    public StrategyOutputDto liquidationSignal(String source, Position position, String reasoning) {
+        return new StrategyOutputDto(source, TradingAction.SHOULD_SELL, BigDecimal.ONE,
+                position.getQuantity(), null, position.getId(), null, reasoning, Instant.now(), Map.of());
+    }
+
+    /** Saida decidida pelo core vende a mercado: certeza de execucao acima de preco (T45, T44). */
+    public OrderType liquidationOrderType() {
+        return OrderType.MARKET;
     }
 
     /**
