@@ -55,7 +55,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T47 | Um caminho por operação (limpeza pós-T46)                       | Baixa | Claude | Concluído |
 | T48 | Proteção LIMIT na liquidação do PANIC_SELL                      | Média | Claude | Pendente  |
 | T49 | Ciclo de vida do runner por API (start, resume, terminate)      | Alta  | Claude | Concluído |
-| T50 | Limites de risco pré-trade (posições, ordens, preço, utilização) | Média | Claude | Pendente  |
+| T50 | Limites de risco pré-trade (posições, ordens, preço, utilização) | Média | Claude | Concluído |
 | T51 | Observabilidade de capital, Safe Mode e lifecycle                | Baixa | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 

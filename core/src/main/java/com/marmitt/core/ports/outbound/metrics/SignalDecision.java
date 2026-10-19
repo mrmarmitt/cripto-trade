@@ -17,6 +17,12 @@ public enum SignalDecision {
     REJECTED_LOCK,
     REJECTED_NO_POSITION,
     REJECTED_POLICY,
+    /** {@code limitPrice} a mais de 10% do preco do tick (T50). */
+    REJECTED_PRICE_DEVIATION,
+    /** BUY com o runner no limite {@code maxOpenPositions} (T50). */
+    REJECTED_MAX_POSITIONS,
+    /** BUY com o runner no limite {@code maxPendingOrders} de ordens em voo (T50). */
+    REJECTED_MAX_PENDING,
     /** Tick conduzido pelo Safe Mode (CANCEL_ALL/PANIC_SELL): a estrategia nao foi consultada (T45). */
     SAFE_MODE,
     /** A estrategia nao produziu decisao utilizavel (falha, indisponivel, resposta invalida, velha) — T41. */

@@ -5,11 +5,12 @@ import java.math.BigDecimal;
 /**
  * Parâmetros compartilhados das estratégias de cenário para testnet (T35).
  *
- * <p>Offsets são <b>frações sobre o preço de mercado corrente</b> (ex.: {@code 0.50} = 50%),
+ * <p>Offsets são <b>frações sobre o preço de mercado corrente</b> (ex.: {@code 0.05} = 5%),
  * nunca valores absolutos, para adaptarem-se a qualquer símbolo/preço. Os defaults devem caber
  * na banda do filtro {@code PERCENT_PRICE}/{@code PERCENT_PRICE_BY_SIDE} do símbolo (ver T35/T6):
  * o offset de "descansar" precisa afastar o suficiente para a ordem não preencher, mas dentro da
- * banda; o offset marketable precisa cruzar o spread.
+ * banda; o offset marketable precisa cruzar o spread. Os dois ficam abaixo do desvio maximo de 10%
+ * entre o preco da ordem e o do tick, acima do qual o core descarta o sinal (T50).
  */
 public record ScenarioStrategyConfig(
         BigDecimal restingOffset,        // afastamento p/ a ordem descansar sem preencher (0 < x < 1)
@@ -45,7 +46,7 @@ public record ScenarioStrategyConfig(
      */
     public static ScenarioStrategyConfig defaultConfig() {
         return new ScenarioStrategyConfig(
-                new BigDecimal("0.50"),   // 50% longe do mercado — descansa sem preencher
+                new BigDecimal("0.05"),   // 5% longe do mercado — descansa sem preencher (T50: < 10%)
                 new BigDecimal("0.02"),   // 2% além do mercado — marketable (cruza o spread)
                 new BigDecimal("0.001"),  // 0.001 unidade por ordem
                 new BigDecimal("2"),      // 2x o capital disponível

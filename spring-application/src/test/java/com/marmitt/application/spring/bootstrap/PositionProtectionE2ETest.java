@@ -170,7 +170,7 @@ class PositionProtectionE2ETest extends ScenarioStrategyE2ETestSupport {
             if (restingSell) {
                 return StrategyOutputDto.sellAt(getStrategyName(), BigDecimal.ONE,
                         context.openLots().getFirst().availableQuantity(),
-                        input.currentPrice().multiply(new BigDecimal("1.5")).setScale(2, RoundingMode.HALF_UP),
+                        input.currentPrice().multiply(new BigDecimal("1.05")).setScale(2, RoundingMode.HALF_UP),
                         "t44: SELL descansando acima do mercado");
             }
             return StrategyOutputDto.hold(getStrategyName(), "t44: sempre HOLD com lote aberto");

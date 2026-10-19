@@ -1677,7 +1677,7 @@ Esta seção detalha **como implementar** a alocação de capital, a validação
 
 ### 7.1 Cadeia de Validação do Capital Request
 
-> **Estado (T39, 2026-10-16):** Passo 2 implementado como releitura de `canAcceptSignals` na transação; passo 3 descartado (reserva na mesma transação do persist); passo 4 só tem `maxAllocationPercent` — `maxOpenPositions`/`maxPendingOrders` pendentes na **T50**.
+> **Estado (T39, 2026-10-16):** Passo 2 implementado como releitura de `canAcceptSignals` na transação; passo 3 descartado (reserva na mesma transação do persist); passo 4: `maxAllocationPercent` na reserva; `maxOpenPositions`/`maxPendingOrders` aplicados ao BUY antes do persist pelo `PreTradeRiskPolicy` (**T50**, 2026-10-19).
 
 Quando o Runner invoca `ReserveCapitalPort.reserve()`, o Portfolio executa uma cadeia de validações ordenada. A falha em qualquer passo resulta em rejeição imediata — não há "continue apesar do erro".
 
@@ -1783,7 +1783,7 @@ Este excedente é devolvido ao `AvailableBalance` como parte do `ConfirmExecutio
 
 ### 7.3 Validação Pre-Reserve (Runner-Side)
 
-> **Estado (T39, 2026-10-16):** V2 (confiança mínima) descartada; V3/V4 acontecem como normalização ao `stepSize` no core e `OrderFilterValidator` no adapter Binance; V5 (sanidade de preço) pendente na **T50**.
+> **Estado (T39, 2026-10-16):** V2 (confiança mínima) descartada; V3/V4 acontecem como normalização ao `stepSize` no core e `OrderFilterValidator` no adapter Binance; V5 (sanidade de preço) aplicada pelo `PreTradeRiskPolicy` (**T50**): `limitPrice` a mais de 10% do tick é descartado em BUY e SELL. O gate de utilização global (BLUEPRINT §11.2.D) foi descartado.
 
 Antes de invocar `ReserveCapitalPort.reserve()`, o Runner executa validações locais para evitar chamadas desnecessárias ao Portfolio.
 
@@ -1830,7 +1830,7 @@ O Runner valida regras de negócio da strategy e da exchange. O Portfolio valida
 
 ### 7.4 Limites de Exposição por Runner
 
-> **Estado (T39, 2026-10-16):** Só `maxAllocationPercent` é aplicado. `maxOpenPositions`/`maxPendingOrders`: **T50**; cancel rate: **T51**; alteração em runtime: `PATCH /api/admin/runners/{id}` (T49). A exposição é calculada por consulta, não por `MarginAccount`.
+> **Estado (T39, 2026-10-16):** `maxAllocationPercent` na reserva; `maxOpenPositions`/`maxPendingOrders` no BUY (**T50**); cancel rate: **T51**; alteração em runtime: `PATCH /api/admin/runners/{id}` (T49). A exposição é calculada por consulta, não por `MarginAccount`.
 
 > **Referência:** Blueprint Seção 11.2.B.
 

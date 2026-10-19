@@ -39,8 +39,8 @@ class ScenarioFilledBuyRestingSellCancelE2ETest extends ScenarioStrategyE2ETestS
                 "A BUY marketable deve preencher." + System.lineSeparator() + stateDump(runnerId));
         assertEquals("CANCELED", sells.getFirst().status(),
                 "A SELL que descansa deve terminar cancelada." + System.lineSeparator() + stateDump(runnerId));
-        assertEquals(0, sells.getFirst().price().compareTo(new BigDecimal("97500.00000000")),
-                "A SELL deve descansar 50% acima do mercado (restingOffset)");
+        assertEquals(0, sells.getFirst().price().compareTo(new BigDecimal("68250.00000000")),
+                "A SELL deve descansar 5% acima do mercado (restingOffset)");
 
         assertFalse(hasLockedPosition(runnerId),
                 "O cancelamento da SELL deve liberar o lock da posicao."

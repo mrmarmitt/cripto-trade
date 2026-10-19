@@ -22,6 +22,7 @@ import java.util.UUID;
  * <ul>
  *   <li>{@link RunnerSignalPolicy}: para verificar se o runner SINGLE ja tem posicao
  *       aberta ou ordem em voo antes de aceitar um novo BUY.</li>
+ *   <li>{@link PreTradeRiskPolicy}: limites {@code maxOpenPositions}/{@code maxPendingOrders} (T50).</li>
  *   <li>{@link CapitalReservationPolicy}: para calcular se o novo BUY ultrapassaria
  *       o limite de alocacao maxima ({@code maxAllocationPercent}) do runner.</li>
  * </ul>
@@ -41,7 +42,7 @@ class RunnerExposureService {
     /**
      * Calcula o valor financeiro total em voo para o runner.
      * Usado como fallback quando o snapshot nao foi pre-carregado
-     * (ex: runners com politica MULTIPLE que nao precisam do {@code hasOpenOrInFlight}).
+     * (ex.: reserva sem snapshot pre-carregado).
      */
     public BigDecimal calculateInFlightExposure(UUID runnerId) {
         List<Transaction> inflight = strategyRunnerRepository.findByRunnerIdAndStatuses(runnerId, TransactionStatus.IN_FLIGHT);
@@ -66,19 +67,23 @@ class RunnerExposureService {
                 .map(Transaction::getTotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
-        boolean hasOpenOrInFlight = !openPositions.isEmpty() || !inFlight.isEmpty();
-        return new ExposureSnapshot(hasOpenOrInFlight, inFlightExposure);
+        return new ExposureSnapshot(openPositions.size(), inFlight.size(), inFlightExposure);
     }
 
     /**
      * Foto do estado de exposicao do runner no momento do tick.
      *
-     * @param hasOpenOrInFlight {@code true} se existe ao menos uma posicao aberta ou
-     *                          ordem em voo — usado pela policy SINGLE para bloquear novo BUY
-     * @param inFlightExposure  somatorio dos valores totais das ordens em voo —
-     *                          usado pela {@link CapitalReservationPolicy} para calcular
-     *                          se o novo BUY ultrapassa o limite de alocacao do runner
+     * @param openPositions    posicoes abertas — limite {@code maxOpenPositions} (T50)
+     * @param inFlightOrders   ordens em voo (PENDING, SUBMITTED, PARTIAL) — limite {@code maxPendingOrders} (T50)
+     * @param inFlightExposure somatorio dos valores totais das ordens em voo —
+     *                         usado pela {@link CapitalReservationPolicy} para calcular
+     *                         se o novo BUY ultrapassa o limite de alocacao do runner
      */
-    public record ExposureSnapshot(boolean hasOpenOrInFlight, BigDecimal inFlightExposure) {
+    public record ExposureSnapshot(int openPositions, int inFlightOrders, BigDecimal inFlightExposure) {
+
+        /** Ao menos uma posicao aberta ou ordem em voo — usado pela politica SINGLE. */
+        public boolean hasOpenOrInFlight() {
+            return openPositions > 0 || inFlightOrders > 0;
+        }
     }
 }
