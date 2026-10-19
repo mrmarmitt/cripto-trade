@@ -123,6 +123,25 @@ exchange:
       wait-duration-in-open-state-ms: 60000
       permitted-number-of-calls-in-half-open-state: 3
 
+safe-mode:
+  auto:
+    # T25: gatilhos automaticos (decisao de 2026-10-19). Portfolio: HALT, retomada sempre manual.
+    # Runner: halt so do runner, retomada manual pelo resume. enabled=false desliga todos (o drawdown
+    # da T43 tem chave propria em portfolio.circuit-breaker).
+    enabled: true
+    evaluation-interval-ms: 30000
+    dlq:
+      enabled: true
+      threshold: 3
+    balance-divergence:
+      enabled: true
+    watchdog:
+      enabled: true
+      max-stuck-cycles: 3
+    rejections:
+      enabled: true
+      max-consecutive: 5
+
 portfolio:
   circuit-breaker:
     # T43: HALT automatico quando o equity (available + reserved + PnL flutuante) cai mais que

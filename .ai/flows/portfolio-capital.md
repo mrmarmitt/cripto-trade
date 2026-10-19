@@ -74,7 +74,24 @@ normal do CANCELED/FILLED, sem atalho. Runners fora de operacao (kill switch) na
 2. Grava a amostra em `equity_snapshots`; pico = maior amostra desde `agora - 24h` ou desde o ultimo
    reset manual para NORMAL, o que for mais recente.
 3. Em NORMAL, `(pico - equity) / pico > max-drawdown-percent` (10%) aciona HALT `AUTOMATIC` pelo
-   `ManageSafeModePort`, com motivo `MAX_DRAWDOWN_EXCEEDED`, metrica e Discord. Sem retomada automatica.
+   `AutomaticSafeModeTrigger`, com motivo `MAX_DRAWDOWN_EXCEEDED`, metrica e Discord. Sem retomada automatica.
+
+## Gatilhos Automaticos (T25)
+
+Todo HALT automatico do portfolio passa pelo `AutomaticSafeModeTrigger` (core): so age com o portfolio
+em NORMAL (sem repetir mudanca, metrica, log ou alerta), muda o nivel pelo `ManageSafeModePort` com
+origem `AUTOMATIC`, conta `circuit_breaker.activations.total{reason}` e notifica o Discord. Gatilhos
+(`SafeModeTrigger`), cada um desligavel em `safe-mode.auto.*`:
+
+- `MAX_DRAWDOWN_EXCEEDED` — drawdown 24h (T43, chave propria).
+- `DLQ_THRESHOLD` — `EvaluateOperationalTriggersUseCase` (a cada 30s): >= 3 entradas nao resolvidas.
+- `BALANCE_DIVERGENCE` — sanidade de saldo do boot com `FAIL_DEFICIT` (`RunBootSequenceUseCase`).
+- `WATCHDOG_STUCK` — mesma transacao `FAILED` em 3 ciclos seguidos do watchdog
+  (`RecoverStaleTransactionsUseCase`, contagem em memoria).
+
+Por runner, fora do Safe Mode: `ConsecutiveRejectionGuard` (na `OrderConciliationUseCase`) para o runner
+apos 5 ordens distintas rejeitadas seguidas (`HaltRunnerPort`, alerta `RUNNER_AUTO_HALTED`); ordem
+aceita zera a sequencia. Retomada sempre manual (portfolio pela API do Safe Mode, runner pelo `resume`).
 
 ## Reserva Para BUY
 

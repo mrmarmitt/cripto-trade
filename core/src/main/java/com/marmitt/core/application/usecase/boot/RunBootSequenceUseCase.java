@@ -2,6 +2,7 @@ package com.marmitt.core.application.usecase.boot;
 
 import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
 import com.marmitt.core.application.usecase.boot.phase2.PortfolioZombieDetectionUseCase;
+import com.marmitt.core.application.usecase.portfolio.AutomaticSafeModeTrigger;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
 import com.marmitt.core.domain.portfolio.Portfolio;
@@ -17,6 +18,7 @@ import com.marmitt.core.enums.BootFailureMode;
 import com.marmitt.core.enums.PortfolioSanityStatus;
 import com.marmitt.core.enums.PortfolioZombieDetectionStatus;
 import com.marmitt.core.enums.RunnerStatus;
+import com.marmitt.core.enums.SafeModeTrigger;
 import com.marmitt.core.ports.inbound.boot.RunBootSequencePort;
 import com.marmitt.core.ports.outbound.boot.BootExecutionObserverPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
@@ -43,6 +45,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
     private final PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase;
     private final DeadLetterEntryRepositoryPort deadLetterEntryRepository;
     private final RunnerBootRecoveryUseCase runnerBootRecoveryUseCase;
+    private final AutomaticSafeModeTrigger safeModeTrigger;
 
     public RunBootSequenceUseCase(PortfolioRepositoryPort portfolioRepository,
                                   StrategyRunnerRepositoryPort strategyRunnerRepository,
@@ -50,7 +53,8 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
                                   PortfolioBootSanityUseCase portfolioBootSanityUseCase,
                                   PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase,
                                   DeadLetterEntryRepositoryPort deadLetterEntryRepository,
-                                  RunnerBootRecoveryUseCase runnerBootRecoveryUseCase) {
+                                  RunnerBootRecoveryUseCase runnerBootRecoveryUseCase,
+                                  AutomaticSafeModeTrigger safeModeTrigger) {
         this.portfolioRepository = portfolioRepository;
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.exchangeAdapterRepository = exchangeAdapterRepository;
@@ -58,6 +62,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
         this.portfolioZombieDetectionUseCase = portfolioZombieDetectionUseCase;
         this.deadLetterEntryRepository = deadLetterEntryRepository;
         this.runnerBootRecoveryUseCase = runnerBootRecoveryUseCase;
+        this.safeModeTrigger = safeModeTrigger;
     }
 
     @Override
@@ -170,10 +175,17 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
                     case SKIPPED -> log.warn(
                             "bootSequence.phase2.sanity: portfolio={} exchange={} status={} code={} message={}",
                             result.portfolioId(), result.exchangeId(), result.status(), result.code(), result.message());
-                    case FAIL_DEFICIT -> log.error(
-                            "bootSequence.phase2.sanity: portfolio={} exchange={} status={} code={} message={} localTotal={} exchangeTotal={} signedDelta={} deviation={}",
-                            result.portfolioId(), result.exchangeId(), result.status(), result.code(), result.message(),
-                            result.localTotal(), result.exchangeTotal(), result.signedDelta(), result.absoluteDeviation());
+                    case FAIL_DEFICIT -> {
+                        log.error(
+                                "bootSequence.phase2.sanity: portfolio={} exchange={} status={} code={} message={} localTotal={} exchangeTotal={} signedDelta={} deviation={}",
+                                result.portfolioId(), result.exchangeId(), result.status(), result.code(), result.message(),
+                                result.localTotal(), result.exchangeTotal(), result.signedDelta(), result.absoluteDeviation());
+                        // T25: saldo local maior que o da exchange - operar sobre capital inexistente. HALT antes
+                        // de qualquer BUY (persistido, vale tambem se o fail-fast abortar o boot a seguir).
+                        safeModeTrigger.activate(result.portfolioId(), SafeModeTrigger.BALANCE_DIVERGENCE,
+                                "exchange=" + result.exchangeId() + " localTotal=" + result.localTotal()
+                                        + " exchangeTotal=" + result.exchangeTotal() + " signedDelta=" + result.signedDelta());
+                    }
                     case FAILED -> log.warn(
                             "bootSequence.phase2.sanity: portfolio={} exchange={} status={} code={} message={}",
                             result.portfolioId(), result.exchangeId(), result.status(), result.code(), result.message());

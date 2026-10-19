@@ -3,15 +3,11 @@ package com.marmitt.core.application.usecase.portfolio;
 import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.Position;
-import com.marmitt.core.dto.notification.ErrorNotificationEvent;
-import com.marmitt.core.dto.portfolio.request.ChangeSafeModeRequest;
-import com.marmitt.core.enums.SafeModeOrigin;
 import com.marmitt.core.enums.SafeModeStatus;
+import com.marmitt.core.enums.SafeModeTrigger;
 import com.marmitt.core.ports.inbound.portfolio.EvaluateDrawdownPort;
-import com.marmitt.core.ports.inbound.portfolio.ManageSafeModePort;
 import com.marmitt.core.ports.outbound.marketdata.LatestPricePort;
 import com.marmitt.core.ports.outbound.metrics.CircuitBreakerMetricsPort;
-import com.marmitt.core.ports.outbound.notification.ErrorNotificationPort;
 import com.marmitt.core.ports.outbound.repository.EquitySnapshotRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
@@ -39,7 +35,7 @@ import java.util.Optional;
  *       {@code agora - 24h} e o ultimo reset manual (descida para NORMAL). Sem isso, logo apos o reset
  *       o pico antigo reacionaria o HALT.</li>
  *   <li>Se o portfolio esta em NORMAL e {@code (pico - equity) / pico > maxDrawdownPercent}, aciona
- *       HALT automatico pelo {@link ManageSafeModePort} e notifica o operador. Nao ha retomada
+ *       HALT automatico pelo {@link AutomaticSafeModeTrigger} (auditoria, metrica e alerta). Nao ha retomada
  *       automatica (Blueprint 11.1.C).</li>
  * </ol>
  */
@@ -47,15 +43,13 @@ import java.util.Optional;
 public class EvaluateDrawdownUseCase implements EvaluateDrawdownPort {
 
     static final Duration WINDOW = Duration.ofHours(24);
-    static final String REASON = "MAX_DRAWDOWN_EXCEEDED";
     private static final BigDecimal WARNING_FRACTION = new BigDecimal("0.5");
 
     private final PortfolioRepositoryPort portfolioRepository;
     private final GlobalBalanceRepositoryPort globalBalanceRepository;
     private final PortfolioMarkToMarket markToMarket;
     private final EquitySnapshotRepositoryPort equitySnapshots;
-    private final ManageSafeModePort manageSafeMode;
-    private final ErrorNotificationPort notification;
+    private final AutomaticSafeModeTrigger safeModeTrigger;
     private final CircuitBreakerMetricsPort metrics;
     private final BigDecimal maxDrawdownPercent;
     private final Clock clock;
@@ -65,8 +59,7 @@ public class EvaluateDrawdownUseCase implements EvaluateDrawdownPort {
                                    StrategyRunnerRepositoryPort strategyRunnerRepository,
                                    LatestPricePort latestPrices,
                                    EquitySnapshotRepositoryPort equitySnapshots,
-                                   ManageSafeModePort manageSafeMode,
-                                   ErrorNotificationPort notification,
+                                   AutomaticSafeModeTrigger safeModeTrigger,
                                    CircuitBreakerMetricsPort metrics,
                                    BigDecimal maxDrawdownPercent,
                                    Clock clock) {
@@ -77,8 +70,7 @@ public class EvaluateDrawdownUseCase implements EvaluateDrawdownPort {
         this.globalBalanceRepository = globalBalanceRepository;
         this.markToMarket = new PortfolioMarkToMarket(strategyRunnerRepository, latestPrices);
         this.equitySnapshots = equitySnapshots;
-        this.manageSafeMode = manageSafeMode;
-        this.notification = notification;
+        this.safeModeTrigger = safeModeTrigger;
         this.metrics = metrics;
         this.maxDrawdownPercent = maxDrawdownPercent;
         this.clock = clock;
@@ -158,14 +150,8 @@ public class EvaluateDrawdownUseCase implements EvaluateDrawdownPort {
     }
 
     private void trip(Portfolio portfolio, BigDecimal equity, BigDecimal peak, BigDecimal drawdown) {
-        String details = REASON + " drawdown=" + drawdown + " limit=" + maxDrawdownPercent
-                + " peak=" + peak + " equity=" + equity;
-        manageSafeMode.change(portfolio.getId(), SafeModeOrigin.AUTOMATIC,
-                new ChangeSafeModeRequest(SafeModeStatus.HALT, details, false));
-        metrics.recordActivation(portfolio.getId(), REASON);
-        log.error("drawdown: HALT activated portfolioId={} {}", portfolio.getId(), details);
-        notification.notifyError(ErrorNotificationEvent.circuitBreakerTriggered(
-                "Drawdown limit exceeded - portfolio " + portfolio.getName() + " in HALT",
-                details, clock.instant()));
+        safeModeTrigger.activate(portfolio.getId(), SafeModeTrigger.MAX_DRAWDOWN_EXCEEDED,
+                "drawdown=" + drawdown + " limit=" + maxDrawdownPercent + " peak=" + peak + " equity=" + equity);
     }
+
 }

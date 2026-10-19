@@ -67,6 +67,25 @@ PUT /api/admin/portfolios/{id}/safe-mode
   símbolo; se persistir, o símbolo da posição não está recebendo market data.
 - Para desligar (ex.: teste controlado): `portfolio.circuit-breaker.enabled=false`.
 
+## Gatilhos automáticos (T25)
+
+Além do drawdown (T43), o portfolio entra em **HALT automático** (origem `AUTOMATIC`, alerta Discord
+`[CIRCUIT_BREAKER_TRIGGERED]`, `circuit_breaker_activations_total{reason}`) quando:
+
+| Motivo | Condição | O que conferir antes de retomar |
+|---|---|---|
+| `DLQ_THRESHOLD` | ≥ 3 entradas não resolvidas na DLQ do portfolio | `GET /api/dead-letters`; reprocessar ou resolver as entradas |
+| `BALANCE_DIVERGENCE` | Sanidade do boot com saldo local maior que o da exchange (`FAIL_DEFICIT`) | Comparar saldo da conta com `global_balances`; corrigir a origem da diferença |
+| `WATCHDOG_STUCK` | Mesma transação sem resolver em 3 ciclos do watchdog (~3 min) | Ordem na exchange pelo `clientOrderId`; disponibilidade da exchange (T24) |
+
+Runner (não o portfolio): **5 ordens rejeitadas seguidas** param só aquele runner (alerta
+`[RUNNER_AUTO_HALTED]` com o último motivo de rejeição). Corrigir a causa (saldo, filtros, credencial) e
+retomar com `POST /api/admin/runners/{id}/resume`.
+
+- Retomada sempre manual. Gatilho não repete com o portfolio já em Safe Mode.
+- Configuração: `safe-mode.auto.*` (cada gatilho tem `enabled`; `safe-mode.auto.enabled=false` desliga
+  todos os da T25 sem afetar o Safe Mode manual nem o drawdown).
+
 ## Ciclo de vida do runner (T49)
 
 Endpoints protegidos pelo `admin.api.key`:

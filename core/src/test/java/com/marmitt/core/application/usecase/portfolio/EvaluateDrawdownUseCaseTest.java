@@ -9,6 +9,7 @@ import com.marmitt.core.dto.portfolio.request.ChangeSafeModeRequest;
 import com.marmitt.core.enums.CapitalPoolingMode;
 import com.marmitt.core.enums.SafeModeOrigin;
 import com.marmitt.core.enums.SafeModeStatus;
+import com.marmitt.core.enums.SafeModeTrigger;
 import com.marmitt.core.ports.inbound.portfolio.ManageSafeModePort;
 import com.marmitt.core.ports.outbound.marketdata.LatestPricePort;
 import com.marmitt.core.ports.outbound.metrics.CircuitBreakerMetricsPort;
@@ -28,6 +29,7 @@ import java.time.Instant;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.EnumSet;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -193,8 +195,10 @@ class EvaluateDrawdownUseCaseTest {
     // ---------------------------------------------------------------- setup
 
     private EvaluateDrawdownUseCase useCase() {
+        AutomaticSafeModeTrigger trigger = new AutomaticSafeModeTrigger(portfolioRepository, manageSafeMode, metrics,
+                notification, clock, EnumSet.allOf(SafeModeTrigger.class));
         return new EvaluateDrawdownUseCase(portfolioRepository, balanceRepository, runnerRepository, prices,
-                snapshots, manageSafeMode, notification, metrics, LIMIT, clock);
+                snapshots, trigger, metrics, LIMIT, clock);
     }
 
     private void portfolioAt(SafeModeStatus status, Instant changedAt) {
@@ -202,6 +206,7 @@ class EvaluateDrawdownUseCaseTest {
                 CapitalPoolingMode.SHARED, changedAt == null ? null : SafeModeOrigin.MANUAL,
                 changedAt == null ? null : "setup", changedAt, 0L);
         when(portfolioRepository.findAll()).thenReturn(List.of(portfolio));
+        when(portfolioRepository.findById(portfolioId)).thenReturn(Optional.of(portfolio));
     }
 
     private void balance(String available, String reserved) {

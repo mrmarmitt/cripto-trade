@@ -36,6 +36,9 @@ public interface DeadLetterEntryJdbcRepository extends CrudRepository<DeadLetter
             """)
     boolean existsUnresolvedByPortfolioId(@Param("portfolioId") UUID portfolioId);
 
+    @Query("SELECT COUNT(*) FROM dead_letter_entries WHERE portfolio_id = :portfolioId AND is_resolved = FALSE")
+    long countUnresolvedByPortfolioId(@Param("portfolioId") UUID portfolioId);
+
     @Query("""
             SELECT EXISTS(
                 SELECT 1
