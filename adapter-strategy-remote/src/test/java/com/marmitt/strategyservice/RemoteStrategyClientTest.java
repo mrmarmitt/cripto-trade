@@ -27,6 +27,7 @@ import java.util.function.Function;
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * T41: cliente do contrato — mapeamento, validacao, sem retry, decisao velha e sequence por runner.
@@ -66,12 +67,44 @@ class RemoteStrategyClientTest {
         client.evaluate(REF, input(), context(runnerA));
         client.evaluate(REF, input(), context(runnerB));
 
+        JsonNode first = objectMapper.readTree(http.calls.get(0).body());
         JsonNode second = objectMapper.readTree(http.calls.get(1).body());
         JsonNode third = objectMapper.readTree(http.calls.get(2).body());
-        assertEquals(2, second.path("sequence").asLong());
-        assertEquals(runnerA + ":" + TICK.toEpochMilli() + ":2", second.path("tickId").asText());
-        assertEquals(1, third.path("sequence").asLong(), "Cada runner tem o seu contador");
+        long firstSequence = first.path("sequence").asLong();
+        assertEquals(firstSequence + 1, second.path("sequence").asLong(), "Estritamente crescente por runner");
+        assertEquals(runnerA + ":" + TICK.toEpochMilli() + ":" + (firstSequence + 1), second.path("tickId").asText());
+        assertEquals(firstSequence, third.path("sequence").asLong(), "Cada runner tem o seu contador");
         assertEquals("65000.50", second.path("input").path("currentPrice").asText(), "Decimal trafega como string");
+    }
+
+    @Test
+    void sequenceKeepsGrowingAcrossAClientRestart() throws Exception {
+        http.reply = request -> new StrategyServiceHttpPort.Response(200, BUY);
+        UUID runner = UUID.randomUUID();
+        RemoteStrategyClient beforeRestart = client(Duration.ofSeconds(1));
+        for (int i = 0; i < 5; i++) {
+            beforeRestart.evaluate(REF, input(), context(runner));
+        }
+        long lastBeforeRestart = objectMapper.readTree(http.calls.getLast().body()).path("sequence").asLong();
+
+        // ctrade reinicia um segundo depois: contador em memoria recomeca, o servico guardou o anterior.
+        RemoteStrategyClient afterRestart = new RemoteStrategyClient(http, objectMapper, endpoints(),
+                Duration.ofSeconds(5), Clock.fixed(TICK.plusSeconds(1), ZoneOffset.UTC));
+        afterRestart.evaluate(REF, input(), context(runner));
+
+        long firstAfterRestart = objectMapper.readTree(http.calls.getLast().body()).path("sequence").asLong();
+        assertTrue(firstAfterRestart > lastBeforeRestart,
+                "Depois do restart o sequence continua acima do ultimo visto pelo servico");
+    }
+
+    @Test
+    void nullMetaIsAnInvalidResponse() {
+        RemoteStrategyClient client = client(Duration.ofSeconds(1));
+        for (String body : new String[]{"null", "[null]"}) {
+            http.reply = request -> new StrategyServiceHttpPort.Response(200, body);
+            StrategyUnavailableException e = assertThrows(StrategyUnavailableException.class, () -> client.describe(REF));
+            assertEquals(Reason.INVALID_RESPONSE, e.reason(), body);
+        }
     }
 
     @Test

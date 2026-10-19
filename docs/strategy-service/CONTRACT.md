@@ -81,8 +81,9 @@ Strings `date-time` (`2026-07-03T14:22:05.123Z`). Sem epoch, sem timezone local.
   (ver "Estado, warm-up e readiness").
 - `tickId` — identificador opaco do tick (string), único por runner. Mesma `tickId` ⇒ mesma decisão
   (ver "Entrega e idempotência").
-- `sequence` — inteiro monotônico crescente por runner. A app só acrescenta ao warm-up um tick com
-  `sequence` maior que o último visto daquele runner.
+- `sequence` — inteiro monotônico crescente por runner, **não contíguo**. A app só acrescenta ao
+  warm-up um tick com `sequence` maior que o último visto daquele runner. O ctrade o ancora no relógio
+  (microssegundos), então ele continua crescente depois de um restart do ctrade sem estado persistido.
 - `input` (`MarketInput`) — dados do tick. `currentPrice` é obrigatório e positivo; os demais preços
   são opcionais. A validação semântica rica (spread, faixa diária, idade do dado) é do ctrade — a app
   recebe o dado já aceito.

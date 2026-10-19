@@ -16,6 +16,7 @@ import java.io.IOException;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
@@ -31,7 +32,10 @@ import java.util.concurrent.atomic.AtomicLong;
  *   <li><b>Sem retry</b> (T40): qualquer falha vira {@link StrategyUnavailableException} e o tick é
  *       HOLD; o próximo tick segue normalmente.</li>
  *   <li><b>{@code tickId}/{@code sequence} por runner:</b> {@code sequence} cresce a cada chamada do
- *       runner; {@code tickId} = runner + instante do tick + sequence.</li>
+ *       runner e parte do relogio em microssegundos ({@code max(anterior + 1, agora em µs)}): continua
+ *       crescente depois de um restart do ctrade sem precisar persistir o contador — um servico que
+ *       guarda o ultimo valor visto nao rejeita os ticks novos. {@code tickId} = runner + instante do
+ *       tick + sequence.</li>
  *   <li><b>Resposta validada</b> contra o contrato antes de virar decisão ({@link DecisionValidator}).</li>
  *   <li><b>Decisão velha</b> ({@code agora − input.timestamp > maxDecisionAge}) é descartada.</li>
  * </ul>
@@ -60,7 +64,7 @@ public class RemoteStrategyClient implements StrategyEvaluationPort {
     @Override
     public StrategyOutputDto evaluate(UUID strategyRef, StrategyInputDto input, StrategyContextDto context) {
         RemoteStrategyEndpoint endpoint = endpoint(strategyRef);
-        long sequence = sequenceByRunner.computeIfAbsent(context.runnerId(), id -> new AtomicLong()).incrementAndGet();
+        long sequence = nextSequence(context.runnerId());
         String tickId = context.runnerId() + ":" + input.timestamp().toEpochMilli() + ":" + sequence;
         String body = write(StrategyContractMapper.toRequest(strategyRef, tickId, sequence, input, context));
 
@@ -82,14 +86,28 @@ public class RemoteStrategyClient implements StrategyEvaluationPort {
         return StrategyContractMapper.toCore(decision);
     }
 
+    /**
+     * Proximo {@code sequence} do runner: estritamente crescente na vida do cliente e ancorado no
+     * relogio, para que um restart do ctrade (contador zerado em memoria) nao volte abaixo do ultimo
+     * valor que o servico viu. Nao precisa ser contiguo.
+     */
+    private long nextSequence(UUID runnerId) {
+        long nowMicros = ChronoUnit.MICROS.between(Instant.EPOCH, Instant.now(clock));
+        return sequenceByRunner.computeIfAbsent(runnerId, id -> new AtomicLong())
+                .updateAndGet(previous -> Math.max(previous + 1, nowMicros));
+    }
+
     @Override
     public RemoteStrategyIdentity describe(UUID strategyRef) {
         RemoteStrategyEndpoint endpoint = endpoint(strategyRef);
         StrategyServiceHttpPort.Response response = call(() -> http.get(
                 endpoint.baseUrl() + "/meta?strategyRef=" + strategyRef, headers(endpoint)), strategyRef);
         WireTypes.Meta[] served = read(response.body(), WireTypes.Meta[].class, strategyRef);
+        if (served == null) {
+            throw new StrategyUnavailableException(Reason.INVALID_RESPONSE, "empty /meta response for " + strategyRef);
+        }
         return Arrays.stream(served)
-                .filter(meta -> strategyRef.toString().equalsIgnoreCase(meta.strategyId()))
+                .filter(meta -> meta != null && strategyRef.toString().equalsIgnoreCase(meta.strategyId()))
                 .findFirst()
                 .map(meta -> new RemoteStrategyIdentity(UUID.fromString(meta.strategyId()), meta.name(),
                         meta.version(), meta.contractVersion()))

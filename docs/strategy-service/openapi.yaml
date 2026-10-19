@@ -278,8 +278,10 @@ components:
           format: int64
           minimum: 0
           description: >
-            Contador monotonico crescente por runner. So um sequence maior que o
-            ultimo aceito daquele (strategyRef, runnerId) entra no warm-up.
+            Contador monotonico crescente por runner, nao contiguo (o ctrade o
+            ancora no relogio em microssegundos para sobreviver a restart). So um
+            sequence maior que o ultimo aceito daquele (strategyRef, runnerId)
+            entra no warm-up.
         input: { $ref: '#/components/schemas/MarketInput' }
         context: { $ref: '#/components/schemas/StrategyContext' }
 

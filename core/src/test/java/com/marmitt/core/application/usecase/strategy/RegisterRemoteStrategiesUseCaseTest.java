@@ -72,6 +72,17 @@ class RegisterRemoteStrategiesUseCaseTest {
     }
 
     @Test
+    void unexpectedFailureOnOneEntryDoesNotBlockTheOthers() {
+        UUID other = UUID.randomUUID();
+        RemoteStrategyDefinition second = new RemoteStrategyDefinition(other, "Other", "1.0.0");
+        when(repository.findById(any())).thenReturn(Optional.empty());
+        when(evaluation.describe(REF)).thenThrow(new NullPointerException("malformed meta"));
+        when(evaluation.describe(other)).thenReturn(new RemoteStrategyIdentity(other, "Other", "1.0.0", "1.1.0"));
+
+        assertEquals(List.of(other), useCase.registerPending(List.of(SMA, second)));
+    }
+
+    @Test
     void alreadyRegisteredEntryIsSkipped() {
         when(repository.findById(REF)).thenReturn(Optional.of(mock(TradingStrategy.class)));
 

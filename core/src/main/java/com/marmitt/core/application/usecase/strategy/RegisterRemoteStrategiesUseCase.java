@@ -54,6 +54,10 @@ public class RegisterRemoteStrategiesUseCase implements RegisterRemoteStrategies
             } catch (StrategyUnavailableException e) {
                 log.error("remoteStrategy: catalog entry NOT registered strategyRef={} - service unavailable ({}): {}",
                         definition.strategyRef(), e.reason(), e.getMessage());
+            } catch (RuntimeException e) {
+                // Uma entrada com resposta inesperada nao pode impedir o registro das demais.
+                log.error("remoteStrategy: catalog entry NOT registered strategyRef={} - unexpected failure: {}",
+                        definition.strategyRef(), e.toString(), e);
             }
         }
         return registered;
