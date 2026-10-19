@@ -124,7 +124,8 @@ genérico: são dados que o ctrade **envia** já validados, não saída remota n
 | `SHOULD_CANCEL` | `targetTransactionId` | `quantity`, `confidence` | Cancela ordem em trânsito. |
 
 - `limitPrice` — quando informado, deve ser positivo; é o valor que persiste, reserva capital e vai à
-  exchange. `null` = usar o preço de mercado do tick (default).
+  exchange. `null` = usar o preço de mercado do tick (default). A mais de 10% do preço do tick, o
+  ctrade descarta o sinal (`REJECTED_PRICE_DEVIATION`, T50).
 - `quantity` é **absoluta** (ex.: `"0.05"` BTC), não percentual.
 
 ---

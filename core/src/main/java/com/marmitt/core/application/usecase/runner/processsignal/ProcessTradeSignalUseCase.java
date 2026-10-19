@@ -95,6 +95,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     private final Duration slowProcessingWarning;
 
     private final RunnerSignalPolicy signalPolicy;
+    private final PreTradeRiskPolicy preTradeRiskPolicy;
     private final StrategySignalEvaluator signalEvaluator;
     private final RunnerContextAssembler contextAssembler;
     private final TradeIntentFactory tradeIntentFactory;
@@ -132,6 +133,7 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         this.slowProcessingWarning = slowProcessingWarning;
 
         this.signalPolicy = new RunnerSignalPolicy();
+        this.preTradeRiskPolicy = new PreTradeRiskPolicy();
         this.signalEvaluator = new StrategySignalEvaluator(strategyRepository);
         this.contextAssembler = new RunnerContextAssembler(
                 globalBalanceRepository, strategyRunnerRepository, MINIMUM_OPERATION_AMOUNT);
@@ -503,18 +505,23 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
      */
     private SignalDecision processTradeSignal(StrategyRunner runner, StrategyOutputDto signal, BigDecimal currentPrice,
                                               OrderType orderType) {
-        RunnerExposureService.ExposureSnapshot exposureSnapshot = null;
-        boolean hasOpenOrInflight = false;
-        if (signalPolicy.requiresOpenPositionCheck(runner, signal)) {
-            exposureSnapshot = runnerExposureService.loadSnapshot(runner);
-            hasOpenOrInflight = exposureSnapshot.hasOpenOrInFlight();
-        }
+        RunnerExposureService.ExposureSnapshot exposureSnapshot = signalPolicy.requiresExposureSnapshot(signal)
+                ? runnerExposureService.loadSnapshot(runner)
+                : null;
+        boolean hasOpenOrInflight = exposureSnapshot != null && exposureSnapshot.hasOpenOrInFlight();
         if (!signalPolicy.canExecuteSignal(runner, signal, hasOpenOrInflight)) {
             // Sinal avaliado mas barrado pela guarda de execução (sobretudo política SINGLE com
             // posição/ordem já aberta): registra REJECTED_POLICY para o tick não parecer
             // "avaliação parada" no monitoramento.
             signalMetrics.recordSignalEvaluated(runner.getId(), SignalDecision.REJECTED_POLICY);
             return SignalDecision.REJECTED_POLICY;
+        }
+        // T50: limites de risco antes de persistir/reservar (sanidade de preço, posições, ordens em voo).
+        Optional<SignalDecision> riskRejection =
+                preTradeRiskPolicy.rejection(runner, signal, currentPrice, exposureSnapshot);
+        if (riskRejection.isPresent()) {
+            signalMetrics.recordSignalEvaluated(runner.getId(), riskRejection.get());
+            return riskRejection.get();
         }
 
         // Preço efetivo da ordem: a estratégia pode fixar um limitPrice (ex.: ordem que descansa

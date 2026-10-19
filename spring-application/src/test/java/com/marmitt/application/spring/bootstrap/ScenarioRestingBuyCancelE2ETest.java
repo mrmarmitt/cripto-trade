@@ -35,8 +35,8 @@ class ScenarioRestingBuyCancelE2ETest extends ScenarioStrategyE2ETestSupport {
         assertEquals(1, buys.size(), "maxCycles=1 deve produzir exatamente uma BUY");
         assertEquals("CANCELED", buys.getFirst().status(),
                 "A BUY que descansa deve terminar cancelada." + System.lineSeparator() + stateDump(runnerId));
-        assertEquals(0, buys.getFirst().price().compareTo(new BigDecimal("32500.00000000")),
-                "A BUY deve descansar 50% abaixo do mercado (restingOffset)");
+        assertEquals(0, buys.getFirst().price().compareTo(new BigDecimal("61750.00000000")),
+                "A BUY deve descansar 5% abaixo do mercado (restingOffset)");
 
         assertEquals(0, positionCount(runnerId, "OPEN"),
                 "Uma BUY cancelada nao pode abrir lote");

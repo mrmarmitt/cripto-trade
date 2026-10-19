@@ -44,15 +44,18 @@ adaptadores externos.
    desfecho `STRATEGY_UNAVAILABLE` (T41). Estrategia remota = `RemoteTradingStrategy` registrada pelo
    catalogo, avaliada pelo `StrategyEvaluationPort` (contrato em `docs/strategy-service/`).
 6. Sinal `HOLD` encerra o fluxo sem efeito.
-7. `OrderNormalizer` alinha quantidade e preco as regras de filtro da exchange
+7. `PreTradeRiskPolicy` (T50) descarta, antes de persistir: `limitPrice` a mais de 10% do preco do
+   tick (BUY e SELL) e BUY com o runner em `maxOpenPositions` ou `maxPendingOrders` (snapshot de
+   exposicao carregado para todo BUY). SELL nunca e barrada por contagem, para nao travar saidas.
+8. `OrderNormalizer` alinha quantidade e preco as regras de filtro da exchange
    (`stepSize`/`tickSize`) ANTES de materializar a transacao, via
    `OrderQuantityNormalizerPort`. O preco arredonda a favor do trader conforme o lado
    (BUY para baixo, SELL para cima; T37), com o lado derivado por
    `TradeIntentFactory.orderSideOf`. Exchange sem normalizador (ex.: MOCK) usa os
    valores originais.
-8. Sinal `BUY` passa por `BuySignalHandler`.
-9. Sinal `SELL` passa por `SellSignalHandler`.
-10. A transacao e persistida antes do envio externo da ordem.
+9. Sinal `BUY` passa por `BuySignalHandler`.
+10. Sinal `SELL` passa por `SellSignalHandler`.
+11. A transacao e persistida antes do envio externo da ordem.
 
 ## BUY
 
@@ -135,6 +138,7 @@ O tipo da ordem e decidido aqui (`Transaction.orderType`): `LIMIT` para sinais d
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/BuySignalHandler.java` | Persiste BUY, reserva capital e faz dispatch. |
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/SellSignalHandler.java` | Persiste SELL, trava posicao e faz dispatch. |
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/CapitalReservationPolicy.java` | Valida Safe Mode, fundos e limite de exposicao por runner. |
+| `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/PreTradeRiskPolicy.java` | Sanidade de preco e limites `maxOpenPositions`/`maxPendingOrders` antes do persist (T50). |
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/SafeModeHandler.java` | Cancela ordens LIMIT em voo e gera a liquidacao MARKET nos niveis CANCEL_ALL/PANIC_SELL (T45). |
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/PositionProtectionHandler.java` | Detecta lote que viola a protecao, gera a saida MARKET ou cancela a SELL LIMIT que o trava (T44). |
 | `core/src/main/java/com/marmitt/core/domain/runner/PositionProtection.java` | Limites do lote por runner e a regra de violacao (perda sobre o custo, idade). |
@@ -171,6 +175,8 @@ As tags `decision` sao **outcomes mutuamente exclusivos**, nao a decisao bruta d
 - `REJECTED_NO_POSITION` — SELL sem posicao aberta para vender.
 - `REJECTED_POLICY` — sinal barrado pela guarda de execucao (sobretudo politica
   SINGLE com posicao/ordem ja aberta) antes do pipeline de trade.
+- `REJECTED_PRICE_DEVIATION` / `REJECTED_MAX_POSITIONS` / `REJECTED_MAX_PENDING` — limites de risco
+  pre-trade (T50).
 - `SAFE_MODE` — tick conduzido pelo Safe Mode (T45).
 - `STRATEGY_UNAVAILABLE` — estrategia sem decisao utilizavel (T41).
 - `PROTECTIVE_EXIT` — a protecao do lote agiu no tick (T44); a venda despachada tambem conta `SELL`.

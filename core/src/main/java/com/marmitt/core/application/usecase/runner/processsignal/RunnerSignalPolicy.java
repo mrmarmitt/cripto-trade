@@ -102,15 +102,11 @@ class RunnerSignalPolicy {
     }
 
     /**
-     * Indica se o sinal exige carregamento do snapshot de exposicao antes da execucao.
-     *
-     * <p>Apenas runners com politica {@code SINGLE} e sinal BUY precisam saber se ja
-     * existe posicao aberta ou ordem em voo — e a unica regra que rejeita BUY com base
-     * nessa informacao. Carregar o snapshot desnecessariamente adicionaria uma consulta
-     * ao banco em todos os ticks de runners MULTIPLE ou em sinais SELL.
+     * Indica se o sinal exige o snapshot de exposicao antes da execucao: todo BUY, que passa pela
+     * politica SINGLE, pelos limites {@code maxOpenPositions}/{@code maxPendingOrders} (T50) e pela
+     * reserva (exposicao em voo). SELL so reduz exposicao e nao consulta o snapshot.
      */
-    public boolean requiresOpenPositionCheck(StrategyRunner runner, StrategyOutputDto signal) {
-        return runner.getExecutionPolicy() == ExecutionPolicy.SINGLE
-                && signal.decision() == TradingAction.SHOULD_BUY;
+    public boolean requiresExposureSnapshot(StrategyOutputDto signal) {
+        return signal.decision() == TradingAction.SHOULD_BUY;
     }
 }
