@@ -20,7 +20,7 @@ public class ProcessUserMessageEventListener {
     }
 
     @EventListener
-    @Async("messageProcessingExecutor")
+    @Async("userDataExecutor")
     public void handleRawUserDataMessage(RawUserDataMessageReceivedEvent event) {
         MDC.put("correlationId", event.getContext().correlationId().toString());
         MDC.put("exchangeName", event.getContext().exchangeName());

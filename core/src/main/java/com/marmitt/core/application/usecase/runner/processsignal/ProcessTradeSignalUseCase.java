@@ -22,6 +22,7 @@ import com.marmitt.core.ports.outbound.exchange.rest.OrderQuantityNormalizerPort
 import com.marmitt.core.ports.outbound.marketdata.LatestPricePort;
 import com.marmitt.core.ports.outbound.metrics.SignalDecision;
 import com.marmitt.core.ports.outbound.metrics.SignalMetricsPort;
+import com.marmitt.core.ports.outbound.metrics.TickDiscardReason;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
@@ -34,12 +35,12 @@ import lombok.extern.slf4j.Slf4j;
 import org.slf4j.MDC;
 
 import java.math.BigDecimal;
+import java.time.Duration;
 import java.time.Instant;
-import java.util.HashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.concurrent.Executor;
 import java.util.function.Predicate;
 
 /**
@@ -84,6 +85,9 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     private final OrderConciliationPort orderConciliation;
     private final SignalMetricsPort signalMetrics;
     private final LatestPricePort latestPrices;
+    private final RunnerMailbox mailbox;
+    private final Duration staleTickThreshold;
+    private final Duration slowProcessingWarning;
 
     private final RunnerSignalPolicy signalPolicy;
     private final StrategySignalEvaluator signalEvaluator;
@@ -105,12 +109,18 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
                                         OrderConciliationPort orderConciliation,
                                         List<OrderQuantityNormalizerPort> orderNormalizers,
                                         SignalMetricsPort signalMetrics,
-                                        LatestPricePort latestPrices) {
+                                        LatestPricePort latestPrices,
+                                        Executor runnerExecutor,
+                                        Duration staleTickThreshold,
+                                        Duration slowProcessingWarning) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.portfolioRepository = portfolioRepository;
         this.orderConciliation = orderConciliation;
         this.signalMetrics = signalMetrics;
         this.latestPrices = latestPrices;
+        this.mailbox = new RunnerMailbox(runnerExecutor, this::evaluateTick, signalMetrics);
+        this.staleTickThreshold = staleTickThreshold;
+        this.slowProcessingWarning = slowProcessingWarning;
 
         this.signalPolicy = new RunnerSignalPolicy();
         this.signalEvaluator = new StrategySignalEvaluator(strategyRepository);
@@ -259,38 +269,64 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
             return;
         }
 
-        StrategyInputDto strategyInput = tradeIntentFactory.buildStrategyInput(marketData);
-        Map<UUID, SafeModeStatus> safeModeByPortfolio = new HashMap<>();
+        // T42: so roteia. A avaliacao de cada runner acontece na mailbox dele (latest-wins, sequencial),
+        // no executor dos runners — a thread de market data nunca avalia estrategia.
         for (StrategyRunner runner : strategyRunners) {
-            if (!signalPolicy.canProcessRunner(runner, exchangeId)) {
-                continue;
-            }
-
-            try {
-                SafeModeStatus safeMode = safeModeByPortfolio.computeIfAbsent(
-                        runner.getPortfolioId(), this::loadSafeMode);
-                if (safeMode.cancelsOrders()) {
-                    enforceSafeMode(runner, safeMode, marketData.price());
-                    continue;
-                }
-                processRunner(runner, strategyInput, marketData.price());
-            } catch (RunnerHaltedException e) {
-                log.warn("priceUpdate: signal discarded - runner halted mid-flight runnerId={} symbol={}",
-                        runner.getId(), symbol);
-            } catch (ConcurrentPositionLockException e) {
-                signalMetrics.recordSignalEvaluated(runner.getId(), SignalDecision.REJECTED_LOCK);
-                log.warn("priceUpdate: concurrent SELL conflict for runner={} symbol={} - tick discarded (position already locked by another thread)",
-                        runner.getId(), symbol);
-            } catch (Exception e) {
-                log.error("priceUpdate: error processing runner={} symbol={} - {}",
-                        runner.getId(), symbol, e.getMessage(), e);
+            if (signalPolicy.canProcessRunner(runner, exchangeId)) {
+                mailbox.submit(runner.getId(), marketData);
             }
         }
     }
 
     /**
-     * Nivel do Safe Mode do portfolio, lido uma vez por tick para cada portfolio. Sem portfolio,
-     * NORMAL: o BUY ja e recusado pela politica de capital.
+     * Avalia o tick mais recente de um runner, ja fora da thread de market data. Rele o runner (o
+     * status pode ter mudado enquanto o tick esperava: kill switch, encerramento, reconciliacao) e
+     * descarta o tick que envelheceu na fila alem de {@code staleTickThreshold} (IG §12.3).
+     */
+    private void evaluateTick(UUID runnerId, MarketDataDto marketData) {
+        Duration age = Duration.between(marketData.timestamp(), Instant.now());
+        if (age.compareTo(staleTickThreshold) > 0) {
+            signalMetrics.recordTickDiscarded(runnerId, TickDiscardReason.STALE);
+            log.warn("priceUpdate: stale tick discarded runnerId={} age={}ms threshold={}ms",
+                    runnerId, age.toMillis(), staleTickThreshold.toMillis());
+            return;
+        }
+        StrategyRunner runner = strategyRunnerRepository.findById(runnerId).orElse(null);
+        if (runner == null || !signalPolicy.canProcessRunner(runner, marketData.exchangeName())) {
+            return;
+        }
+
+        long start = System.nanoTime();
+        try {
+            SafeModeStatus safeMode = loadSafeMode(runner.getPortfolioId());
+            if (safeMode.cancelsOrders()) {
+                enforceSafeMode(runner, safeMode, marketData.price());
+            } else {
+                processRunner(runner, tradeIntentFactory.buildStrategyInput(marketData), marketData.price());
+            }
+        } catch (RunnerHaltedException e) {
+            log.warn("priceUpdate: signal discarded - runner halted mid-flight runnerId={} symbol={}",
+                    runnerId, runner.getSymbol());
+        } catch (ConcurrentPositionLockException e) {
+            signalMetrics.recordSignalEvaluated(runnerId, SignalDecision.REJECTED_LOCK);
+            log.warn("priceUpdate: concurrent SELL conflict for runner={} symbol={} - tick discarded (position already locked by another thread)",
+                    runnerId, runner.getSymbol());
+        } catch (Exception e) {
+            log.error("priceUpdate: error processing runner={} symbol={} - {}",
+                    runnerId, runner.getSymbol(), e.getMessage(), e);
+        } finally {
+            Duration took = Duration.ofNanos(System.nanoTime() - start);
+            signalMetrics.recordProcessingTime(runnerId, took);
+            if (took.compareTo(slowProcessingWarning) > 0) {
+                log.warn("priceUpdate: slow evaluation runnerId={} took={}ms warnAbove={}ms",
+                        runnerId, took.toMillis(), slowProcessingWarning.toMillis());
+            }
+        }
+    }
+
+    /**
+     * Nivel do Safe Mode do portfolio do runner, lido a cada avaliacao. Sem portfolio, NORMAL: o BUY
+     * ja e recusado pela politica de capital.
      */
     private SafeModeStatus loadSafeMode(UUID portfolioId) {
         return portfolioRepository.findById(portfolioId)

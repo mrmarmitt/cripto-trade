@@ -1,6 +1,7 @@
 package com.marmitt.application.spring.config.core;
 
 import com.marmitt.application.spring.bootstrap.RunnerBootPhase3Properties;
+import com.marmitt.application.spring.bootstrap.RunnerSignalProperties;
 import com.marmitt.core.application.usecase.runner.CreateRunnerUseCase;
 import com.marmitt.core.application.usecase.runner.HaltRunnerUseCase;
 import com.marmitt.core.application.usecase.runner.RecoverStaleTransactionsUseCase;
@@ -41,6 +42,7 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 import com.google.common.util.concurrent.Striped;
 
+import java.time.Duration;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.locks.Lock;
@@ -135,7 +137,9 @@ public class RunnerConfig {
             OrderConciliationPort orderConciliation,
             List<OrderQuantityNormalizerPort> orderNormalizers,
             SignalMetricsPort signalMetrics,
-            LatestPricePort latestPrices) {
+            LatestPricePort latestPrices,
+            @Qualifier("runnerSignalExecutor") Executor runnerSignalExecutor,
+            RunnerSignalProperties runnerSignalProperties) {
 
         return new ProcessTradeSignalUseCase(
                 strategyRunnerRepository,
@@ -146,7 +150,10 @@ public class RunnerConfig {
                 orderConciliation,
                 orderNormalizers,
                 signalMetrics,
-                latestPrices) {
+                latestPrices,
+                runnerSignalExecutor,
+                Duration.ofMillis(runnerSignalProperties.getStaleTickThresholdMs()),
+                Duration.ofMillis(runnerSignalProperties.getSlowProcessingWarnMs())) {
 
             @Override
             public void transactionalPersistBuyAndReserve(BuyExecutionContext context) {
