@@ -95,3 +95,21 @@ Endpoints protegidos pelo `admin.api.key`:
   `runner.signal.slow-processing-warn-ms` (1s) há WARN `slow evaluation`.
 - Muitos `STALE`: aumentar `runner.signal.threads` ou investigar a estratégia lenta.
 - Log ERROR `marketDataExecutor: queue full`: parsing de market data não acompanha o feed.
+
+## Estratégia remota (T41)
+
+> Não ativar em testnet/produção antes da T44 (proteção de posição): com a estratégia fora do ar, o
+> runner não vende.
+
+1. Subir a app da estratégia (referência: `gradle :strategy-service-reference:run`, variáveis `PORT`,
+   `STRATEGY_REF`, `STRATEGY_TOKEN`).
+2. Adicionar a entrada em `ctrade.strategy.remote.catalog` (`strategy-ref`, `base-url` terminando em
+   `/v1`, `name`, `version`) e o token em `CTRADE_STRATEGY_REMOTE_TOKEN`.
+3. No boot, o log `remoteStrategy: registered strategyRef=...` confirma o registro (conferido via
+   `/v1/meta`). `NOT registered` traz o motivo (serviço fora, versão/contrato divergente) e o ctrade
+   tenta de novo a cada `registration-retry-interval-ms`.
+4. Criar o runner apontando para o `strategy-ref` e iniciá-lo (`POST /api/admin/runners/{id}/start`).
+
+Sinais: `signal.evaluated.total{decision=STRATEGY_UNAVAILABLE}` (estratégia não decidiu),
+`strategy.remote.failures{reason=UNREACHABLE|ERROR_RESPONSE|INVALID_RESPONSE|STALE_DECISION}` e
+`strategy.remote.latency` por `strategyRef`. Parâmetros: `timeout-ms` (250), `max-decision-age-ms` (2000).

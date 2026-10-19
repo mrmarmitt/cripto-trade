@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T40 (contrato revisado). T42 é pré-requisito para **ativar** estratégia remota em
 testnet/produção, não para o código desta task.
-**Status:** Pendente
+**Status:** Concluído (2026-10-19) — código entregue; **ativação em ambiente real aguarda a T44**.
 
 ---
 
@@ -102,3 +102,50 @@ máquina de promoção `REGISTERED → SHADOW → ACTIVE → DRAINING → RETIRE
 - `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/StrategySignalEvaluator.java`.
 - `spring-application/src/main/java/com/marmitt/application/spring/repository/InMemoryStrategyRepository.java`.
 - `.ai/flows/runner-signal-processing.md`.
+
+---
+
+## Entrega (2026-10-19)
+
+### Decisões registradas (implementação)
+
+- **Módulos:** `adapter-strategy-remote` (formato de rede do contrato, validação da decisão e cliente;
+  porta HTTP própria `StrategyServiceHttpPort`, no mesmo padrão do `HttpClientPort` da Binance) e
+  `strategy-service-reference` (app mínima com `HttpServer` do JDK, fora do classpath do ctrade, que
+  usa o mesmo mapeamento — um contrato, um mapeamento para os dois lados).
+- **Sem portão de readiness no caminho do tick:** o warm-up é por runner e só avança quando o runner
+  chama `/evaluate`; bloquear a chamada enquanto `ready=false` impediria o aquecimento. A app responde
+  HOLD enquanto aquece (o contrato exige decisão válida). A readiness escopada fica para o portão de
+  promoção (fora do escopo).
+- **Toda falha da estratégia vira `STRATEGY_UNAVAILABLE`:** serviço fora, timeout, 5xx, resposta fora
+  do contrato, decisão velha, retorno nulo, sinal inválido e exceção de estratégia in-process — sempre
+  HOLD com o desfecho próprio, sem cair no catch genérico do runner.
+- **Resolução só por `strategyId`** no avaliador e identidade só por id no `InMemoryStrategyRepository`
+  (duas versões podem ter o mesmo nome); `StrategyRepositoryPort.findByName` removido (sem uso).
+- **Catálogo estático em YAML** (`ctrade.strategy.remote.catalog`); o core (`RegisterRemoteStrategiesUseCase`)
+  confere `/v1/meta` — mesmo id, nome, versão e contrato maior 1 — antes de registrar; o spring tenta
+  de novo a cada `registration-retry-interval-ms` (serviço que sobe depois do ctrade).
+- **Parâmetros:** `timeout-ms` 250 (spec), `max-decision-age-ms` 2000 (a idade conta desde o
+  recebimento do tick e inclui a espera na mailbox, já limitada a 5 s pela T42), token opcional como
+  `Authorization: Bearer` (`CTRADE_STRATEGY_REMOTE_TOKEN`) — documentado no contrato.
+- **SMA in-process com warm-up por runner** (pendência da T40), mesma chave do contrato.
+
+### Validação
+
+- `:core:test` 201 — `StrategySignalEvaluatorTest`, `RegisterRemoteStrategiesUseCaseTest`.
+- `:adapter-strategy-remote:test` 8 — `RemoteStrategyClientTest` (mapeamento, `tickId`/`sequence`
+  por runner, decimal como string, 503/timeout/JSON inválido/faixa inválida sem retry, decisão velha,
+  `/meta`), `DecisionValidatorTest`.
+- `:strategy-service-reference:test` 2 — **paridade**: 80 ticks × 2 runners intercalados, SMA in-process
+  e SMA remoto (HTTP real) com a mesma sequência de decisões, incluindo BUYs.
+- `:spring-application:test` 201 — `RemoteStrategyE2ETest` (MockWebServer pelo catálogo): decisão remota
+  vira BUY preenchida pelo pipeline normal; 503, timeout, decisão velha e decisão fora do contrato viram
+  `STRATEGY_UNAVAILABLE` sem ordem e contam em `strategy.remote.failures{reason}`.
+
+### Riscos residuais
+
+- **Não ativar em ambiente real antes da T44:** com a estratégia fora do ar, HOLD implícito impede
+  qualquer saída de posição.
+- **Rede no caminho do tick:** a chamada roda no `runnerSignalExecutor` (T42); runners com estratégia
+  lenta ocupam threads do pool — `runner.signal.threads` e o timeout limitam o efeito.
+- **App de referência** atende fora de sequência com HOLD (o SMA não sabe avaliar sem mexer no warm-up).
