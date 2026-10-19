@@ -5,6 +5,7 @@ import com.marmitt.core.dto.runner.response.RunnerTransitionResult;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.exceptions.RunnerNotFoundException;
 import com.marmitt.core.ports.inbound.runner.HaltRunnerPort;
+import com.marmitt.core.ports.outbound.metrics.OperationalMetricsPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
@@ -16,9 +17,11 @@ import java.util.stream.Stream;
 public class HaltRunnerUseCase implements HaltRunnerPort {
 
     private final StrategyRunnerRepositoryPort runnerRepository;
+    private final OperationalMetricsPort metrics;
 
-    public HaltRunnerUseCase(StrategyRunnerRepositoryPort runnerRepository) {
+    public HaltRunnerUseCase(StrategyRunnerRepositoryPort runnerRepository, OperationalMetricsPort metrics) {
         this.runnerRepository = runnerRepository;
+        this.metrics = metrics;
     }
 
     @Override
@@ -32,6 +35,7 @@ public class HaltRunnerUseCase implements HaltRunnerPort {
                     RunnerStatus previous = runner.getStatus();
                     runner.halt();
                     runnerRepository.save(runner);
+                    metrics.recordTransition(previous, RunnerStatus.HALTED);
                     log.info("kill-switch: runner halted - id={} strategy={} symbol={} previous={}",
                             runner.getId(), runner.getStrategyName(), runner.getSymbol(), previous);
                     return RunnerTransitionResult.of(runner, previous);
@@ -51,6 +55,7 @@ public class HaltRunnerUseCase implements HaltRunnerPort {
         if (runner.canAcceptSignals()) {
             runner.halt();
             runnerRepository.save(runner);
+            metrics.recordTransition(previous, RunnerStatus.HALTED);
             log.info("kill-switch: runner halted - id={} strategy={} symbol={}",
                     runner.getId(), runner.getStrategyName(), runner.getSymbol());
         }

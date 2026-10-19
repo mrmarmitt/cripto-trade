@@ -4,9 +4,11 @@ import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.runner.request.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.response.CreateRunnerResponse;
+import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.enums.AccountingPolicyType;
 import com.marmitt.core.enums.ExecutionPolicy;
 import com.marmitt.core.ports.inbound.runner.CreateRunnerPort;
+import com.marmitt.core.ports.outbound.metrics.OperationalMetricsPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
@@ -25,17 +27,20 @@ public class CreateRunnerUseCase implements CreateRunnerPort {
     private final StrategyRepositoryPort strategyRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
+    private final OperationalMetricsPort metrics;
 
     public CreateRunnerUseCase(
             PortfolioRepositoryPort portfolioRepository,
             StrategyRepositoryPort strategyRepository,
             ExchangeAdapterRepositoryPort exchangeAdapterRepository,
-            StrategyRunnerRepositoryPort strategyRunnerRepository
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            OperationalMetricsPort metrics
     ) {
         this.portfolioRepository = portfolioRepository;
         this.strategyRepository = strategyRepository;
         this.exchangeAdapterRepository = exchangeAdapterRepository;
         this.strategyRunnerRepository = strategyRunnerRepository;
+        this.metrics = metrics;
     }
 
     @Override
@@ -91,6 +96,7 @@ public class CreateRunnerUseCase implements CreateRunnerPort {
             );
 
             strategyRunnerRepository.save(runner);
+            metrics.recordTransition(null, RunnerStatus.CREATED);
             exchangeAdapterRepository.registerPortfolioByAdapter(request.exchangeName(), request.portfolioId());
 
             log.info("Runner created successfully - runnerId={} portfolioId={} strategyId={} symbol={} exchange={}",

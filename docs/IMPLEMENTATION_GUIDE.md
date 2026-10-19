@@ -1830,7 +1830,7 @@ O Runner valida regras de negócio da strategy e da exchange. O Portfolio valida
 
 ### 7.4 Limites de Exposição por Runner
 
-> **Estado (T39, 2026-10-16):** `maxAllocationPercent` na reserva; `maxOpenPositions`/`maxPendingOrders` no BUY (**T50**); cancel rate: **T51**; alteração em runtime: `PATCH /api/admin/runners/{id}` (T49). A exposição é calculada por consulta, não por `MarginAccount`.
+> **Estado (T39, 2026-10-16):** `maxAllocationPercent` na reserva; `maxOpenPositions`/`maxPendingOrders` no BUY (**T50**); cancel rate: alerta Grafana `ctrade-cancel-rate-high` sobre `signal.evaluated.total{decision=CANCEL}` (> 10/min, **T51**); alteração em runtime: `PATCH /api/admin/runners/{id}` (T49). A exposição é calculada por consulta, não por `MarginAccount`.
 
 > **Referência:** Blueprint Seção 11.2.B.
 
@@ -2014,7 +2014,7 @@ BEGIN TRANSACTION;
 
 ### 7.7 Monitoramento e Métricas de Capital
 
-> **Estado (T39, 2026-10-16):** Métricas pendentes na **T51**.
+> **Estado (T51, 2026-10-19):** `capital.utilization.runner` (exposição em voo ÷ limite, mesma conta da reserva), `capital.utilization.global`, `capital.reservation.oldest.age.seconds` (idade da ordem em voo mais antiga, no lugar da duração média) por amostra a cada 15s; rejection rate e cancel rate derivados de `signal.evaluated.total` em PromQL, com alertas no Grafana.
 
 > **Nota de Implementação #20 absorvida.**
 
@@ -3662,7 +3662,7 @@ activatePanicSell(confirmationToken, auditReason):
 
 ### 11.4 Kill-Switch Externo
 
-> **Estado (T39, 2026-10-16):** Endpoint real: `GET/PUT /api/admin/portfolios/{id}/safe-mode` (por portfolio, PUT → 202). A regra de escalação é a do Blueprint 11.1.C: **subida pode pular níveis** (com `confirm`), **descida é um nível por vez**. Health com Safe Mode: **T51**.
+> **Estado (T39, 2026-10-16):** Endpoint real: `GET/PUT /api/admin/portfolios/{id}/safe-mode` (por portfolio, PUT → 202). A regra de escalação é a do Blueprint 11.1.C: **subida pode pular níveis** (com `confirm`), **descida é um nível por vez**. Health com Safe Mode: componente `safeMode` do `/actuator/health` (**T51**), status UP com o nível por portfolio.
 
 > **Nota #13 absorvida:** "O sistema deve possuir um endpoint que, se sinalizado, aciona o cancelamento em massa (Panic Sell / Cancel All) em caso de emergência externa."
 
@@ -3844,7 +3844,7 @@ RunnerCircuitBreaker (Portfolio, event-driven):
 
 ### 11.7 Observabilidade
 
-> **Estado (T39, 2026-10-16):** Existem `circuit_breaker.drawdown.current`, `.drawdown.peak_24h`, `circuit_breaker.equity.current` e `circuit_breaker.activations.total` (T43). As demais: **T51**.
+> **Estado (T39, 2026-10-16):** Existem `circuit_breaker.drawdown.current`, `.drawdown.peak_24h`, `circuit_breaker.equity.current` e `circuit_breaker.activations.total` (T43). T51: `circuit_breaker.current_level`, `circuit_breaker.duration.active.seconds` (gauge, tempo desde a última mudança de nível) e `circuit_breaker.runner.suspended.count` por portfolio. Progresso de CANCEL_ALL/PANIC_SELL fica no `GET .../safe-mode`.
 
 | Métrica                                  | Tipo    | Descrição                                                      |
 |------------------------------------------|---------|----------------------------------------------------------------|
@@ -4752,6 +4752,8 @@ public class RunnerAdminController {
 ```
 
 ### 13.7 Observabilidade
+
+> **Estado (T51, 2026-10-19):** existem `runner.lifecycle.transitions.total{from,to}` (criação tem `from=NONE`), `runner.lifecycle.current_state{status}` (contagem por status), `runner.lifecycle.terminating.duration` e `runner.lifecycle.termination.stuck` (timeout `ctrade.observability.termination-timeout-ms`, 10 min). `created.total`/`archived.total` saem de `transitions.total`; health check do lifecycle não existe.
 
 | Métrica                                  | Tipo    | Descrição                                          |
 |------------------------------------------|---------|----------------------------------------------------|

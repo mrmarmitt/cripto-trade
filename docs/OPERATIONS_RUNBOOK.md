@@ -86,6 +86,21 @@ Endpoints protegidos pelo `admin.api.key`:
 - Fechar posição exige runner ACTIVE ou TERMINATING; runner halted: retome antes.
 - Posição travada por SELL LIMIT: cancele a ordem e depois feche a posição.
 
+## Estado operacional e alertas (T51)
+
+- `GET /actuator/health` → componente `safeMode`: `active` e o nível de cada portfolio. Continua `UP`
+  com Safe Mode ativo (é proteção, não falha).
+- Amostra a cada `ctrade.observability.report-interval-ms` (15s): `circuit_breaker_current_level`
+  (0=NORMAL … 3=PANIC_SELL), `circuit_breaker_duration_active_seconds`, `capital_utilization_global`,
+  `capital_utilization_runner`, `capital_reservation_oldest_age_seconds`, `runner_lifecycle_current_state`.
+- Alertas do Grafana (grupo `ctrade-operational`, canal `alerts-behavior`):
+  - **Safe Mode ativo** → ver a seção do Safe Mode; `GET /api/admin/portfolios/{id}/safe-mode`.
+  - **Runner travado em TERMINATING** (> 10 min, log WARN `runner stuck in TERMINATING`) → conferir
+    ordens em voo e posição do runner; cancelar/fechar pelos comandos da T49.
+  - **Cancel rate > 10/min** → estratégia em loop de ordem/cancelamento; considerar halt do runner.
+  - **Rejection rate > 50%** → ver `signal_evaluated_total` por `decision` (capital, preço, limites).
+  - **Utilização global > 80%** → capital quase todo reservado; novos BUYs tendem a ser recusados.
+
 ## Processamento de ticks (T42)
 
 - `runner.ticks.discarded{runnerId, reason}`: `COALESCED` cresce quando a avaliação é mais lenta que o

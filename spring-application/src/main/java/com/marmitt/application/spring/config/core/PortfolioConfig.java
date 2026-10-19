@@ -3,6 +3,10 @@ package com.marmitt.application.spring.config.core;
 import com.marmitt.application.spring.bootstrap.CircuitBreakerProperties;
 import com.marmitt.application.spring.service.TransactionalManageDeadLetterPort;
 import com.marmitt.core.application.usecase.portfolio.EvaluateDrawdownUseCase;
+import com.marmitt.core.application.usecase.portfolio.ReportOperationalStateUseCase;
+import com.marmitt.application.spring.bootstrap.OperationalStateProperties;
+import com.marmitt.core.ports.inbound.portfolio.ReportOperationalStatePort;
+import com.marmitt.core.ports.outbound.metrics.OperationalMetricsPort;
 import com.marmitt.core.ports.inbound.portfolio.EvaluateDrawdownPort;
 import com.marmitt.core.ports.outbound.marketdata.LatestPricePort;
 import com.marmitt.core.ports.outbound.metrics.CircuitBreakerMetricsPort;
@@ -25,6 +29,8 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 import java.time.Clock;
+import java.time.Duration;
+import java.time.Instant;
 
 @Configuration
 public class PortfolioConfig {
@@ -78,6 +84,19 @@ public class PortfolioConfig {
         return new EvaluateDrawdownUseCase(portfolioRepository, globalBalanceRepository, strategyRunnerRepository,
                 latestPrices, equitySnapshots, manageSafeMode, errorNotification, circuitBreakerMetrics,
                 circuitBreakerProperties.getMaxDrawdownPercent(), Clock.systemUTC());
+    }
+
+    @Bean
+    public ReportOperationalStatePort reportOperationalState(
+            PortfolioRepositoryPort portfolioRepository,
+            GlobalBalanceRepositoryPort globalBalanceRepository,
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            OperationalMetricsPort operationalMetrics,
+            OperationalStateProperties operationalStateProperties
+    ) {
+        return new ReportOperationalStateUseCase(portfolioRepository, globalBalanceRepository,
+                strategyRunnerRepository, operationalMetrics,
+                Duration.ofMillis(operationalStateProperties.getTerminationTimeoutMs()), Instant::now);
     }
 
     @Bean

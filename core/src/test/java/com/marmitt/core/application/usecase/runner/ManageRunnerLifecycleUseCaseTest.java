@@ -12,6 +12,7 @@ import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.exceptions.RunnerNotFoundException;
 import com.marmitt.core.exceptions.RunnerOperationException;
 import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
+import com.marmitt.core.ports.outbound.metrics.OperationalMetricsPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.junit.jupiter.api.BeforeEach;
@@ -40,7 +41,9 @@ class ManageRunnerLifecycleUseCaseTest {
     private final StrategyRunnerRepositoryPort repository = mock(StrategyRunnerRepositoryPort.class);
     private final ExchangeAdapterRepositoryPort adapters = mock(ExchangeAdapterRepositoryPort.class);
     private final RunnerBootRecoveryUseCase recovery = mock(RunnerBootRecoveryUseCase.class);
-    private final ManageRunnerLifecycleUseCase useCase = new ManageRunnerLifecycleUseCase(repository, adapters, recovery);
+    private final OperationalMetricsPort metrics = mock(OperationalMetricsPort.class);
+    private final ManageRunnerLifecycleUseCase useCase =
+            new ManageRunnerLifecycleUseCase(repository, adapters, recovery, metrics);
 
     private StrategyRunner runner;
 
@@ -119,6 +122,10 @@ class ManageRunnerLifecycleUseCaseTest {
 
         assertEquals(RunnerStatus.ACTIVE, result.previousStatus());
         assertEquals(RunnerStatus.ARCHIVED, runner.getStatus());
+        // T51: transicoes e tempo em TERMINATING vao para as metricas de lifecycle.
+        verify(metrics).recordTransition(RunnerStatus.ACTIVE, RunnerStatus.TERMINATING);
+        verify(metrics).recordTransition(RunnerStatus.TERMINATING, RunnerStatus.ARCHIVED);
+        verify(metrics).recordTerminatingDuration(any(Duration.class));
     }
 
     @Test

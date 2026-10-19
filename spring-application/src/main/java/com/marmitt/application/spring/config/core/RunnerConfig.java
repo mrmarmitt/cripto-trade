@@ -28,6 +28,7 @@ import com.marmitt.core.ports.outbound.events.EventPublisherPort;
 import com.marmitt.core.ports.outbound.exchange.OrderDispatchPort;
 import com.marmitt.core.ports.outbound.exchange.rest.OrderQuantityNormalizerPort;
 import com.marmitt.core.ports.outbound.marketdata.LatestPricePort;
+import com.marmitt.core.ports.outbound.metrics.OperationalMetricsPort;
 import com.marmitt.core.ports.outbound.notification.ErrorNotificationPort;
 import com.marmitt.core.ports.outbound.metrics.SignalMetricsPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
@@ -175,13 +176,15 @@ public class RunnerConfig {
             PortfolioRepositoryPort portfolioRepository,
             StrategyRepositoryPort strategyRepository,
             ExchangeAdapterRepositoryPort exchangeAdapterRepository,
-            StrategyRunnerRepositoryPort strategyRunnerRepository
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            OperationalMetricsPort operationalMetrics
     ) {
         return new CreateRunnerUseCase(
                 portfolioRepository,
                 strategyRepository,
                 exchangeAdapterRepository,
-                strategyRunnerRepository
+                strategyRunnerRepository,
+                operationalMetrics
         );
     }
 
@@ -194,9 +197,10 @@ public class RunnerConfig {
 
     @Bean
     public HaltRunnerPort haltRunner(
-            StrategyRunnerRepositoryPort strategyRunnerRepository
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            OperationalMetricsPort operationalMetrics
     ) {
-        return new HaltRunnerUseCase(strategyRunnerRepository);
+        return new HaltRunnerUseCase(strategyRunnerRepository, operationalMetrics);
     }
 
     @Bean
@@ -229,10 +233,11 @@ public class RunnerConfig {
     public ManageRunnerLifecyclePort manageRunnerLifecycle(
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             ExchangeAdapterRepositoryPort exchangeAdapterRepository,
-            RunnerBootRecoveryUseCase runnerBootRecoveryUseCase
+            RunnerBootRecoveryUseCase runnerBootRecoveryUseCase,
+            OperationalMetricsPort operationalMetrics
     ) {
         return new ManageRunnerLifecycleUseCase(strategyRunnerRepository, exchangeAdapterRepository,
-                runnerBootRecoveryUseCase);
+                runnerBootRecoveryUseCase, operationalMetrics);
     }
 
     @Bean
@@ -241,6 +246,7 @@ public class RunnerConfig {
             ExchangeAdapterRepositoryPort exchangeAdapterRepository,
             DeadLetterEntryRepositoryPort deadLetterEntryRepository,
             RecoverTransactionStatusUseCase recoverTransactionStatusUseCase,
+            OperationalMetricsPort operationalMetrics,
             RunnerBootPhase3Properties phase3Properties,
             @Qualifier("bootRecoveryQueryExecutor") Executor bootRecoveryQueryExecutor
     ) {
@@ -249,6 +255,7 @@ public class RunnerConfig {
                 exchangeAdapterRepository,
                 deadLetterEntryRepository,
                 recoverTransactionStatusUseCase,
+                operationalMetrics,
                 phase3Properties.getPendingGraceMs(),
                 phase3Properties.getExchangeQueryTimeoutMs(),
                 phase3Properties.getExchangeQueryMaxAttempts(),

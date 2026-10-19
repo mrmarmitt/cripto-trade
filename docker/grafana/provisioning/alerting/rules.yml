@@ -189,3 +189,159 @@ groups:
               conditions:
                 - evaluator: { type: gt, params: [0] }
               refId: C
+
+  # Estado operacional sobre as metricas do Prometheus (T51; IG 7.7, 11.7, 13.7).
+  - orgId: 1
+    name: ctrade-operational
+    folder: ctrade-alerts
+    interval: 1m
+    rules:
+      - uid: ctrade-safe-mode-active
+        title: Safe Mode ativo
+        condition: C
+        for: 0m
+        labels:
+          channel: alerts-behavior
+          severity: critical
+        annotations:
+          summary: 'Algum portfolio fora de NORMAL (circuit_breaker_current_level > 0)'
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              datasource: { type: prometheus, uid: prometheus }
+              expr: 'max(circuit_breaker_current_level)'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              datasource: { type: __expr__, uid: __expr__ }
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+              refId: C
+
+      - uid: ctrade-runner-termination-stuck
+        title: Runner travado em TERMINATING
+        condition: C
+        for: 0m
+        labels:
+          channel: alerts-behavior
+          severity: warning
+        annotations:
+          summary: 'Runner em TERMINATING ha mais que o timeout (10 min)'
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              datasource: { type: prometheus, uid: prometheus }
+              expr: 'max(runner_lifecycle_termination_stuck)'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              datasource: { type: __expr__, uid: __expr__ }
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0] }
+              refId: C
+
+      - uid: ctrade-cancel-rate-high
+        title: Taxa de cancelamento alta
+        condition: C
+        for: 2m
+        labels:
+          channel: alerts-behavior
+          severity: warning
+        annotations:
+          summary: 'Runner com mais de 10 SHOULD_CANCEL por minuto (possivel loop ordem/cancelamento)'
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              datasource: { type: prometheus, uid: prometheus }
+              expr: 'max(increase(signal_evaluated_total{decision="CANCEL"}[1m]))'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              datasource: { type: __expr__, uid: __expr__ }
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [10] }
+              refId: C
+
+      - uid: ctrade-rejection-rate-high
+        title: Taxa de rejeicao alta
+        condition: C
+        for: 5m
+        labels:
+          channel: alerts-behavior
+          severity: warning
+        annotations:
+          summary: 'Mais da metade dos sinais de trade de um runner rejeitados em 5 min'
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              datasource: { type: prometheus, uid: prometheus }
+              expr: 'max(sum by (runnerId) (increase(signal_evaluated_total{decision=~"REJECTED_.*"}[5m])) / sum by (runnerId) (increase(signal_evaluated_total{decision!~"HOLD|SAFE_MODE|STRATEGY_UNAVAILABLE|PROTECTIVE_EXIT"}[5m])))'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              datasource: { type: __expr__, uid: __expr__ }
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.5] }
+              refId: C
+
+      - uid: ctrade-global-utilization-high
+        title: Utilizacao global de capital alta
+        condition: C
+        for: 5m
+        labels:
+          channel: alerts-behavior
+          severity: warning
+        annotations:
+          summary: 'Reservado acima de 80% do capital do portfolio'
+        noDataState: OK
+        execErrState: OK
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              datasource: { type: prometheus, uid: prometheus }
+              expr: 'max(capital_utilization_global)'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              datasource: { type: __expr__, uid: __expr__ }
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.8] }
+              refId: C

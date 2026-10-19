@@ -1,0 +1,22 @@
+package com.marmitt.application.spring.bootstrap;
+
+import lombok.Getter;
+import lombok.Setter;
+import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.stereotype.Component;
+
+/**
+ * Amostragem do estado operacional para as métricas (T51). Defaults do IG §13.8.
+ */
+@Getter
+@Setter
+@Component
+@ConfigurationProperties(prefix = "ctrade.observability")
+public class OperationalStateProperties {
+
+    private boolean enabled = true;
+    /** Intervalo entre amostras de Safe Mode, capital e lifecycle. */
+    private long reportIntervalMs = 15_000L;
+    /** Runner em TERMINATING há mais que isso conta como travado (IG: 10 min). */
+    private long terminationTimeoutMs = 600_000L;
+}

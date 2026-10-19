@@ -7,6 +7,7 @@ import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 
@@ -31,7 +32,7 @@ import java.util.UUID;
  * pois carrega posicoes e transacoes em uma unica chamada e compartilha o resultado
  * entre a policy e a reserva — evitando consultas duplicadas ao banco.
  */
-class RunnerExposureService {
+public class RunnerExposureService {
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
 
@@ -45,10 +46,19 @@ class RunnerExposureService {
      * (ex.: reserva sem snapshot pre-carregado).
      */
     public BigDecimal calculateInFlightExposure(UUID runnerId) {
-        List<Transaction> inflight = strategyRunnerRepository.findByRunnerIdAndStatuses(runnerId, TransactionStatus.IN_FLIGHT);
-        return inflight.stream()
-                .map(Transaction::getTotal)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        return inFlightSummary(runnerId).exposure();
+    }
+
+    /**
+     * Exposicao em voo e a ordem em voo mais antiga do runner. Fonte unica da exposicao usada pela
+     * reserva e pela metrica de utilizacao de capital (T51).
+     */
+    public InFlightSummary inFlightSummary(UUID runnerId) {
+        List<Transaction> inFlight = strategyRunnerRepository.findByRunnerIdAndStatuses(runnerId, TransactionStatus.IN_FLIGHT);
+        return new InFlightSummary(sumTotals(inFlight), inFlight.stream()
+                .map(Transaction::getRequestedAt)
+                .min(Instant::compareTo)
+                .orElse(null));
     }
 
     /**
@@ -63,11 +73,20 @@ class RunnerExposureService {
         List<Position> openPositions = strategyRunnerRepository.findOpenPositionsByRunnerId(runner.getId());
         List<Transaction> inFlight = strategyRunnerRepository.findByRunnerIdAndStatuses(runner.getId(), TransactionStatus.IN_FLIGHT);
 
-        BigDecimal inFlightExposure = inFlight.stream()
+        return new ExposureSnapshot(openPositions.size(), inFlight.size(), sumTotals(inFlight));
+    }
+
+    private static BigDecimal sumTotals(List<Transaction> inFlight) {
+        return inFlight.stream()
                 .map(Transaction::getTotal)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
+    }
 
-        return new ExposureSnapshot(openPositions.size(), inFlight.size(), inFlightExposure);
+    /**
+     * @param exposure        somatorio dos totais das ordens em voo
+     * @param oldestRequestedAt envio da ordem em voo mais antiga, {@code null} sem ordem
+     */
+    public record InFlightSummary(BigDecimal exposure, Instant oldestRequestedAt) {
     }
 
     /**
