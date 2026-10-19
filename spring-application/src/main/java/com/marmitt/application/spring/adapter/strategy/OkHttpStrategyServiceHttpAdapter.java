@@ -38,10 +38,17 @@ public class OkHttpStrategyServiceHttpAdapter implements StrategyServiceHttpPort
         return execute(builder.build());
     }
 
+    /**
+     * Toda falha de transporte sai como {@link IOException}, como a porta promete: quando o
+     * {@code callTimeout} dispara no meio da leitura do corpo, o Okio pode lançar
+     * {@code IllegalStateException("closed")} em vez de {@code InterruptedIOException}.
+     */
     private Response execute(Request request) throws IOException {
         try (okhttp3.Response response = client.newCall(request).execute()) {
             String body = response.body() != null ? response.body().string() : "";
             return new Response(response.code(), body);
+        } catch (IllegalStateException e) {
+            throw new IOException("strategy service transport failed: " + e.getMessage(), e);
         }
     }
 }

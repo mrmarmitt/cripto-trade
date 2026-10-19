@@ -7,6 +7,8 @@ import okhttp3.mockwebserver.RecordedRequest;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import com.marmitt.core.ports.inbound.runner.HaltRunnerPort;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
@@ -27,6 +29,9 @@ class RemoteStrategyE2ETest extends ScenarioStrategyE2ETestSupport {
 
     private static final UUID REF = UUID.fromString("5ea5e0a0-0000-4000-a000-0000000000e2");
     private static final MockWebServer SERVICE = new MockWebServer();
+
+    @Autowired
+    private HaltRunnerPort haltRunner;
     private static volatile Mode mode = Mode.BUY;
 
     enum Mode { BUY, ERROR, SLOW, STALE, MALFORMED }
@@ -94,16 +99,26 @@ class RemoteStrategyE2ETest extends ScenarioStrategyE2ETestSupport {
         awaitCondition(() -> strategyRepository.findById(REF).isPresent(), WAIT_TIMEOUT, "estrategia remota registrada");
         for (Mode failure : new Mode[]{Mode.ERROR, Mode.SLOW, Mode.STALE, Mode.MALFORMED}) {
             mode = failure;
+            double failuresBefore = remoteFailures(failure);
             UUID runnerId = createAndActivateRunner(createPortfolio(), REF);
-            double before = signalEvaluatedCount(runnerId, "STRATEGY_UNAVAILABLE");
 
             publishTick(MARKET_PRICE);
-            awaitCondition(() -> signalEvaluatedCount(runnerId, "STRATEGY_UNAVAILABLE") > before, WAIT_TIMEOUT,
+            awaitCondition(() -> signalEvaluatedCount(runnerId, "STRATEGY_UNAVAILABLE") >= 1.0, WAIT_TIMEOUT,
                     failure + " vira STRATEGY_UNAVAILABLE", runnerId);
 
             assertEquals(0, transactionCount(runnerId), failure + " nao pode gerar ordem");
-            assertTrue(remoteFailures(failure) >= 1.0, failure + " deve contar em strategy.remote.failures");
+            assertTrue(remoteFailures(failure) > failuresBefore,
+                    failure + " deve contar em strategy.remote.failures; contadores=" + allRemoteFailures());
+            // Isola a proxima iteracao: runner parado nao e mais avaliado nos ticks seguintes.
+            haltRunner.haltById(runnerId);
         }
+    }
+
+    private String allRemoteFailures() {
+        StringBuilder out = new StringBuilder();
+        meterRegistry.find("strategy.remote.failures").counters().forEach(counter ->
+                out.append(counter.getId().getTag("reason")).append('=').append(counter.count()).append(' '));
+        return out.toString();
     }
 
     private double remoteFailures(Mode failure) {
