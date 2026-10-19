@@ -30,6 +30,11 @@ info:
     1.1 (T40): tickId/sequence com deduplicacao, sem retry do ctrade, idade
     maxima da decisao validada pelo ctrade, PnL do contexto marcado a mercado.
 
+# Token de servico opcional: `{}` permite chamada sem credencial; com token, Bearer.
+security:
+  - {}
+  - bearerAuth: []
+
 servers:
   - url: http://{host}:{port}/v1
     variables:
@@ -173,6 +178,11 @@ paths:
               schema: { $ref: '#/components/schemas/Error' }
 
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Token de servico opcional (ctrade.strategy.remote.token); rede interna.
   schemas:
 
     # ---- Tipos base de convencao -------------------------------------------
@@ -268,8 +278,10 @@ components:
           format: int64
           minimum: 0
           description: >
-            Contador monotonico crescente por runner. So um sequence maior que o
-            ultimo aceito daquele (strategyRef, runnerId) entra no warm-up.
+            Contador monotonico crescente por runner, nao contiguo (o ctrade o
+            ancora no relogio em microssegundos para sobreviver a restart). So um
+            sequence maior que o ultimo aceito daquele (strategyRef, runnerId)
+            entra no warm-up.
         input: { $ref: '#/components/schemas/MarketInput' }
         context: { $ref: '#/components/schemas/StrategyContext' }
 

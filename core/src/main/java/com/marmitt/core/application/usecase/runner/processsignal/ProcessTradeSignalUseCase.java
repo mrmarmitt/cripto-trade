@@ -405,7 +405,13 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         }
 
         StrategyContextDto context = contextAssembler.assemble(runner, currentPrice);
-        StrategyOutputDto strategyOutput = signalEvaluator.evaluate(runner, activeStrategy.get(), input, context);
+        StrategySignalEvaluator.Evaluation evaluation =
+                signalEvaluator.evaluate(runner, activeStrategy.get(), input, context);
+        if (evaluation.unavailable()) {
+            signalMetrics.recordSignalEvaluated(runner.getId(), SignalDecision.STRATEGY_UNAVAILABLE);
+            return;
+        }
+        StrategyOutputDto strategyOutput = evaluation.output();
         if (signalEvaluator.isHold(strategyOutput)) {
             signalMetrics.recordSignalEvaluated(runner.getId(), SignalDecision.HOLD);
             log.debug("priceUpdate: HOLD signal for runner={} - no action", runner.getId());

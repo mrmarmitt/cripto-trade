@@ -53,6 +53,7 @@ mecanica (spring) e do provider (adapter), ligadas por um port.
 | Endpoint HTTP | `spring/controller` delega a port inbound | controller fino + `GlobalExceptionHandler` | `RunnerController` -> `QueryRunnerPort` |
 | Persistir agregado | `core` define port; `spring/infrastructure/persistence` implementa | `Jdbc*RepositoryAdapter` + entity + mapper | `JdbcGlobalBalanceRepositoryAdapter` |
 | Decidir BUY/SELL/HOLD/CANCEL | `strategy` | `TradingStrategy` pura | `SimpleMovingAverageStrategy` |
+| Falar com estrategia fora do processo | `adapter-strategy-remote` (rede) + `core` (falha = HOLD, catalogo) | `StrategyEvaluationPort`, `RegisterRemoteStrategiesPort` | `RemoteStrategyClient` + `RegisterRemoteStrategiesUseCase` |
 | Marcar posicao a mercado / equity do portfolio | `core` | `LatestPricePort` (preco), `Position.getUnrealizedPnl` | `PortfolioMarkToMarket` (core) + `InMemoryLatestPriceRepository` (spring) |
 | Normalizar quantidade/preco para filtros | `core` decide **quando**; adapter sabe **como** | `OrderQuantityNormalizerPort` | `OrderNormalizer` (core) + `BinanceOrderNormalizer` (adapter) |
 
@@ -165,7 +166,13 @@ Uma pasta por estrategia com a classe `TradingStrategy` e seu record de config. 
 | `rest`, `auth`, `filters`, `userdata`, `trade`, `boot` | Detalhes do provider por capacidade |
 
 Adapters sao Java puro (sem Spring): recebem dependencias por construtor e sao montados
-em `spring-application/config/exchange`.
+em `spring-application/config/exchange` (exchanges) ou `config/strategy` (estrategias remotas).
+
+`adapter-strategy-remote` (`com.marmitt.strategyservice`) e o adapter do contrato de estrategias fora
+do processo (T41): `wire` (formato de rede, mapeamento nos dois sentidos, validacao da decisao) e o
+cliente `RemoteStrategyClient`. Transporte HTTP pela propria porta `StrategyServiceHttpPort`,
+implementada com OkHttp no spring. `strategy-service-reference` e uma app separada (nao entra no
+classpath do ctrade) que serve estrategias pelo contrato usando o mesmo `wire`.
 
 ---
 

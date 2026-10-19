@@ -5,6 +5,7 @@ import com.marmitt.core.dto.strategy.StrategyContextDto;
 import com.marmitt.core.dto.strategy.StrategyInputDto;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.enums.TradingAction;
+import com.marmitt.core.exceptions.StrategyUnavailableException;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.strategy.TradingStrategy;
 import lombok.extern.slf4j.Slf4j;
@@ -32,14 +33,14 @@ class StrategySignalEvaluator {
     }
 
     /**
-     * Resolve a estrategia ativa do runner, tentando primeiro por ID e depois por nome.
+     * Resolve a estrategia ativa do runner pelo {@code strategyId} (T41: so por id — com duas versoes
+     * de mesmo nome no ar, resolver por nome ficaria ambiguo).
      *
      * @return a estrategia habilitada, ou vazio se nao encontrada ou desabilitada —
      *         o chamador deve tratar ausencia como HOLD implicito
      */
     public Optional<TradingStrategy> resolveActiveStrategy(StrategyRunner runner) {
-        Optional<TradingStrategy> strategy = strategyRepository.findById(runner.getStrategyId())
-                .or(() -> strategyRepository.findByName(runner.getStrategyName()));
+        Optional<TradingStrategy> strategy = strategyRepository.findById(runner.getStrategyId());
 
         if (strategy.isEmpty()) {
             log.warn("priceUpdate: strategy not found for runner={} strategyId={} strategyName={}",
@@ -56,27 +57,40 @@ class StrategySignalEvaluator {
     }
 
     /**
-     * Executa a estrategia e retorna a decisao de trade.
-     * Retorno nulo da estrategia e normalizado para HOLD — estrategias mal implementadas
-     * nao devem causar NullPointerException no pipeline principal.
+     * Executa a estrategia. Qualquer falha — retorno nulo, sinal invalido, excecao da estrategia
+     * in-process ou estrategia remota indisponivel ({@link StrategyUnavailableException}) — vira
+     * HOLD implicito com {@code unavailable = true}: o runner nao age neste tick e o monitoramento
+     * distingue "estrategia decidiu esperar" de "estrategia nao decidiu" (T41).
      */
-    public StrategyOutputDto evaluate(StrategyRunner runner,
-                                      TradingStrategy strategy,
-                                      StrategyInputDto input,
-                                      StrategyContextDto context) {
+    public Evaluation evaluate(StrategyRunner runner,
+                               TradingStrategy strategy,
+                               StrategyInputDto input,
+                               StrategyContextDto context) {
         try {
             StrategyOutputDto output = strategy.executeStrategy(input, context);
             if (output == null) {
-                return StrategyOutputDto.hold(runner.getStrategyName(),
-                        "Execution of strategy returned null, SHOULD_HOLD by default.");
+                return unavailable(strategy, "strategy returned null");
             }
-            return output;
-        } catch (IllegalArgumentException e) {
-            log.warn("priceUpdate: invalid strategy signal runner={} strategy={} reason={} - forcing HOLD",
-                    runner.getId(), strategy.getStrategyName(), e.getMessage());
-            return StrategyOutputDto.hold(strategy.getStrategyName(),
-                    "Invalid strategy signal: " + e.getMessage());
+            return new Evaluation(output, false);
+        } catch (StrategyUnavailableException e) {
+            log.warn("priceUpdate: strategy unavailable runner={} strategy={} reason={} - {} - HOLD",
+                    runner.getId(), strategy.getStrategyName(), e.reason(), e.getMessage());
+            return unavailable(strategy, e.reason() + ": " + e.getMessage());
+        } catch (RuntimeException e) {
+            log.warn("priceUpdate: strategy failed runner={} strategy={} - {} - HOLD",
+                    runner.getId(), strategy.getStrategyName(), e.toString());
+            return unavailable(strategy, e.toString());
         }
+    }
+
+    private static Evaluation unavailable(TradingStrategy strategy, String reason) {
+        return new Evaluation(StrategyOutputDto.hold(strategy.getStrategyName(), "Strategy unavailable: " + reason), true);
+    }
+
+    /**
+     * @param unavailable a estrategia nao produziu decisao utilizavel; {@code output} e um HOLD implicito
+     */
+    record Evaluation(StrategyOutputDto output, boolean unavailable) {
     }
 
     /**

@@ -12,7 +12,9 @@ import java.math.RoundingMode;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 
 @Slf4j
@@ -24,7 +26,12 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
 
     private boolean enabled = true;
     private final SimpleMovingAverageConfig config;
-    private final List<BigDecimal> priceHistory = new ArrayList<>();
+    /**
+     * Historico de warm-up por runner (T40/T41): dois runners com esta estrategia em simbolos
+     * diferentes nao podem misturar a serie de precos — mesma chave {@code (strategy, runnerId)} do
+     * contrato out-of-process.
+     */
+    private final Map<UUID, List<BigDecimal>> priceHistoryByRunner = new HashMap<>();
 
     public SimpleMovingAverageStrategy() {
         this(SimpleMovingAverageConfig.defaultConfig());
@@ -62,7 +69,9 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
     @Override
     public synchronized StrategyOutputDto executeStrategy(StrategyInputDto input, StrategyContextDto portfolioContext) {
         BigDecimal currentPrice = input.currentPrice();
-        updateHistory(currentPrice);
+        List<BigDecimal> priceHistory = priceHistoryByRunner.computeIfAbsent(
+                portfolioContext.runnerId(), runnerId -> new ArrayList<>());
+        updateHistory(priceHistory, currentPrice);
 
         // 1. Aguardar historico minimo
         if (priceHistory.size() < config.movingAveragePeriod()) {
@@ -110,8 +119,8 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
         }
 
         // 3. Sinal de compra - cruzamento de SMA para cima
-        BigDecimal sma = calculateSMA();
-        BigDecimal previousPrice = resolvePreviousPrice(input);
+        BigDecimal sma = calculateSMA(priceHistory);
+        BigDecimal previousPrice = resolvePreviousPrice(input, priceHistory);
         log.debug("SMA: current={} previous={} sma={} size={}",
                 currentPrice, previousPrice, sma, priceHistory.size());
         if (previousPrice != null
@@ -127,14 +136,14 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
         return StrategyOutputDto.hold(STRATEGY_NAME, "Nenhum sinal de lucro ou cruzamento de media.");
     }
 
-    private void updateHistory(BigDecimal price) {
+    private void updateHistory(List<BigDecimal> priceHistory, BigDecimal price) {
         priceHistory.add(price);
         while (priceHistory.size() > config.movingAveragePeriod()) {
             priceHistory.removeFirst();
         }
     }
 
-    private BigDecimal resolvePreviousPrice(StrategyInputDto input) {
+    private BigDecimal resolvePreviousPrice(StrategyInputDto input, List<BigDecimal> priceHistory) {
         if (input.previousPrice() != null) {
             return input.previousPrice();
         }
@@ -144,7 +153,7 @@ public class SimpleMovingAverageStrategy implements TradingStrategy {
         return priceHistory.get(priceHistory.size() - 2);
     }
 
-    private BigDecimal calculateSMA() {
+    private static BigDecimal calculateSMA(List<BigDecimal> priceHistory) {
         BigDecimal sum = priceHistory.stream()
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
         return sum.divide(BigDecimal.valueOf(priceHistory.size()), 8, RoundingMode.HALF_UP);

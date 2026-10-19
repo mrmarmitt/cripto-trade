@@ -1,0 +1,31 @@
+package com.marmitt.core.ports.outbound.strategy;
+
+import com.marmitt.core.dto.strategy.StrategyContextDto;
+import com.marmitt.core.dto.strategy.StrategyInputDto;
+import com.marmitt.core.dto.strategy.StrategyOutputDto;
+
+import java.util.UUID;
+
+/**
+ * Avaliação de uma estratégia que roda fora do processo (T41). Agnóstico de transporte: o adapter
+ * decide REST, gRPC etc. Qualquer falha (indisponível, timeout, 5xx, resposta fora do contrato,
+ * decisão velha) é sinalizada com {@link com.marmitt.core.exceptions.StrategyUnavailableException}.
+ */
+public interface StrategyEvaluationPort {
+
+    StrategyOutputDto evaluate(UUID strategyRef, StrategyInputDto input, StrategyContextDto context);
+
+    /**
+     * Identidade que o serviço declara servir para {@code strategyRef} ({@code /meta} no contrato REST).
+     *
+     * @throws com.marmitt.core.exceptions.StrategyUnavailableException se o serviço não responder ou
+     *         não servir a versão
+     */
+    RemoteStrategyIdentity describe(UUID strategyRef);
+
+    /**
+     * @param contractVersion versão do contrato de rede que o serviço implementa (ex.: {@code 1.1.0})
+     */
+    record RemoteStrategyIdentity(UUID strategyId, String name, String version, String contractVersion) {
+    }
+}

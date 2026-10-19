@@ -81,8 +81,9 @@ Strings `date-time` (`2026-07-03T14:22:05.123Z`). Sem epoch, sem timezone local.
   (ver "Estado, warm-up e readiness").
 - `tickId` — identificador opaco do tick (string), único por runner. Mesma `tickId` ⇒ mesma decisão
   (ver "Entrega e idempotência").
-- `sequence` — inteiro monotônico crescente por runner. A app só acrescenta ao warm-up um tick com
-  `sequence` maior que o último visto daquele runner.
+- `sequence` — inteiro monotônico crescente por runner, **não contíguo**. A app só acrescenta ao
+  warm-up um tick com `sequence` maior que o último visto daquele runner. O ctrade o ancora no relógio
+  (microssegundos), então ele continua crescente depois de um restart do ctrade sem estado persistido.
 - `input` (`MarketInput`) — dados do tick. `currentPrice` é obrigatório e positivo; os demais preços
   são opcionais. A validação semântica rica (spread, faixa diária, idade do dado) é do ctrade — a app
   recebe o dado já aceito.
@@ -278,16 +279,27 @@ o risco é maior em `SHOULD_BUY`/`SHOULD_SELL` sem `limitPrice`, que usam o pre�
 
 ---
 
+## Autenticação
+
+Opcional: quando o ctrade tem token configurado, envia `Authorization: Bearer <token>` em todas as
+chamadas. A app que exige token responde `401` sem ele. O serviço deve ficar em rede interna.
+
 ## Onde isto se encaixa
 
-Camada 1 do desacoplamento de estratégias. As demais peças (fora do escopo deste spec):
+Camada 1 do desacoplamento de estratégias — **implementada na T41**:
 
-- **Core:** `StrategyEvaluationPort` + uma `TradingStrategy` proxy que delega `executeStrategy` a este
-  endpoint. O core permanece puro e agnóstico de transporte.
-- **spring-application:** adapter REST cliente deste contrato + `strategy_catalog` (ref → endpoint →
-  status) + registry dinâmico que troca o proxy ativo em runtime via o `registerStrategy` já existente.
-- **Loop autônomo:** harness de backtest, gate de invariantes, shadow/canário e máquina de promoção
-  (`REGISTERED → SHADOW → ACTIVE → DRAINING → RETIRED`).
+- **Core:** `StrategyEvaluationPort` + `RemoteTradingStrategy` (proxy que delega `executeStrategy`);
+  falha vira HOLD com o desfecho `STRATEGY_UNAVAILABLE`. `RegisterRemoteStrategiesUseCase` confere
+  `/v1/meta` antes de registrar.
+- **`adapter-strategy-remote`:** formato de rede deste contrato, validação da decisão e cliente (sem
+  retry, `tickId`/`sequence` por runner, descarte por idade).
+- **spring-application:** transporte OkHttp com timeout, catálogo estático
+  (`ctrade.strategy.remote.catalog`), métricas e registro no boot com nova tentativa periódica.
+- **`strategy-service-reference`:** app de referência que serve o SMA por este contrato; o teste de
+  paridade in-process × remoto é o portão da migração.
+
+Fora do escopo ainda: troca de versão em runtime, harness de backtest, gate de invariantes,
+shadow/canário e máquina de promoção (`REGISTERED → SHADOW → ACTIVE → DRAINING → RETIRED`).
 
 Transporte inicial é **REST/JSON**; o `StrategyEvaluationPort` é agnóstico, então gRPC é uma troca de
 adapter no futuro sem tocar no core, caso a serialização vire gargalo medido.

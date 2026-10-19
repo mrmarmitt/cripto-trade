@@ -10,7 +10,5 @@ public interface StrategyRepositoryPort {
 
     Optional<TradingStrategy> findById(UUID strategyId);
 
-    Optional<TradingStrategy> findByName(String strategyName);
-
     void registerStrategy(TradingStrategy strategy);
 }
