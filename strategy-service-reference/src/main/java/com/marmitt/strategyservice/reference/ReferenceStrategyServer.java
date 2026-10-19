@@ -188,7 +188,8 @@ public class ReferenceStrategyServer {
     /** Estado do runner: último sequence aceito e as decisões recentes por tickId (cache curto). */
     private static final class RunnerState {
         private static final int CACHE_SIZE = 32;
-        private long lastSequence;
+        /** Nenhum tick aceito ainda: abaixo do minimo do contrato (0), para o primeiro tick entrar. */
+        private long lastSequence = -1;
         private final Map<String, WireTypes.Decision> decisionsByTickId = new LinkedHashMap<>(CACHE_SIZE, 0.75f, false) {
             @Override
             protected boolean removeEldestEntry(Map.Entry<String, WireTypes.Decision> eldest) {

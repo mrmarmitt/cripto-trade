@@ -42,8 +42,31 @@ class ReferenceStrategyServerTest {
     }
 
     @Test
+    void firstTickWithSequenceZeroIsEvaluated() throws Exception {
+        String runner = java.util.UUID.randomUUID().toString();
+        HttpResponse<String> response = post(evaluateRequest(runner, "t0", 0), "secret");
+
+        assertEquals(200, response.statusCode());
+        assertTrue(response.body().contains("Aguardando historico: 1/"),
+                "sequence 0 entra no warm-up (primeiro tick do historico): " + response.body());
+    }
+
+    @Test
     void missingTokenGetsA401() throws Exception {
         assertEquals(401, post("{}", null).statusCode());
+    }
+
+    private static String evaluateRequest(String runnerId, String tickId, long sequence) {
+        String lots = "[]";
+        return "{\"strategyRef\":\"" + ReferenceStrategyServer.DEFAULT_STRATEGY_REF + "\",\"tickId\":\"" + tickId
+                + "\",\"sequence\":" + sequence + ",\"input\":{\"symbol\":\"BTCUSDT\",\"currentPrice\":\"65000\","
+                + "\"timestamp\":\"2026-10-19T12:00:00Z\"},\"context\":{\"runnerId\":\"" + runnerId + "\","
+                + "\"portfolioId\":\"22222222-2222-2222-2222-222222222222\",\"symbol\":\"BTCUSDT\","
+                + "\"positionContext\":{\"symbol\":\"BTCUSDT\",\"quantity\":\"0\",\"averagePrice\":\"0\","
+                + "\"currentPrice\":\"0\",\"unrealizedPnl\":\"0\",\"realizedPnl\":\"0\",\"openLots\":" + lots + "},"
+                + "\"openLots\":" + lots + ",\"pendingOrders\":[],\"totalCapital\":\"10000\",\"availableCapital\":\"10000\","
+                + "\"maxOperationAmount\":\"2000\",\"minOperationAmount\":\"10\",\"maxOpenPositions\":1,"
+                + "\"currentOpenPositions\":0,\"realizedPnl\":\"0\",\"unrealizedPnl\":\"0\"}}";
     }
 
     private HttpResponse<String> post(String body, String token) throws Exception {
