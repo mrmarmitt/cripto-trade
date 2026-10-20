@@ -261,6 +261,10 @@ T44  Proteção do lote (stop 5% MARKET; concluída)                   T24  Circ
 > do `CANCELED` e debita o saldo da execução inteira. Não afeta exchange real; afeta E2E que cancelam
 > ordem marketable.
 >
+> **Ideia em espera (2026-10-20):** MOCK como app externo, no mesmo papel do app de estratégia. Adiado
+> para depois do soak (T53): hoje os E2E controlam o MOCK dentro do processo (preço de referência,
+> overrides, reset) e um container a mais na CI traz novos pontos de instabilidade.
+>
 > Fora desta trilha, ainda sem task: perfil `application-prod.yml` e gestão de segredos
 > (`GO_LIVE_CHECKLIST` itens 8–9), harness de backtest/modo shadow e limpeza de documentação
 > desatualizada.
