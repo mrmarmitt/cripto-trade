@@ -228,7 +228,7 @@ T41  Extração mínima: StrategyEvaluationPort + RemoteTradingStrategy + catál
 T42  Mailbox por runner + executores separados (fill nunca espera tick)
 
 T45  Ativação do Safe Mode + CANCEL_ALL / PANIC_SELL   ← pré-requisito de T25 e T43 (concluída)
-T48  Proteção LIMIT no PANIC_SELL (configurável na estratégia) ← decisão pendente; após T40
+T48  Proteção LIMIT no PANIC_SELL (política no cadastro do runner) ← decidida; pronta
        ↓
 T43  Drawdown 24h + marcação a mercado (concluída; perda diária descartada)     T25  Safe Mode automático
 T44  Proteção do lote (stop 5% MARKET; concluída)                   T24  Circuit breaker REST
