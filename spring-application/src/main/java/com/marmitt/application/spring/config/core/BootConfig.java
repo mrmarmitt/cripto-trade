@@ -3,6 +3,7 @@ package com.marmitt.application.spring.config.core;
 import com.marmitt.core.application.usecase.boot.RunBootSequenceUseCase;
 import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
 import com.marmitt.core.application.usecase.boot.phase2.PortfolioZombieDetectionUseCase;
+import com.marmitt.core.application.usecase.portfolio.AutomaticSafeModeTrigger;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.ports.inbound.boot.RunBootSequencePort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
@@ -40,7 +41,8 @@ public class BootConfig {
             PortfolioBootSanityUseCase portfolioBootSanityUseCase,
             PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase,
             DeadLetterEntryRepositoryPort deadLetterEntryRepository,
-            RunnerBootRecoveryUseCase runnerBootRecoveryUseCase
+            RunnerBootRecoveryUseCase runnerBootRecoveryUseCase,
+            AutomaticSafeModeTrigger automaticSafeModeTrigger
     ) {
         return new RunBootSequenceUseCase(
                 portfolioRepository,
@@ -49,7 +51,8 @@ public class BootConfig {
                 portfolioBootSanityUseCase,
                 portfolioZombieDetectionUseCase,
                 deadLetterEntryRepository,
-                runnerBootRecoveryUseCase
+                runnerBootRecoveryUseCase,
+                automaticSafeModeTrigger
         );
     }
 }

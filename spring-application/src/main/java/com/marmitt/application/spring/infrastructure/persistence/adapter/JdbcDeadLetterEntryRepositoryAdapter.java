@@ -111,6 +111,15 @@ public class JdbcDeadLetterEntryRepositoryAdapter implements DeadLetterEntryRepo
     }
 
     @Override
+    public long countUnresolvedByPortfolioId(UUID portfolioId) {
+        long start = System.nanoTime();
+        long count = deadLetterEntryJdbcRepository.countUnresolvedByPortfolioId(portfolioId);
+        log.trace("[REPO] deadLetterEntry.countUnresolvedByPortfolioId({}) - {}ms - count={}",
+                portfolioId, RepoTiming.elapsedMs(start), count);
+        return count;
+    }
+
+    @Override
     public boolean existsUnresolvedByPortfolioIdAndRunnerIsNull(UUID portfolioId) {
         long start = System.nanoTime();
         boolean exists = deadLetterEntryJdbcRepository.existsUnresolvedByPortfolioIdAndRunnerIsNull(portfolioId);

@@ -47,6 +47,12 @@ public record ErrorNotificationEvent(
                 correlationId, runnerId, null, occurredAt);
     }
 
+    public static ErrorNotificationEvent runnerAutoHalted(String title, String description, UUID runnerId,
+                                                          Instant occurredAt) {
+        return new ErrorNotificationEvent(ErrorNotificationType.RUNNER_AUTO_HALTED, title, description,
+                null, runnerId, null, occurredAt);
+    }
+
     public static ErrorNotificationEvent bootFailFast(String title, String description,
                                                       String correlationId, Instant occurredAt) {
         return new ErrorNotificationEvent(ErrorNotificationType.BOOT_FAIL_FAST, title, description,

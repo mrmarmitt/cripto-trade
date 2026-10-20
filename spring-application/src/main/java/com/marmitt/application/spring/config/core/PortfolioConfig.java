@@ -1,27 +1,31 @@
 package com.marmitt.application.spring.config.core;
 
+import com.marmitt.application.spring.bootstrap.AutoSafeModeProperties;
 import com.marmitt.application.spring.bootstrap.CircuitBreakerProperties;
-import com.marmitt.application.spring.service.TransactionalManageDeadLetterPort;
-import com.marmitt.core.application.usecase.portfolio.EvaluateDrawdownUseCase;
-import com.marmitt.core.application.usecase.portfolio.ReportOperationalStateUseCase;
 import com.marmitt.application.spring.bootstrap.OperationalStateProperties;
-import com.marmitt.core.ports.inbound.portfolio.ReportOperationalStatePort;
-import com.marmitt.core.ports.outbound.metrics.OperationalMetricsPort;
-import com.marmitt.core.ports.inbound.portfolio.EvaluateDrawdownPort;
-import com.marmitt.core.ports.outbound.marketdata.LatestPricePort;
-import com.marmitt.core.ports.outbound.metrics.CircuitBreakerMetricsPort;
-import com.marmitt.core.ports.outbound.notification.ErrorNotificationPort;
-import com.marmitt.core.ports.outbound.repository.EquitySnapshotRepositoryPort;
-import com.marmitt.core.ports.outbound.repository.DeadLetterReprocessingPort;
+import com.marmitt.application.spring.service.TransactionalManageDeadLetterPort;
+import com.marmitt.core.application.usecase.portfolio.AutomaticSafeModeTrigger;
 import com.marmitt.core.application.usecase.portfolio.CreatePortfolioUseCase;
+import com.marmitt.core.application.usecase.portfolio.EvaluateDrawdownUseCase;
+import com.marmitt.core.application.usecase.portfolio.EvaluateOperationalTriggersUseCase;
 import com.marmitt.core.application.usecase.portfolio.ManageDeadLetterUseCase;
 import com.marmitt.core.application.usecase.portfolio.ManageSafeModeUseCase;
 import com.marmitt.core.application.usecase.portfolio.QueryPortfolioUseCase;
+import com.marmitt.core.application.usecase.portfolio.ReportOperationalStateUseCase;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
+import com.marmitt.core.ports.inbound.portfolio.EvaluateDrawdownPort;
+import com.marmitt.core.ports.inbound.portfolio.EvaluateOperationalTriggersPort;
 import com.marmitt.core.ports.inbound.portfolio.ManageDeadLetterPort;
 import com.marmitt.core.ports.inbound.portfolio.ManageSafeModePort;
 import com.marmitt.core.ports.inbound.portfolio.QueryPortfolioPort;
+import com.marmitt.core.ports.inbound.portfolio.ReportOperationalStatePort;
+import com.marmitt.core.ports.outbound.marketdata.LatestPricePort;
+import com.marmitt.core.ports.outbound.metrics.CircuitBreakerMetricsPort;
+import com.marmitt.core.ports.outbound.metrics.OperationalMetricsPort;
+import com.marmitt.core.ports.outbound.notification.ErrorNotificationPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.DeadLetterReprocessingPort;
+import com.marmitt.core.ports.outbound.repository.EquitySnapshotRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
@@ -76,14 +80,37 @@ public class PortfolioConfig {
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             LatestPricePort latestPrices,
             EquitySnapshotRepositoryPort equitySnapshots,
-            ManageSafeModePort manageSafeMode,
-            ErrorNotificationPort errorNotification,
+            AutomaticSafeModeTrigger automaticSafeModeTrigger,
             CircuitBreakerMetricsPort circuitBreakerMetrics,
             CircuitBreakerProperties circuitBreakerProperties
     ) {
         return new EvaluateDrawdownUseCase(portfolioRepository, globalBalanceRepository, strategyRunnerRepository,
-                latestPrices, equitySnapshots, manageSafeMode, errorNotification, circuitBreakerMetrics,
+                latestPrices, equitySnapshots, automaticSafeModeTrigger, circuitBreakerMetrics,
                 circuitBreakerProperties.getMaxDrawdownPercent(), Clock.systemUTC());
+    }
+
+    /** Caminho unico do HALT automatico do portfolio (T43, T25). */
+    @Bean
+    public AutomaticSafeModeTrigger automaticSafeModeTrigger(
+            PortfolioRepositoryPort portfolioRepository,
+            ManageSafeModePort manageSafeMode,
+            CircuitBreakerMetricsPort circuitBreakerMetrics,
+            ErrorNotificationPort errorNotification,
+            AutoSafeModeProperties autoSafeModeProperties
+    ) {
+        return new AutomaticSafeModeTrigger(portfolioRepository, manageSafeMode, circuitBreakerMetrics,
+                errorNotification, Clock.systemUTC(), autoSafeModeProperties.enabledTriggers());
+    }
+
+    @Bean
+    public EvaluateOperationalTriggersPort evaluateOperationalTriggers(
+            PortfolioRepositoryPort portfolioRepository,
+            DeadLetterEntryRepositoryPort deadLetterEntryRepository,
+            AutomaticSafeModeTrigger automaticSafeModeTrigger,
+            AutoSafeModeProperties autoSafeModeProperties
+    ) {
+        return new EvaluateOperationalTriggersUseCase(portfolioRepository, deadLetterEntryRepository,
+                automaticSafeModeTrigger, autoSafeModeProperties.getDlq().getThreshold());
     }
 
     @Bean

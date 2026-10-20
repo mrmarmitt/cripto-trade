@@ -1,17 +1,22 @@
 package com.marmitt.core.application.usecase.runner;
 
+import com.marmitt.core.application.usecase.portfolio.AutomaticSafeModeTrigger;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.runner.request.RecoverStaleTransactionsRequest;
 import com.marmitt.core.dto.runner.request.RecoverTransactionStatusRequest;
 import com.marmitt.core.dto.runner.response.RecoverStaleTransactionsResponse;
 import com.marmitt.core.dto.runner.response.RecoverTransactionStatusResponse;
+import com.marmitt.core.enums.SafeModeTrigger;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.ports.inbound.runner.RecoverStaleTransactionsPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.UUID;
 
 @Slf4j
 public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactionsPort {
@@ -29,11 +34,26 @@ public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactions
 
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final RecoverTransactionStatusUseCase recoverTransactionStatusUseCase;
+    private final AutomaticSafeModeTrigger safeModeTrigger;
+    private final int maxStuckCycles;
+    /** Ciclos consecutivos em que cada transacao falhou (T25); so guarda as que falharam no ultimo ciclo. */
+    private Map<UUID, Integer> consecutiveFailures = new HashMap<>();
 
+    /**
+     * @param maxStuckCycles ciclos consecutivos sem resolver a mesma transacao que acionam HALT do
+     *                       portfolio (T25)
+     */
     public RecoverStaleTransactionsUseCase(StrategyRunnerRepositoryPort strategyRunnerRepository,
-                                           RecoverTransactionStatusUseCase recoverTransactionStatusUseCase) {
+                                           RecoverTransactionStatusUseCase recoverTransactionStatusUseCase,
+                                           AutomaticSafeModeTrigger safeModeTrigger,
+                                           int maxStuckCycles) {
+        if (maxStuckCycles <= 0) {
+            throw new IllegalArgumentException("maxStuckCycles must be positive: " + maxStuckCycles);
+        }
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.recoverTransactionStatusUseCase = recoverTransactionStatusUseCase;
+        this.safeModeTrigger = safeModeTrigger;
+        this.maxStuckCycles = maxStuckCycles;
     }
 
     @Override
@@ -61,6 +81,7 @@ public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactions
         int routedToDlq = 0;
         int skipped = 0;
         int failed = 0;
+        Map<UUID, Integer> failuresThisCycle = new HashMap<>();
 
         for (Transaction candidate : candidates) {
             try {
@@ -82,13 +103,17 @@ public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactions
                 }
 
                 failed++;
+                recordFailure(candidate, failuresThisCycle);
                 log.warn("runtimeRecoveryBatch: failed transactionId={} reason={} failureReason={}",
                         response.transactionId(), response.message(), response.failureReason());
             } catch (RuntimeException e) {
                 failed++;
+                recordFailure(candidate, failuresThisCycle);
                 log.error("runtimeRecoveryBatch: unexpected failure transactionId={}", candidate.getId(), e);
             }
         }
+        // Transacao resolvida, pulada ou fora dos candidatos zera a contagem: so conta ciclo seguido.
+        consecutiveFailures = failuresThisCycle;
 
         return new RecoverStaleTransactionsResponse(
                 candidates.size(),
@@ -97,5 +122,21 @@ public class RecoverStaleTransactionsUseCase implements RecoverStaleTransactions
                 skipped,
                 failed
         );
+    }
+
+    /**
+     * Conta mais um ciclo sem resolver a transacao; no limite, aciona HALT do portfolio do runner (T25).
+     * Transacao presa que nem a exchange esclarece deixa capital e posicao em estado incerto.
+     */
+    private void recordFailure(Transaction candidate, Map<UUID, Integer> failuresThisCycle) {
+        int cycles = consecutiveFailures.getOrDefault(candidate.getId(), 0) + 1;
+        failuresThisCycle.put(candidate.getId(), cycles);
+        if (cycles < maxStuckCycles) {
+            return;
+        }
+        strategyRunnerRepository.findById(candidate.getRunnerId()).ifPresent(runner ->
+                safeModeTrigger.activate(runner.getPortfolioId(), SafeModeTrigger.WATCHDOG_STUCK,
+                        "transactionId=" + candidate.getId() + " runnerId=" + runner.getId()
+                                + " status=" + candidate.getStatus() + " cycles=" + cycles));
     }
 }

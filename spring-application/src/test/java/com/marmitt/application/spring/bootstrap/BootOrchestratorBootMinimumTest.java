@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.bootstrap;
 
+import com.marmitt.core.application.usecase.portfolio.AutomaticSafeModeTrigger;
 import com.marmitt.core.application.usecase.boot.RunBootSequenceUseCase;
 import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
 import com.marmitt.core.application.usecase.boot.phase2.PortfolioZombieDetectionUseCase;
@@ -188,7 +189,8 @@ class BootOrchestratorBootMinimumTest {
                 portfolioBootSanityUseCase,
                 portfolioZombieDetectionUseCase,
                 deadLetterRepository,
-                runnerBootRecoveryUseCase
+                runnerBootRecoveryUseCase,
+                mock(AutomaticSafeModeTrigger.class)
         );
 
         return new BootOrchestrator(

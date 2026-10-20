@@ -1,6 +1,7 @@
 package com.marmitt.application.spring.bootstrap;
 
 import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
+import com.marmitt.core.application.usecase.runner.ConsecutiveRejectionGuard;
 import com.marmitt.core.application.usecase.runner.OrderConciliationUseCase;
 import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
 import com.marmitt.core.domain.runner.StrategyRunner;
@@ -119,10 +120,11 @@ class MockTransientOrderFailureIntegrationTest extends MockOrderOverrideIntegrat
         @Primary
         OrderConciliationUseCase failingOrderConciliationUseCase(
                 ConciliationOrderUpdateExecutor delegate,
-                PlannedOrderConciliationFailurePlan failurePlan
+                PlannedOrderConciliationFailurePlan failurePlan,
+                ConsecutiveRejectionGuard rejectionGuard
         ) {
             return new OrderConciliationUseCase(
-                    new FailingOnceConciliationOrderUpdateExecutor(delegate, failurePlan));
+                    new FailingOnceConciliationOrderUpdateExecutor(delegate, failurePlan), rejectionGuard);
         }
     }
 

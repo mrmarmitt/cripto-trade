@@ -14,5 +14,7 @@ public enum ErrorNotificationType {
     /** Monitor de capital acionou o Safe Mode automaticamente (T43). */
     CIRCUIT_BREAKER_TRIGGERED,
     /** Protecao do lote vendeu a posicao sem a estrategia (T44). */
-    PROTECTIVE_EXIT
+    PROTECTIVE_EXIT,
+    /** Runner parado automaticamente por rejeicoes consecutivas da exchange (T25). */
+    RUNNER_AUTO_HALTED
 }

@@ -3,7 +3,7 @@
 **Complexidade:** Média  
 **Responsável:** Claude  
 **Dependências:** T21 (Discord notifications), T23 (signal counter — opcional para trigger por HOLD rate), **T45** (caminho de ativação do Safe Mode)  
-**Status:** Pendente
+**Status:** Concluído (2026-10-19) — ver "Entrega" no fim.
 
 > **Escopo ampliado (2026-10-16, T39):** além dos gatilhos operacionais, esta task passa a cobrir os
 > gatilhos 2–4 do BLUEPRINT §11.1.A ainda inexistentes: **rejeições consecutivas** (circuit breaker por
@@ -172,3 +172,47 @@ safe-mode:
 5. Desativação manual via `PUT /api/admin/portfolios/{id}/safe-mode` continua funcionando.
 6. Cada condição pode ser desabilitada individualmente via config sem alterar as demais.
 7. `safe-mode.auto.enabled: false` desabilita o avaliador inteiro sem afetar Safe Mode manual.
+
+---
+
+## Entrega (2026-10-19)
+
+> As seções acima (port `SafeModeActivationPort`, `AutoSafeModeUseCase`, evento, gatilho por capital
+> disponível e por reconexão) são o rascunho original; vale o que está aqui.
+
+### Decisões de implementação
+
+- **Caminho único do HALT automático:** `AutomaticSafeModeTrigger` (core) — usado pelo drawdown da T43
+  (refatorado) e pelos gatilhos novos. Só age com o portfolio em NORMAL; muda pelo `ManageSafeModePort`
+  com origem `AUTOMATIC`, conta `circuit_breaker.activations.total{reason}`, loga e notifica
+  (`CIRCUIT_BREAKER_TRIGGERED`). Motivos em `SafeModeTrigger`; gatilho desligado é ignorado ali mesmo.
+- **DLQ (≥ 3):** `EvaluateOperationalTriggersUseCase` agendado a cada 30s (`OperationalTriggerScheduler`),
+  com `DeadLetterEntryRepositoryPort.countUnresolvedByPortfolioId` novo.
+- **Divergência de saldo:** `RunBootSequenceUseCase` aciona no `FAIL_DEFICIT` da sanidade do boot, antes
+  do fail-fast (o HALT persiste mesmo se o boot abortar).
+- **Watchdog travado (3 ciclos):** `RecoverStaleTransactionsUseCase` conta, em memória, ciclos seguidos
+  com a mesma transação `FAILED`; resolvida, pulada ou fora dos candidatos zera.
+- **Rejeições consecutivas (5, por runner):** `ConsecutiveRejectionGuard`, chamado pela
+  `OrderConciliationUseCase` depois de conciliar (falha nele não desfaz a conciliação). Conta ordens
+  distintas por runner (shortCode do `clientOrderId`); NEW/fill zera. Halt pelo `HaltRunnerPort`, alerta
+  `RUNNER_AUTO_HALTED`; sem cooldown.
+- **Configuração:** `safe-mode.auto.*` com `enabled` por gatilho e global (critérios 6 e 7).
+
+### Validação
+
+- `./scripts/gradle-run.ps1 test` verde (core 235, spring-application 217).
+- `AutomaticSafeModeTriggerTest`: HALT com auditoria, métrica e alerta; Safe Mode já ativo (inclusive
+  manual mais alto) não repete; gatilho desligado ignorado.
+- `EvaluateOperationalTriggersUseCaseTest`, `RecoverStaleTransactionsStuckTriggerTest`,
+  `ConsecutiveRejectionGuardTest` (5 rejeições distintas param o runner; aceite zera; REJECTED repetido
+  conta uma vez; runner já parado não alerta de novo).
+- `EvaluateDrawdownUseCaseTest` verde pelo caminho novo.
+- `AutoSafeModeIntegrationTest` (Postgres): 2 entradas não acionam, a 3ª aciona HALT `AUTOMATIC`, a
+  segunda avaliação não registra nova mudança, retomada manual funciona (critérios 1, 4 e 5). O bloqueio
+  de BUY com HALT (critério 2) já é coberto pelos testes do Safe Mode (T45).
+
+### Riscos residuais
+
+- Contagens do watchdog e das rejeições ficam em memória: restart recomeça a sequência.
+- Sem teste dedicado do `FAIL_DEFICIT` no boot (o acionamento é uma chamada ao disparador já testado).
+

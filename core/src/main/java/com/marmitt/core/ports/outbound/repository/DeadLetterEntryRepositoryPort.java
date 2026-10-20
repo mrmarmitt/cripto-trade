@@ -20,6 +20,9 @@ public interface DeadLetterEntryRepositoryPort {
 
     boolean existsUnresolvedByPortfolioId(UUID portfolioId);
 
+    /** Entradas não resolvidas do portfolio (com e sem runner) — gatilho de Safe Mode da T25. */
+    long countUnresolvedByPortfolioId(UUID portfolioId);
+
     boolean existsUnresolvedByPortfolioIdAndRunnerIsNull(UUID portfolioId);
 
     boolean existsUnresolvedByRunnerId(UUID runnerId);
