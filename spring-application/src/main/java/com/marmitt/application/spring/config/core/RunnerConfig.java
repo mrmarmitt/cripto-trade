@@ -41,6 +41,7 @@ import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
+import com.marmitt.core.ports.outbound.runner.RunnerActivationObserverPort;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -254,10 +255,11 @@ public class RunnerConfig {
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             ExchangeAdapterRepositoryPort exchangeAdapterRepository,
             RunnerBootRecoveryUseCase runnerBootRecoveryUseCase,
-            OperationalMetricsPort operationalMetrics
+            OperationalMetricsPort operationalMetrics,
+            RunnerActivationObserverPort runnerActivationObserver
     ) {
         return new ManageRunnerLifecycleUseCase(strategyRunnerRepository, exchangeAdapterRepository,
-                runnerBootRecoveryUseCase, operationalMetrics);
+                runnerBootRecoveryUseCase, operationalMetrics, runnerActivationObserver);
     }
 
     @Bean

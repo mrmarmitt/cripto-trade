@@ -169,8 +169,15 @@ ctrade:
     report-interval-ms: 15000
     termination-timeout-ms: 600000
     # T55: limiares do estado consolidado (GET /api/admin/operational-state).
-    market-data-stale-ms: 60000          # sem tick com runner ACTIVE: CRITICAL
+    market-data-stale-ms: 60000          # sem tick com runner ACTIVE: CRITICAL (T56: tambem reassina)
     reservation-stale-ms: 86400000       # BUY em voo segurando capital: WARN
+  market-data:
+    auto-feed:
+      # T56: abre conexoes e assinaturas que os runners operacionais precisam (boot, ciclo, start/resume).
+      enabled: ${CTRADE_MARKET_DATA_AUTO_FEED_ENABLED:true}
+      interval-ms: 30000
+      default-stream-type: TICKER
+      stream-types: {}                   # por exchange, ex.: BINANCE: TICKER
   scenario-strategies:
     # Estrategias de cenario deterministicas p/ testes em testnet (T35). Default OFF: nunca
     # registradas em producao. Ligar apenas em testnet/dev via CTRADE_SCENARIO_STRATEGIES_ENABLED=true.

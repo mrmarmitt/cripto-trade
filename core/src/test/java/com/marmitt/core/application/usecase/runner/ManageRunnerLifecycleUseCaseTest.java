@@ -42,8 +42,9 @@ class ManageRunnerLifecycleUseCaseTest {
     private final ExchangeAdapterRepositoryPort adapters = mock(ExchangeAdapterRepositoryPort.class);
     private final RunnerBootRecoveryUseCase recovery = mock(RunnerBootRecoveryUseCase.class);
     private final OperationalMetricsPort metrics = mock(OperationalMetricsPort.class);
+    private final java.util.List<UUID> activations = new java.util.ArrayList<>();
     private final ManageRunnerLifecycleUseCase useCase =
-            new ManageRunnerLifecycleUseCase(repository, adapters, recovery, metrics);
+            new ManageRunnerLifecycleUseCase(repository, adapters, recovery, metrics, activations::add);
 
     private StrategyRunner runner;
 
@@ -68,6 +69,7 @@ class ManageRunnerLifecycleUseCaseTest {
 
         assertEquals(RunnerStatus.CREATED, result.previousStatus());
         assertEquals(RunnerStatus.ACTIVE, result.newStatus());
+        assertEquals(java.util.List.of(runner.getId()), activations, "T56: avisa o coordenador de market data");
     }
 
     @Test

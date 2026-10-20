@@ -70,21 +70,20 @@ sem explicação (PnL, saldo, divergência com a exchange).
 <a id="partida-depois-de-um-boot"></a>
 ## Partida depois de um boot
 
-O boot reconcilia runners, mas **não abre conexões nem assinaturas de websocket**. Sem elas os runners
-ficam sem tick (`MARKET_DATA_STALE`) e, na Binance, sem atualizações de ordem (`STREAM_DISCONNECTED`).
+O coordenador de market data (T56) abre sozinho as conexões e assinaturas que os runners operacionais
+precisam: market data de cada fonte em `allowedMarketDataSources` e o stream de usuário da exchange que
+tem um. Roda 5s depois do boot, a cada 30s (`ctrade.market-data.auto-feed.*`) e logo após `start`/`resume`.
 
 1. `GET /api/boot/status` → esperado `status=SUCCESS`. Senão, ver [boot-not-ready](#boot-not-ready).
-2. Conectar o market data da exchange com os símbolos dos runners `ACTIVE`
-   (`GET /api/admin/runners/status` lista símbolos e fontes):
-   ```
-   POST /api/websocket/connect
-   {"exchange":"BINANCE","symbols":[{"baseCurrency":"BTC","quoteCurrency":"USDT","streamType":"TICKER"}]}
-   ```
-3. Assinar o market data: `POST /api/websocket/exchange/market-data/subscribe` com o mesmo corpo.
-4. Exchange com stream de usuário (Binance): `POST /api/websocket/exchange/order-notifications/subscribe`
-   `{"exchange":"BINANCE"}`.
-5. Confirmar: `GET /api/websocket/all` com `CONNECTED`; em até 60s, `MARKET_DATA_STALE` e
-   `STREAM_DISCONNECTED` em `OK`.
+2. Aguardar até 1 minuto e conferir `GET /api/admin/operational-state`: `MARKET_DATA_STALE` e
+   `STREAM_DISCONNECTED` em `OK`. Logs `marketData: connecting ...` / `subscribing ...` mostram o que foi
+   aberto e por quê.
+3. Não resolveu: ver [market-data-stale](#market-data-stale) ou [stream-disconnected](#stream-disconnected).
+
+Conexão manual (diagnóstico, ou com `ctrade.market-data.auto-feed.enabled=false`):
+`POST /api/websocket/connect`
+`{"exchange":"BINANCE","symbols":[{"baseCurrency":"BTC","quoteCurrency":"USDT","streamType":"TICKER"}]}`
+abre o market data e, se a exchange tiver, o stream de usuário.
 
 ---
 
@@ -236,19 +235,24 @@ O runner está em HOLD: não compra nem vende pela estratégia (a proteção do 
 
 Sem tick, nenhuma decisão, proteção do lote nem liquidação acontece.
 
-- **Diagnóstico:** `GET /api/websocket/all` — conexão de market data da exchange existe e está
-  `CONNECTED`? Logo após boot, é esperado: ver [Partida](#partida-depois-de-um-boot).
-- **Ação:** sem conexão → passos 2 e 3 da [Partida](#partida-depois-de-um-boot). Conectada sem tick →
-  `POST /api/websocket/exchange/market-data/subscribe` de novo com o símbolo.
+O coordenador (T56) reabre a conexão caída e reassina o símbolo sem tick a cada 30s.
+
+- **Diagnóstico:** logs `marketData:` (o coordenador está tentando? `no adapter for market data
+  source` = a fonte do runner não tem adapter registrado); `GET /api/websocket/all` para o estado da
+  conexão. Logo após boot ou reconexão, aguardar um ciclo.
+- **Ação:** persistindo depois de 2 ciclos com a conexão `CONNECTED`, a fonte não está publicando o
+  símbolo: conferir se o símbolo existe na exchange e se `allowedMarketDataSources` do runner está certo.
+  Coordenador desligado: conexão manual (ver [Partida](#partida-depois-de-um-boot)).
 - **Confirmar:** em até 60s o símbolo sai de `subjects`.
 
 <a id="stream-disconnected"></a>
 ### STREAM_DISCONNECTED — stream necessário não conectado
 
 - **Diagnóstico:** `subjects` traz exchange, canal e status (`NOT_OPENED` = nunca aberto desde o boot).
-  `RECONNECTING` = a estratégia de reconexão está trabalhando: aguardar.
-- **Ação:** `USER_DATA` → `POST /api/websocket/exchange/order-notifications/subscribe`
-  `{"exchange":"<exchange>"}`; `MARKET` → passos 2 e 3 da [Partida](#partida-depois-de-um-boot).
+  `CONNECTING`/`RECONNECTING` = a reconexão está trabalhando e o coordenador não interfere: aguardar.
+- **Ação:** o coordenador (T56) reabre a cada 30s. Persistindo, ver os logs `marketData:` e a causa da
+  falha de conexão (credencial, rede, chave de listen da Binance); coordenador desligado → conexão
+  manual (ver [Partida](#partida-depois-de-um-boot)).
 - **Confirmar:** status `CONNECTED` em `GET /api/websocket/all` e a verificação em `OK`.
 
 <a id="exchange-rest-circuit-open"></a>
