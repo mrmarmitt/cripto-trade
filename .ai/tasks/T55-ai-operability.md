@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T54 (primeira API no padrão), T27 (envelope `ApiError`), T51 (estado operacional como
 métrica). Base do monitoramento periódico por IA da T53.
-**Status:** Rascunho — **decisões de negócio pendentes** (ver seção própria).
+**Status:** Pendente — decisões registradas; entrega em 4 PRs (A → B → C → D).
 
 ---
 
@@ -30,18 +30,23 @@ endpoints que **mudam estado**:
 | `POST /api/dead-letters/{id}/resolve` e `/reprocess` | Resolve ou reaplica efeito financeiro de entrada da DLQ. |
 | `POST /api/portfolios`, `POST /api/portfolios/{id}/runners` | Cria portfolio e runner. |
 
-Os de websocket/listeners são de uma fase anterior ao core atual; as ordens diretas contrariam a regra
-de que toda ordem nasce de uma transação do core (`PHASE0_INVARIANTS`).
+As ordens diretas contrariam a regra de que toda ordem nasce de uma transação do core
+(`PHASE0_INVARIANTS`).
+
+**Os endpoints de conexão e assinatura são, hoje, o único jeito de começar a operar**: o boot não abre
+conexões nem assina market data; só a estratégia de reconexão religa uma conexão que caiu. Depois de um
+restart, sem `connect`/`subscribe`, os runners ficam sem tick. Por isso eles ficam (protegidos), e a
+abertura automática vira task própria.
 
 ## Escopo proposto
 
 ### Parte A — Superfície da API
 
-1. **Autenticação em tudo que muda estado**: toda rota de escrita exige `X-Admin-Key`.
-2. **Remover os caminhos que contornam o core**: ordens diretas e controle manual de websocket e
-   listeners (decisão 1).
-3. **Inventário de leitura**: leituras sem efeito (`GET`) seguem abertas ou também exigem a chave
-   (decisão 1).
+1. **Um perímetro só**: toda rota da API (leitura e escrita) exige `X-Admin-Key`.
+2. **Remover o que contorna o core**: `POST /api/websocket/exchange/orders/create` e `/orders/cancel`
+   (ordem e cancelamento direto na exchange) e `DELETE /api/listeners/clear`.
+3. **Manter o controle de conexão e assinatura** (`/api/websocket/...`), protegido; na Parte B ganha
+   `reason` e entra no histórico.
 
 ### Parte B — Padrão de resposta e erro
 
@@ -90,6 +95,7 @@ Verificações propostas:
 | `RUNNER_ON_HOLD_STRATEGY_UNUSABLE` | Runner `ACTIVE` cuja estratégia não está utilizável | Runners × catálogo (T54) |
 | `STRATEGY_VERIFICATION_FAILED` | Estratégia habilitada sem passar na conferência | Catálogo (T54) |
 | `MARKET_DATA_STALE` | Sem tick recente para símbolo com runner ativo | Último preço / tick |
+| `STREAM_DISCONNECTED` | Stream de market data ou de usuário desconectado com runner ativo | Conexões websocket |
 | `EXCHANGE_REST_CIRCUIT_OPEN` | Circuit breaker das consultas REST aberto | T24 |
 | `BOOT_NOT_READY` | Boot não concluído ou com falha | Boot |
 | `EXCHANGE_BALANCE_DIVERGENCE` | Saldo local ≠ saldo na exchange | T29, **sob demanda** (decisão 3) |
@@ -103,23 +109,26 @@ Também exposto como métrica (`operational_state_status` e por `id`) para alert
 cada alerta, a consulta de diagnóstico, a ação com o corpo exato, a resposta esperada e como confirmar
 que resolveu. As seções atuais viram a fonte; o formato muda.
 
-## Decisões pendentes
+## Decisões registradas (2026-10-20)
 
-1. **Endpoints que contornam o core e leituras:** remover de vez ordens diretas e controle manual de
-   websocket/listeners (recomendado) ou só protegê-los com a chave? E as leituras (`GET`): exigir a
-   chave também (recomendado, um único perímetro) ou manter abertas?
-2. **Limiares e severidade** das verificações. Proposta: DLQ ≥ 1 `WARN`, ≥ 3 `CRITICAL` (igual ao HALT
-   automático da T25); reserva sem ordem `CRITICAL`; transação presa `WARN` acima do limiar do watchdog e
-   `CRITICAL` acima de 3 ciclos (igual à T25); Safe Mode `HALT` `WARN`, `CANCEL_ALL`/`PANIC_SELL`
-   `CRITICAL`; tick ausente há mais de 60s com runner ativo `CRITICAL`.
-3. **Comparação com a exchange:** só sob demanda (`?includeExchange=true`, recomendado, porque consome
-   cota da API da Binance) ou sempre.
-4. **Histórico das ações do operador:** um log único (`operator_actions`: quem/qual ação/alvo/`reason`/
-   resultado/quando) consultável por API (recomendado) ou histórico por recurso, como na T54.
-5. **`reason` obrigatório nos comandos existentes** é mudança de contrato: aplicar já (recomendado — o
-   único cliente será o agente) ou aceitar ausência por um período.
-6. **Entrega em partes:** um PR por parte (A → B → C → D, recomendado, com a Parte A primeiro pelo risco
-   de segurança) ou um PR único.
+1. **Superfície:** remover ordem/cancelamento direto na exchange e `DELETE /api/listeners/clear`;
+   manter conexão e assinatura de websocket (são o único jeito de começar a operar hoje), protegidas;
+   toda a API, inclusive leituras, atrás de `X-Admin-Key`.
+2. **Limiares:** DLQ ≥ 1 `WARN`, ≥ 3 `CRITICAL`; reserva sem ordem `CRITICAL`; transação presa `WARN`
+   acima do limiar do watchdog e `CRITICAL` acima de 3 ciclos; Safe Mode `HALT` `WARN`,
+   `CANCEL_ALL`/`PANIC_SELL` `CRITICAL`; sem tick há mais de 60s com runner ativo `CRITICAL`; stream
+   desconectado com runner ativo `CRITICAL`.
+3. **Comparação com a exchange** (registro local × Binance: saldo pela T29, trades pela T18): só sob
+   demanda (`?includeExchange=true`), porque consome cota da API da Binance.
+4. **Histórico:** log único `operator_actions` (quem, ação, alvo, `reason`, resultado, quando),
+   consultável por API — responde "o que foi feito e por quê" numa consulta.
+5. **`reason` obrigatório** nos comandos existentes já nesta task.
+6. **Entrega:** um PR por parte, começando pela A.
+
+## Follow-up registrado
+
+- **Abertura automática de conexões:** o ctrade abrir e manter as conexões/assinaturas que os runners
+  ativos precisam (inclusive após restart), sem depender de chamada manual. Task própria depois da T55.
 
 ## Riscos
 
