@@ -4,7 +4,6 @@ import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.dto.runner.request.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.response.CreateRunnerResponse;
 import com.marmitt.core.enums.RunnerStatus;
-import com.marmitt.core.exceptions.RunnerOperationException;
 import com.marmitt.core.ports.inbound.runner.HaltRunnerPort;
 import com.marmitt.core.ports.inbound.runner.ManageRunnerLifecyclePort;
 import com.marmitt.core.ports.inbound.runner.RunnerOrderCommandPort;
@@ -25,7 +24,6 @@ import java.util.function.BooleanSupplier;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
-import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
@@ -79,8 +77,10 @@ class RunnerLifecycleE2ETest extends ScenarioStrategyE2ETestSupport {
         awaitCondition(() -> "CANCELED".equals(transactionsOfType(runnerId, "BUY").getFirst().status()),
                 WAIT_TIMEOUT, "BUY cancelada pelo comando", runnerId);
         awaitCondition(() -> balance(portfolioId).reserved().signum() == 0, WAIT_TIMEOUT, "reserva devolvida", runnerId);
-        assertThrows(RunnerOperationException.class, () -> runnerOrderCommands.cancelOrder(runnerId, buyId),
-                "Ordem ja terminal nao pode ser cancelada de novo");
+        // T55: cancelar de novo uma ordem ja terminal e no-op, sem erro nem efeito.
+        runnerOrderCommands.cancelOrder(runnerId, buyId);
+        assertEquals("CANCELED", transactionsOfType(runnerId, "BUY").getFirst().status());
+        assertEquals(0, balance(portfolioId).reserved().signum());
     }
 
     @Test

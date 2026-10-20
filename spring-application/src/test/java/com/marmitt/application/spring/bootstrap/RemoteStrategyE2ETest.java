@@ -96,7 +96,7 @@ class RemoteStrategyE2ETest extends ScenarioStrategyE2ETestSupport {
     void registerInTheCatalog() {
         mode = Mode.BUY;
         catalog.register(new RegisterRemoteStrategyRequest(REF, "RemoteE2E", "1.0.0",
-                SERVICE.url("/v1").toString(), "e2e-token", "e2e setup"));
+                SERVICE.url("/v1").toString(), "e2e-token"), "e2e setup");
         catalog.enable(REF, "e2e setup");
     }
 

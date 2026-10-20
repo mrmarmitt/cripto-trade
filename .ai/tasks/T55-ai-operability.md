@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T54 (primeira API no padrão), T27 (envelope `ApiError`), T51 (estado operacional como
 métrica). Base do monitoramento periódico por IA da T53.
-**Status:** Em andamento — Parte A entregue (2026-10-20); B, C e D pendentes.
+**Status:** Em andamento — Partes A e B entregues (2026-10-20); C e D pendentes.
 
 ---
 
@@ -173,3 +173,32 @@ que resolveu. As seções atuais viram a fonte; o formato muda.
 - Validação: `CapitalDeadLetterReplayIntegrationTest` passa a mandar a chave e prova que leitura sem
   chave é `401 ADMIN_KEY_INVALID` e que as rotas removidas respondem `404`; suíte completa verde.
 - Docs: `README.md` (perímetro, sem ordem direta) e `OPERATIONS_RUNBOOK.md` (seção "Acesso à API").
+
+### Parte B — Padrão de resposta e erro (2026-10-20)
+
+- **Um mecanismo para todo comando:** cabeçalhos `X-Reason` (obrigatório) e `X-Operator` (opcional).
+  `OperatorCommandInterceptor` (depois da chave) recusa escrita sem `X-Reason` com
+  `400 REASON_REQUIRED`, sem executar, e grava todo comando em `operator_actions`
+  (`V18__create_operator_actions.sql`): ator, método, caminho, operação (controller.método), motivo,
+  status HTTP, `errorCode`, duração. Consulta: `GET /api/admin/operator-actions`. O catálogo (T54) e o
+  Safe Mode passaram o motivo do corpo para o cabeçalho; DLQ usa `X-Operator`/`X-Reason` no lugar de
+  `resolvedBy`/`requestedBy`/`resolutionNote` (DTOs de request removidos).
+- **Códigos:** `CodedError` no core, implementado pelas exceções de negócio; `RunnerOperationException` e
+  `SafeModeTransitionException` com código por causa (`RUNNER_RECONCILIATION_INCOMPLETE`,
+  `EXCHANGE_UNAVAILABLE`, `ORDER_NOT_FOUND`, `POSITION_NOT_FOUND`, `POSITION_LOCKED`,
+  `RUNNER_NOT_ACCEPTING_SIGNALS`, `NO_MARKET_PRICE`, `CONFIRMATION_REQUIRED`, `SAFE_MODE_STEP_TOO_LARGE`…).
+  `GlobalExceptionHandler` põe `code` em toda resposta de erro, inclusive as genéricas
+  (`INVALID_REQUEST`, `MALFORMED_BODY`, `RESOURCE_NOT_FOUND`, `METHOD_NOT_ALLOWED`, `INTERNAL_ERROR`…).
+- **Idempotência no core:** `start`/`resume` em runner `ACTIVE`, `terminate` em `TERMINATING`/`ARCHIVED`,
+  `halt` em `HALTED` (já era), cancelar ordem já terminal, fechar posição já fechada ou já em venda
+  MARKET, resolver/reprocessar DLQ já resolvida e Safe Mode no mesmo nível (já era) devolvem o estado
+  atual sem efeito. O log registra a tentativa repetida como mais uma ação, com o status da resposta.
+- **OpenAPI:** `OpenApiConfig` publica a chave como esquema de segurança, a lista de códigos e os
+  cabeçalhos `X-Reason`/`X-Operator` em todo comando.
+- **Fora desta parte:** comandos que ainda respondem `202` sem estado (cancelar ordem, fechar posição,
+  conexão websocket) seguem assim; o estado resultante deles fica visível pelo estado consolidado da
+  Parte C. Criação de portfolio/runner não é idempotente (não há chave natural no pedido).
+- Validação: testes do core para idempotência e códigos; `CapitalDeadLetterReplayIntegrationTest`
+  prova `REASON_REQUIRED`, o registro de comando recusado e aceito (ator, motivo, operação, status,
+  código); suíte completa verde.
+

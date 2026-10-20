@@ -6,7 +6,7 @@ import java.util.Objects;
  * Recusa de uma operacao no catalogo de estrategias remotas (T54), com codigo estavel para quem opera
  * pela API (inclusive agentes) reagir sem interpretar a mensagem.
  */
-public class StrategyCatalogException extends RuntimeException {
+public class StrategyCatalogException extends RuntimeException implements CodedError {
 
     private final Code code;
 
@@ -15,8 +15,13 @@ public class StrategyCatalogException extends RuntimeException {
         this.code = Objects.requireNonNull(code, "code cannot be null");
     }
 
-    public Code code() {
+    public Code catalogCode() {
         return code;
+    }
+
+    @Override
+    public String code() {
+        return code.name();
     }
 
     /**

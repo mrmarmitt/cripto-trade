@@ -8,7 +8,7 @@ import java.util.Objects;
  * <p>Usada principalmente no boot recovery para decidir retry de forma
  * robusta, sem depender de parsing de mensagem textual.
  */
-public class ExchangeQueryException extends RuntimeException {
+public class ExchangeQueryException extends RuntimeException implements CodedError {
 
     public enum ErrorType {
         TEMPORARY,
@@ -44,5 +44,10 @@ public class ExchangeQueryException extends RuntimeException {
 
     public boolean isRetryable() {
         return errorType == ErrorType.TEMPORARY || errorType == ErrorType.RATE_LIMIT;
+    }
+
+    @Override
+    public String code() {
+        return "EXCHANGE_QUERY_FAILED";
     }
 }

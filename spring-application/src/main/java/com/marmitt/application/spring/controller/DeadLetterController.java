@@ -1,17 +1,16 @@
 package com.marmitt.application.spring.controller;
 
+import com.marmitt.application.spring.web.OperatorCommandInterceptor;
+
 import com.marmitt.core.dto.portfolio.response.DeadLetterEntryDto;
-import com.marmitt.core.dto.portfolio.request.ReprocessDeadLetterRequest;
 import com.marmitt.core.dto.portfolio.response.ReprocessDeadLetterResponse;
-import com.marmitt.core.dto.portfolio.request.ResolveDeadLetterRequest;
 import com.marmitt.core.dto.portfolio.response.ResolveDeadLetterResponse;
 import com.marmitt.core.ports.inbound.portfolio.ManageDeadLetterPort;
-import jakarta.validation.Valid;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestHeader;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -39,24 +38,26 @@ public class DeadLetterController {
         return ResponseEntity.ok(entries);
     }
 
+    /**
+     * Quem resolve vem de {@code X-Operator} e a nota de {@code X-Reason} (T55). Repetir em entrada ja
+     * resolvida devolve o estado atual.
+     */
     @PostMapping("/{id}/resolve")
     public ResponseEntity<ResolveDeadLetterResponse> resolve(
             @PathVariable UUID id,
-            @Valid @RequestBody ResolveDeadLetterRequest request
+            @RequestHeader(value = OperatorCommandInterceptor.OPERATOR, defaultValue = "unknown") String operator,
+            @RequestHeader(OperatorCommandInterceptor.REASON) String reason
     ) {
-        ResolveDeadLetterResponse response = manageDeadLetter.resolve(
-                id, request.resolvedBy(), request.resolutionNote());
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(manageDeadLetter.resolve(id, operator, reason));
     }
 
     @PostMapping("/{id}/reprocess")
     public ResponseEntity<ReprocessDeadLetterResponse> reprocess(
             @PathVariable UUID id,
-            @Valid @RequestBody ReprocessDeadLetterRequest request
+            @RequestHeader(value = OperatorCommandInterceptor.OPERATOR, defaultValue = "unknown") String operator,
+            @RequestHeader(OperatorCommandInterceptor.REASON) String reason
     ) {
-        ReprocessDeadLetterResponse response = manageDeadLetter.reprocess(
-                id, request.requestedBy(), request.resolutionNote());
-        return ResponseEntity.ok(response);
+        return ResponseEntity.ok(manageDeadLetter.reprocess(id, operator, reason));
     }
 }
 

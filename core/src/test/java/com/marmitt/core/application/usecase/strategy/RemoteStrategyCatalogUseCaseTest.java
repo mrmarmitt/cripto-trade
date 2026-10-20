@@ -72,7 +72,7 @@ class RemoteStrategyCatalogUseCaseTest {
     void registerVerifiesOnTheSpotAndPutsTheStrategyInUse() {
         when(evaluation.describe(eq(REF), any())).thenReturn(IDENTITY);
 
-        RemoteStrategyView view = useCase.register(request("token-1"));
+        RemoteStrategyView view = useCase.register(request("token-1"), "first deploy");
 
         assertEquals(RemoteStrategyStatus.ENABLED, view.status());
         assertEquals(RemoteStrategyVerification.VERIFIED, view.verification());
@@ -89,7 +89,7 @@ class RemoteStrategyCatalogUseCaseTest {
         when(evaluation.describe(eq(REF), any())).thenThrow(
                 new StrategyUnavailableException(StrategyUnavailableException.Reason.UNREACHABLE, "connection refused"));
 
-        RemoteStrategyView view = useCase.register(request(null));
+        RemoteStrategyView view = useCase.register(request(null), "first deploy");
 
         assertEquals(RemoteStrategyVerification.FAILED, view.verification());
         assertFalse(view.usable());
@@ -122,7 +122,7 @@ class RemoteStrategyCatalogUseCaseTest {
             RemoteStrategyCatalogUseCase isolated = new RemoteStrategyCatalogUseCase(new InMemoryCatalog(), fresh,
                     port, runners, notification, Clock.systemUTC());
 
-            RemoteStrategyView view = isolated.register(request(null));
+            RemoteStrategyView view = isolated.register(request(null), "first deploy");
 
             assertEquals(RemoteStrategyVerification.FAILED, view.verification(), served.toString());
             assertFalse(fresh.findById(REF).orElseThrow().isEnabled(), served.toString());
@@ -132,16 +132,16 @@ class RemoteStrategyCatalogUseCaseTest {
     @Test
     void repeatingTheSameRegistrationIsANoOpAndADifferentOneIsAConflict() {
         when(evaluation.describe(eq(REF), any())).thenReturn(IDENTITY);
-        useCase.register(request("token-1"));
+        useCase.register(request("token-1"), "first deploy");
 
-        RemoteStrategyView again = useCase.register(request("token-1"));
+        RemoteStrategyView again = useCase.register(request("token-1"), "first deploy");
         assertEquals(RemoteStrategyVerification.VERIFIED, again.verification());
         assertEquals(2, catalog.events.get(REF).size(), "cadastro repetido nao gera evento");
         verify(evaluation, times(1)).describe(eq(REF), any());
 
         StrategyCatalogException conflict = assertThrows(StrategyCatalogException.class,
-                () -> useCase.register(request("token-2")));
-        assertEquals(Code.STRATEGY_DEFINITION_CONFLICT, conflict.code());
+                () -> useCase.register(request("token-2"), "first deploy"));
+        assertEquals(Code.STRATEGY_DEFINITION_CONFLICT, conflict.catalogCode());
     }
 
     @Test
@@ -152,28 +152,28 @@ class RemoteStrategyCatalogUseCaseTest {
         strategies.registerStrategy(builtIn);
 
         StrategyCatalogException e = assertThrows(StrategyCatalogException.class,
-                () -> useCase.register(request(null)));
-        assertEquals(Code.STRATEGY_REF_IN_USE, e.code());
+                () -> useCase.register(request(null), "first deploy"));
+        assertEquals(Code.STRATEGY_REF_IN_USE, e.catalogCode());
     }
 
     @Test
     void everyChangeRequiresAReasonAndInvalidInputHasItsOwnCode() {
-        assertEquals(Code.REASON_REQUIRED, assertThrows(StrategyCatalogException.class, () -> useCase.register(
-                new RegisterRemoteStrategyRequest(REF, "SMA", "1.0.0", URL, null, " "))).code());
+        assertEquals(Code.REASON_REQUIRED, assertThrows(StrategyCatalogException.class,
+                () -> useCase.register(request(null), " ")).catalogCode());
         assertEquals(Code.INVALID_STRATEGY_DEFINITION, assertThrows(StrategyCatalogException.class,
-                () -> useCase.register(new RegisterRemoteStrategyRequest(REF, "SMA", "1.0.0", "ftp://x/v1", null,
-                        "why"))).code());
+                () -> useCase.register(new RegisterRemoteStrategyRequest(REF, "SMA", "1.0.0", "ftp://x/v1", null),
+                        "why")).catalogCode());
         assertEquals(Code.INVALID_STRATEGY_DEFINITION, assertThrows(StrategyCatalogException.class,
-                () -> useCase.register(new RegisterRemoteStrategyRequest(null, "SMA", "1.0.0", URL, null,
-                        "why"))).code());
+                () -> useCase.register(new RegisterRemoteStrategyRequest(null, "SMA", "1.0.0", URL, null),
+                        "why")).catalogCode());
         assertEquals(Code.STRATEGY_NOT_FOUND, assertThrows(StrategyCatalogException.class,
-                () -> useCase.disable(UUID.randomUUID(), "why")).code());
+                () -> useCase.disable(UUID.randomUUID(), "why")).catalogCode());
     }
 
     @Test
     void disableTakesTheStrategyOutOfUseAndAlertsWhenActiveRunnersAreLeftOnHold() {
         when(evaluation.describe(eq(REF), any())).thenReturn(IDENTITY);
-        useCase.register(request(null));
+        useCase.register(request(null), "first deploy");
         StrategyRunner active = runner(RunnerStatus.ACTIVE);
         StrategyRunner archived = runner(RunnerStatus.ARCHIVED);
         when(runners.findAll()).thenReturn(List.of(active, archived));
@@ -201,7 +201,7 @@ class RemoteStrategyCatalogUseCaseTest {
     @Test
     void enableVerifiesAgainBeforeUse() {
         when(evaluation.describe(eq(REF), any())).thenReturn(IDENTITY);
-        useCase.register(request(null));
+        useCase.register(request(null), "first deploy");
         when(runners.findAll()).thenReturn(List.of());
         useCase.disable(REF, "pause");
 
@@ -215,10 +215,10 @@ class RemoteStrategyCatalogUseCaseTest {
     @Test
     void endpointChangeIsVerifiedAtTheNewAddressAndUsedOnTheNextCall() {
         when(evaluation.describe(eq(REF), any())).thenReturn(IDENTITY);
-        useCase.register(request("token-1"));
+        useCase.register(request("token-1"), "first deploy");
 
         RemoteStrategyView view = useCase.update(REF,
-                new UpdateRemoteStrategyRequest("http://strategy-b:9000/v1/", null, "moved to new host"));
+                new UpdateRemoteStrategyRequest("http://strategy-b:9000/v1/", null), "moved to new host");
 
         StrategyEndpoint moved = new StrategyEndpoint("http://strategy-b:9000/v1", "token-1");
         assertEquals("http://strategy-b:9000/v1", view.baseUrl());
@@ -229,7 +229,7 @@ class RemoteStrategyCatalogUseCaseTest {
                 .filter(event -> event.type() == RemoteStrategyEventType.ENDPOINT_CHANGED).findFirst().orElseThrow();
         assertTrue(change.detail().contains("token unchanged"), change.detail());
 
-        useCase.update(REF, new UpdateRemoteStrategyRequest("http://strategy-b:9000/v1", null, "same"));
+        useCase.update(REF, new UpdateRemoteStrategyRequest("http://strategy-b:9000/v1", null), "same");
         assertEquals(1, eventTypes().stream().filter(RemoteStrategyEventType.ENDPOINT_CHANGED::equals).count(),
                 "mesmo endereco nao gera evento");
     }
@@ -260,7 +260,7 @@ class RemoteStrategyCatalogUseCaseTest {
     // ---------------------------------------------------------------- helpers
 
     private static RegisterRemoteStrategyRequest request(String token) {
-        return new RegisterRemoteStrategyRequest(REF, "SMA", "1.0.0", URL, token, "first deploy");
+        return new RegisterRemoteStrategyRequest(REF, "SMA", "1.0.0", URL, token);
     }
 
     private List<RemoteStrategyEventType> eventTypes() {

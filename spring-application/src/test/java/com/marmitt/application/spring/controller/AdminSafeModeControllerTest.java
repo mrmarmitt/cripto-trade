@@ -57,7 +57,8 @@ class AdminSafeModeControllerTest {
 
         mockMvc.perform(put("/api/admin/portfolios/{id}/safe-mode", portfolioId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"level\":\"CANCEL_ALL\",\"reason\":\"exchange instavel\",\"confirm\":true}"))
+                        .header("X-Reason", "exchange instavel")
+                        .content("{\"level\":\"CANCEL_ALL\",\"confirm\":true}"))
                 .andExpect(status().isAccepted())
                 .andExpect(jsonPath("$.level").value("CANCEL_ALL"))
                 .andExpect(jsonPath("$.restingOrders").value(3));
@@ -73,7 +74,8 @@ class AdminSafeModeControllerTest {
 
         mockMvc.perform(put("/api/admin/portfolios/{id}/safe-mode", portfolioId)
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"level\":\"PANIC_SELL\",\"reason\":\"x\"}"))
+                        .header("X-Reason", "x")
+                        .content("{\"level\":\"PANIC_SELL\"}"))
                 .andExpect(status().isConflict());
     }
 

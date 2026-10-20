@@ -91,7 +91,7 @@ public class Portfolio {
         Objects.requireNonNull(target, "target cannot be null");
         Objects.requireNonNull(origin, "origin cannot be null");
         if (reason == null || reason.isBlank()) {
-            throw new SafeModeTransitionException("A reason is required to change the safe mode");
+            throw new SafeModeTransitionException("REASON_REQUIRED", "A reason is required to change the safe mode");
         }
         if (target == safeModeStatus) {
             return Optional.empty();
@@ -107,10 +107,10 @@ public class Portfolio {
         }
         boolean raising = target.compareTo(safeModeStatus) > 0;
         if (raising && target.requiresConfirmation() && !confirmed) {
-            throw new SafeModeTransitionException(target + " requires explicit confirmation");
+            throw new SafeModeTransitionException("CONFIRMATION_REQUIRED", target + " requires explicit confirmation");
         }
         if (!raising && safeModeStatus.ordinal() - target.ordinal() > 1) {
-            throw new SafeModeTransitionException(
+            throw new SafeModeTransitionException("SAFE_MODE_STEP_TOO_LARGE",
                     "Safe mode must be lowered one level at a time: " + safeModeStatus + " -> " + target);
         }
 

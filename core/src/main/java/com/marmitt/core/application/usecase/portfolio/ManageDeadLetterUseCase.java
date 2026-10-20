@@ -51,7 +51,9 @@ public class ManageDeadLetterUseCase implements ManageDeadLetterPort {
                 .orElseThrow(() -> new DeadLetterNotFoundException(deadLetterId));
 
         if (entry.isResolved()) {
-            throw new DeadLetterConflictException(deadLetterId, "Dead letter entry is already resolved");
+            // T55: comando repetido devolve o estado atual, sem efeito.
+            return ResolveDeadLetterResponse.success(DeadLetterEntryDto.fromDomain(entry),
+                    "Dead letter entry was already resolved");
         }
 
         entry.resolve(resolvedBy);
@@ -76,7 +78,8 @@ public class ManageDeadLetterUseCase implements ManageDeadLetterPort {
                 .orElseThrow(() -> new DeadLetterNotFoundException(deadLetterId));
 
         if (entry.isResolved()) {
-            throw new DeadLetterConflictException(deadLetterId, "Dead letter entry is already resolved");
+            return ReprocessDeadLetterResponse.success(DeadLetterEntryDto.fromDomain(entry),
+                    "Dead letter entry was already resolved - nothing reprocessed");
         }
 
         if (!deadLetterReprocessingPort.supports(entry)) {

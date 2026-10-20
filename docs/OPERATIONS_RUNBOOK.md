@@ -22,6 +22,17 @@ Este documento define **como operar, monitorar e manter** o sistema em produçã
 Toda chamada a `/api/**` leva `X-Admin-Key: <ADMIN_API_KEY>`; sem ela a resposta é `401` com
 `code=ADMIN_KEY_INVALID`. `ADMIN_API_KEY` vazio bloqueia a API inteira. `/actuator` não exige a chave.
 
+Todo comando (`POST`, `PUT`, `PATCH`, `DELETE`) leva também:
+
+- `X-Reason: <motivo>` — obrigatório; sem ele, `400` com `code=REASON_REQUIRED` e nada é executado;
+- `X-Operator: <quem>` — opcional (ex.: o nome do agente); sem ele, fica `unknown`.
+
+Cada comando, inclusive os recusados, fica em `GET /api/admin/operator-actions` (`since`,
+`pathContains`, `limit`): quem, motivo, operação, status HTTP e `errorCode`. Toda recusa traz `code`
+estável no `ApiError` (lista no OpenAPI, `/v3/api-docs`). Repetir um comando já aplicado (halt,
+resume, start, terminate, cancelar ordem já terminal, fechar posição já fechada ou em venda a mercado,
+resolver/reprocessar DLQ já resolvida, mesmo nível de Safe Mode) devolve o estado atual, sem efeito.
+
 Para começar a operar depois de um boot, as conexões e assinaturas de websocket ainda são abertas à mão
 (`POST /api/websocket/connect`, `POST /api/websocket/exchange/market-data/subscribe`,
 `.../order-notifications/subscribe`); o boot não as abre sozinho. Ordens só nascem pelos runners: não
@@ -44,7 +55,7 @@ Endpoints protegidos pelo `admin.api.key` (header da T8):
 ```
 GET /api/admin/portfolios/{id}/safe-mode
 PUT /api/admin/portfolios/{id}/safe-mode
-    {"level": "HALT" | "CANCEL_ALL" | "PANIC_SELL" | "NORMAL", "reason": "...", "confirm": true|false}
+    {"level": "HALT" | "CANCEL_ALL" | "PANIC_SELL" | "NORMAL", "confirm": true|false}   + X-Reason
 ```
 
 | Nível | Quando usar | Efeito |
@@ -182,13 +193,13 @@ Cada runner vende o lote a mercado, sem consultar a estratégia, quando a perda 
 A estratégia é uma app independente que implementa `docs/strategy-service/CONTRACT.md` (qualquer
 linguagem; referência: `gradle :strategy-service-reference:run` com `PORT`, `STRATEGY_REF`,
 `STRATEGY_TOKEN`). O catálogo fica no banco e é operado só por API, sem restart do ctrade. Todas as
-chamadas levam `X-Admin-Key`; toda mudança exige `reason`; recusas trazem `code` no `ApiError`.
+chamadas levam `X-Admin-Key`; toda mudança exige `X-Reason`; recusas trazem `code` no `ApiError`.
 Contrato completo no OpenAPI (`/v3/api-docs`, tag *Strategy catalog*).
 
 **Cadastrar e colocar em uso**
 
 1. `POST /api/admin/strategies` com
-   `{"strategyRef","name","version","baseUrl":"http://host:porta/v1","token","reason"}`.
+   `{"strategyRef","name","version","baseUrl":"http://host:porta/v1","token"}` e `X-Reason`.
    - Esperado: `200`, `status=ENABLED`, `verification=VERIFIED`, `usable=true`.
    - `verification=FAILED`, `usable=false`: ler `lastError` (serviço fora, nome/versão divergente ou
      contrato não suportado). O ctrade confere de novo a cada `registration-retry-interval-ms` (30s);
@@ -206,14 +217,14 @@ Contrato completo no OpenAPI (`/v3/api-docs`, tag *Strategy catalog*).
   `ENDPOINT_CHANGED` com `reason`; `VERIFIED`, `VERIFICATION_FAILED` com `detail`).
 
 **Mudar endereço ou token**: `PATCH /api/admin/strategies/{strategyRef}` com `baseUrl` e/ou `token`
-(nulo mantém; token vazio remove) e `reason`. A estratégia sai de uso e é conferida no endereço novo;
+(nulo mantém; token vazio remove) e `X-Reason`. A estratégia sai de uso e é conferida no endereço novo;
 esperado `usable=true` na resposta.
 
-**Tirar de uso**: `POST /api/admin/strategies/{strategyRef}/disable` com `{"reason"}`.
+**Tirar de uso**: `POST /api/admin/strategies/{strategyRef}/disable` com `X-Reason`.
 - Esperado: `status=DISABLED`, `usable=false`; os runners listados ficam em HOLD (nada é parado).
 - Com runner `ACTIVE`, sai o alerta Discord `[STRATEGY_DISABLED]`. Para encerrar esses runners, usar
   os comandos da T49.
-- Não há exclusão. Para voltar: `POST .../enable` com `{"reason"}`, que confere de novo antes do uso.
+- Não há exclusão. Para voltar: `POST .../enable` com `X-Reason`, que confere de novo antes do uso.
 
 Sinais: `signal.evaluated.total{decision=STRATEGY_UNAVAILABLE}` (estratégia não decidiu),
 `strategy.remote.failures{reason=UNREACHABLE|ERROR_RESPONSE|INVALID_RESPONSE|STALE_DECISION}` e

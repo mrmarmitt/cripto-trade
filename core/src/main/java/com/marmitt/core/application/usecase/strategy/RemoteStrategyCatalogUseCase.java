@@ -78,8 +78,8 @@ public class RemoteStrategyCatalogUseCase implements ManageRemoteStrategiesPort,
     // ============================================================
 
     @Override
-    public synchronized RemoteStrategyView register(RegisterRemoteStrategyRequest request) {
-        String reason = requireReason(request.reason());
+    public synchronized RemoteStrategyView register(RegisterRemoteStrategyRequest request, String why) {
+        String reason = requireReason(why);
         if (request.strategyRef() == null) {
             throw invalid("strategyRef is required");
         }
@@ -115,8 +115,9 @@ public class RemoteStrategyCatalogUseCase implements ManageRemoteStrategiesPort,
     }
 
     @Override
-    public synchronized RemoteStrategyView update(UUID strategyRef, UpdateRemoteStrategyRequest request) {
-        String reason = requireReason(request.reason());
+    public synchronized RemoteStrategyView update(UUID strategyRef, UpdateRemoteStrategyRequest request,
+                                                  String why) {
+        String reason = requireReason(why);
         RemoteStrategy strategy = load(strategyRef);
         StrategyEndpoint current = strategy.getEndpoint();
         StrategyEndpoint requested = endpoint(

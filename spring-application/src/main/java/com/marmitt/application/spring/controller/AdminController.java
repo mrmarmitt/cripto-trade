@@ -1,5 +1,9 @@
 package com.marmitt.application.spring.controller;
 
+import com.marmitt.application.spring.web.OperatorCommandInterceptor;
+import com.marmitt.core.enums.SafeModeStatus;
+import org.springframework.web.bind.annotation.RequestHeader;
+
 import com.marmitt.binance.filters.SymbolFilterCache;
 import com.marmitt.core.dto.portfolio.request.ChangeSafeModeRequest;
 import com.marmitt.core.dto.portfolio.response.SafeModeStatusDto;
@@ -117,7 +121,15 @@ public class AdminController {
      */
     @PutMapping("/portfolios/{id}/safe-mode")
     public ResponseEntity<SafeModeStatusDto> changeSafeMode(@PathVariable UUID id,
-                                                            @RequestBody ChangeSafeModeRequest request) {
-        return ResponseEntity.accepted().body(manageSafeMode.change(id, SafeModeOrigin.MANUAL, request));
+                                                            @RequestBody SafeModeChange body,
+                                                            @RequestHeader(OperatorCommandInterceptor.REASON) String reason) {
+        return ResponseEntity.accepted().body(manageSafeMode.change(id, SafeModeOrigin.MANUAL,
+                new ChangeSafeModeRequest(body.level(), reason, body.confirm())));
+    }
+
+    /**
+     * Corpo da mudanca de Safe Mode; o motivo vem de {@code X-Reason}, como em todo comando (T55).
+     */
+    public record SafeModeChange(SafeModeStatus level, boolean confirm) {
     }
 }

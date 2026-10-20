@@ -110,8 +110,41 @@ class ManageRunnerLifecycleUseCaseTest {
 
     @Test
     void resumeOnlyAcceptsHaltedRunners() {
-        assertThrows(RunnerOperationException.class, () -> useCase.resume(runner.getId()));
+        RunnerOperationException refused = assertThrows(RunnerOperationException.class,
+                () -> useCase.resume(runner.getId()));
+        assertEquals(RunnerOperationException.INVALID_STATE, refused.code());
         verify(recovery, never()).recoverRunner(any());
+    }
+
+    @Test
+    void repeatingACommandAlreadyAppliedReturnsTheCurrentStateWithoutEffect() {
+        activate(runner);
+
+        RunnerTransitionResult start = useCase.start(runner.getId());
+        RunnerTransitionResult resume = useCase.resume(runner.getId());
+
+        assertEquals(RunnerStatus.ACTIVE, start.previousStatus());
+        assertEquals(RunnerStatus.ACTIVE, start.newStatus());
+        assertEquals(RunnerStatus.ACTIVE, resume.newStatus());
+        verify(recovery, never()).recoverRunner(any());
+        verify(repository, never()).save(any());
+
+        runner.startTerminating();
+        RunnerTransitionResult terminate = useCase.terminate(runner.getId());
+        assertEquals(RunnerStatus.TERMINATING, terminate.previousStatus());
+        assertEquals(RunnerStatus.TERMINATING, terminate.newStatus());
+        verify(repository, never()).save(any());
+    }
+
+    @Test
+    void refusalsCarryAStableCode() {
+        when(recovery.recoverRunner(runner)).thenReturn(summary(false));
+        assertEquals("RUNNER_RECONCILIATION_INCOMPLETE",
+                assertThrows(RunnerOperationException.class, () -> useCase.start(runner.getId())).code());
+
+        when(adapters.isDispatchBlocked("MOCK")).thenReturn(true);
+        assertEquals("EXCHANGE_UNAVAILABLE",
+                assertThrows(RunnerOperationException.class, () -> useCase.start(runner.getId())).code());
     }
 
     @Test

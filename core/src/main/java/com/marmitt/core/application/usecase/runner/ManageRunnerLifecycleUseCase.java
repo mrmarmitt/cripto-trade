@@ -52,6 +52,10 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
     public RunnerTransitionResult start(UUID runnerId) {
         StrategyRunner runner = load(runnerId);
         RunnerStatus previous = runner.getStatus();
+        if (previous == RunnerStatus.ACTIVE) {
+            // T55: repetir um comando ja aplicado devolve o estado atual, sem efeito.
+            return RunnerTransitionResult.of(runner, previous);
+        }
         requireExchangeAvailable(runner);
         runner.startInitializing();
         strategyRunnerRepository.save(runner);
@@ -68,6 +72,9 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
     @Override
     public RunnerTransitionResult resume(UUID runnerId) {
         StrategyRunner runner = load(runnerId);
+        if (runner.getStatus() == RunnerStatus.ACTIVE) {
+            return RunnerTransitionResult.of(runner, RunnerStatus.ACTIVE);
+        }
         if (runner.getStatus() != RunnerStatus.HALTED) {
             throw new RunnerOperationException("Only HALTED runners can be resumed; runner " + runnerId
                     + " is " + runner.getStatus());
@@ -87,6 +94,9 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
     public RunnerTransitionResult terminate(UUID runnerId) {
         StrategyRunner runner = load(runnerId);
         RunnerStatus previous = runner.getStatus();
+        if (previous == RunnerStatus.TERMINATING || previous == RunnerStatus.ARCHIVED) {
+            return RunnerTransitionResult.of(runner, previous);
+        }
         runner.startTerminating();
         strategyRunnerRepository.save(runner);
         metrics.recordTransition(previous, RunnerStatus.TERMINATING);
@@ -128,7 +138,7 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
     private void reconcile(StrategyRunner runner, String operation) {
         RunnerBootRecoveryUseCase.RecoverySummary summary = runnerRecovery.recoverRunner(runner);
         if (!summary.completed()) {
-            throw new RunnerOperationException("Runner " + runner.getId() + " " + operation
+            throw new RunnerOperationException("RUNNER_RECONCILIATION_INCOMPLETE", "Runner " + runner.getId() + " " + operation
                     + " refused: reconciliation not completed " + summary.notes());
         }
     }
@@ -140,7 +150,7 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
         String exchangeId = runner.getExchangeId();
         if (exchangeAdapterRepository.findAdapter(exchangeId).isEmpty()
                 || exchangeAdapterRepository.isDispatchBlocked(exchangeId)) {
-            throw new RunnerOperationException("Exchange " + exchangeId + " is not available for runner "
+            throw new RunnerOperationException("EXCHANGE_UNAVAILABLE", "Exchange " + exchangeId + " is not available for runner "
                     + runner.getId());
         }
     }

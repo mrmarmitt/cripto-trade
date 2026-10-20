@@ -44,36 +44,36 @@ class StrategyCatalogControllerTest {
 
     @Test
     void registerReturnsTheResultingStateWithoutToken() throws Exception {
-        when(catalog.register(any())).thenReturn(view());
+        when(catalog.register(any(), any())).thenReturn(view());
 
-        mockMvc.perform(post("/api/admin/strategies").contentType(MediaType.APPLICATION_JSON).content("""
+        mockMvc.perform(post("/api/admin/strategies").header("X-Reason", "first deploy")
+                        .contentType(MediaType.APPLICATION_JSON).content("""
                         {"strategyRef":"%s","name":"SMA","version":"1.0.0","baseUrl":"http://s:8090/v1",
-                         "token":"secret","reason":"first deploy"}""".formatted(ref)))
+                         "token":"secret"}""".formatted(ref)))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.verification").value("VERIFIED"))
                 .andExpect(jsonPath("$.usable").value(true))
                 .andExpect(jsonPath("$.tokenConfigured").value(true))
                 .andExpect(jsonPath("$.token").doesNotExist());
         verify(catalog).register(new RegisterRemoteStrategyRequest(ref, "SMA", "1.0.0", "http://s:8090/v1",
-                "secret", "first deploy"));
+                "secret"), "first deploy");
     }
 
     @Test
     void refusalsCarryAStableCodeAndTheMatchingStatus() throws Exception {
         when(catalog.disable(ref, "why")).thenThrow(new StrategyCatalogException(Code.STRATEGY_NOT_FOUND, "missing"));
-        when(catalog.enable(ref, null)).thenThrow(new StrategyCatalogException(Code.REASON_REQUIRED, "reason"));
-        when(catalog.register(any())).thenThrow(
+        when(catalog.enable(ref, " ")).thenThrow(new StrategyCatalogException(Code.REASON_REQUIRED, "reason"));
+        when(catalog.register(any(), any())).thenThrow(
                 new StrategyCatalogException(Code.STRATEGY_DEFINITION_CONFLICT, "different definition"));
 
-        mockMvc.perform(post("/api/admin/strategies/{ref}/disable", ref).contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"reason\":\"why\"}"))
+        mockMvc.perform(post("/api/admin/strategies/{ref}/disable", ref).header("X-Reason", "why"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.code").value("STRATEGY_NOT_FOUND"));
-        mockMvc.perform(post("/api/admin/strategies/{ref}/enable", ref).contentType(MediaType.APPLICATION_JSON)
-                        .content("{}"))
+        mockMvc.perform(post("/api/admin/strategies/{ref}/enable", ref).header("X-Reason", " "))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("REASON_REQUIRED"));
-        mockMvc.perform(post("/api/admin/strategies").contentType(MediaType.APPLICATION_JSON).content("{}"))
+        mockMvc.perform(post("/api/admin/strategies").header("X-Reason", "why")
+                        .contentType(MediaType.APPLICATION_JSON).content("{}"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("STRATEGY_DEFINITION_CONFLICT"));
     }

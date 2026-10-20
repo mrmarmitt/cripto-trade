@@ -422,35 +422,50 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
     // Comandos do operador (T49)
     // ============================================================
 
+    /**
+     * Ordem ja terminal (cancelada, executada, rejeitada) e no-op (T55: comando repetido nao falha).
+     */
     @Override
     public void cancelOrder(UUID runnerId, UUID transactionId) {
         StrategyRunner runner = loadRunner(runnerId);
         switch (cancelSignalHandler.handle(runner, transactionId, "admin FORCE_CANCEL")) {
-            case DISPATCHED -> { }
-            case NOT_FOUND -> throw new RunnerOperationException(
+            case DISPATCHED, NOT_CANCELABLE -> { }
+            case NOT_FOUND -> throw new RunnerOperationException("ORDER_NOT_FOUND",
                     "Order " + transactionId + " not found for runner " + runnerId);
-            case NOT_CANCELABLE -> throw new RunnerOperationException(
-                    "Order " + transactionId + " is not in flight");
         }
     }
 
+    /**
+     * Posicao ja fechada, ou ja sendo vendida a mercado, e no-op (T55: comando repetido nao falha).
+     * Travada por uma SELL LIMIT, e recusada: o operador cancela essa ordem antes.
+     */
     @Override
     public void closePosition(UUID runnerId, UUID positionId) {
         StrategyRunner runner = loadRunner(runnerId);
-        if (!runner.canAcceptSignals()) {
-            throw new RunnerOperationException("Runner " + runnerId + " in status " + runner.getStatus()
-                    + (runner.isReconciling() ? " (reconciling)" : "") + " cannot sell - resume it first");
-        }
         Position position = strategyRunnerRepository.findPositionById(positionId)
-                .filter(found -> found.getRunnerId().equals(runnerId) && found.isOpen())
-                .orElseThrow(() -> new RunnerOperationException(
-                        "Position " + positionId + " is not open for runner " + runnerId));
+                .filter(found -> found.getRunnerId().equals(runnerId))
+                .orElseThrow(() -> new RunnerOperationException("POSITION_NOT_FOUND",
+                        "Position " + positionId + " not found for runner " + runnerId));
+        if (!position.isOpen()) {
+            return;
+        }
         if (position.isLocked()) {
-            throw new RunnerOperationException("Position " + positionId
-                    + " is locked by an in-flight SELL - cancel that order first");
+            boolean closingAtMarket = strategyRunnerRepository.findTransactionById(position.getLockedByTransactionId())
+                    .map(sell -> sell.getOrderType() == OrderType.MARKET)
+                    .orElse(false);
+            if (closingAtMarket) {
+                return;
+            }
+            throw new RunnerOperationException("POSITION_LOCKED", "Position " + positionId
+                    + " is locked by an in-flight SELL LIMIT - cancel that order first");
+        }
+        if (!runner.canAcceptSignals()) {
+            throw new RunnerOperationException("RUNNER_NOT_ACCEPTING_SIGNALS", "Runner " + runnerId + " in status "
+                    + runner.getStatus() + (runner.isReconciling() ? " (reconciling)" : "")
+                    + " cannot sell - resume it first");
         }
         BigDecimal referencePrice = latestPrices.find(runner.getSymbol())
-                .orElseThrow(() -> new RunnerOperationException(
+                .orElseThrow(() -> new RunnerOperationException("NO_MARKET_PRICE",
                         "No market price yet for " + runner.getSymbol() + " - wait for the first tick"));
         log.warn("adminCommand: FORCE_CLOSE_POSITION positionId={} runnerId={} quantity={} referencePrice={}",
                 positionId, runnerId, position.getQuantity(), referencePrice);
