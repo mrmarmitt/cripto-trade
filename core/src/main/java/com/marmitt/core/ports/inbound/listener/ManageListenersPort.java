@@ -64,9 +64,4 @@ public interface ManageListenersPort {
      * @return informações sobre quantos listeners estão registrados
      */
     ListenerStats getListenerStats();
-    
-    /**
-     * Limpa todos os listeners registrados.
-     */
-    void clearAllListeners();
 }

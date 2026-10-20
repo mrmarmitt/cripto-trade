@@ -70,9 +70,4 @@ public class ManageListenersUseCase implements ManageListenersPort {
         
         return new ListenerStats(orderListenerCount, priceListenerCount);
     }
-    
-    @Override
-    public void clearAllListeners() {
-        listenerRepository.clearAllListeners();
-    }
 }

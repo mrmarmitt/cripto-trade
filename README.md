@@ -162,6 +162,10 @@ Grafana disponível em `http://localhost:3000` (admin / ctrade123).
 
 ### Principais Endpoints
 
+Toda a API (`/api/**`, leitura e escrita) exige o cabeçalho `X-Admin-Key` com o valor de
+`ADMIN_API_KEY` (T55). `/actuator` (health, métricas) fica fora. Não há endpoint de ordem direta:
+toda ordem nasce de uma transação do core, pelo runner.
+
 ```bash
 # WebSocket Management
 POST /api/websocket/connect
@@ -171,10 +175,6 @@ GET  /api/websocket/stats
 # Market Data
 POST /api/websocket/exchange/market-data/subscribe
 POST /api/websocket/exchange/market-data/unsubscribe
-
-# Order Management  
-POST /api/websocket/exchange/orders/create
-POST /api/websocket/exchange/orders/cancel
 
 # Exchange Queries
 GET  /api/exchanges/{exchange}/balances          # ?asset=USDT filtra um ativo

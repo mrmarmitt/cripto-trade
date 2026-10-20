@@ -17,6 +17,16 @@ Este documento define **como operar, monitorar e manter** o sistema em produçã
 - **[Blueprint](BLUEPRINT.md):** Define a arquitetura que este runbook monitora
 - **Implementation Guide:** Fornece as decisões técnicas que impactam o comportamento operacional
 
+## Acesso à API (T55)
+
+Toda chamada a `/api/**` leva `X-Admin-Key: <ADMIN_API_KEY>`; sem ela a resposta é `401` com
+`code=ADMIN_KEY_INVALID`. `ADMIN_API_KEY` vazio bloqueia a API inteira. `/actuator` não exige a chave.
+
+Para começar a operar depois de um boot, as conexões e assinaturas de websocket ainda são abertas à mão
+(`POST /api/websocket/connect`, `POST /api/websocket/exchange/market-data/subscribe`,
+`.../order-notifications/subscribe`); o boot não as abre sozinho. Ordens só nascem pelos runners: não
+existe endpoint de ordem direta na exchange.
+
 ## Pré-requisitos de conta na exchange
 
 ### Binance: pagamento de taxas com BNB desligado (T46)

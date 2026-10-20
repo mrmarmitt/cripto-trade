@@ -122,12 +122,6 @@ public class InMemoryListenerRepository implements ListenerRepositoryPort {
         return priceUpdateListeners.size();
     }
 
-    @Override
-    public void clearAllListeners() {
-        orderUpdateListeners.clear();
-        priceUpdateListeners.clear();
-    }
-
     private String generateListenerKey(Object listener) {
         return listener.getClass().getSimpleName() + "_" + listener.hashCode();
     }

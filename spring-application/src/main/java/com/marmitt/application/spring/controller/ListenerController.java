@@ -34,19 +34,6 @@ public class ListenerController {
     }
     
     /**
-     * Limpa todos os listeners registrados.
-     * Útil para testes ou reinicialização do sistema.
-     * 
-     * @return confirmação da operação
-     */
-    @DeleteMapping("/clear")
-    public ResponseEntity<String> clearAllListeners() {
-        log.info("Clearing all listeners");
-        manageListenersPort.clearAllListeners();
-        return ResponseEntity.ok("All listeners cleared successfully");
-    }
-    
-    /**
      * Lista todos os listeners de atualizações de ordens registrados.
      * 
      * @return lista de listeners registrados

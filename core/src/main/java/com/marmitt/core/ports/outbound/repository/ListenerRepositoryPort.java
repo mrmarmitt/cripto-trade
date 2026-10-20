@@ -31,6 +31,4 @@ public interface ListenerRepositoryPort {
     int getOrderUpdateListenerCount();
 
     int getPriceUpdateListenerCount();
-
-    void clearAllListeners();
 }
