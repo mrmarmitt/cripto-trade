@@ -1,254 +1,387 @@
 # Operations Runbook — CTrade
 
-## Propósito
+## Propósito e como usar
 
-Este documento define **como operar, monitorar e manter** o sistema em produção. É o guia de referência para quem precisa entender o comportamento do sistema em runtime, responder a incidentes e garantir a saúde operacional.
+O ctrade é operado por um **agente de IA** (`.ai/product-direction.md`). Este runbook é escrito para
+ele: cada procedimento é uma sequência de chamadas com a resposta esperada e como confirmar que
+resolveu. Um humano consegue seguir os mesmos passos.
 
-## Escopo
+- **Ponto de partida de toda verificação:** `GET /api/admin/operational-state`. Cada verificação que não
+  está `OK` traz `runbook` com a âncora da seção deste documento (ex.: `#dlq-unresolved`).
+- **Alertas** (Discord, Grafana) apontam para as mesmas seções — ver [Alertas](#alertas).
+- **Mecanismos** (Safe Mode, drawdown, gatilhos, ciclo de vida, proteção do lote, catálogo) estão em
+  [Referência](#referencia), para quem precisa entender o porquê.
 
-- SLA e requisitos não-funcionais: latência máxima, throughput por Runner, tempo de reconciliação
-- Audit Trail: eventos a serem logados, retenção, rastreabilidade de decisões e transições de estado
-- Security Boundaries: isolamento entre Runners, limites de recursos, proteção de conexões
-- Testing Strategy: mocks entre agregados, testes de integração, simulação de falhas, testes de carga
-- Gestão de WebSocket: conexões compartilhadas vs por Runner, rate limits, reconexão
+## Convenções
 
-## Relação com outros documentos
-
-- **[Blueprint](BLUEPRINT.md):** Define a arquitetura que este runbook monitora
-- **Implementation Guide:** Fornece as decisões técnicas que impactam o comportamento operacional
-
-## Acesso à API (T55)
-
-Toda chamada a `/api/**` leva `X-Admin-Key: <ADMIN_API_KEY>`; sem ela a resposta é `401` com
-`code=ADMIN_KEY_INVALID`. `ADMIN_API_KEY` vazio bloqueia a API inteira. `/actuator` não exige a chave.
-
-Todo comando (`POST`, `PUT`, `PATCH`, `DELETE`) leva também:
-
-- `X-Reason: <motivo>` — obrigatório; sem ele, `400` com `code=REASON_REQUIRED` e nada é executado;
-- `X-Operator: <quem>` — opcional (ex.: o nome do agente); sem ele, fica `unknown`.
-
-Cada comando, inclusive os recusados, fica em `GET /api/admin/operator-actions` (`since`,
-`pathContains`, `limit`): quem, motivo, operação, status HTTP e `errorCode`. Toda recusa traz `code`
-estável no `ApiError` (lista no OpenAPI, `/v3/api-docs`). Repetir um comando já aplicado (halt,
-resume, start, terminate, cancelar ordem já terminal, fechar posição já fechada ou em venda a mercado,
-resolver/reprocessar DLQ já resolvida, mesmo nível de Safe Mode) devolve o estado atual, sem efeito.
-
-Para começar a operar depois de um boot, as conexões e assinaturas de websocket ainda são abertas à mão
-(`POST /api/websocket/connect`, `POST /api/websocket/exchange/market-data/subscribe`,
-`.../order-notifications/subscribe`); o boot não as abre sozinho. Ordens só nascem pelos runners: não
-existe endpoint de ordem direta na exchange.
-
-## Estado consolidado (T55)
-
-`GET /api/admin/operational-state` é a primeira consulta de qualquer verificação: `status` (`OK`, `WARN`,
-`CRITICAL`) é a pior severidade entre as verificações; cada uma traz `id`, `subjects` (o que está afetado),
-`since` e `runbook` (a seção com diagnóstico e ação, detalhada na Parte D da T55). Também exportado como
-`operational_state_status` e `operational_check_status{check}` (0=OK, 1=WARN, 2=CRITICAL).
-
-| id | Severidade | O que significa |
-|---|---|---|
-| `BOOT_NOT_READY` | CRITICAL | Boot não concluído ou com falha (`GET /api/boot/status`). |
-| `SAFE_MODE_ACTIVE` | WARN em `HALT`, CRITICAL acima | Portfolio fora de `NORMAL`. |
-| `CAPITAL_RESERVED_WITHOUT_ORDER` | CRITICAL | `reserved > 0` sem nenhuma BUY em voo no portfolio. |
-| `CAPITAL_RESERVATION_STALE` | WARN | BUY em voo segurando capital há mais de `reservation-stale-ms` (24h). |
-| `TRANSACTION_STUCK` | WARN; CRITICAL após 3 ciclos do watchdog | Ordem `PENDING` sem confirmação da exchange. Ordem descansando no livro não conta. |
-| `POSITION_LOCK_ORPHAN` | CRITICAL | Lote travado por SELL que já terminou ou não existe. |
-| `DLQ_UNRESOLVED` | WARN a partir de 1; CRITICAL a partir de 3 | Entradas da DLQ não resolvidas. |
-| `RUNNER_HALTED` / `RUNNER_RECONCILING` / `RUNNER_STUCK_TERMINATING` | WARN | Runners fora de operação. |
-| `RUNNER_ON_HOLD_STRATEGY_UNUSABLE` | WARN | Runner `ACTIVE` com estratégia ausente, desabilitada ou não conferida. |
-| `STRATEGY_VERIFICATION_FAILED` | WARN | Estratégia remota habilitada que não passa na conferência. |
-| `MARKET_DATA_STALE` | CRITICAL | Símbolo com runner `ACTIVE` sem tick há mais de `market-data-stale-ms` (60s). |
-| `STREAM_DISCONNECTED` | CRITICAL | Stream de usuário ausente/desconectado para exchange que precisa dele, ou stream de market data aberto e caído, com runner `ACTIVE`. |
-| `EXCHANGE_REST_CIRCUIT_OPEN` | CRITICAL | Circuit breaker das consultas REST aberto (T24). |
-
-## Pré-requisitos de conta na exchange
-
-### Binance: pagamento de taxas com BNB desligado (T46)
-
-A opção **"Usar BNB para pagar taxas"** deve ficar **desligada** na conta (testnet e produção). O
-sistema contabiliza a comissão cobrada no ativo recebido (base na compra, cotação na venda) e não
-converte fee de terceiro ativo. Se a opção for ligada, cada fill chega com fee em BNB: o sistema
-segue operando, mas a fee fica fora do PnL e é registrada em log `ERROR` com
-`unsupported BUY fee asset` / `unsupported SELL fee asset` — sinal para desligar a opção.
-
-## Safe Mode do portfolio (T45)
-
-Endpoints protegidos pelo `admin.api.key` (header da T8):
-
-```
-GET /api/admin/portfolios/{id}/safe-mode
-PUT /api/admin/portfolios/{id}/safe-mode
-    {"level": "HALT" | "CANCEL_ALL" | "PANIC_SELL" | "NORMAL", "confirm": true|false}   + X-Reason
+```bash
+CTRADE=http://<host>:8080          # base da API
+KEY=<ADMIN_API_KEY>                # chave admin
+# Leitura
+curl -s -H "X-Admin-Key: $KEY" "$CTRADE/api/admin/operational-state"
+# Comando: sempre com motivo; X-Operator identifica quem pediu
+curl -s -X POST -H "X-Admin-Key: $KEY" -H "X-Reason: <motivo>" -H "X-Operator: <agente>" \
+     "$CTRADE/api/admin/runners/<id>/halt"
 ```
 
-| Nível | Quando usar | Efeito |
+- Toda chamada a `/api/**` exige `X-Admin-Key`; sem ela, `401 ADMIN_KEY_INVALID`. `/actuator` não exige.
+- Todo comando (`POST`, `PUT`, `PATCH`, `DELETE`) exige `X-Reason`; sem ele, `400 REASON_REQUIRED` e nada
+  é executado. `X-Operator` é opcional (fica `unknown`).
+- Toda recusa traz `code` estável no `ApiError` (lista no OpenAPI, `/v3/api-docs`). Reagir pelo `code`,
+  não pela mensagem.
+- Repetir um comando já aplicado devolve o estado atual, sem efeito — é seguro repetir depois de timeout.
+- Todo comando, aceito ou recusado, fica em `GET /api/admin/operator-actions` (`since`, `pathContains`,
+  `limit`). Antes de agir sobre algo, consultar o que já foi feito nele:
+  `GET /api/admin/operator-actions?pathContains=<id>`.
+- Não existe endpoint de ordem direta na exchange: toda ordem nasce de um runner.
+
+<a id="ciclo-de-verificacao"></a>
+## Ciclo de verificação
+
+1. `GET /api/admin/operational-state`.
+2. `status=OK`: nada a fazer.
+3. Para cada verificação `CRITICAL`, depois cada `WARN`: abrir a seção do `runbook`, seguir o
+   diagnóstico e a ação.
+4. Confirmar: repetir o passo 1; a verificação tratada volta a `OK` (ou fica explicada no registro da
+   ação). Se não voltar depois do procedimento, ver [Quando escalar](#quando-escalar).
+
+<a id="limites-de-autonomia"></a>
+## Limites de autonomia
+
+> **Proposta a confirmar pelo mantenedor.** Até lá, o agente segue esta divisão.
+
+| O agente faz sozinho | O agente pede confirmação ao mantenedor antes |
+|---|---|
+| Diagnosticar, consultar, reconectar streams, conferir estratégias | Subir o Safe Mode para `PANIC_SELL` (vende tudo) |
+| Subir o Safe Mode para `HALT` ou `CANCEL_ALL` | Descer o Safe Mode de um HALT **automático** (drawdown, DLQ, divergência de saldo) |
+| `halt` de runner; cancelar ordem LIMIT | Fechar posição à mão (`.../positions/{id}/close`) |
+| Resolver/reprocessar DLQ quando a causa está identificada | Encerrar runner (`terminate`) |
+| Habilitar/desabilitar estratégia, trocar endereço | Mudar limites de risco ou a política de liquidação do runner |
+
+<a id="quando-escalar"></a>
+### Quando escalar
+
+Escalar ao mantenedor (Discord) com o `operational-state`, as ações tentadas e o resultado quando:
+o procedimento não resolve; a ação está na coluna da direita acima; ou há sinal de perda financeira
+sem explicação (PnL, saldo, divergência com a exchange).
+
+---
+
+<a id="partida-depois-de-um-boot"></a>
+## Partida depois de um boot
+
+O boot reconcilia runners, mas **não abre conexões nem assinaturas de websocket**. Sem elas os runners
+ficam sem tick (`MARKET_DATA_STALE`) e, na Binance, sem atualizações de ordem (`STREAM_DISCONNECTED`).
+
+1. `GET /api/boot/status` → esperado `status=SUCCESS`. Senão, ver [boot-not-ready](#boot-not-ready).
+2. Conectar o market data da exchange com os símbolos dos runners `ACTIVE`
+   (`GET /api/admin/runners/status` lista símbolos e fontes):
+   ```
+   POST /api/websocket/connect
+   {"exchange":"BINANCE","symbols":[{"baseCurrency":"BTC","quoteCurrency":"USDT","streamType":"TICKER"}]}
+   ```
+3. Assinar o market data: `POST /api/websocket/exchange/market-data/subscribe` com o mesmo corpo.
+4. Exchange com stream de usuário (Binance): `POST /api/websocket/exchange/order-notifications/subscribe`
+   `{"exchange":"BINANCE"}`.
+5. Confirmar: `GET /api/websocket/all` com `CONNECTED`; em até 60s, `MARKET_DATA_STALE` e
+   `STREAM_DISCONNECTED` em `OK`.
+
+---
+
+## Procedimentos por verificação
+
+<a id="boot-not-ready"></a>
+### BOOT_NOT_READY — boot não concluído
+
+- **Diagnóstico:** `GET /api/boot/status` → `status`, `failurePhase`, `failureMessage`, fases.
+  `RUNNING`: aguardar e repetir. `NOT_STARTED`: orquestrador desligado (`runner.boot.orchestrator-enabled`).
+- **Ação (`FAILED`):** pela fase:
+  - `phase1.infrastructure`: exchange inacessível ou credencial inválida — conferir conectividade e
+    chaves; reiniciar o ctrade depois de corrigir.
+  - `phase2.sanity` com `FAIL_DEFICIT`: saldo local maior que o da exchange. O portfolio já foi para
+    HALT automático. **Escalar** com `GET /api/exchanges/<exchange>/balances` e
+    `GET /api/portfolios/<id>/balance`.
+  - `phase2.zombie` / `phase3`: ver os logs da fase; reiniciar depois de corrigir a causa.
+- **Confirmar:** após restart, `GET /api/boot/status` → `SUCCESS` e a verificação em `OK`.
+
+<a id="safe-mode-active"></a>
+### SAFE_MODE_ACTIVE — portfolio fora de NORMAL
+
+- **Diagnóstico:** `subjects` traz `level`, `origin`, `reason`, `since`.
+  `GET /api/admin/portfolios/<id>/safe-mode` mostra o progresso (`restingOrders`, `liquidatingOrders`,
+  `openPositions`, `idleRunners`).
+  - `origin=AUTOMATIC`: um gatilho disparou (motivo em `reason`: `MAX_DRAWDOWN_EXCEEDED`,
+    `DLQ_THRESHOLD`, `BALANCE_DIVERGENCE`, `WATCHDOG_STUCK`). Tratar a causa primeiro (seção
+    [Gatilhos](#ref-gatilhos)).
+  - `origin=MANUAL`: conferir em `GET /api/admin/operator-actions?pathContains=<portfolioId>` quem
+    subiu e por quê.
+- **Ação:** descer **um nível por vez** depois que a causa estiver resolvida:
+  `PUT /api/admin/portfolios/<id>/safe-mode` `{"level":"<um abaixo>","confirm":false}` + `X-Reason`.
+  Descer de HALT **automático** exige confirmação do mantenedor ([Limites](#limites-de-autonomia)).
+- **Esperado:** `202` com o novo nível; `409 SAFE_MODE_STEP_TOO_LARGE` se pular nível.
+- **Confirmar:** nível `NORMAL` e a verificação em `OK`.
+
+<a id="capital-reserved-without-order"></a>
+### CAPITAL_RESERVED_WITHOUT_ORDER — capital reservado sem BUY em voo
+
+Capital preso: a reserva não vai voltar sozinha.
+
+- **Diagnóstico:** `GET /api/portfolios/<id>/balance` (confirmar `reserved`);
+  `GET /api/dead-letters?portfolioId=<id>` — uma liberação de reserva que falhou costuma estar na DLQ.
+- **Ação:** se houver entrada da DLQ correspondente, seguir [dlq-unresolved](#dlq-unresolved)
+  (reprocessar devolve a reserva). Sem DLQ: **escalar** — não há comando para mexer em saldo à mão.
+- **Confirmar:** `reserved` igual à soma das BUYs em voo (zero sem nenhuma) e a verificação em `OK`.
+
+<a id="capital-reservation-stale"></a>
+### CAPITAL_RESERVATION_STALE — BUY em voo há mais de 24h
+
+Normalmente uma LIMIT que a estratégia deixou longe do preço.
+
+- **Diagnóstico:** `subjects` traz runner, transação, total e desde quando. Conferir se a estratégia
+  ainda quer a ordem e o preço de mercado.
+- **Ação (se a ordem não faz mais sentido):** `POST /api/admin/runners/<runnerId>/orders/<transactionId>/cancel`
+  + `X-Reason`. Esperado `202`; o `CANCELED` chega pelo stream e devolve a reserva.
+- **Confirmar:** a transação some de `subjects`; `reserved` cai pelo total da ordem.
+
+<a id="transaction-stuck"></a>
+### TRANSACTION_STUCK — ordem PENDING sem confirmação da exchange
+
+O watchdog consulta a exchange e resolve sozinho na maioria dos casos. `CRITICAL` = passou de 3 ciclos.
+
+- **Diagnóstico:** `EXCHANGE_REST_CIRCUIT_OPEN` e `STREAM_DISCONNECTED` estão `OK`? Se não, tratá-los
+  primeiro (o watchdog depende deles). `GET /api/runners/<runnerId>/transactions` para o histórico.
+- **Ação:** com a exchange acessível, aguardar 1 ciclo do watchdog (60s). Persistindo `CRITICAL`, o
+  portfolio vai para HALT automático (`WATCHDOG_STUCK`). **Escalar** com o `clientOrderId`.
+- **Confirmar:** a transação sai de `PENDING` (terminal ou `SUBMITTED`) e a verificação em `OK`.
+
+<a id="position-lock-orphan"></a>
+### POSITION_LOCK_ORPHAN — lote travado por SELL que já terminou
+
+O lote nunca mais será vendido, nem pela proteção do lote.
+
+- **Diagnóstico:** `subjects` traz posição, transação do lock e o status dela.
+  `GET /api/dead-letters?runnerId=<runnerId>` — a conciliação da SELL pode ter caído na DLQ.
+- **Ação:** havendo DLQ, seguir [dlq-unresolved](#dlq-unresolved). Sem DLQ: `halt` do runner e
+  **escalar** (não há comando para destravar lote à mão).
+- **Confirmar:** a posição sai de `subjects`.
+
+<a id="dlq-unresolved"></a>
+### DLQ_UNRESOLVED — entradas não resolvidas
+
+`CRITICAL` (≥ 3) também coloca o portfolio em HALT automático (`DLQ_THRESHOLD`).
+
+- **Diagnóstico:** `GET /api/dead-letters?portfolioId=<id>` → `reason`, `clientOrderId`, `rawPayload`.
+- **Ação, por entrada:**
+  - Efeito de capital reaplicável (reserva, liberação, execução confirmada):
+    `POST /api/dead-letters/<id>/reprocess` + `X-Reason`. Esperado `200` com `reprocessed=true`;
+    `409 DEAD_LETTER_REPROCESS_REFUSED` = não reaplicável automaticamente.
+  - Sem efeito a reaplicar, ou já corrigido por outro caminho: `POST /api/dead-letters/<id>/resolve`
+    + `X-Reason` explicando a causa.
+- **Confirmar:** a verificação em `OK`; se havia HALT automático, ver [safe-mode-active](#safe-mode-active).
+
+<a id="runner-halted"></a>
+### RUNNER_HALTED — runner parado
+
+- **Diagnóstico:** `GET /api/admin/operator-actions?pathContains=<runnerId>` (halt manual?) e alertas
+  `[RUNNER_AUTO_HALTED]` (5 rejeições seguidas: saldo, filtros, credencial).
+- **Ação (causa resolvida):** `POST /api/admin/runners/<id>/resume` + `X-Reason`. Esperado `200` com
+  `newStatus=ACTIVE`; `409 RUNNER_RECONCILIATION_INCOMPLETE` = a reconciliação não fechou (ver logs e
+  DLQ do runner).
+- **Confirmar:** o runner sai de `subjects`.
+
+<a id="runner-reconciling"></a>
+### RUNNER_RECONCILING — runner reconciliando
+
+Transitório depois de start/resume/boot. Persistindo, a reconciliação ficou pendente.
+
+- **Ação:** repetir o comando que a iniciou (`start` ou `resume`) — é idempotente e retoma de onde
+  parou. Recusa `RUNNER_RECONCILIATION_INCOMPLETE`: ver DLQ e `TRANSACTION_STUCK` do runner.
+
+<a id="runner-stuck-terminating"></a>
+### RUNNER_STUCK_TERMINATING — encerramento sem concluir
+
+O runner é arquivado sozinho quando não tem posição nem ordem em voo.
+
+- **Diagnóstico:** `GET /api/runners/<id>/transactions` (ordens em voo) e posições abertas.
+- **Ação:** cancelar as LIMIT em voo (`.../orders/<tx>/cancel`); posições abertas esperam a estratégia
+  vender ou exigem fechar à mão (confirmação do mantenedor).
+- **Confirmar:** o runner vai a `ARCHIVED`.
+
+<a id="runner-on-hold-strategy-unusable"></a>
+### RUNNER_ON_HOLD_STRATEGY_UNUSABLE — runner ACTIVE sem estratégia utilizável
+
+O runner está em HOLD: não compra nem vende pela estratégia (a proteção do lote continua).
+
+- **Diagnóstico:** `GET /api/admin/strategies/<strategyId>` → `status`, `verification`, `usable`,
+  `lastError`. Estratégia interna (não está no catálogo) ausente é erro de configuração: **escalar**.
+- **Ação:** ver [strategy-verification-failed](#strategy-verification-failed); desabilitada de propósito
+  → reabilitar só se o motivo do `DISABLED` (em `.../events`) já não vale.
+- **Confirmar:** `usable=true` e a verificação em `OK`.
+
+<a id="strategy-verification-failed"></a>
+### STRATEGY_VERIFICATION_FAILED — estratégia remota habilitada e inutilizável
+
+- **Diagnóstico:** `lastError` em `subjects` (ou `GET /api/admin/strategies/<ref>`):
+  - `service unavailable (UNREACHABLE)`: app da estratégia fora ou endereço errado;
+  - `service declares ...`: nome/versão diferente do cadastro (app trocada no mesmo endereço);
+  - `unsupported contract version`: app em versão maior do contrato.
+- **Ação:** app fora → aguardar (conferida a cada 30s); endereço mudou →
+  `PATCH /api/admin/strategies/<ref>` `{"baseUrl":"..."}` + `X-Reason`; versão nova → cadastrar com
+  `strategyRef` novo e apontar runners novos para ela.
+- **Esperado:** resposta com `usable=true`.
+- **Confirmar:** a verificação em `OK`.
+
+<a id="market-data-stale"></a>
+### MARKET_DATA_STALE — sem tick há mais de 60s
+
+Sem tick, nenhuma decisão, proteção do lote nem liquidação acontece.
+
+- **Diagnóstico:** `GET /api/websocket/all` — conexão de market data da exchange existe e está
+  `CONNECTED`? Logo após boot, é esperado: ver [Partida](#partida-depois-de-um-boot).
+- **Ação:** sem conexão → passos 2 e 3 da [Partida](#partida-depois-de-um-boot). Conectada sem tick →
+  `POST /api/websocket/exchange/market-data/subscribe` de novo com o símbolo.
+- **Confirmar:** em até 60s o símbolo sai de `subjects`.
+
+<a id="stream-disconnected"></a>
+### STREAM_DISCONNECTED — stream necessário não conectado
+
+- **Diagnóstico:** `subjects` traz exchange, canal e status (`NOT_OPENED` = nunca aberto desde o boot).
+  `RECONNECTING` = a estratégia de reconexão está trabalhando: aguardar.
+- **Ação:** `USER_DATA` → `POST /api/websocket/exchange/order-notifications/subscribe`
+  `{"exchange":"<exchange>"}`; `MARKET` → passos 2 e 3 da [Partida](#partida-depois-de-um-boot).
+- **Confirmar:** status `CONNECTED` em `GET /api/websocket/all` e a verificação em `OK`.
+
+<a id="exchange-rest-circuit-open"></a>
+### EXCHANGE_REST_CIRCUIT_OPEN — consultas REST à exchange suspensas
+
+5 falhas de instabilidade abrem o circuito por 60s (T24). Boot recovery e watchdog ficam sem consultar.
+
+- **Diagnóstico:** status da Binance, credenciais, rate limit; logs `ExchangeQueryException`.
+- **Ação:** nenhuma no ctrade: o circuito testa sozinho na próxima consulta após 60s. Persistindo
+  mais de 10 min, **escalar**.
+- **Confirmar:** a verificação em `OK`.
+
+---
+
+<a id="alertas"></a>
+## Alertas
+
+| Alerta | Seção |
+|---|---|
+| Discord `[DLQ_PERSISTED]` | [dlq-unresolved](#dlq-unresolved) |
+| Discord `[BOOT_FAIL_FAST]` | [boot-not-ready](#boot-not-ready) |
+| Discord `[CIRCUIT_BREAKER_TRIGGERED]` | [safe-mode-active](#safe-mode-active) (HALT automático) |
+| Discord `[PROTECTIVE_EXIT]` | Informativo: a proteção vendeu um lote (T44). Conferir se a estratégia está saudável. |
+| Discord `[RUNNER_AUTO_HALTED]` | [runner-halted](#runner-halted) |
+| Discord `[STRATEGY_DISABLED]` | [runner-on-hold-strategy-unusable](#runner-on-hold-strategy-unusable) |
+| Grafana `operational_state_status = 2` | [Ciclo de verificação](#ciclo-de-verificacao) |
+| Grafana *Safe Mode ativo* | [safe-mode-active](#safe-mode-active) |
+| Grafana *Runner travado em TERMINATING* | [runner-stuck-terminating](#runner-stuck-terminating) |
+| Grafana *Circuit breaker da exchange aberto* | [exchange-rest-circuit-open](#exchange-rest-circuit-open) |
+| Grafana *Cancel rate > 10/min* | Estratégia em loop de ordem/cancelamento: `halt` do runner e conferir a estratégia. |
+| Grafana *Rejection rate > 50%* | `signal_evaluated_total` por `decision` (capital, preço, limites); ajustar a causa. |
+| Grafana *Utilização global > 80%* | Capital quase todo reservado; ver [capital-reservation-stale](#capital-reservation-stale). |
+
+---
+
+<a id="referencia"></a>
+## Referência
+
+### Pré-requisito da conta Binance: BNB para taxas desligado (T46)
+
+A opção **"Usar BNB para pagar taxas"** deve ficar **desligada** (testnet e produção). Ligada, cada fill
+chega com fee em BNB: o sistema segue, mas a fee fica fora do PnL, com log `ERROR`
+`unsupported BUY fee asset` / `unsupported SELL fee asset`.
+
+### Safe Mode do portfolio (T45)
+
+`GET|PUT /api/admin/portfolios/{id}/safe-mode`; corpo do `PUT`: `{"level","confirm"}` + `X-Reason`.
+
+| Nível | Efeito |
+|---|---|
+| `HALT` | Nenhum BUY novo. A estratégia segue e pode vender. |
+| `CANCEL_ALL` | HALT + cancela ordens LIMIT em voo; estratégia não é consultada. Exige `confirm`. |
+| `PANIC_SELL` | CANCEL_ALL + vende todas as posições: MARKET por padrão, ou LIMIT protegida conforme o runner (T48). Exige `confirm`. |
+
+- O `PUT` responde `202`; a execução acontece nos ticks seguintes (sem tick, nada é liquidado).
+- `idleRunners > 0`: runners parados pelo kill switch não são conduzidos; retomar para liquidá-los.
+- Liquidação LIMIT por runner (T48): `PATCH /api/admin/runners/{id}`
+  `{"liquidationOrderType":"LIMIT","liquidationMaxSlippagePercent":0.01,"liquidationEscalationTicks":3}`;
+  SELL LIMIT 1% abaixo do último preço, escalada para MARKET após 3 ticks sem preencher.
+- Descida um nível por vez. Mudanças em `safe_mode_changes`.
+
+### Circuit breaker de drawdown (T43)
+
+A cada 10s, equity = `available + reserved + PnL flutuante`. Queda acima de 10% do pico de 24h → HALT
+automático (`MAX_DRAWDOWN_EXCEEDED`). Sem retomada automática; o pico é recalculado após o reset.
+Gauges `circuit_breaker.drawdown.current`, `.peak_24h`, `circuit_breaker.equity.current`.
+`portfolio.circuit-breaker.enabled=false` desliga.
+
+<a id="ref-gatilhos"></a>
+### Gatilhos automáticos (T25)
+
+| Motivo | Condição | Antes de retomar |
 |---|---|---|
-| `HALT` | Suspeita de problema; parar de comprar | Nenhum BUY novo. A estratégia segue e pode vender. |
-| `CANCEL_ALL` | Tirar todas as ordens LIMIT do livro | HALT + cancela ordens LIMIT em voo. Estratégia parada. Exige `confirm`. |
-| `PANIC_SELL` | Zerar exposição imediatamente | CANCEL_ALL + vende todas as posições, **a mercado** por padrão ou com LIMIT protegida conforme o runner (ver abaixo). Exige `confirm`. |
+| `DLQ_THRESHOLD` | ≥ 3 entradas não resolvidas | [dlq-unresolved](#dlq-unresolved) |
+| `BALANCE_DIVERGENCE` | Sanidade do boot com saldo local > exchange (`FAIL_DEFICIT`) | [boot-not-ready](#boot-not-ready); escalar |
+| `WATCHDOG_STUCK` | Mesma transação sem resolver em 3 ciclos | [transaction-stuck](#transaction-stuck) |
 
-- O `PUT` responde **202** e a execução acontece nos ticks seguintes; acompanhe pelo `GET`
-  (`restingOrders`, `liquidatingOrders`, `openPositions` caindo a zero).
-- `idleRunners > 0`: há runners parados pelo kill switch (ou reconciliando) que o Safe Mode **não**
-  conduz. Para liquidá-los, retome o runner (`POST /api/admin/runners/{id}/resume`, T49) com o
-  portfolio em `PANIC_SELL`.
-- Liquidação por runner (T48): por padrão o `PANIC_SELL` vende a MARKET. Para símbolos de livro raso,
-  configure LIMIT no runner com `PATCH /api/admin/runners/{id}`:
-  `{"liquidationOrderType": "LIMIT", "liquidationMaxSlippagePercent": 0.01, "liquidationEscalationTicks": 3}`
-  (os dois últimos são o padrão). A SELL LIMIT sai a 1% abaixo do último preço; sem preenchimento em
-  3 ticks é cancelada e o restante do lote sai a MARKET. Sem ticks de market data nada é liquidado,
-  em nenhum dos dois tipos. Sinal no log: `safeMode: PANIC_SELL LIMIT unfilled - canceling to escalate`.
-- Retomada: desça **um nível por vez** (`PANIC_SELL` → `CANCEL_ALL` → `HALT` → `NORMAL`), cada passo com motivo.
-- `409`: transição recusada (pulo na descida, falta de `confirm`, motivo vazio ou alteração concorrente).
-- Toda mudança fica em `safe_mode_changes` (de/para, origem, motivo, data).
+Runner: 5 rejeições seguidas param só ele (`[RUNNER_AUTO_HALTED]`). Retomada sempre manual.
+`safe-mode.auto.*` (cada gatilho com `enabled`).
 
-## Circuit breaker de drawdown (T43)
+### Ciclo de vida do runner (T49)
 
-- O monitor roda a cada 10s (`portfolio.circuit-breaker.check-interval-ms`). Equity =
-  `available + reserved + PnL flutuante` das posições ao último preço.
-- Queda acima de **10%** (`max-drawdown-percent`) em relação ao pico das últimas 24h coloca o
-  portfolio em **HALT automático** (motivo `MAX_DRAWDOWN_EXCEEDED`), com aviso no Discord e registro
-  em `safe_mode_changes` (origem `AUTOMATIC`). A 50% do limite há log WARN.
-- **Não há retomada automática.** Depois de analisar a perda, desça para `NORMAL` pela API do Safe
-  Mode; o pico é recalculado a partir do reset, então o breaker não reaciona pelo pico antigo.
-- Gauges: `circuit_breaker.drawdown.current`, `circuit_breaker.drawdown.peak_24h`,
-  `circuit_breaker.equity.current` (tag `portfolioId`); contador `circuit_breaker.activations.total`.
-- Log `drawdown: no market price ... skipped` logo após subir é esperado até o primeiro tick do
-  símbolo; se persistir, o símbolo da posição não está recebendo market data.
-- Para desligar (ex.: teste controlado): `portfolio.circuit-breaker.enabled=false`.
+| Ação | Endpoint (todos com `X-Reason`) |
+|---|---|
+| Iniciar | `POST /api/admin/runners/{id}/start` (reconcilia e ativa) |
+| Parar | `POST /api/admin/runners/{id}/halt` |
+| Retomar | `POST /api/admin/runners/{id}/resume` |
+| Encerrar | `POST /api/admin/runners/{id}/terminate` (arquiva sozinho quando zerado) |
+| Limites, proteção, liquidação | `PATCH /api/admin/runners/{id}` (campo omitido mantém) |
+| Cancelar ordem | `POST /api/admin/runners/{id}/orders/{transactionId}/cancel` (`202`) |
+| Fechar posição | `POST /api/admin/runners/{id}/positions/{positionId}/close` (`202`, SELL MARKET do lote) |
 
-## Gatilhos automáticos (T25)
+Códigos de recusa: `RUNNER_INVALID_STATE`, `RUNNER_RECONCILIATION_INCOMPLETE`, `EXCHANGE_UNAVAILABLE`,
+`ORDER_NOT_FOUND`, `POSITION_NOT_FOUND`, `POSITION_LOCKED` (cancelar a SELL LIMIT antes),
+`RUNNER_NOT_ACCEPTING_SIGNALS` (retomar antes), `NO_MARKET_PRICE` (esperar o primeiro tick).
 
-Além do drawdown (T43), o portfolio entra em **HALT automático** (origem `AUTOMATIC`, alerta Discord
-`[CIRCUIT_BREAKER_TRIGGERED]`, `circuit_breaker_activations_total{reason}`) quando:
+### Proteção do lote (T44)
 
-| Motivo | Condição | O que conferir antes de retomar |
-|---|---|---|
-| `DLQ_THRESHOLD` | ≥ 3 entradas não resolvidas na DLQ do portfolio | `GET /api/dead-letters`; reprocessar ou resolver as entradas |
-| `BALANCE_DIVERGENCE` | Sanidade do boot com saldo local maior que o da exchange (`FAIL_DEFICIT`) | Comparar saldo da conta com `global_balances`; corrigir a origem da diferença |
-| `WATCHDOG_STUCK` | Mesma transação sem resolver em 3 ciclos do watchdog (~3 min) | Ordem na exchange pelo `clientOrderId`; disponibilidade da exchange (T24) |
+Venda MARKET do lote, sem a estratégia, quando a perda passa de `maxLossPercentPerLot` (0.05) ou a idade
+passa de `maxHoldingDuration`. Vale com a estratégia fora do ar e em HALT. Ajuste:
+`PATCH /api/admin/runners/{id}` `{"maxLossPercentPerLot":0.08}` / `{"maxHoldingDuration":"PT24H"}`
+(`"PT0S"` desliga a idade). Sinais: `[PROTECTIVE_EXIT]`, `signal.evaluated.total{decision=PROTECTIVE_EXIT}`.
 
-Runner (não o portfolio): **5 ordens rejeitadas seguidas** param só aquele runner (alerta
-`[RUNNER_AUTO_HALTED]` com o último motivo de rejeição). Corrigir a causa (saldo, filtros, credencial) e
-retomar com `POST /api/admin/runners/{id}/resume`.
+### Estratégia remota e catálogo (T41, T54)
 
-- Retomada sempre manual. Gatilho não repete com o portfolio já em Safe Mode.
-- Configuração: `safe-mode.auto.*` (cada gatilho tem `enabled`; `safe-mode.auto.enabled=false` desliga
-  todos os da T25 sem afetar o Safe Mode manual nem o drawdown).
+A estratégia é uma app que implementa `docs/strategy-service/CONTRACT.md`; o catálogo é operado por API.
 
-## Ciclo de vida do runner (T49)
+- Cadastrar: `POST /api/admin/strategies`
+  `{"strategyRef","name","version","baseUrl":"http://host:porta/v1","token"}`. Esperado
+  `verification=VERIFIED`, `usable=true`; `FAILED` = ler `lastError` (conferido de novo a cada 30s).
+  `409 STRATEGY_DEFINITION_CONFLICT`: versão nova = `strategyRef` novo; endereço novo = `PATCH`.
+- Consultar: `GET /api/admin/strategies[/{ref}]`, histórico em `.../events`.
+- Endereço/token: `PATCH /api/admin/strategies/{ref}` `{"baseUrl","token"}` (nulo mantém; token vazio remove).
+- Tirar de uso / voltar: `POST .../disable` / `.../enable`. Sem exclusão.
+- Sinais: `signal.evaluated.total{decision=STRATEGY_UNAVAILABLE}`,
+  `strategy.remote.failures{reason}`, `strategy.remote.latency`. `timeout-ms` 250, `max-decision-age-ms` 2000.
 
-Endpoints protegidos pelo `admin.api.key`:
+### Circuit breaker das consultas REST (T24)
 
-| Ação | Endpoint | Efeito |
-|---|---|---|
-| Iniciar runner criado | `POST /api/admin/runners/{id}/start` | Reconcilia e ativa (CREATED → ACTIVE), sem restart |
-| Parar | `POST /api/admin/runners/{id}/halt` | Kill switch (T8): nenhuma ordem nova |
-| Retomar | `POST /api/admin/runners/{id}/resume` | Reconcilia; só volta a ACTIVE se não houver erro nem DLQ pendente |
-| Encerrar | `POST /api/admin/runners/{id}/terminate` | TERMINATING: sem compras, a estratégia ainda vende; arquivado sozinho quando zerado |
-| Ajustar limites | `PATCH /api/admin/runners/{id}` `{"maxAllocationPercent":0.2,"maxOpenPositions":1,"maxPendingOrders":1}` | Campo omitido mantém o valor |
-| Cancelar ordem | `POST /api/admin/runners/{id}/orders/{transactionId}/cancel` | 202; o CANCELED chega pelo stream |
-| Fechar posição | `POST /api/admin/runners/{id}/positions/{positionId}/close` | 202; SELL MARKET do lote inteiro |
+5 falhas de instabilidade (rede, 5xx, rate limit) abrem o circuito por 60s; erro de requisição ou de
+autenticação não conta. `resilience4j_circuitbreaker_state{name="binance-order-query",state="open"}`.
+`exchange.order-query.circuit-breaker.enabled=false` desliga.
 
-- `409` = operação recusada pelo estado (transição inválida, exchange indisponível, reconciliação
-  incompleta, posição travada por uma SELL em voo, sem preço de mercado ainda). A mensagem diz o motivo.
-- Fechar posição exige runner ACTIVE ou TERMINATING; runner halted: retome antes.
-- Posição travada por SELL LIMIT: cancele a ordem e depois feche a posição.
+### Processamento de ticks (T42)
 
-## Estado operacional e alertas (T51)
+`runner.ticks.discarded{reason}`: `COALESCED` normal em rajadas; `STALE` = fila saturada (aumentar
+`runner.signal.threads` ou investigar estratégia lenta); `OUT_OF_ORDER` raro.
+`runner.signal.processing.time` com WARN `slow evaluation` acima de 1s. ERROR
+`marketDataExecutor: queue full` = parsing não acompanha o feed.
 
-- `GET /actuator/health` → componente `safeMode`: `active` e o nível de cada portfolio. Continua `UP`
-  com Safe Mode ativo (é proteção, não falha).
-- Amostra a cada `ctrade.observability.report-interval-ms` (15s): `circuit_breaker_current_level`
-  (0=NORMAL … 3=PANIC_SELL), `circuit_breaker_duration_active_seconds`, `capital_utilization_global`,
-  `capital_utilization_runner`, `capital_reservation_oldest_age_seconds`, `runner_lifecycle_current_state`.
-- Alertas do Grafana (grupo `ctrade-operational`, canal `alerts-behavior`):
-  - **Safe Mode ativo** → ver a seção do Safe Mode; `GET /api/admin/portfolios/{id}/safe-mode`.
-  - **Runner travado em TERMINATING** (> 10 min, log WARN `runner stuck in TERMINATING`) → conferir
-    ordens em voo e posição do runner; cancelar/fechar pelos comandos da T49.
-  - **Cancel rate > 10/min** → estratégia em loop de ordem/cancelamento; considerar halt do runner.
-  - **Rejection rate > 50%** → ver `signal_evaluated_total` por `decision` (capital, preço, limites).
-  - **Utilização global > 80%** → capital quase todo reservado; novos BUYs tendem a ser recusados.
+### Métricas de estado (T51, T55)
 
-## Circuit breaker das consultas REST (T24)
-
-As consultas REST de ordens à Binance (boot recovery, watchdog de transações) passam por um circuit
-breaker: 5 falhas de instabilidade (rede, 5xx, rate limit) abrem o circuito por 60s; erro de requisição
-ou de autenticação não conta. Aberto, a consulta falha na hora como falha transitória — o boot repete
-com backoff e o watchdog tenta no próximo ciclo.
-
-- Sinais: alerta Grafana **Circuit breaker da exchange aberto**,
-  `resilience4j_circuitbreaker_state{name="binance-order-query",state="open"} = 1`.
-- Ação: conferir a disponibilidade da Binance (status, credenciais, rate limit). O circuito testa de
-  novo sozinho na próxima consulta depois dos 60s.
-- Config: `exchange.order-query.circuit-breaker.*` (`enabled: false` desliga).
-
-## Processamento de ticks (T42)
-
-- `runner.ticks.discarded{runnerId, reason}`: `COALESCED` cresce quando a avaliação é mais lenta que o
-  feed (normal em rajadas); `STALE` indica tick que esperou mais que
-  `runner.signal.stale-tick-threshold-ms` (5s) — fila de runners saturada; `OUT_OF_ORDER` deve ser raro.
-- `runner.signal.processing.time{runnerId}`: duração de cada avaliação; acima de
-  `runner.signal.slow-processing-warn-ms` (1s) há WARN `slow evaluation`.
-- Muitos `STALE`: aumentar `runner.signal.threads` ou investigar a estratégia lenta.
-- Log ERROR `marketDataExecutor: queue full`: parsing de market data não acompanha o feed.
-
-## Proteção do lote (T44)
-
-Cada runner vende o lote a mercado, sem consultar a estratégia, quando a perda passa de
-`maxLossPercentPerLot` do custo (padrão 0.05) ou, se configurado, quando o lote passa de
-`maxHoldingDuration`. Vale com a estratégia fora do ar e sob Safe Mode `HALT`.
-
-- Sinais: log WARN `protection: MAX_LOSS ...`, alerta Discord `[PROTECTIVE_EXIT]`, outcome
-  `signal.evaluated.total{decision=PROTECTIVE_EXIT}`. A venda é uma SELL `MARKET` com reasoning
-  `protective exit ...`.
-- Ajustar por runner: `PATCH /api/admin/runners/{id}` com `{"maxLossPercentPerLot": 0.08}` ou
-  `{"maxHoldingDuration": "PT24H"}`; `"PT0S"` desliga a idade máxima. O limite de perda não desliga
-  (valores em (0, 1)).
-- SELL LIMIT da estratégia descansando sobre o lote é cancelada primeiro; a venda protetiva sai no
-  tick seguinte ao `CANCELED`.
-
-## Estratégia remota (T41) e catálogo de estratégias (T54)
-
-> Com a estratégia fora do ar, desabilitada ou ainda não conferida, o runner não opera (HOLD
-> implícito); a saída do lote em queda fica com a proteção do lote (T44).
-
-A estratégia é uma app independente que implementa `docs/strategy-service/CONTRACT.md` (qualquer
-linguagem; referência: `gradle :strategy-service-reference:run` com `PORT`, `STRATEGY_REF`,
-`STRATEGY_TOKEN`). O catálogo fica no banco e é operado só por API, sem restart do ctrade. Todas as
-chamadas levam `X-Admin-Key`; toda mudança exige `X-Reason`; recusas trazem `code` no `ApiError`.
-Contrato completo no OpenAPI (`/v3/api-docs`, tag *Strategy catalog*).
-
-**Cadastrar e colocar em uso**
-
-1. `POST /api/admin/strategies` com
-   `{"strategyRef","name","version","baseUrl":"http://host:porta/v1","token"}` e `X-Reason`.
-   - Esperado: `200`, `status=ENABLED`, `verification=VERIFIED`, `usable=true`.
-   - `verification=FAILED`, `usable=false`: ler `lastError` (serviço fora, nome/versão divergente ou
-     contrato não suportado). O ctrade confere de novo a cada `registration-retry-interval-ms` (30s);
-     corrigir a causa e acompanhar pelo `GET` até `usable=true`.
-   - `409 STRATEGY_DEFINITION_CONFLICT`: o `strategyRef` já existe com outros dados. Versão nova da
-     estratégia = `strategyRef` novo; endereço novo = `PATCH`.
-   - Repetir o mesmo cadastro devolve o registro existente, sem efeito.
-2. Criar o runner apontando para o `strategyRef` e iniciá-lo (`POST /api/admin/runners/{id}/start`).
-
-**Verificar**
-
-- `GET /api/admin/strategies` (ou `/{strategyRef}`): `usable`, `verification`, `lastError`,
-  `lastVerificationAt` e `runners` (id, `shortCode`, símbolo, status) de cada estratégia.
-- `GET /api/admin/strategies/{strategyRef}/events`: histórico (`REGISTERED`, `ENABLED`, `DISABLED`,
-  `ENDPOINT_CHANGED` com `reason`; `VERIFIED`, `VERIFICATION_FAILED` com `detail`).
-
-**Mudar endereço ou token**: `PATCH /api/admin/strategies/{strategyRef}` com `baseUrl` e/ou `token`
-(nulo mantém; token vazio remove) e `X-Reason`. A estratégia sai de uso e é conferida no endereço novo;
-esperado `usable=true` na resposta.
-
-**Tirar de uso**: `POST /api/admin/strategies/{strategyRef}/disable` com `X-Reason`.
-- Esperado: `status=DISABLED`, `usable=false`; os runners listados ficam em HOLD (nada é parado).
-- Com runner `ACTIVE`, sai o alerta Discord `[STRATEGY_DISABLED]`. Para encerrar esses runners, usar
-  os comandos da T49.
-- Não há exclusão. Para voltar: `POST .../enable` com `X-Reason`, que confere de novo antes do uso.
-
-Sinais: `signal.evaluated.total{decision=STRATEGY_UNAVAILABLE}` (estratégia não decidiu),
-`strategy.remote.failures{reason=UNREACHABLE|ERROR_RESPONSE|INVALID_RESPONSE|STALE_DECISION}` e
-`strategy.remote.latency` por `strategyRef`. Parâmetros: `timeout-ms` (250), `max-decision-age-ms` (2000).
+`operational_state_status`, `operational_check_status{check}` (0=OK, 1=WARN, 2=CRITICAL);
+`circuit_breaker_current_level` (0=NORMAL … 3=PANIC_SELL), `capital_utilization_global`,
+`capital_utilization_runner`, `capital_reservation_oldest_age_seconds`, `runner_lifecycle_current_state`.
+`/actuator/health` → componente `safeMode` (continua `UP` com Safe Mode ativo).

@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T54 (primeira API no padrão), T27 (envelope `ApiError`), T51 (estado operacional como
 métrica). Base do monitoramento periódico por IA da T53.
-**Status:** Em andamento — Partes A, B e C entregues (2026-10-20); C2 (divergência com a exchange) e D pendentes.
+**Status:** Em andamento — Partes A, B, C e D entregues (2026-10-20); C2 (divergência com a exchange) pendente.
 
 ---
 
@@ -225,4 +225,15 @@ que resolveu. As seções atuais viram a fonte; o formato muda.
   para quando forem extraídas para reuso, sem reimplementar.
 - Validação: `InspectOperationalStateUseCaseTest` (caso que dispara e que não dispara por verificação),
   `OperationalStateIntegrationTest` (Postgres: endpoint e métrica); suíte completa verde.
+
+### Parte D — Runbook executável (2026-10-20)
+
+- `docs/OPERATIONS_RUNBOOK.md` reescrito para o agente operador: convenções da API (chave, `X-Reason`,
+  `code`, idempotência, log de ações), ciclo de verificação a partir de `operational-state`, partida
+  depois de um boot (abrir conexões e assinaturas), um procedimento por verificação com âncora estável
+  (`#dlq-unresolved` etc., o mesmo `runbook` que a verificação devolve) — diagnóstico, ação com o comando
+  exato, resposta esperada e confirmação —, mapa de alertas Discord/Grafana para as seções e a referência
+  dos mecanismos (conteúdo anterior, condensado).
+- **Limites de autonomia** (o que o agente faz sozinho × o que pede ao mantenedor) entraram como
+  **proposta a confirmar pelo mantenedor**.
 
