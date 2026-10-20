@@ -3,6 +3,7 @@ package com.marmitt.strategyservice;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.core.domain.Symbol;
+import com.marmitt.core.domain.strategy.StrategyEndpoint;
 import com.marmitt.core.dto.strategy.PositionContext;
 import com.marmitt.core.dto.strategy.StrategyContextDto;
 import com.marmitt.core.dto.strategy.StrategyInputDto;
@@ -35,6 +36,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class RemoteStrategyClientTest {
 
     private static final UUID REF = UUID.fromString("5ea5e0a0-0000-4000-a000-000000000001");
+    private static final StrategyEndpoint ENDPOINT = new StrategyEndpoint("http://strategy:8090/v1/", "token-1");
     private static final Instant TICK = Instant.parse("2026-10-19T12:00:00Z");
     private static final String BUY = """
             {"strategyName":"SMA","decision":"SHOULD_BUY","confidence":"0.80","quantity":"0.00100000",
@@ -47,7 +49,7 @@ class RemoteStrategyClientTest {
     void validDecisionIsMappedToTheCore() {
         http.reply = request -> new StrategyServiceHttpPort.Response(200, BUY);
 
-        StrategyOutputDto output = client(Duration.ofSeconds(1)).evaluate(REF, input(), context(UUID.randomUUID()));
+        StrategyOutputDto output = client(Duration.ofSeconds(1)).evaluate(REF, ENDPOINT, input(), context(UUID.randomUUID()));
 
         assertEquals(TradingAction.SHOULD_BUY, output.decision());
         assertEquals(0, new BigDecimal("0.001").compareTo(output.quantity()));
@@ -63,9 +65,9 @@ class RemoteStrategyClientTest {
         UUID runnerA = UUID.randomUUID();
         UUID runnerB = UUID.randomUUID();
 
-        client.evaluate(REF, input(), context(runnerA));
-        client.evaluate(REF, input(), context(runnerA));
-        client.evaluate(REF, input(), context(runnerB));
+        client.evaluate(REF, ENDPOINT, input(), context(runnerA));
+        client.evaluate(REF, ENDPOINT, input(), context(runnerA));
+        client.evaluate(REF, ENDPOINT, input(), context(runnerB));
 
         JsonNode first = objectMapper.readTree(http.calls.get(0).body());
         JsonNode second = objectMapper.readTree(http.calls.get(1).body());
@@ -83,14 +85,14 @@ class RemoteStrategyClientTest {
         UUID runner = UUID.randomUUID();
         RemoteStrategyClient beforeRestart = client(Duration.ofSeconds(1));
         for (int i = 0; i < 5; i++) {
-            beforeRestart.evaluate(REF, input(), context(runner));
+            beforeRestart.evaluate(REF, ENDPOINT, input(), context(runner));
         }
         long lastBeforeRestart = objectMapper.readTree(http.calls.getLast().body()).path("sequence").asLong();
 
         // ctrade reinicia um segundo depois: contador em memoria recomeca, o servico guardou o anterior.
-        RemoteStrategyClient afterRestart = new RemoteStrategyClient(http, objectMapper, endpoints(),
+        RemoteStrategyClient afterRestart = new RemoteStrategyClient(http, objectMapper,
                 Duration.ofSeconds(5), Clock.fixed(TICK.plusSeconds(1), ZoneOffset.UTC));
-        afterRestart.evaluate(REF, input(), context(runner));
+        afterRestart.evaluate(REF, ENDPOINT, input(), context(runner));
 
         long firstAfterRestart = objectMapper.readTree(http.calls.getLast().body()).path("sequence").asLong();
         assertTrue(firstAfterRestart > lastBeforeRestart,
@@ -102,7 +104,7 @@ class RemoteStrategyClientTest {
         RemoteStrategyClient client = client(Duration.ofSeconds(1));
         for (String body : new String[]{"null", "[null]"}) {
             http.reply = request -> new StrategyServiceHttpPort.Response(200, body);
-            StrategyUnavailableException e = assertThrows(StrategyUnavailableException.class, () -> client.describe(REF));
+            StrategyUnavailableException e = assertThrows(StrategyUnavailableException.class, () -> client.describe(REF, ENDPOINT));
             assertEquals(Reason.INVALID_RESPONSE, e.reason(), body);
         }
     }
@@ -140,19 +142,12 @@ class RemoteStrategyClientTest {
     @Test
     void decisionOlderThanTheLimitIsDiscarded() {
         http.reply = request -> new StrategyServiceHttpPort.Response(200, BUY);
-        RemoteStrategyClient client = new RemoteStrategyClient(http, objectMapper, endpoints(),
+        RemoteStrategyClient client = new RemoteStrategyClient(http, objectMapper,
                 Duration.ofMillis(500), Clock.fixed(TICK.plusMillis(800), ZoneOffset.UTC));
 
         StrategyUnavailableException e = assertThrows(StrategyUnavailableException.class,
-                () -> client.evaluate(REF, input(), context(UUID.randomUUID())));
+                () -> client.evaluate(REF, ENDPOINT, input(), context(UUID.randomUUID())));
         assertEquals(Reason.STALE_DECISION, e.reason());
-    }
-
-    @Test
-    void unknownStrategyRefHasNoEndpoint() {
-        StrategyUnavailableException e = assertThrows(StrategyUnavailableException.class,
-                () -> client(Duration.ofSeconds(1)).evaluate(UUID.randomUUID(), input(), context(UUID.randomUUID())));
-        assertEquals(Reason.UNREACHABLE, e.reason());
     }
 
     @Test
@@ -160,7 +155,7 @@ class RemoteStrategyClientTest {
         http.reply = request -> new StrategyServiceHttpPort.Response(200,
                 "[{\"strategyId\":\"" + REF + "\",\"name\":\"SMA\",\"version\":\"1.0.0\",\"contractVersion\":\"1.1.0\"}]");
 
-        var identity = client(Duration.ofSeconds(1)).describe(REF);
+        var identity = client(Duration.ofSeconds(1)).describe(REF, ENDPOINT);
 
         assertEquals(REF, identity.strategyId());
         assertEquals("1.1.0", identity.contractVersion());
@@ -169,17 +164,13 @@ class RemoteStrategyClientTest {
 
     private void assertReason(Reason expected, RemoteStrategyClient client) {
         StrategyUnavailableException e = assertThrows(StrategyUnavailableException.class,
-                () -> client.evaluate(REF, input(), context(UUID.randomUUID())));
+                () -> client.evaluate(REF, ENDPOINT, input(), context(UUID.randomUUID())));
         assertEquals(expected, e.reason());
     }
 
     private RemoteStrategyClient client(Duration maxAge) {
-        return new RemoteStrategyClient(http, objectMapper, endpoints(), maxAge,
+        return new RemoteStrategyClient(http, objectMapper, maxAge,
                 Clock.fixed(TICK.plusMillis(100), ZoneOffset.UTC));
-    }
-
-    private static List<RemoteStrategyEndpoint> endpoints() {
-        return List.of(new RemoteStrategyEndpoint(REF, "http://strategy:8090/v1/", "token-1"));
     }
 
     private static StrategyInputDto input() {

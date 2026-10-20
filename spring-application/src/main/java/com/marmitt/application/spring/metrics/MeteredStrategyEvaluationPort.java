@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.metrics;
 
+import com.marmitt.core.domain.strategy.StrategyEndpoint;
 import com.marmitt.core.dto.strategy.StrategyContextDto;
 import com.marmitt.core.dto.strategy.StrategyInputDto;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
@@ -28,10 +29,11 @@ public class MeteredStrategyEvaluationPort implements StrategyEvaluationPort {
     }
 
     @Override
-    public StrategyOutputDto evaluate(UUID strategyRef, StrategyInputDto input, StrategyContextDto context) {
+    public StrategyOutputDto evaluate(UUID strategyRef, StrategyEndpoint endpoint, StrategyInputDto input,
+                                      StrategyContextDto context) {
         Timer.Sample sample = Timer.start(meterRegistry);
         try {
-            return delegate.evaluate(strategyRef, input, context);
+            return delegate.evaluate(strategyRef, endpoint, input, context);
         } catch (StrategyUnavailableException e) {
             meterRegistry.counter(FAILURES, "strategyRef", strategyRef.toString(), "reason", e.reason().name()).increment();
             throw e;
@@ -42,7 +44,7 @@ public class MeteredStrategyEvaluationPort implements StrategyEvaluationPort {
     }
 
     @Override
-    public RemoteStrategyIdentity describe(UUID strategyRef) {
-        return delegate.describe(strategyRef);
+    public RemoteStrategyIdentity describe(UUID strategyRef, StrategyEndpoint endpoint) {
+        return delegate.describe(strategyRef, endpoint);
     }
 }

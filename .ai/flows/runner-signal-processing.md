@@ -41,8 +41,11 @@ adaptadores externos.
    `unrealizedPnl` e o percentual do lote refletem o mercado (T43).
 5. `StrategySignalEvaluator` resolve a estrategia **so por `strategyId`** e a avalia. Qualquer falha
    (excecao, retorno nulo, sinal invalido, estrategia remota indisponivel) vira HOLD implicito com o
-   desfecho `STRATEGY_UNAVAILABLE` (T41). Estrategia remota = `RemoteTradingStrategy` registrada pelo
-   catalogo, avaliada pelo `StrategyEvaluationPort` (contrato em `docs/strategy-service/`).
+   desfecho `STRATEGY_UNAVAILABLE` (T41). Estrategia remota = `RemoteTradingStrategy` posta no
+   repositorio pelo catalogo persistido (`RemoteStrategyCatalogUseCase`, T54) e avaliada pelo
+   `StrategyEvaluationPort` com o endereco/token do catalogo (contrato em `docs/strategy-service/`).
+   Ela so e consultada quando habilitada e conferida via `/v1/meta` neste processo; desabilitada ou
+   pendente, o runner fica em HOLD implicito sem chamar o servico.
 6. Sinal `HOLD` encerra o fluxo sem efeito.
 7. `PreTradeRiskPolicy` (T50) descarta, antes de persistir: `limitPrice` a mais de 10% do preco do
    tick (BUY e SELL) e BUY com o runner em `maxOpenPositions` ou `maxPendingOrders` (snapshot de

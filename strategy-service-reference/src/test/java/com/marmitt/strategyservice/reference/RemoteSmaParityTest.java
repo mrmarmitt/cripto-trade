@@ -1,6 +1,7 @@
 package com.marmitt.strategyservice.reference;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.marmitt.core.domain.strategy.StrategyEndpoint;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.dto.strategy.OpenLotDto;
 import com.marmitt.core.dto.strategy.PositionContext;
@@ -10,7 +11,6 @@ import com.marmitt.core.dto.strategy.StrategyOutputDto;
 import com.marmitt.core.ports.outbound.strategy.StrategyEvaluationPort.RemoteStrategyIdentity;
 import com.marmitt.strategy.impl.simple_moving_avager.SimpleMovingAverageStrategy;
 import com.marmitt.strategyservice.RemoteStrategyClient;
-import com.marmitt.strategyservice.RemoteStrategyEndpoint;
 import com.marmitt.strategyservice.StrategyServiceHttpPort;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -43,14 +43,14 @@ class RemoteSmaParityTest {
 
     private ReferenceStrategyServer server;
     private RemoteStrategyClient client;
+    private StrategyEndpoint endpoint;
 
     @BeforeEach
     void startServer() throws IOException {
         server = new ReferenceStrategyServer(REF, new SimpleMovingAverageStrategy(), "secret");
         server.start(0);
-        client = new RemoteStrategyClient(new JdkHttp(), new ObjectMapper(),
-                List.of(new RemoteStrategyEndpoint(REF, "http://localhost:" + server.port() + "/v1", "secret")),
-                Duration.ofSeconds(5), Clock.systemUTC());
+        endpoint = new StrategyEndpoint("http://localhost:" + server.port() + "/v1", "secret");
+        client = new RemoteStrategyClient(new JdkHttp(), new ObjectMapper(), Duration.ofSeconds(5), Clock.systemUTC());
     }
 
     @AfterEach
@@ -73,7 +73,7 @@ class RemoteSmaParityTest {
                 StrategyInputDto input = input(price);
                 StrategyContextDto context = context(runner);
                 local.add(summary(inProcess.executeStrategy(input, context)));
-                remote.add(summary(client.evaluate(REF, input, context)));
+                remote.add(summary(client.evaluate(REF, endpoint, input, context)));
             }
         }
 
@@ -84,7 +84,7 @@ class RemoteSmaParityTest {
 
     @Test
     void metaDeclaresTheServedIdentity() {
-        RemoteStrategyIdentity identity = client.describe(REF);
+        RemoteStrategyIdentity identity = client.describe(REF, endpoint);
 
         assertEquals(REF, identity.strategyId());
         assertEquals("SimpleMovingAverageStrategy", identity.name());

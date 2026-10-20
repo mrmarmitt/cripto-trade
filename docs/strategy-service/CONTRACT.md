@@ -287,20 +287,21 @@ estratégia não é avisada além do que já vê no contexto (o lote some de `op
 
 ## Autenticação
 
-Opcional: quando o ctrade tem token configurado, envia `Authorization: Bearer <token>` em todas as
-chamadas. A app que exige token responde `401` sem ele. O serviço deve ficar em rede interna.
+Opcional: quando a estratégia tem token cadastrado no catálogo do ctrade (T54, um token por
+estratégia), o ctrade envia `Authorization: Bearer <token>` em todas as chamadas a ela. A app que exige token responde `401` sem ele. O serviço deve ficar em rede interna.
 
 ## Onde isto se encaixa
 
 Camada 1 do desacoplamento de estratégias — **implementada na T41**:
 
 - **Core:** `StrategyEvaluationPort` + `RemoteTradingStrategy` (proxy que delega `executeStrategy`);
-  falha vira HOLD com o desfecho `STRATEGY_UNAVAILABLE`. `RegisterRemoteStrategiesUseCase` confere
-  `/v1/meta` antes de registrar.
+  falha vira HOLD com o desfecho `STRATEGY_UNAVAILABLE`. O catálogo (`RemoteStrategyCatalogUseCase`,
+  T54) confere `/v1/meta` antes de colocar a estratégia em uso.
 - **`adapter-strategy-remote`:** formato de rede deste contrato, validação da decisão e cliente (sem
   retry, `tickId`/`sequence` por runner, descarte por idade).
-- **spring-application:** transporte OkHttp com timeout, catálogo estático
-  (`ctrade.strategy.remote.catalog`), métricas e registro no boot com nova tentativa periódica.
+- **spring-application:** transporte OkHttp com timeout, métricas e o ciclo periódico de conferência.
+  Desde a T54 o catálogo é persistido e administrado por `/api/admin/strategies` (cadastro sem restart,
+  token por estratégia, histórico de mudanças).
 - **`strategy-service-reference`:** app de referência que serve o SMA por este contrato; o teste de
   paridade in-process × remoto é o portão da migração.
 

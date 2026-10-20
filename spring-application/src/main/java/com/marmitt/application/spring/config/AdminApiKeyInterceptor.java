@@ -42,7 +42,8 @@ public class AdminApiKeyInterceptor implements HandlerInterceptor {
                 HttpStatus.UNAUTHORIZED.value(),
                 HttpStatus.UNAUTHORIZED.getReasonPhrase(),
                 "Missing or invalid X-Admin-Key header",
-                request.getRequestURI());
+                request.getRequestURI(),
+                "ADMIN_KEY_INVALID");
         response.setStatus(HttpStatus.UNAUTHORIZED.value());
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.getWriter().write(objectMapper.writeValueAsString(body));

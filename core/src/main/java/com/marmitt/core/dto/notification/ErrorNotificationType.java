@@ -16,5 +16,7 @@ public enum ErrorNotificationType {
     /** Protecao do lote vendeu a posicao sem a estrategia (T44). */
     PROTECTIVE_EXIT,
     /** Runner parado automaticamente por rejeicoes consecutivas da exchange (T25). */
-    RUNNER_AUTO_HALTED
+    RUNNER_AUTO_HALTED,
+    /** Estrategia remota desabilitada com runners ativos apontando para ela, que ficam em HOLD (T54). */
+    STRATEGY_DISABLED
 }
