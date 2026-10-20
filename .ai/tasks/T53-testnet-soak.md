@@ -182,6 +182,7 @@ explicação (erro comprovadamente da testnet é aceito se registrado).
 | # | Data | Fase | Duração | Estratégia / símbolo | Resultado | Achados → tasks |
 |---|---|---|---|---|---|---|
 | 1 | 2026-10-20 | 1 (smoke) | ~15 min | 4 cenários / BTCUSDT, máquina local | Ramos OK; trades 100% iguais à exchange; DLQ vazia. Reprovada por F1 (bug) e por ruído de `ERROR` (F5). | F1–F6 abaixo |
+| 2 | 2026-10-20 | 1 (smoke) | ~17 min | 4 cenários / BTCUSDT, máquina local | **Aprovada.** F1, F2, F4 e F5 confirmados corrigidos; 271 fills 100% iguais à exchange; DLQ vazia; zero `ERROR`. | F3 (T57), F7 abaixo |
 
 ### Rodada 1 — detalhes (2026-10-20)
 
@@ -220,6 +221,41 @@ reserva), F4 (`retrievedAt` = instante da consulta; `accountUpdatedAt` à parte)
 ignorados sem erro) e F6 (runbook). **F3 continua aberto** e depende de decisão do mantenedor; até lá, o
 runbook descreve a limitação. Próximo passo: repetir a fase 1.
 - A confirmar: comissão zero na testnet (`totalFeesPaid` 0 em 130 fills).
+
+### Rodada 2 — detalhes (2026-10-20, após o bugfix)
+
+Banco limpo com `scripts/reset-testnet-db.ps1`; boot `SUCCESS`; `operational-state` `OK` antes de começar.
+
+- **Cenário 1 (resting BUY → cancel):** 73 BUYs `CANCELED` em ~5 min (rodada 1: 4), cada `CANCELED`
+  conciliado na hora pelo stream; `reserved` 0. **F1 corrigido.**
+- **Cenário 2 (fill → resting SELL → cancel):** 1 BUY `FILLED`, 66 SELLs `CANCELED`. Com o lote aberto
+  (82.853 USDT reservados), `CAPITAL_RESERVED_WITHOUT_ORDER` ficou `OK`. **F2 corrigido.** A SELL que
+  descansava após o `halt` foi cancelada pelo operador em segundos (rodada 1: `502`). Lote de 0.001 BTC
+  deixado aberto (desenho do cenário; fechar à mão exige o mantenedor).
+- **Cenário 3 (round trip):** 135 BUY + 135 SELL `FILLED`; `reserved` 0; PnL realizado −0.01401 USDT;
+  `available` 999.98599 (bate com 1000 + PnL).
+- **Cenário 4 (recusa por capital):** a BUY de 2× o capital recusada com `RUNNER_LIMIT_EXCEEDED` (78
+  vezes, `WARN`); a transação é desfeita, não fica registro e nada vai à exchange.
+- **Saldo da exchange:** `retrievedAt` = instante da consulta e `accountUpdatedAt` à parte. **F4
+  corrigido.** USDT da conta caiu 82.867 desde a rodada 1 = custo do lote do cenário 2 (82.853) + PnL do
+  cenário 3 (0.014).
+- **Logs:** zero `ERROR` na rodada inteira (rodada 1: 77 de `-2011` + 147 de `outboundAccountPosition`).
+  **F5 corrigido.**
+- **Comissão:** `totalFeesPaid` 0 em 271 fills — **confirmado: testnet sem comissão**; a fee no ativo
+  (T46) só será exercitada em produção ou com conta que cobre comissão.
+- **Comparação com a exchange:** `EXCHANGE_TRADE_DIVERGENCE` com 271 casados, 0 só locais, 0 divergentes;
+  os 131 "só na exchange" são todos da rodada 1 (20:21–20:23, antes do reset), conferido por
+  `GET /api/exchanges/BINANCE/trades` em janelas antes/depois do reset (ver F7).
+  `EXCHANGE_BALANCE_DIVERGENCE` `WARN_SURPLUS` nos 4 portfolios (F3, esperado até a T57).
+- **Fim:** 4 runners `HALTED`, nenhuma ordem em voo, DLQ vazia, 21 ações de operador auditadas com
+  `X-Reason`.
+
+**Achado:**
+
+- **F7 — Operação (baixo): janela de comparação de trades atravessa o reset do banco.** Depois de limpar
+  o banco, `includeExchange` com janela que alcança antes do reset acusa `CRITICAL` pelos fills apagados.
+  Só acontece em testnet (dado descartável); procedimento: usar janela que comece depois do reset ou
+  conferir os horários dos "só na exchange". Sem task por ora.
 
 
 ## Fontes
