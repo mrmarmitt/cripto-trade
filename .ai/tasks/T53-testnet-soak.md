@@ -80,10 +80,11 @@ Cada fase só começa com a anterior aprovada. Uma rodada reprovada gera achado 
 ## Pré-requisitos ainda abertos
 
 - **VPS** contratada e com o ambiente do Docker Compose (bloqueia as fases 2 a 4).
-- **Várias estratégias remotas:** o `strategy-service-reference` só serve a SMA com parâmetros fixos
-  (média 10, ±2%, 10% de alocação); limiares e tipo de estratégia não são configuráveis por processo.
+- **Apps de estratégia para o soak:** o ctrade só define o contrato; as estratégias são apps
+  independentes, em qualquer linguagem. Para as rodadas pesadas é preciso ter várias apps que
+  implementem o contrato (o `strategy-service-reference` serve só a SMA com parâmetros fixos).
 - **Catálogo remoto estático:** cada estratégia nova exige editar `ctrade.strategy.remote.catalog` e
-  reiniciar o ctrade (T41).
+  reiniciar o ctrade (T41) → **T54**.
 - **Acesso do monitoramento por IA** aos endpoints, métricas e logs da VPS.
 
 ## Riscos e limitações conhecidas
