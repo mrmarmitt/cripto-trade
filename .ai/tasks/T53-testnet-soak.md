@@ -4,7 +4,7 @@
 **Responsável:** Claude (spec, procedimento, análise) + mantenedor (execução no ambiente)
 **Dependências:** T2 (perfil testnet), T18 (relatório de reconciliação), T21/T51 (alertas), T25/T43/T44/T45/T48
 (proteções), T41 (estratégia remota).
-**Status:** Pendente — decisões registradas; execução bloqueada pelos pré-requisitos abertos.
+**Status:** Pendente — fase 1 pronta para rodar (roteiro abaixo); fases 2–4 bloqueadas pelos pré-requisitos abertos.
 
 ---
 
@@ -93,6 +93,87 @@ Cada fase só começa com a anterior aprovada. Uma rodada reprovada gera achado 
 - **Reset periódico da testnet** apaga saldos e ordens; rodada que atravessar um reset é descartada.
 - **Ferramental de coleta:** hoje a verificação dos critérios é manual (endpoints, Grafana, SQL). Se
   ficar trabalhosa, um relatório de rodada (endpoint ou script) pode virar task.
+
+## Roteiro — Fase 1 (smoke de ramos, máquina local)
+
+Objetivo: em 1–2h, provar contra a Binance testnet que cada ramo das estratégias de cenário funciona e
+que, no fim, o registro do ctrade bate com o da exchange. Divisão: **o mantenedor sobe a infra e a
+aplicação** (credenciais são dele); **o agente faz as chamadas de API, acompanha e analisa** — a sessão
+roda na mesma máquina e alcança `localhost:8080`.
+
+### 0. Antes de começar (mantenedor)
+
+- Chaves da Binance testnet (testnet.binance.vision) com permissão de trade; conferir que a conta tem
+  saldo de USDT e BTC.
+- Docker rodando. Banco limpo (dado de testnet é descartável): se já houver dados de rodadas antigas,
+  `docker compose --profile base down -v` apaga o volume do Postgres.
+
+### 1. Subir infraestrutura e aplicação (mantenedor)
+
+```powershell
+docker compose --profile base --profile observability up -d   # Postgres + Prometheus/Loki/Grafana
+
+$env:SPRING_PROFILES_ACTIVE = "testnet"
+$env:BINANCE_API_KEY = "<chave testnet>"
+$env:BINANCE_API_SECRET = "<segredo testnet>"
+$env:ADMIN_API_KEY = "<uma chave qualquer, passada ao agente>"
+$env:CTRADE_SCENARIO_STRATEGIES_ENABLED = "true"
+$env:DISCORD_WEBHOOK_URL = "<opcional>"
+./gradlew :spring-application:bootRun
+```
+
+Avisar o agente quando aparecer `Started CTradeApplication`, informando o valor de `ADMIN_API_KEY`.
+
+### 2. Conferência inicial (agente)
+
+1. `GET /api/boot/status` → `SUCCESS`.
+2. `GET /api/exchanges/BINANCE/balances?asset=USDT` → saldo da conta (o capital de cada portfolio fica
+   abaixo dele, para a sanidade de saldo passar).
+3. `GET /api/admin/operational-state` → sem runners ainda; esperado `OK` (ou só `WARN` explicável).
+
+### 3. Preparação dos cenários (agente)
+
+Um portfolio por cenário, para o resultado de um não contaminar o outro:
+
+- `POST /api/portfolios` `{"name":"smoke-<cenário>","initialCapitalAmount":1000,"currency":"USDT"}`
+- `POST /api/portfolios/{id}/runners`
+  `{"strategyId":"<id>","symbol":"BTCUSDT","exchangeName":"BINANCE","allowedMarketDataSources":["BINANCE"]}`
+
+| Cenário | `strategyId` | Ramo |
+|---|---|---|
+| 1 Resting BUY → cancel | `b1000000-0000-4000-a000-000000000001` | BUY 5% abaixo descansa; cancelada; reserva devolvida |
+| 2 Fill → resting SELL → cancel | `b1000000-0000-4000-a000-000000000002` | BUY preenche; SELL 5% acima descansa; cancelada; lote destravado |
+| 3 Round trip | `b1000000-0000-4000-a000-000000000003` | BUY preenche; SELL preenche; lote fechado com PnL |
+| 4 Recusa por capital | `b1000000-0000-4000-a000-000000000004` | BUY 2× o capital: `REJECTED_CAPITAL`, nada vai à exchange |
+
+### 4. Execução, um cenário por vez (agente)
+
+As estratégias de cenário registradas na aplicação não têm teto de ciclos (`maxCycles = 0`): com tick por
+segundo, repetem o ciclo a cada poucos segundos. Por isso cada cenário roda **~5 minutos** e é parado.
+
+1. `POST /api/admin/runners/{id}/start` (`X-Reason: smoke fase 1 cenário N`) → `ACTIVE`. O coordenador
+   de market data (T56) abre a conexão e a assinatura de BTCUSDT sozinho.
+2. Acompanhar a cada minuto: `GET /api/admin/operational-state`, `GET /api/runners/{id}/transactions`,
+   `GET /api/portfolios/{pid}/balance`.
+3. Conferir o ramo esperado da tabela acima (status das transações, `reserved` voltando a zero, lote
+   aberto/fechado).
+4. `POST /api/admin/runners/{id}/halt`; esperar as ordens em voo terminarem (`CANCELED`/`FILLED`).
+
+O alerta *Cancel rate > 10/min* dos cenários 1 e 2 é esperado nesta fase.
+
+### 5. Fechamento (agente)
+
+1. Todos os runners em `HALTED`, sem ordem em voo.
+2. `GET /api/admin/operational-state?includeExchange=true&exchangeWindowHours=3`:
+   `EXCHANGE_TRADE_DIVERGENCE` e `EXCHANGE_BALANCE_DIVERGENCE` sem `CRITICAL`.
+3. `GET /api/admin/operator-actions` (o que foi feito), `GET /api/dead-letters` (vazio), logs `ERROR`.
+4. Registrar a execução na tabela abaixo; cada achado vira task.
+
+### Aprovação da fase 1
+
+Os 4 ramos se comportaram como na tabela; nenhuma divergência de trades com a exchange; nenhum saldo
+local acima do da exchange; DLQ vazia; `reserved = 0` em todos os portfolios no fim; nenhum `ERROR` sem
+explicação (erro comprovadamente da testnet é aceito se registrado).
 
 ## Registro de execuções
 
