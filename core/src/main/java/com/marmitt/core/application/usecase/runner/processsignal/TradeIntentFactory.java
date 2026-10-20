@@ -140,8 +140,17 @@ class TradeIntentFactory {
      * @param source nome registrado como estrategia de origem da transacao
      */
     public StrategyOutputDto liquidationSignal(String source, Position position, String reasoning) {
+        return liquidationSignal(source, position, null, reasoning);
+    }
+
+    /**
+     * Sinal de venda do lote inteiro com preco-limite: a SELL LIMIT do PANIC_SELL com politica de
+     * liquidacao LIMIT (T48). {@code limitPrice} nulo usa o preco do tick, como nas saidas a mercado.
+     */
+    public StrategyOutputDto liquidationSignal(String source, Position position, BigDecimal limitPrice,
+                                               String reasoning) {
         return new StrategyOutputDto(source, TradingAction.SHOULD_SELL, BigDecimal.ONE,
-                position.getQuantity(), null, position.getId(), null, reasoning, Instant.now(), Map.of());
+                position.getQuantity(), limitPrice, position.getId(), null, reasoning, Instant.now(), Map.of());
     }
 
     /** Saida decidida pelo core vende a mercado: certeza de execucao acima de preco (T45, T44). */

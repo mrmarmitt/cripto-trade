@@ -98,7 +98,8 @@ Lote que viola um limite:
 Quando age (2 ou 3), a protecao registra `PROTECTIVE_EXIT` e a estrategia nao e consultada no tick.
 Lotes abertos antes da feature entram na protecao. Sem estado proprio: cada tick reavalia o lote.
 Limites alterados por `PATCH /api/admin/runners/{id}` (`maxLossPercentPerLot`, `maxHoldingDuration`
-ISO-8601, `PT0S` desliga a idade).
+ISO-8601, `PT0S` desliga a idade; e, para o PANIC_SELL, `liquidationOrderType`,
+`liquidationMaxSlippagePercent`, `liquidationEscalationTicks`).
 
 ## Safe Mode (T45)
 
@@ -107,14 +108,25 @@ Nos niveis `CANCEL_ALL` e `PANIC_SELL`, a cada tick do runner:
 1. `checkRunnerNotHalted` (kill switch tem precedencia).
 2. `SafeModeHandler.cancelRestingOrders` envia cancelamento para cada ordem LIMIT em voo
    (`TransactionStatus.IN_FLIGHT`) por `CancelSignalHandler.cancelResting`, o mesmo caminho da
-   protecao do lote. Ordens MARKET nao sao canceladas.
-3. Em `PANIC_SELL`, cada posicao aberta sem lock vira sinal de venda do lote inteiro e passa pelo
-   ramo SELL acima com `OrderType.MARKET`. Posicao travada por SELL LIMIT espera o cancelamento a
-   destravar; posicao travada pela propria liquidacao nao e vendida de novo.
+   protecao do lote. Ordens MARKET nao sao canceladas, nem a SELL LIMIT de liquidacao ainda no prazo.
+3. Em `PANIC_SELL`, `SafeModeHandler.liquidations` le as posicoes ativas (OPEN e CLOSING) do runner
+   e aplica a `LiquidationPolicy` do runner (T48):
+   - `MARKET` (default): cada lote sem lock vira venda do lote inteiro com `OrderType.MARKET`;
+   - `LIMIT`: o lote sem tentativa recebe uma SELL LIMIT a `preco do tick × (1 − maxSlippagePercent)`
+     (normalizada SELL→ceiling, T37). Com o lote travado por ela, cada tick conta; ao atingir
+     `escalationTicks` a LIMIT e cancelada. Destravado o lote apos a tentativa (cancelada, rejeitada
+     ou parcial), o restante sai a MARKET.
+   Posicao travada por SELL LIMIT da estrategia espera o cancelamento a destravar; posicao travada
+   pela propria liquidacao nao e vendida de novo.
+
+A tentativa LIMIT fica em memoria por lote (a `Transaction` nao registra a origem da ordem) e e
+descartada fora do `PANIC_SELL`. Apos restart, a LIMIT em voo e cancelada como qualquer outra e o lote
+ganha nova tentativa.
 
 `HALT` nao muda este fluxo: a estrategia roda e pode vender; o BUY e recusado na reserva de capital.
 O tipo da ordem e decidido aqui (`Transaction.orderType`): `LIMIT` para sinais da estrategia,
-`MARKET` para as saidas decididas pelo core (liquidacao, fechar posicao, protecao do lote).
+`MARKET` para as saidas decididas pelo core (fechar posicao, protecao do lote) e, no `PANIC_SELL`, o
+tipo da `LiquidationPolicy` do runner.
 
 ## Ciclo De Vida E Comandos Do Operador (T49)
 
@@ -139,7 +151,8 @@ O tipo da ordem e decidido aqui (`Transaction.orderType`): `LIMIT` para sinais d
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/SellSignalHandler.java` | Persiste SELL, trava posicao e faz dispatch. |
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/CapitalReservationPolicy.java` | Valida Safe Mode, fundos e limite de exposicao por runner. |
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/PreTradeRiskPolicy.java` | Sanidade de preco e limites `maxOpenPositions`/`maxPendingOrders` antes do persist (T50). |
-| `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/SafeModeHandler.java` | Cancela ordens LIMIT em voo e gera a liquidacao MARKET nos niveis CANCEL_ALL/PANIC_SELL (T45). |
+| `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/SafeModeHandler.java` | Cancela ordens LIMIT em voo e gera a liquidacao nos niveis CANCEL_ALL/PANIC_SELL (T45), MARKET ou LIMIT com escalada conforme a politica do runner (T48). |
+| `core/src/main/java/com/marmitt/core/domain/runner/LiquidationPolicy.java` | Politica de liquidacao do PANIC_SELL por runner: tipo, afastamento da LIMIT e ticks ate escalar (T48). |
 | `core/src/main/java/com/marmitt/core/application/usecase/runner/processsignal/PositionProtectionHandler.java` | Detecta lote que viola a protecao, gera a saida MARKET ou cancela a SELL LIMIT que o trava (T44). |
 | `core/src/main/java/com/marmitt/core/domain/runner/PositionProtection.java` | Limites do lote por runner e a regra de violacao (perda sobre o custo, idade). |
 | `spring-application/src/main/java/com/marmitt/application/spring/config/core/RunnerConfig.java` | Injeta fronteiras transacionais com `TransactionTemplate`. |

@@ -6,6 +6,7 @@ import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCa
 import com.marmitt.core.application.usecase.boot.phase2.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.domain.portfolio.Portfolio;
+import com.marmitt.core.domain.runner.LiquidationPolicy;
 import com.marmitt.core.domain.runner.PositionProtection;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.portfolio.PortfolioZombieCandidate;
@@ -240,6 +241,7 @@ class BootOrchestratorObservabilityTest {
                 1,
                 null,
                 PositionProtection.defaults(),
+                LiquidationPolicy.defaults(),
                 false,
                 Instant.now(),
                 Instant.now(),

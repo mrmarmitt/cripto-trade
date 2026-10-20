@@ -2,9 +2,12 @@ package com.marmitt.application.spring.bootstrap;
 
 import com.marmitt.core.dto.portfolio.request.ChangeSafeModeRequest;
 import com.marmitt.core.dto.portfolio.response.SafeModeStatusDto;
+import com.marmitt.core.dto.runner.request.UpdateRunnerLimitsRequest;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.SafeModeOrigin;
 import com.marmitt.core.enums.SafeModeStatus;
 import com.marmitt.core.ports.inbound.portfolio.ManageSafeModePort;
+import com.marmitt.core.ports.inbound.runner.ManageRunnerLifecyclePort;
 import com.marmitt.strategy.impl.scenario.FilledBuyRestingSellCancelStrategy;
 import com.marmitt.strategy.impl.scenario.ImmediateRoundTripStrategy;
 import com.marmitt.strategy.impl.scenario.RestingBuyCancelStrategy;
@@ -24,7 +27,8 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.junit.jupiter.api.Assertions.fail;
 
 /**
- * T45 — niveis do Safe Mode contra o MOCK, usando as estrategias de cenario da T38.
+ * T45 — niveis do Safe Mode contra o MOCK, usando as estrategias de cenario da T38; T48 — politica de
+ * liquidacao LIMIT do PANIC_SELL, com preenchimento e com escalada para MARKET.
  *
  * <p>Cada teste dirige ticks ate o estado de interesse (ordem descansando, lote aberto), muda o nivel
  * pelo port de entrada e prova o efeito pelo pipeline real: cancelamento conciliado, venda MARKET,
@@ -34,6 +38,9 @@ class SafeModeE2ETest extends ScenarioStrategyE2ETestSupport {
 
     @Autowired
     private ManageSafeModePort manageSafeMode;
+
+    @Autowired
+    private ManageRunnerLifecyclePort runnerLifecycle;
 
     @Test
     void haltBlocksNewBuysButKeepsTheStrategyRunning() {
@@ -131,7 +138,73 @@ class SafeModeE2ETest extends ScenarioStrategyE2ETestSupport {
                 "Convergido, o PANIC_SELL nao gera novas ordens nos ticks seguintes");
     }
 
+    @Test
+    void panicSellWithLimitPolicyLiquidatesWithTheLimitWhenItFills() {
+        UUID runnerId = activateScenario(
+                new FilledBuyRestingSellCancelStrategy(ScenarioStrategyConfig.boundedConfig(1)));
+        UUID portfolioId = portfolioIdOf(runnerId);
+        // O MOCK preenche a LIMIT marketable em parciais ao longo de ~1s: prazo largo para nao escalar.
+        useLimitLiquidation(runnerId, 30);
+        tickUntil(() -> transactionsOfType(runnerId, "SELL").stream().anyMatch(tx -> "SUBMITTED".equals(tx.status())),
+                "SELL LIMIT descansando sobre o lote", runnerId);
+
+        change(portfolioId, SafeModeStatus.PANIC_SELL, true);
+
+        driveTicks(10);
+        awaitCondition(() -> positionCount(runnerId, "CLOSED") == 1 && positionCount(runnerId, "OPEN") == 0,
+                WAIT_TIMEOUT, "lote liquidado pela LIMIT", runnerId);
+        awaitStable(runnerId, QUIET_WINDOW);
+
+        List<String> sells = sellsWithOrderType(runnerId);
+        assertEquals(List.of("LIMIT:CANCELED", "LIMIT:FILLED"), sells,
+                "SELL da estrategia cancelada e liquidacao LIMIT preenchida, sem MARKET: " + sells);
+        BigDecimal liquidationPrice = sellPrices(runnerId).getLast();
+        assertEquals(0, new BigDecimal("64350").compareTo(liquidationPrice),
+                "SELL LIMIT a 1% abaixo do tick: " + liquidationPrice);
+    }
+
+    @Test
+    void panicSellWithLimitPolicyEscalatesToMarketWhenTheLimitDoesNotFill() {
+        UUID runnerId = activateScenario(
+                new FilledBuyRestingSellCancelStrategy(ScenarioStrategyConfig.boundedConfig(1)));
+        UUID portfolioId = portfolioIdOf(runnerId);
+        useLimitLiquidation(runnerId, 3);
+        tickUntil(() -> transactionsOfType(runnerId, "SELL").stream().anyMatch(tx -> "SUBMITTED".equals(tx.status())),
+                "SELL LIMIT descansando sobre o lote", runnerId);
+
+        change(portfolioId, SafeModeStatus.PANIC_SELL, true);
+
+        // A exchange ja caiu 2% abaixo do tick: a SELL LIMIT a -1% descansa e nao preenche.
+        BigDecimal fallenMarket = new BigDecimal("63700.00");
+        Instant deadline = Instant.now().plus(WAIT_TIMEOUT);
+        while (Instant.now().isBefore(deadline) && positionCount(runnerId, "CLOSED") == 0) {
+            publishTick(MARKET_PRICE, fallenMarket);
+            sleep(150);
+        }
+        awaitCondition(() -> positionCount(runnerId, "CLOSED") == 1 && positionCount(runnerId, "OPEN") == 0,
+                WAIT_TIMEOUT, "lote liquidado pela escalada", runnerId);
+        awaitStable(runnerId, QUIET_WINDOW);
+
+        List<String> sells = sellsWithOrderType(runnerId);
+        assertEquals(List.of("LIMIT:CANCELED", "LIMIT:CANCELED", "MARKET:FILLED"), sells,
+                "SELL da estrategia e LIMIT de liquidacao canceladas, uma unica MARKET: " + sells);
+        assertEquals(0, marketSellExecutedQuantity(runnerId).compareTo(totalMatchedQuantity(runnerId)),
+                "O lote inteiro deve ser casado pela venda MARKET");
+        assertEquals(0, balance(portfolioId).reserved().signum());
+    }
+
     // ---------------------------------------------------------------- helpers
+
+    private void useLimitLiquidation(UUID runnerId, int escalationTicks) {
+        runnerLifecycle.updateLimits(runnerId, new UpdateRunnerLimitsRequest(null, null, null, null, null,
+                OrderType.LIMIT, null, escalationTicks));
+    }
+
+    private List<BigDecimal> sellPrices(UUID runnerId) {
+        return jdbcTemplate.queryForList(
+                "SELECT price FROM transactions WHERE runner_id = ? AND type = 'SELL' ORDER BY requested_at",
+                BigDecimal.class, runnerId);
+    }
 
     private SafeModeStatusDto change(UUID portfolioId, SafeModeStatus level, boolean confirm) {
         return manageSafeMode.change(portfolioId, SafeModeOrigin.MANUAL,

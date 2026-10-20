@@ -5,6 +5,7 @@ import com.marmitt.application.spring.infrastructure.persistence.entity.RunnerPo
 import com.marmitt.application.spring.infrastructure.persistence.entity.RunnerTransactionEntity;
 import com.marmitt.application.spring.infrastructure.persistence.entity.RunnerTransactionMatchEntity;
 import com.marmitt.application.spring.infrastructure.persistence.entity.StrategyRunnerEntity;
+import com.marmitt.core.domain.runner.LiquidationPolicy;
 import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.PositionProtection;
 import com.marmitt.core.domain.runner.StrategyRunner;
@@ -41,6 +42,9 @@ public class StrategyRunnerEntityMapper {
                 .maxLossPercentPerLot(domain.getPositionProtection().maxLossPercentPerLot())
                 .maxHoldingSeconds(domain.getPositionProtection().maxHoldingDuration() != null
                         ? domain.getPositionProtection().maxHoldingDuration().toSeconds() : null)
+                .liquidationOrderType(domain.getLiquidationPolicy().orderType())
+                .liquidationMaxSlippagePercent(domain.getLiquidationPolicy().maxSlippagePercent())
+                .liquidationEscalationTicks(domain.getLiquidationPolicy().escalationTicks())
                 .dedicatedBudget(domain.getDedicatedBudget())
                 .isReconciling(domain.isReconciling())
                 .createdAt(domain.getCreatedAt())
@@ -70,6 +74,8 @@ public class StrategyRunnerEntityMapper {
                 entity.getDedicatedBudget(),
                 new PositionProtection(entity.getMaxLossPercentPerLot(),
                         entity.getMaxHoldingSeconds() != null ? Duration.ofSeconds(entity.getMaxHoldingSeconds()) : null),
+                new LiquidationPolicy(entity.getLiquidationOrderType(), entity.getLiquidationMaxSlippagePercent(),
+                        entity.getLiquidationEscalationTicks()),
                 entity.isReconciling(),
                 entity.getCreatedAt(),
                 entity.getStatusChangedAt(),

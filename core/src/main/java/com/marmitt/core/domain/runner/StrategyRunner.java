@@ -2,6 +2,7 @@ package com.marmitt.core.domain.runner;
 
 import com.marmitt.core.enums.AccountingPolicyType;
 import com.marmitt.core.enums.ExecutionPolicy;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.exceptions.RunnerOperationException;
 import lombok.Getter;
@@ -60,6 +61,9 @@ public class StrategyRunner {
 
     /** Proteção do lote independente da estratégia (T44). */
     private PositionProtection positionProtection;
+
+    /** Como o runner liquida os lotes no Safe Mode PANIC_SELL (T48). */
+    private LiquidationPolicy liquidationPolicy;
 
     /**
      * Fatia fixa reservada para este Runner em modo DEDICATED.
@@ -123,6 +127,7 @@ public class StrategyRunner {
         this.maxPendingOrders = maxPendingOrders > 0 ? maxPendingOrders : 1;
         this.dedicatedBudget = dedicatedBudget;
         this.positionProtection = PositionProtection.defaults();
+        this.liquidationPolicy = LiquidationPolicy.defaults();
         this.status = RunnerStatus.CREATED;
         this.isReconciling = false;
         this.createdAt = Instant.now();
@@ -152,6 +157,7 @@ public class StrategyRunner {
             int maxPendingOrders,
             BigDecimal dedicatedBudget,
             PositionProtection positionProtection,
+            LiquidationPolicy liquidationPolicy,
             boolean isReconciling,
             Instant createdAt,
             Instant statusChangedAt,
@@ -177,6 +183,7 @@ public class StrategyRunner {
         this.maxPendingOrders = maxPendingOrders;
         this.dedicatedBudget = dedicatedBudget;
         this.positionProtection = Objects.requireNonNull(positionProtection, "positionProtection cannot be null");
+        this.liquidationPolicy = Objects.requireNonNull(liquidationPolicy, "liquidationPolicy cannot be null");
         this.isReconciling = isReconciling;
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt cannot be null");
         this.statusChangedAt = statusChangedAt != null ? statusChangedAt : createdAt;
@@ -304,12 +311,15 @@ public class StrategyRunner {
     }
 
     /**
-     * Altera os limites mutáveis em runtime (IG §13.2.2, T49) e a proteção do lote (T44). {@code null}
-     * mantém o valor atual; vale a partir da próxima reserva ou do próximo tick. {@code maxHoldingDuration}
-     * zero desliga a idade máxima. Políticas, estratégia e símbolo são imutáveis.
+     * Altera os limites mutáveis em runtime (IG §13.2.2, T49), a proteção do lote (T44) e a política de
+     * liquidação do PANIC_SELL (T48). {@code null} mantém o valor atual; vale a partir da próxima reserva
+     * ou do próximo tick. {@code maxHoldingDuration} zero desliga a idade máxima. Políticas de execução e
+     * contabilidade, estratégia e símbolo são imutáveis.
      */
     public void updateLimits(BigDecimal maxAllocationPercent, Integer maxOpenPositions, Integer maxPendingOrders,
-                             BigDecimal maxLossPercentPerLot, Duration maxHoldingDuration) {
+                             BigDecimal maxLossPercentPerLot, Duration maxHoldingDuration,
+                             OrderType liquidationOrderType, BigDecimal liquidationMaxSlippagePercent,
+                             Integer liquidationEscalationTicks) {
         if (this.status == RunnerStatus.ARCHIVED) {
             throw new RunnerOperationException("Cannot change limits of an archived runner: " + id);
         }
@@ -328,6 +338,11 @@ public class StrategyRunner {
                 maxLossPercentPerLot != null ? maxLossPercentPerLot : positionProtection.maxLossPercentPerLot(),
                 maxHoldingDuration == null ? positionProtection.maxHoldingDuration()
                         : maxHoldingDuration.isZero() ? null : maxHoldingDuration);
+        LiquidationPolicy liquidation = new LiquidationPolicy(
+                liquidationOrderType != null ? liquidationOrderType : liquidationPolicy.orderType(),
+                liquidationMaxSlippagePercent != null
+                        ? liquidationMaxSlippagePercent : liquidationPolicy.maxSlippagePercent(),
+                liquidationEscalationTicks != null ? liquidationEscalationTicks : liquidationPolicy.escalationTicks());
 
         if (maxAllocationPercent != null) {
             this.maxAllocationPercent = maxAllocationPercent;
@@ -339,6 +354,7 @@ public class StrategyRunner {
             this.maxPendingOrders = maxPendingOrders;
         }
         this.positionProtection = protection;
+        this.liquidationPolicy = liquidation;
     }
 
     /**
