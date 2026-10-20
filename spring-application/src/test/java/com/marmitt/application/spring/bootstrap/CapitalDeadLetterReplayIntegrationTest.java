@@ -41,6 +41,8 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -111,6 +113,7 @@ class CapitalDeadLetterReplayIntegrationTest extends AbstractIntegrationTest {
         assertBalance(portfolioId, new BigDecimal("350.00000000"), RESERVED_AMOUNT, BigDecimal.ZERO);
 
         mockMvc.perform(post("/api/dead-letters/{id}/reprocess", firstEntry.getId())
+                        .header("X-Admin-Key", ADMIN_KEY)
                         .contentType("application/json")
                         .content("""
                                 {
@@ -137,6 +140,7 @@ class CapitalDeadLetterReplayIntegrationTest extends AbstractIntegrationTest {
         );
 
         mockMvc.perform(post("/api/dead-letters/{id}/reprocess", duplicateEntry.getId())
+                        .header("X-Admin-Key", ADMIN_KEY)
                         .contentType("application/json")
                         .content("""
                                 {
@@ -175,6 +179,7 @@ class CapitalDeadLetterReplayIntegrationTest extends AbstractIntegrationTest {
         assertBalance(portfolioId, new BigDecimal("350.00000000"), RESERVED_AMOUNT, BigDecimal.ZERO);
 
         mockMvc.perform(post("/api/dead-letters/{id}/reprocess", firstEntry.getId())
+                        .header("X-Admin-Key", ADMIN_KEY)
                         .contentType("application/json")
                         .content("""
                                 {
@@ -201,6 +206,7 @@ class CapitalDeadLetterReplayIntegrationTest extends AbstractIntegrationTest {
         );
 
         mockMvc.perform(post("/api/dead-letters/{id}/reprocess", duplicateEntry.getId())
+                        .header("X-Admin-Key", ADMIN_KEY)
                         .contentType("application/json")
                         .content("""
                                 {
@@ -359,6 +365,24 @@ class CapitalDeadLetterReplayIntegrationTest extends AbstractIntegrationTest {
             Thread.currentThread().interrupt();
             throw new IllegalStateException("Interrupted while waiting async processing", e);
         }
+    }
+
+    @Test
+    void wholeApiRequiresTheAdminKeyIncludingReads() throws Exception {
+        mockMvc.perform(get("/api/dead-letters"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("ADMIN_KEY_INVALID"));
+        mockMvc.perform(get("/api/dead-letters").header("X-Admin-Key", ADMIN_KEY))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void directOrderAndListenerClearEndpointsNoLongerExist() throws Exception {
+        mockMvc.perform(post("/api/websocket/exchange/orders/create").header("X-Admin-Key", ADMIN_KEY)
+                        .contentType("application/json").content("{}"))
+                .andExpect(status().isNotFound());
+        mockMvc.perform(delete("/api/listeners/clear").header("X-Admin-Key", ADMIN_KEY))
+                .andExpect(status().isNotFound());
     }
 }
 

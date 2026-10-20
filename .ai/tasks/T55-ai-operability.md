@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T54 (primeira API no padrão), T27 (envelope `ApiError`), T51 (estado operacional como
 métrica). Base do monitoramento periódico por IA da T53.
-**Status:** Pendente — decisões registradas; entrega em 4 PRs (A → B → C → D).
+**Status:** Em andamento — Parte A entregue (2026-10-20); B, C e D pendentes.
 
 ---
 
@@ -155,3 +155,21 @@ que resolveu. As seções atuais viram a fonte; o formato muda.
 - `.ai/tasks/T54-dynamic-strategy-catalog.md` (padrão de referência)
 - `docs/OPERATIONS_RUNBOOK.md`, `docs/PHASE0_INVARIANTS.md`
 - `spring-application/.../config/AdminWebMvcConfig.java`, `.../controller/*`
+
+## Entrega
+
+### Parte A — Superfície da API (2026-10-20)
+
+- `AdminWebMvcConfig`: `X-Admin-Key` em `/api/**` (leitura e escrita). `/actuator` fica fora. O `401`
+  traz `code=ADMIN_KEY_INVALID` (desde a T54).
+- Removidos (sem consumidor além da própria rota): `POST /api/websocket/exchange/orders/create` e
+  `/orders/cancel` com `OrderManagementService`, `OrderManagementMapper`, `OrderCreateRequest`,
+  `OrderCancelRequest`, `OrderManagementResponse`; `DELETE /api/listeners/clear` com
+  `clearAllListeners` no port de entrada, no use case, no port de saída e no repositório.
+- Mantidos e protegidos: conexão e assinatura de websocket (único jeito de começar a operar).
+- **Bug encontrado e corrigido:** `GET /api/dead-letters` sem filtro respondia `500` no Postgres (`? IS NULL`
+  com parâmetro nulo sem tipo). `DeadLetterEntryJdbcRepository.findUnresolved` passou a usar
+  `CAST(:param AS UUID)`. O operador não conseguia listar a DLQ inteira.
+- Validação: `CapitalDeadLetterReplayIntegrationTest` passa a mandar a chave e prova que leitura sem
+  chave é `401 ADMIN_KEY_INVALID` e que as rotas removidas respondem `404`; suíte completa verde.
+- Docs: `README.md` (perímetro, sem ordem direta) e `OPERATIONS_RUNBOOK.md` (seção "Acesso à API").

@@ -13,12 +13,13 @@ import java.util.UUID;
 @Repository
 public interface DeadLetterEntryJdbcRepository extends CrudRepository<DeadLetterEntryEntity, UUID> {
 
+    // CAST: o Postgres nao infere o tipo de um parametro nulo em "? IS NULL" (listar sem filtro dava 500).
     @Query("""
             SELECT *
               FROM dead_letter_entries
              WHERE is_resolved = FALSE
-               AND (:portfolioId IS NULL OR portfolio_id = :portfolioId)
-               AND (:runnerId IS NULL OR runner_id = :runnerId)
+               AND (CAST(:portfolioId AS UUID) IS NULL OR portfolio_id = :portfolioId)
+               AND (CAST(:runnerId AS UUID) IS NULL OR runner_id = :runnerId)
              ORDER BY created_at DESC
              LIMIT :limit
             """)

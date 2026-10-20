@@ -12,6 +12,9 @@ import org.testcontainers.containers.PostgreSQLContainer;
 )
 abstract class AbstractIntegrationTest {
 
+    /** Chave da API nos testes de integração que chamam a borda HTTP (T55: toda a /api exige). */
+    static final String ADMIN_KEY = "it-admin-key";
+
     @SuppressWarnings("resource")
     static final PostgreSQLContainer<?> POSTGRES;
 
@@ -30,5 +33,6 @@ abstract class AbstractIntegrationTest {
         registry.add("spring.datasource.password", POSTGRES::getPassword);
         registry.add("spring.flyway.enabled", () -> "true");
         registry.add("runner.boot.orchestrator-enabled", () -> "false");
+        registry.add("admin.api.key", () -> ADMIN_KEY);
     }
 }
