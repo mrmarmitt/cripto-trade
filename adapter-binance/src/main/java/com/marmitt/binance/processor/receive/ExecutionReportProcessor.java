@@ -31,7 +31,7 @@ class ExecutionReportProcessor implements BinanceEventProcessor<OrderDataDto> {
         String correlationId = context.correlationId().toString();
         try {
             String orderId       = data.path("i").asText();
-            String clientOrderId = data.path("c").asText();
+            String clientOrderId = originalClientOrderId(data);
             String symbolRaw     = data.path("s").asText();
             String sideRaw       = data.path("S").asText();
             String typeRaw       = data.path("o").asText();
@@ -72,6 +72,16 @@ class ExecutionReportProcessor implements BinanceEventProcessor<OrderDataDto> {
             log.error("Failed to parse executionReport: correlationId={}", correlationId, e);
             return ProcessingResult.error(correlationId, "Failed to parse executionReport: " + e.getMessage(), e);
         }
+    }
+
+    /**
+     * Id da ordem que o ctrade criou. Num cancelamento a Binance poe em {@code c} o id do pedido de
+     * cancelamento e o id original em {@code C} (vazio nos demais eventos); ler so o {@code c} deixava o
+     * {@code CANCELED} sem transacao e ele so era conciliado pelo watchdog, ~60s depois (T53, rodada 1).
+     */
+    private static String originalClientOrderId(JsonNode data) {
+        String original = data.path("C").asText("");
+        return original.isBlank() ? data.path("c").asText() : original;
     }
 
     private BigDecimal computeWap(BigDecimal executedQty, BigDecimal cumulativeQuoteQty) {

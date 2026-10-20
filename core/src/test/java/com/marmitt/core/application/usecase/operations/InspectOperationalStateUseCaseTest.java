@@ -132,6 +132,19 @@ class InspectOperationalStateUseCaseTest {
     }
 
     @Test
+    void openLotJustifiesTheReservationOfItsCost() {
+        GlobalBalance balance = mock(GlobalBalance.class);
+        when(balance.getReservedBalance()).thenReturn(new BigDecimal("82.58801"));
+        UUID portfolioId = portfolio.getId();
+        when(balances.findByPortfolioId(portfolioId)).thenReturn(Optional.of(balance));
+        Position openLot = mock(Position.class);
+        when(runners.findActivePositionsByPortfolioId(portfolioId)).thenReturn(List.of(openLot));
+
+        assertEquals(OperationalSeverity.OK, check(useCase.inspect(), "CAPITAL_RESERVED_WITHOUT_ORDER").status(),
+                "o custo da BUY executada fica reservado ate a SELL do lote casar");
+    }
+
+    @Test
     void onlyUnacknowledgedOrdersAreStuckAndBeyondThreeWatchdogCyclesIsCritical() {
         Transaction resting = tx(TransactionType.BUY, TransactionStatus.SUBMITTED, NOW.minus(Duration.ofHours(2)));
         Transaction pending = tx(TransactionType.SELL, TransactionStatus.PENDING, NOW.minusSeconds(45));

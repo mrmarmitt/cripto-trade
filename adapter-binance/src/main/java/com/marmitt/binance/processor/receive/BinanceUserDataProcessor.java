@@ -24,6 +24,13 @@ public class BinanceUserDataProcessor implements ReceivedMessageProcessorPort {
     private final Map<String, BinanceEventProcessor<?>> processorsByEventType;
     private final OrderApiResponseProcessor orderApiResponseProcessor = new OrderApiResponseProcessor();
 
+    /**
+     * Eventos de conta que a Binance envia junto com os de ordem (ex.: saldo apos cada fill). O ctrade nao
+     * os usa: ignorados de proposito, para nao virarem erro a cada fill (T53, rodada 1).
+     */
+    private static final java.util.Set<String> ACCOUNT_EVENTS =
+            java.util.Set.of("outboundAccountPosition", "balanceUpdate", "externalLockUpdate");
+
     public BinanceUserDataProcessor(ObjectMapper objectMapper, EventPublisherPort eventPublisher) {
         this.objectMapper = objectMapper;
         this.eventPublisher = eventPublisher;
@@ -73,6 +80,12 @@ public class BinanceUserDataProcessor implements ReceivedMessageProcessorPort {
                         null,
                         context.streamChannel()));
                 return ProcessingResult.ignored(correlationId, "server-shutdown");
+            }
+
+            if (ACCOUNT_EVENTS.contains(eventType)) {
+                // Saldo da conta: o registro local e a fonte; a conferencia com a exchange e por REST (T55-C2).
+                log.trace("Account event ignored: type={} correlationId={}", eventType, correlationId);
+                return ProcessingResult.ignored(correlationId, "account-event:" + eventType);
             }
 
             BinanceEventProcessor<?> processor = processorsByEventType.get(eventType);

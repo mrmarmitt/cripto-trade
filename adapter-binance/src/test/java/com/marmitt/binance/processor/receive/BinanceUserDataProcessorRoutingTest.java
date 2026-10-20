@@ -100,6 +100,20 @@ class BinanceUserDataProcessorRoutingTest {
     }
 
     @Test
+    void accountPositionEvent_isIgnoredNotAnError() {
+        String msg = """
+                {"subscriptionId":0,"event":{"e":"outboundAccountPosition","E":1700000000000,"u":1700000000000,
+                 "B":[{"a":"USDT","f":"9917.41534000","l":"0.00000000"}]}}
+                """;
+
+        ProcessingResult<?> result = processor.processMessage(msg, ctx());
+
+        assertFalse(result.isError(), "evento de saldo da conta nao e erro");
+        assertFalse(result.isSuccess());
+        assertTrue(publishedEvents.isEmpty());
+    }
+
+    @Test
     void subscriptionRejection_firesWebSocketFailedEvent() {
         String msg = """
                 {

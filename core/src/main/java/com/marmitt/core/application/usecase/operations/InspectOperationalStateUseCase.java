@@ -179,7 +179,9 @@ public class InspectOperationalStateUseCase implements InspectOperationalStatePo
     }
 
     /**
-     * Saldo reservado sem nenhuma BUY em voo no portfolio: reserva orfa, capital preso.
+     * Saldo reservado sem nada que o justifique: nenhuma BUY em voo e nenhum lote aberto no portfolio.
+     * O custo de uma BUY executada fica em {@code reserved} ate a SELL do lote casar
+     * ({@code GlobalBalance.confirmExecution}), entao lote aberto tambem justifica reserva (T53, rodada 1).
      */
     private OperationalCheck capitalReservedWithoutOrder(List<Portfolio> portfolios, List<StrategyRunner> runners,
                                                          Map<UUID, List<Transaction>> inFlightByRunner) {
@@ -194,15 +196,16 @@ public class InspectOperationalStateUseCase implements InspectOperationalStatePo
                     .filter(runner -> runner.getPortfolioId().equals(portfolio.getId()))
                     .flatMap(runner -> inFlightByRunner.getOrDefault(runner.getId(), List.of()).stream())
                     .anyMatch(Transaction::isBuy);
-            if (!buyInFlight) {
+            if (!buyInFlight && runnerRepository.findActivePositionsByPortfolioId(portfolio.getId()).isEmpty()) {
                 subjects.add(subject("portfolioId", portfolio.getId(), "reserved", reserved.toPlainString()));
             }
         }
         if (subjects.isEmpty()) {
-            return ok("CAPITAL_RESERVED_WITHOUT_ORDER", "every reservation has a BUY in flight");
+            return ok("CAPITAL_RESERVED_WITHOUT_ORDER", "every reservation has a BUY in flight or an open lot");
         }
         return check("CAPITAL_RESERVED_WITHOUT_ORDER", OperationalSeverity.CRITICAL,
-                subjects.size() + " portfolio(s) with reserved capital and no BUY in flight", subjects, null);
+                subjects.size() + " portfolio(s) with reserved capital and no BUY in flight nor open lot",
+                subjects, null);
     }
 
     private OperationalCheck capitalReservationStale(List<StrategyRunner> runners,

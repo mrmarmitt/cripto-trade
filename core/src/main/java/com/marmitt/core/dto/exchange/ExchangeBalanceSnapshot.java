@@ -14,12 +14,15 @@ import java.util.Optional;
  *
  * @param exchangeName exchange consultada (ex.: "BINANCE")
  * @param balances     saldos por asset
- * @param retrievedAt  instante em que o snapshot foi obtido
+ * @param retrievedAt      instante em que o snapshot foi obtido (a consulta)
+ * @param accountUpdatedAt ultima alteracao da conta segundo a exchange (ex.: {@code updateTime} da
+ *                         Binance); nulo se a exchange nao informa
  */
 public record ExchangeBalanceSnapshot(
         String exchangeName,
         List<BalanceDto> balances,
-        Instant retrievedAt
+        Instant retrievedAt,
+        Instant accountUpdatedAt
 ) {
 
     public ExchangeBalanceSnapshot {
