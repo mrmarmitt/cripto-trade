@@ -59,7 +59,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T51 | Observabilidade de capital, Safe Mode e lifecycle                | Baixa | Claude | Concluído |
 | T52 | MOCK: cancelamento de ordem em preenchimento simulado            | Média | Claude | Pendente  |
 | T53 | Soak test em testnet (procedimento, critérios, execuções)        | Média | Claude | Pendente  |
-| T54 | Catálogo dinâmico de estratégias remotas (cadastro via API)       | Alta  | Claude | Rascunho  |
+| T54 | Catálogo dinâmico de estratégias remotas (cadastro via API)       | Alta  | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 
 ## Ordem de execução

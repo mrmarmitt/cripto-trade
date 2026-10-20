@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T40 (contrato), T41 (estratégia remota, catálogo estático), T49 (API admin de runners).
 Pré-requisito da T53 com várias estratégias remotas.
-**Status:** Rascunho — **decisões de negócio pendentes** (ver seção própria).
+**Status:** Pendente — decisões registradas; pronta para implementação.
 
 ---
 
@@ -43,14 +43,14 @@ assunto do ctrade.
 ## Solução proposta (a validar)
 
 1. **Catálogo persistido.** Tabela `remote_strategies`: `strategy_ref` (PK), `name`, `version`,
-   `base_url`, `status` (`ENABLED`/`DISABLED`), estado de verificação (`PENDING`/`VERIFIED`/`FAILED`
+   `base_url`, `token`, `status` (`ENABLED`/`DISABLED`), estado de verificação (`PENDING`/`VERIFIED`/`FAILED`
    + último erro e horário), `created_at`, `updated_at`.
 2. **API admin** (`X-Admin-Key`):
-   - `POST /api/admin/strategies` — cadastra (`strategyRef`, `name`, `version`, `baseUrl`);
+   - `POST /api/admin/strategies` — cadastra (`strategyRef`, `name`, `version`, `baseUrl`, `token`);
    - `GET /api/admin/strategies` e `GET /api/admin/strategies/{ref}` — catálogo com estado de
      verificação e runners que usam cada estratégia;
    - `POST /api/admin/strategies/{ref}/disable` e `/enable`;
-   - `PATCH /api/admin/strategies/{ref}` — troca de `baseUrl` (mesma identidade; a app mudou de lugar).
+   - `PATCH /api/admin/strategies/{ref}` — troca de `baseUrl` e/ou `token` (mesma identidade).
 3. **Verificação reaproveitada.** O cadastro grava `PENDING`; o mesmo `RegisterRemoteStrategiesUseCase`
    (agora lendo o catálogo do repositório) confere `/v1/meta` e marca `VERIFIED` ou `FAILED`. O
    scheduler existente continua tentando os pendentes — um só caminho de registro.
@@ -62,20 +62,19 @@ assunto do ctrade.
 6. **Um caminho só.** O catálogo do `application.yml` é removido; o banco passa a ser a única fonte
    (manual §1.3). As estratégias in-process (SMA, cenários) continuam como estão.
 
-## Decisões pendentes
+## Decisões registradas (2026-10-20)
 
-1. **Desabilitar estratégia com runner ativo:** (a) recusar enquanto houver runner `ACTIVE` usando-a;
-   (b) aceitar e deixar os runners em HOLD (com alerta), com a proteção do lote valendo; (c) aceitar e
-   parar os runners (halt). Recomendação: **(b)**, que é o que já acontece quando a estratégia cai.
-2. **Cadastro de estratégia fora do ar:** aceitar como `PENDING` e verificar depois (recomendado, igual
-   ao boot de hoje) ou exigir que `/v1/meta` responda no momento do cadastro.
-3. **Token:** manter o token único para todas as estratégias ou um token por estratégia, informado no
-   cadastro (permite revogar uma sem afetar as outras).
-4. **Endereços permitidos:** aceitar qualquer `baseUrl` vinda de quem tem a chave admin ou restringir a
-   uma lista de hosts/redes configurada (o ctrade passa a chamar um endereço informado por API).
-5. **Remoção definitiva:** só desabilitar (histórico preservado) ou também apagar quando nenhum runner,
-   ativo ou arquivado, referencia a estratégia.
-6. **Catálogo do `application.yml`:** remover de vez (recomendado) ou manter como carga inicial.
+1. **Desabilitar com runner ativo:** aceito; os runners que usam a estratégia ficam em HOLD implícito,
+   com alerta, e a proteção do lote (T44) continua valendo. Nada é parado à força.
+2. **Cadastro de estratégia fora do ar:** aceito como `PENDING`; a verificação por `/v1/meta` acontece
+   depois, pelo scheduler de registro (mesmo comportamento do boot de hoje).
+3. **Token por estratégia:** informado no cadastro e alterável por `PATCH`; revogar uma estratégia não
+   afeta as outras. O token global `CTRADE_STRATEGY_REMOTE_TOKEN` sai junto com o catálogo do YAML.
+   O token nunca volta nas respostas da API.
+4. **Endereços:** sem restrição de host neste momento; basta uma URL válida.
+5. **Remoção:** só desabilitar. Não há exclusão; o histórico e o vínculo com runners arquivados ficam
+   preservados.
+6. **Catálogo do `application.yml`:** removido. O banco é a única fonte.
 
 ## Fora do escopo
 
@@ -88,6 +87,8 @@ assunto do ctrade.
 - Corrida entre desabilitar e um tick em avaliação: a decisão já pedida pode chegar depois; o
   comportamento esperado (ignorar ou aplicar) precisa ficar definido na implementação.
 - Mudança de `baseUrl` com decisões em voo para o endereço antigo.
+- **Token guardado no banco em texto:** aceitável em testnet; antes de produção, avaliar cifragem ou
+  cofre de segredos junto com a gestão de segredos do go-live.
 
 ## Critérios de aceitação (preliminares)
 
@@ -96,7 +97,8 @@ assunto do ctrade.
    `GET` do catálogo.
 3. Desabilitar leva os runners que a usam ao comportamento decidido no item 1, sem efeito financeiro.
 4. Reiniciar o ctrade preserva o catálogo e o estado de cada estratégia.
-5. Nenhuma configuração de catálogo resta no `application.yml` (se a decisão 6 for remover).
+5. Nenhuma configuração de catálogo nem token global resta no `application.yml`.
+6. O token de uma estratégia é enviado só nas chamadas a ela e não aparece em respostas nem logs.
 
 ## Fontes
 
