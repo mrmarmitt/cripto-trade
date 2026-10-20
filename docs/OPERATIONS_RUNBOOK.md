@@ -48,7 +48,7 @@ curl -s -X POST -H "X-Admin-Key: $KEY" -H "X-Reason: <motivo>" -H "X-Operator: <
 <a id="limites-de-autonomia"></a>
 ## Limites de autonomia
 
-> **Proposta a confirmar pelo mantenedor.** Até lá, o agente segue esta divisão.
+> Confirmado pelo mantenedor em 2026-10-20. Mudanças nesta divisão são decisão dele.
 
 | O agente faz sozinho | O agente pede confirmação ao mantenedor antes |
 |---|---|

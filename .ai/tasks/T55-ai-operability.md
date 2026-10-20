@@ -234,6 +234,6 @@ que resolveu. As seções atuais viram a fonte; o formato muda.
   (`#dlq-unresolved` etc., o mesmo `runbook` que a verificação devolve) — diagnóstico, ação com o comando
   exato, resposta esperada e confirmação —, mapa de alertas Discord/Grafana para as seções e a referência
   dos mecanismos (conteúdo anterior, condensado).
-- **Limites de autonomia** (o que o agente faz sozinho × o que pede ao mantenedor) entraram como
-  **proposta a confirmar pelo mantenedor**.
+- **Limites de autonomia** (o que o agente faz sozinho × o que pede ao mantenedor): proposta confirmada
+  pelo mantenedor em 2026-10-20.
 
