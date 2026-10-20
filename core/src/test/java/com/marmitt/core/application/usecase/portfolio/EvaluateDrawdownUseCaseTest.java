@@ -227,6 +227,11 @@ class EvaluateDrawdownUseCaseTest {
         public Optional<BigDecimal> find(String symbol) {
             return Optional.ofNullable(prices.get(symbol));
         }
+
+        @Override
+        public Optional<Instant> findUpdatedAt(String symbol) {
+            return Optional.empty();
+        }
     }
 
     private static final class FakeSnapshots implements EquitySnapshotRepositoryPort {

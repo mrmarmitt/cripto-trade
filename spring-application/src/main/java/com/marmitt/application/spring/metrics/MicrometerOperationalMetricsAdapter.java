@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.metrics;
 
+import com.marmitt.core.dto.operations.OperationalStateReport;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.enums.SafeModeStatus;
 import com.marmitt.core.ports.outbound.metrics.OperationalMetricsPort;
@@ -34,6 +35,10 @@ public class MicrometerOperationalMetricsAdapter implements OperationalMetricsPo
     static final String TERMINATION_STUCK = "runner.lifecycle.termination.stuck";
     static final String TRANSITIONS = "runner.lifecycle.transitions.total";
     static final String TERMINATING_DURATION = "runner.lifecycle.terminating.duration";
+
+    /** T55: 0=OK, 1=WARN, 2=CRITICAL. */
+    static final String OPERATIONAL_STATE = "operational_state_status";
+    static final String OPERATIONAL_CHECK = "operational_check_status";
 
     private final MeterRegistry meterRegistry;
     private final Map<String, AtomicReference<Double>> gauges = new ConcurrentHashMap<>();
@@ -76,6 +81,13 @@ public class MicrometerOperationalMetricsAdapter implements OperationalMetricsPo
     @Override
     public void recordTerminatingDuration(Duration duration) {
         Timer.builder(TERMINATING_DURATION).register(meterRegistry).record(duration);
+    }
+
+    @Override
+    public void recordOperationalState(OperationalStateReport report) {
+        gauge(OPERATIONAL_STATE, Tags.empty()).set((double) report.status().ordinal());
+        report.checks().forEach(check ->
+                gauge(OPERATIONAL_CHECK, Tags.of("check", check.id())).set((double) check.status().ordinal()));
     }
 
     private AtomicReference<Double> gauge(String name, Tags tags) {

@@ -6,7 +6,8 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 /**
- * Amostragem do estado operacional para as métricas (T51). Defaults do IG §13.8.
+ * Amostragem do estado operacional para as métricas (T51) e limiares do estado consolidado (T55).
+ * Defaults do IG §13.8 e das decisões da T55.
  */
 @Getter
 @Setter
@@ -19,4 +20,8 @@ public class OperationalStateProperties {
     private long reportIntervalMs = 15_000L;
     /** Runner em TERMINATING há mais que isso conta como travado (IG: 10 min). */
     private long terminationTimeoutMs = 600_000L;
+    /** T55: sem tick há mais que isso, com runner ACTIVE no símbolo, é CRITICAL. */
+    private long marketDataStaleMs = 60_000L;
+    /** T55: BUY em voo segurando capital há mais que isso é WARN. */
+    private long reservationStaleMs = 86_400_000L;
 }

@@ -38,6 +38,29 @@ Para começar a operar depois de um boot, as conexões e assinaturas de websocke
 `.../order-notifications/subscribe`); o boot não as abre sozinho. Ordens só nascem pelos runners: não
 existe endpoint de ordem direta na exchange.
 
+## Estado consolidado (T55)
+
+`GET /api/admin/operational-state` é a primeira consulta de qualquer verificação: `status` (`OK`, `WARN`,
+`CRITICAL`) é a pior severidade entre as verificações; cada uma traz `id`, `subjects` (o que está afetado),
+`since` e `runbook` (a seção com diagnóstico e ação, detalhada na Parte D da T55). Também exportado como
+`operational_state_status` e `operational_check_status{check}` (0=OK, 1=WARN, 2=CRITICAL).
+
+| id | Severidade | O que significa |
+|---|---|---|
+| `BOOT_NOT_READY` | CRITICAL | Boot não concluído ou com falha (`GET /api/boot/status`). |
+| `SAFE_MODE_ACTIVE` | WARN em `HALT`, CRITICAL acima | Portfolio fora de `NORMAL`. |
+| `CAPITAL_RESERVED_WITHOUT_ORDER` | CRITICAL | `reserved > 0` sem nenhuma BUY em voo no portfolio. |
+| `CAPITAL_RESERVATION_STALE` | WARN | BUY em voo segurando capital há mais de `reservation-stale-ms` (24h). |
+| `TRANSACTION_STUCK` | WARN; CRITICAL após 3 ciclos do watchdog | Ordem `PENDING` sem confirmação da exchange. Ordem descansando no livro não conta. |
+| `POSITION_LOCK_ORPHAN` | CRITICAL | Lote travado por SELL que já terminou ou não existe. |
+| `DLQ_UNRESOLVED` | WARN a partir de 1; CRITICAL a partir de 3 | Entradas da DLQ não resolvidas. |
+| `RUNNER_HALTED` / `RUNNER_RECONCILING` / `RUNNER_STUCK_TERMINATING` | WARN | Runners fora de operação. |
+| `RUNNER_ON_HOLD_STRATEGY_UNUSABLE` | WARN | Runner `ACTIVE` com estratégia ausente, desabilitada ou não conferida. |
+| `STRATEGY_VERIFICATION_FAILED` | WARN | Estratégia remota habilitada que não passa na conferência. |
+| `MARKET_DATA_STALE` | CRITICAL | Símbolo com runner `ACTIVE` sem tick há mais de `market-data-stale-ms` (60s). |
+| `STREAM_DISCONNECTED` | CRITICAL | Stream de usuário ausente/desconectado para exchange que precisa dele, ou stream de market data aberto e caído, com runner `ACTIVE`. |
+| `EXCHANGE_REST_CIRCUIT_OPEN` | CRITICAL | Circuit breaker das consultas REST aberto (T24). |
+
 ## Pré-requisitos de conta na exchange
 
 ### Binance: pagamento de taxas com BNB desligado (T46)

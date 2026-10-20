@@ -1,5 +1,6 @@
 package com.marmitt.core.ports.outbound.metrics;
 
+import com.marmitt.core.dto.operations.OperationalStateReport;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.enums.SafeModeStatus;
 
@@ -42,4 +43,9 @@ public interface OperationalMetricsPort {
 
     /** Tempo que o runner passou em TERMINATING até ser arquivado. */
     void recordTerminatingDuration(Duration duration);
+
+    /**
+     * Estado consolidado (T55): severidade geral e de cada verificacao (0=OK, 1=WARN, 2=CRITICAL).
+     */
+    void recordOperationalState(OperationalStateReport report);
 }
