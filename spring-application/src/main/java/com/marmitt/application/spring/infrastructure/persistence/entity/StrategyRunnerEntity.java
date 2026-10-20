@@ -2,6 +2,7 @@ package com.marmitt.application.spring.infrastructure.persistence.entity;
 
 import com.marmitt.core.enums.AccountingPolicyType;
 import com.marmitt.core.enums.ExecutionPolicy;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.RunnerStatus;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -64,6 +65,13 @@ public class StrategyRunnerEntity {
     private BigDecimal maxLossPercentPerLot;
     /** Proteção do lote (T44): idade máxima em segundos; null desliga. */
     private Long maxHoldingSeconds;
+
+    /** Liquidação do PANIC_SELL (T48): MARKET ou LIMIT. */
+    private OrderType liquidationOrderType;
+    /** Liquidação do PANIC_SELL (T48): afastamento da SELL LIMIT, fração em (0, 1). */
+    private BigDecimal liquidationMaxSlippagePercent;
+    /** Liquidação do PANIC_SELL (T48): ticks sem preenchimento antes de escalar para MARKET. */
+    private int liquidationEscalationTicks;
 
     /** Null em modo SHARED. */
     private BigDecimal dedicatedBudget;

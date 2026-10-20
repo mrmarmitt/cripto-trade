@@ -41,13 +41,19 @@ PUT /api/admin/portfolios/{id}/safe-mode
 |---|---|---|
 | `HALT` | Suspeita de problema; parar de comprar | Nenhum BUY novo. A estratégia segue e pode vender. |
 | `CANCEL_ALL` | Tirar todas as ordens LIMIT do livro | HALT + cancela ordens LIMIT em voo. Estratégia parada. Exige `confirm`. |
-| `PANIC_SELL` | Zerar exposição imediatamente | CANCEL_ALL + vende **a mercado** todas as posições. Exige `confirm`. |
+| `PANIC_SELL` | Zerar exposição imediatamente | CANCEL_ALL + vende todas as posições, **a mercado** por padrão ou com LIMIT protegida conforme o runner (ver abaixo). Exige `confirm`. |
 
 - O `PUT` responde **202** e a execução acontece nos ticks seguintes; acompanhe pelo `GET`
   (`restingOrders`, `liquidatingOrders`, `openPositions` caindo a zero).
 - `idleRunners > 0`: há runners parados pelo kill switch (ou reconciliando) que o Safe Mode **não**
   conduz. Para liquidá-los, retome o runner (`POST /api/admin/runners/{id}/resume`, T49) com o
   portfolio em `PANIC_SELL`.
+- Liquidação por runner (T48): por padrão o `PANIC_SELL` vende a MARKET. Para símbolos de livro raso,
+  configure LIMIT no runner com `PATCH /api/admin/runners/{id}`:
+  `{"liquidationOrderType": "LIMIT", "liquidationMaxSlippagePercent": 0.01, "liquidationEscalationTicks": 3}`
+  (os dois últimos são o padrão). A SELL LIMIT sai a 1% abaixo do último preço; sem preenchimento em
+  3 ticks é cancelada e o restante do lote sai a MARKET. Sem ticks de market data nada é liquidado,
+  em nenhum dos dois tipos. Sinal no log: `safeMode: PANIC_SELL LIMIT unfilled - canceling to escalate`.
 - Retomada: desça **um nível por vez** (`PANIC_SELL` → `CANCEL_ALL` → `HALT` → `NORMAL`), cada passo com motivo.
 - `409`: transição recusada (pulo na descida, falta de `confirm`, motivo vazio ou alteração concorrente).
 - Toda mudança fica em `safe_mode_changes` (de/para, origem, motivo, data).

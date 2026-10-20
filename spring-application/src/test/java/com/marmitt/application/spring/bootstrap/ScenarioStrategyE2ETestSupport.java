@@ -138,7 +138,15 @@ abstract class ScenarioStrategyE2ETestSupport extends AbstractIntegrationTest {
      * decisao de marketable-vs-resting do mock deixaria de corresponder a intencao da estrategia.
      */
     protected void publishTick(BigDecimal price) {
-        mockAdapter.seedReferencePrice(SYMBOL, price);
+        publishTick(price, price);
+    }
+
+    /**
+     * Tick com a exchange num preco diferente do visto pelo pipeline (mercado que ja andou alem do
+     * tick), para provar ordens que descansam porque o livro saiu do lugar.
+     */
+    protected void publishTick(BigDecimal price, BigDecimal exchangePrice) {
+        mockAdapter.seedReferencePrice(SYMBOL, exchangePrice);
         processTradeSignalPort.execute(new MarketDataDto(
                 MARKET_DATA_EXCHANGE,
                 Symbol.of(SYMBOL),

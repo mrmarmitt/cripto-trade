@@ -59,7 +59,7 @@ gatilhos de T43/T25). Regras em `Portfolio.changeSafeMode`:
 |---|---|
 | `HALT` | Recusa reserva de BUY. A estrategia segue rodando e pode vender. |
 | `CANCEL_ALL` | HALT + cancela ordens LIMIT em voo; estrategia nao e consultada. |
-| `PANIC_SELL` | CANCEL_ALL + vende a mercado as posicoes abertas. |
+| `PANIC_SELL` | CANCEL_ALL + vende as posicoes abertas conforme a `LiquidationPolicy` de cada runner: MARKET (default) ou LIMIT com escalada para MARKET (T48). |
 
 A execucao acontece nos ticks (`runner-signal-processing.md`). Capital volta pela conciliacao
 normal do CANCELED/FILLED, sem atalho. Runners fora de operacao (kill switch) nao sao conduzidos.

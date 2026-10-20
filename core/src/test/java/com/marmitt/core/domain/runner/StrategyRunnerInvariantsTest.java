@@ -2,6 +2,7 @@ package com.marmitt.core.domain.runner;
 
 import com.marmitt.core.enums.AccountingPolicyType;
 import com.marmitt.core.enums.ExecutionPolicy;
+import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.exceptions.RunnerOperationException;
 import org.junit.jupiter.api.Test;
@@ -146,13 +147,13 @@ class StrategyRunnerInvariantsTest {
         StrategyRunner runner = activeRunner();
         int pendingBefore = runner.getMaxPendingOrders();
 
-        runner.updateLimits(new BigDecimal("0.30"), 3, null, null, null);
+        runner.updateLimits(new BigDecimal("0.30"), 3, null, null, null, null, null, null);
 
         assertEquals(0, new BigDecimal("0.30").compareTo(runner.getMaxAllocationPercent()));
         assertEquals(3, runner.getMaxOpenPositions());
         assertEquals(pendingBefore, runner.getMaxPendingOrders());
-        assertThrows(IllegalArgumentException.class, () -> runner.updateLimits(new BigDecimal("1.5"), null, null, null, null));
-        assertThrows(IllegalArgumentException.class, () -> runner.updateLimits(null, 0, null, null, null));
+        assertThrows(IllegalArgumentException.class, () -> runner.updateLimits(new BigDecimal("1.5"), null, null, null, null, null, null, null));
+        assertThrows(IllegalArgumentException.class, () -> runner.updateLimits(null, 0, null, null, null, null, null, null));
     }
 
     @Test
@@ -167,13 +168,41 @@ class StrategyRunnerInvariantsTest {
     void updateLimitsChangesTheLotProtectionAndZeroDisablesTheHoldingLimit() {
         StrategyRunner runner = activeRunner();
 
-        runner.updateLimits(null, null, null, new BigDecimal("0.03"), Duration.ofHours(6));
+        runner.updateLimits(null, null, null, new BigDecimal("0.03"), Duration.ofHours(6), null, null, null);
         assertEquals(0, new BigDecimal("0.03").compareTo(runner.getPositionProtection().maxLossPercentPerLot()));
         assertEquals(Duration.ofHours(6), runner.getPositionProtection().maxHoldingDuration());
 
-        runner.updateLimits(null, null, null, null, Duration.ZERO);
+        runner.updateLimits(null, null, null, null, Duration.ZERO, null, null, null);
         assertEquals(null, runner.getPositionProtection().maxHoldingDuration());
         assertEquals(0, new BigDecimal("0.03").compareTo(runner.getPositionProtection().maxLossPercentPerLot()));
+    }
+
+    @Test
+    void liquidationPolicyDefaultsToMarketAndUpdatesOnlyInformedFields() {
+        StrategyRunner runner = activeRunner();
+        assertEquals(LiquidationPolicy.defaults(), runner.getLiquidationPolicy());
+
+        runner.updateLimits(null, null, null, null, null, OrderType.LIMIT, null, null);
+        assertEquals(new LiquidationPolicy(OrderType.LIMIT, new BigDecimal("0.01"), 3), runner.getLiquidationPolicy());
+
+        runner.updateLimits(null, null, null, null, null, null, new BigDecimal("0.02"), 5);
+        assertEquals(new LiquidationPolicy(OrderType.LIMIT, new BigDecimal("0.02"), 5), runner.getLiquidationPolicy());
+    }
+
+    @Test
+    void invalidLiquidationPolicyIsRejectedWithoutApplyingOtherFields() {
+        StrategyRunner runner = activeRunner();
+        BigDecimal allocationBefore = runner.getMaxAllocationPercent();
+
+        assertThrows(IllegalArgumentException.class,
+                () -> runner.updateLimits(new BigDecimal("0.40"), null, null, null, null, OrderType.STOP_LOSS, null, null));
+        assertThrows(IllegalArgumentException.class,
+                () -> runner.updateLimits(new BigDecimal("0.40"), null, null, null, null, null, BigDecimal.ONE, null));
+        assertThrows(IllegalArgumentException.class,
+                () -> runner.updateLimits(new BigDecimal("0.40"), null, null, null, null, null, null, 0));
+        assertEquals(0, allocationBefore.compareTo(runner.getMaxAllocationPercent()),
+                "Pedido invalido nao aplica os outros campos");
+        assertEquals(LiquidationPolicy.defaults(), runner.getLiquidationPolicy());
     }
 
     @Test
@@ -182,11 +211,11 @@ class StrategyRunnerInvariantsTest {
         BigDecimal allocationBefore = runner.getMaxAllocationPercent();
 
         assertThrows(IllegalArgumentException.class,
-                () -> runner.updateLimits(new BigDecimal("0.40"), null, null, BigDecimal.ONE, null));
+                () -> runner.updateLimits(new BigDecimal("0.40"), null, null, BigDecimal.ONE, null, null, null, null));
         assertThrows(IllegalArgumentException.class,
-                () -> runner.updateLimits(null, null, null, BigDecimal.ZERO, null));
+                () -> runner.updateLimits(null, null, null, BigDecimal.ZERO, null, null, null, null));
         assertThrows(IllegalArgumentException.class,
-                () -> runner.updateLimits(null, null, null, null, Duration.ofMillis(500)));
+                () -> runner.updateLimits(null, null, null, null, Duration.ofMillis(500), null, null, null));
         assertEquals(0, allocationBefore.compareTo(runner.getMaxAllocationPercent()),
                 "Pedido invalido nao aplica os outros campos");
     }

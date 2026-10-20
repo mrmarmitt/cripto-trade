@@ -110,13 +110,14 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
     public RunnerTransitionResult updateLimits(UUID runnerId, UpdateRunnerLimitsRequest request) {
         StrategyRunner runner = load(runnerId);
         runner.updateLimits(request.maxAllocationPercent(), request.maxOpenPositions(), request.maxPendingOrders(),
-                request.maxLossPercentPerLot(), request.maxHoldingDuration());
+                request.maxLossPercentPerLot(), request.maxHoldingDuration(), request.liquidationOrderType(),
+                request.liquidationMaxSlippagePercent(), request.liquidationEscalationTicks());
         strategyRunnerRepository.save(runner);
         log.info("runnerLifecycle: limits updated runnerId={} maxAllocationPercent={} maxOpenPositions={} maxPendingOrders={} "
-                        + "maxLossPercentPerLot={} maxHoldingDuration={}",
+                        + "maxLossPercentPerLot={} maxHoldingDuration={} liquidationPolicy={}",
                 runnerId, runner.getMaxAllocationPercent(), runner.getMaxOpenPositions(), runner.getMaxPendingOrders(),
                 runner.getPositionProtection().maxLossPercentPerLot(),
-                runner.getPositionProtection().maxHoldingDuration());
+                runner.getPositionProtection().maxHoldingDuration(), runner.getLiquidationPolicy());
         return RunnerTransitionResult.of(runner, runner.getStatus());
     }
 

@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T45 (PANIC_SELL com MARKET), T44 (`PositionProtection` como modelo de política no runner),
 T49 (endpoint de limites do runner), T37 (normalização de preço side-aware).
-**Status:** Pendente — decisões de negócio registradas; pronta para implementação.
+**Status:** Concluído (2026-10-20) — ver "Entrega" no fim.
 
 ---
 
@@ -93,7 +93,7 @@ liquidação por runner**: o runner pode optar por liquidar com SELL **LIMIT** a
    nunca há duas SELLs do mesmo lote em voo.
 5. Fill parcial seguido de escalada vende a MARKET só a quantidade restante.
 6. A LIMIT de liquidação não é cancelada pelo `cancelRestingOrders` antes do prazo.
-7. Política alterável por `PUT` de limites do runner, persistida e validada (afastamento em (0, 1),
+7. Política alterável por `PATCH /api/admin/runners/{id}`, persistida e validada (afastamento em (0, 1),
    ticks ≥ 1).
 
 ## Validação
@@ -109,3 +109,39 @@ liquidação por runner**: o runner pode optar por liquidar com SELL **LIMIT** a
 - `.ai/tasks/T45-safe-mode-activation-and-levels.md`, `.ai/tasks/T44-strategy-independent-position-protection.md`
 - `.ai/flows/portfolio-capital.md`
 - `docs/OPERATIONS_RUNBOOK.md` (Safe Mode)
+
+## Entrega
+
+### Decisões de implementação (2026-10-20)
+
+- **Posições ativas, não só OPEN.** `findOpenPositionsByRunnerId` só devolve lotes `OPEN`; o lote
+  travado pela LIMIT de liquidação fica `CLOSING` e sumiria da contagem de ticks. O handler passou a ler
+  `findActivePositionsByPortfolioId` filtrado pelo runner (consulta já existente, OPEN + CLOSING).
+- **Uma única tentativa LIMIT por lote.** Qualquer desfecho que destrave o lote depois dela — cancelada
+  pela escalada, rejeitada, parcialmente executada e cancelada, ou barrada antes do envio — leva o
+  restante a MARKET no tick seguinte.
+- **A LIMIT de liquidação não é cancelada pelo `cancelRestingOrders`** enquanto o lote tem tentativa
+  registrada; SELL da estratégia sem lote alvo (FIFO) continua sendo cancelada.
+- **`TradeIntentFactory.liquidationSignal`** ganhou a variante com `limitPrice`; a de três argumentos
+  delega para ela (fonte única do sinal de liquidação).
+- Configuração no mesmo `PATCH /api/admin/runners/{id}` dos limites: `liquidationOrderType`,
+  `liquidationMaxSlippagePercent`, `liquidationEscalationTicks`; migração
+  `V16__runner_liquidation_policy.sql` com default MARKET / 0.01 / 3 e `CHECK`s.
+
+### Validação
+
+- Unitários: `LiquidationPolicyTest`, `SafeModeHandlerTest` (MARKET, LIMIT abaixo do tick, prazo e
+  cancelamento, escalada com restante após parcial, `forget`, lotes de outro runner, SELL FIFO da
+  estratégia), `StrategyRunnerInvariantsTest` (default e validação no `updateLimits`).
+- E2E no MOCK (`SafeModeE2ETest`): LIMIT que preenche fecha o lote sem MARKET; com a exchange 2%
+  abaixo do tick a LIMIT descansa, é cancelada após 3 ticks e o lote sai numa única MARKET.
+
+### Riscos residuais
+
+- Estado da tentativa em memória (restart → nova tentativa, até mais `escalationTicks` ticks).
+- **Achado no MOCK (fora do escopo):** cancelar uma ordem que o MOCK está preenchendo pelo caminho
+  simulado (LIMIT marketable, em parciais) emite `CANCELED` e a simulação continua preenchendo depois,
+  debitando o saldo do mock. O core recusa o fill pós-`CANCELED` (log de erro de conciliação) e a venda
+  seguinte é rejeitada por falta de saldo no mock. Não afeta exchange real, mas qualquer E2E que cancele
+  uma ordem marketable no MOCK cai nisso. O E2E de preenchimento usa prazo largo de ticks para não
+  disparar a escalada no meio da simulação.

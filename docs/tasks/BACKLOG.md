@@ -53,7 +53,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T45 | Ativação do Safe Mode e níveis `CANCEL_ALL` / `PANIC_SELL`      | Média | Claude | Concluído |
 | T46 | Ativo da fee e quantidade líquida da posição                    | Alta  | Claude | Concluído |
 | T47 | Um caminho por operação (limpeza pós-T46)                       | Baixa | Claude | Concluído |
-| T48 | Proteção LIMIT na liquidação do PANIC_SELL                      | Média | Claude | Pendente  |
+| T48 | Proteção LIMIT na liquidação do PANIC_SELL                      | Média | Claude | Concluído |
 | T49 | Ciclo de vida do runner por API (start, resume, terminate)      | Alta  | Claude | Concluído |
 | T50 | Limites de risco pré-trade (posições, ordens, preço, utilização) | Média | Claude | Concluído |
 | T51 | Observabilidade de capital, Safe Mode e lifecycle                | Baixa | Claude | Concluído |
@@ -228,7 +228,7 @@ T41  Extração mínima: StrategyEvaluationPort + RemoteTradingStrategy + catál
 T42  Mailbox por runner + executores separados (fill nunca espera tick)
 
 T45  Ativação do Safe Mode + CANCEL_ALL / PANIC_SELL   ← pré-requisito de T25 e T43 (concluída)
-T48  Proteção LIMIT no PANIC_SELL (política no cadastro do runner) ← decidida; pronta
+T48  Proteção LIMIT no PANIC_SELL (política no cadastro do runner) ← concluída
        ↓
 T43  Drawdown 24h + marcação a mercado (concluída; perda diária descartada)     T25  Safe Mode automático
 T44  Proteção do lote (stop 5% MARKET; concluída)                   T24  Circuit breaker REST

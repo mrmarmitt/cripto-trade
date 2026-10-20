@@ -155,7 +155,7 @@ class ManageRunnerLifecycleUseCaseTest {
         activate(runner);
 
         useCase.updateLimits(runner.getId(), new UpdateRunnerLimitsRequest(new BigDecimal("0.25"), 2, 2,
-                new BigDecimal("0.08"), Duration.ofHours(24)));
+                new BigDecimal("0.08"), Duration.ofHours(24), null, null, null));
 
         assertEquals(0, new BigDecimal("0.25").compareTo(runner.getMaxAllocationPercent()));
         assertEquals(2, runner.getMaxOpenPositions());

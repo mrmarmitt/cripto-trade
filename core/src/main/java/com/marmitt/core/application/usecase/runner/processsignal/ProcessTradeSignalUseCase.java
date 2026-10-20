@@ -316,6 +316,9 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
             // exposicao). Quando ela age, vence a estrategia no tick.
             boolean protectionActed = protectPosition(runner, marketData.price());
             SafeModeStatus safeMode = loadSafeMode(runner.getPortfolioId());
+            if (!safeMode.liquidatesPositions()) {
+                safeModeHandler.forget(runner.getId());
+            }
             if (safeMode.cancelsOrders()) {
                 enforceSafeMode(runner, safeMode, marketData.price());
             } else if (!protectionActed) {
@@ -395,8 +398,9 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
 
     /**
      * Niveis CANCEL_ALL e PANIC_SELL (T45): o Safe Mode conduz o runner no lugar da estrategia.
-     * Cancela as ordens LIMIT em voo e, em PANIC_SELL, vende a mercado cada posicao aberta sem lock
-     * pelo pipeline normal de SELL. Reaplicado a cada tick ate nao restar ordem nem posicao.
+     * Cancela as ordens LIMIT em voo e, em PANIC_SELL, vende cada posicao aberta sem lock pelo pipeline
+     * normal de SELL, no tipo de ordem da politica de liquidacao do runner (T48). Reaplicado a cada tick
+     * ate nao restar ordem nem posicao.
      */
     private void enforceSafeMode(StrategyRunner runner, SafeModeStatus safeMode, BigDecimal currentPrice) {
         checkRunnerNotHalted(runner.getId());
@@ -405,10 +409,12 @@ public abstract class ProcessTradeSignalUseCase implements ProcessTradeSignalPor
         if (!safeMode.liquidatesPositions()) {
             return;
         }
-        for (StrategyOutputDto liquidation : safeModeHandler.liquidationSignals(runner)) {
-            log.warn("safeMode: PANIC_SELL liquidating positionId={} runnerId={} quantity={}",
-                    liquidation.targetLotId(), runner.getId(), liquidation.quantity());
-            processTradeSignal(runner, liquidation, currentPrice, tradeIntentFactory.liquidationOrderType());
+        for (SafeModeHandler.Liquidation liquidation : safeModeHandler.liquidations(runner, currentPrice)) {
+            StrategyOutputDto signal = liquidation.signal();
+            log.warn("safeMode: PANIC_SELL liquidating positionId={} runnerId={} quantity={} orderType={} limitPrice={}",
+                    signal.targetLotId(), runner.getId(), signal.quantity(), liquidation.orderType(),
+                    signal.limitPrice());
+            processTradeSignal(runner, signal, currentPrice, liquidation.orderType());
         }
     }
 

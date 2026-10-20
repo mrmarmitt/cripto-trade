@@ -73,7 +73,7 @@ class AdminRunnerControllerTest {
     @Test
     void patchForwardsTheMutableLimits() throws Exception {
         when(lifecycle.updateLimits(runnerId, new UpdateRunnerLimitsRequest(new BigDecimal("0.3"), 2, null,
-                new BigDecimal("0.08"), Duration.ofHours(24))))
+                new BigDecimal("0.08"), Duration.ofHours(24), null, null, null)))
                 .thenReturn(new RunnerTransitionResult(runnerId, "s", "BTCUSDT", RunnerStatus.ACTIVE, RunnerStatus.ACTIVE));
 
         mockMvc.perform(patch("/api/admin/runners/{id}", runnerId)
@@ -82,7 +82,7 @@ class AdminRunnerControllerTest {
                                 + "\"maxLossPercentPerLot\":0.08,\"maxHoldingDuration\":\"PT24H\"}"))
                 .andExpect(status().isOk());
         verify(lifecycle).updateLimits(runnerId, new UpdateRunnerLimitsRequest(new BigDecimal("0.3"), 2, null,
-                new BigDecimal("0.08"), Duration.ofHours(24)));
+                new BigDecimal("0.08"), Duration.ofHours(24), null, null, null));
     }
 
     @Test
