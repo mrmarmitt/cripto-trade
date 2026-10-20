@@ -1,6 +1,7 @@
 package com.marmitt.application.spring.bootstrap;
 
 import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
+import com.marmitt.application.spring.testsupport.DatabaseCleaner;
 import com.marmitt.core.application.usecase.runner.orderconciliation.ConciliationOrderUpdateExecutor;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
@@ -100,8 +101,7 @@ class RunnerTransactionRecoveryWatchdogIntegrationTest extends AbstractIntegrati
     void cleanDatabaseAndResetProperties() {
         reset(strategyRunnerRepository);
         getMockExchangeAdapter().reset();
-        jdbcTemplate.execute("TRUNCATE TABLE portfolios CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE capital_event_ledger");
+        DatabaseCleaner.reset(jdbcTemplate);
         properties.setEnabled(true);
         properties.setIntervalMs(86_400_000L);
         properties.setStaleThresholdMs(30_000L);

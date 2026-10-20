@@ -1,6 +1,7 @@
 package com.marmitt.application.spring.bootstrap;
 
 import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
+import com.marmitt.application.spring.testsupport.DatabaseCleaner;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.portfolio.request.CreatePortfolioRequest;
@@ -85,8 +86,7 @@ abstract class ScenarioStrategyE2ETestSupport extends AbstractIntegrationTest {
                 .map(MockExchangeAdapter.class::cast)
                 .orElseThrow(() -> new IllegalStateException("MOCK adapter not registered"));
         mockAdapter.reset();
-        jdbcTemplate.execute("TRUNCATE TABLE portfolios CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE capital_event_ledger");
+        DatabaseCleaner.reset(jdbcTemplate);
     }
 
     // ---------------------------------------------------------------- setup

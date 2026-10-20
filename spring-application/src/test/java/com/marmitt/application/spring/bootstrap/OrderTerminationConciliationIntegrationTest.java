@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.bootstrap;
 
+import com.marmitt.application.spring.testsupport.DatabaseCleaner;
 import com.marmitt.core.domain.Symbol;
 import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.runner.ClientOrderId;
@@ -63,8 +64,7 @@ class OrderTerminationConciliationIntegrationTest extends AbstractIntegrationTes
 
     @BeforeEach
     void cleanDatabase() {
-        jdbcTemplate.execute("TRUNCATE TABLE portfolios CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE capital_event_ledger");
+        DatabaseCleaner.reset(jdbcTemplate);
     }
 
     @Test
