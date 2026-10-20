@@ -62,6 +62,28 @@ assunto do ctrade.
 6. **Um caminho só.** O catálogo do `application.yml` é removido; o banco passa a ser a única fonte
    (manual §1.3). As estratégias in-process (SMA, cenários) continuam como estão.
 
+## Operação por IA (diretriz do mantenedor, 2026-10-20)
+
+O principal consumidor desta API é um agente de IA, que vai operar o ctrade sem um humano
+disponível. A API precisa permitir que o agente entenda o estado, aja e confira o efeito sozinho:
+
+1. **Respostas autoexplicativas.** O `GET` traz, por estratégia: `status`, estado de verificação,
+   último erro e horário, `lastVerifiedAt`, identidade servida pela app (nome, versão, contrato) e os
+   runners que a usam (id e status). Toda mudança devolve o estado resultante, não só `200`.
+2. **Erros com código estável.** Além da mensagem, cada recusa traz um código legível por máquina
+   (`STRATEGY_NOT_FOUND`, `STRATEGY_ALREADY_EXISTS`, `STRATEGY_DEFINITION_CONFLICT`, `INVALID_BASE_URL`,
+   …) no envelope `ApiError`.
+3. **Idempotência.** Repetir um cadastro idêntico devolve o registro existente; cadastro com o mesmo
+   `strategyRef` e dados diferentes é recusado com código. `enable`/`disable` repetidos não falham e
+   não geram evento novo.
+4. **`reason` obrigatório** em cadastro, `enable`, `disable` e `PATCH`, guardado num histórico de
+   eventos do catálogo (`GET /api/admin/strategies/{ref}/events`), para o agente reconstruir o que
+   aconteceu e por quê.
+5. **Contrato da API publicado.** Os endpoints aparecem no OpenAPI gerado pelo springdoc, com
+   descrição de campos, estados e códigos de erro.
+6. **Runbook para agente.** A seção do runbook descreve os procedimentos (cadastrar, verificar,
+   desabilitar, diagnosticar `FAILED`) como passos executáveis com a resposta esperada em cada um.
+
 ## Decisões registradas (2026-10-20)
 
 1. **Desabilitar com runner ativo:** aceito; os runners que usam a estratégia ficam em HOLD implícito,
@@ -99,6 +121,9 @@ assunto do ctrade.
 4. Reiniciar o ctrade preserva o catálogo e o estado de cada estratégia.
 5. Nenhuma configuração de catálogo nem token global resta no `application.yml`.
 6. O token de uma estratégia é enviado só nas chamadas a ela e não aparece em respostas nem logs.
+7. Cada recusa da API traz código de erro estável; repetir uma operação já aplicada não falha nem
+   duplica evento.
+8. Toda mudança de estado registra `reason` e aparece no histórico de eventos da estratégia.
 
 ## Fontes
 
