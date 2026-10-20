@@ -62,6 +62,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T54 | Catálogo dinâmico de estratégias remotas (cadastro via API)       | Alta  | Claude | Concluído |
 | T55 | Operabilidade por IA (API segura, códigos, auditoria, estado consolidado) | Alta | Claude | Concluído |
 | T56 | Demanda de market data: conexões e assinaturas automáticas      | Média | Claude | Concluído |
+| T57 | Conferência de saldo por exchange (soma dos portfolios × conta)  | Média | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 
 ## Ordem de execução
