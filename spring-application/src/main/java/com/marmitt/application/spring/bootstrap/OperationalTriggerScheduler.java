@@ -1,24 +1,28 @@
 package com.marmitt.application.spring.bootstrap;
 
+import com.marmitt.core.ports.inbound.portfolio.EvaluateExchangeBalancePort;
 import com.marmitt.core.ports.inbound.portfolio.EvaluateOperationalTriggersPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Dispara a avaliação periódica dos gatilhos operacionais de Safe Mode (T25). Só agenda; a regra fica
- * no core.
+ * Dispara a avaliação periódica dos gatilhos operacionais de Safe Mode (T25) e da conferência de saldo por
+ * exchange (T57, intervalo próprio: uma consulta de conta por exchange). Só agenda; a regra fica no core.
  */
 @Slf4j
 @Component
 public class OperationalTriggerScheduler {
 
     private final EvaluateOperationalTriggersPort evaluateOperationalTriggers;
+    private final EvaluateExchangeBalancePort evaluateExchangeBalance;
     private final AutoSafeModeProperties properties;
 
     public OperationalTriggerScheduler(EvaluateOperationalTriggersPort evaluateOperationalTriggers,
+                                       EvaluateExchangeBalancePort evaluateExchangeBalance,
                                        AutoSafeModeProperties properties) {
         this.evaluateOperationalTriggers = evaluateOperationalTriggers;
+        this.evaluateExchangeBalance = evaluateExchangeBalance;
         this.properties = properties;
     }
 
@@ -34,6 +38,21 @@ public class OperationalTriggerScheduler {
             evaluateOperationalTriggers.evaluate();
         } catch (RuntimeException e) {
             log.error("autoSafeMode: evaluation cycle failed - {}", e.getMessage(), e);
+        }
+    }
+
+    @Scheduled(
+            fixedDelayString = "${safe-mode.auto.balance-divergence.evaluation-interval-ms:300000}",
+            initialDelayString = "${safe-mode.auto.balance-divergence.evaluation-interval-ms:300000}"
+    )
+    public void exchangeBalanceTick() {
+        if (!properties.isEnabled() || !properties.getBalanceDivergence().isEnabled()) {
+            return;
+        }
+        try {
+            evaluateExchangeBalance.evaluate();
+        } catch (RuntimeException e) {
+            log.error("exchangeBalance: evaluation cycle failed - {}", e.getMessage(), e);
         }
     }
 }

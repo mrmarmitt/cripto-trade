@@ -40,19 +40,19 @@
 **O que pode parar silenciosamente:**
 - Boot completa com `hasErrors=true` em modo `WARN_ONLY` — runner continua ACTIVE mas com inconsistências
 - Phase 2 detecta zombies mas não bloqueia (WARN_ONLY) — ordens abertas na exchange sem conciliação local
-- Phase 2 sanity check retorna `WARN_SURPLUS` — saldo na exchange maior que o local
+- Phase 2 de saldo retorna `PENDING` — falta na conta coberta por ordens em voo, conciliadas so na Phase 3 (T57)
 
 **Cadência esperada:** One-shot por startup. Deve concluir em < 3 min.
 
 **Logs sentinel disponíveis:**
 - `bootSequence: completed runId={} portfolios={} runners={}` — qualidade alta (M1)
 - `bootRecovery: completed runnerId={} hasErrors={}` — qualidade alta, `hasErrors` é a chave (M2)
-- `bootSequence.phase2.sanity: completed runId={} result={} portfolios={}` — **✅ T23 (G4)**, `result` agregado (pior status)
+- `bootSequence.phase2.sanity: completed runId={} result={} exchanges={}` — **✅ T23 (G4)**, `result` agregado (pior status; por exchange desde a T57)
 - `bootSequence.phase2.zombie: completed runId={} detected={} mode={}` — **✅ T23 (G4)**
 - ~~`bootSequence.phase2.ttl: completed`~~ — **obsoleto:** fase removida na T31 (não há mais varredura TTL no boot)
 
 **Gaps de instrumentação:**
-- ~~Resultado do sanity check no log de conclusão~~ — **✅ T23 (G4):** `result={PASS/WARN_SURPLUS/FAIL_DEFICIT/SKIPPED/FAILED}` agregado
+- ~~Resultado do sanity check no log de conclusão~~ — **✅ T23 (G4):** `result={OK/PENDING/SKIPPED/FAILED/DEFICIT}` agregado (T57)
 - ~~Contagem de zombies em WARN_ONLY no log de conclusão~~ — **✅ T23 (G4):** `detected={}` + `mode={WARN_ONLY/FAIL_FAST}`
 - ~~Count de transações expiradas por TTL~~ — **obsoleto:** fase TTL removida na T31
 
@@ -186,7 +186,7 @@
 
 | Arquivo | Log atual | Campo faltante | Impacto | Status |
 |---|---|---|---|---|
-| `RunBootSequenceUseCase` | `bootSequence.phase2.sanity: completed` | `runId`, `result` (PASS/WARN/FAIL/SKIP) | Detectar sanity anômalo | ✅ T23 (G4) |
+| `RunBootSequenceUseCase` | `bootSequence.phase2.sanity: completed` | `runId`, `result` (OK/PENDING/SKIPPED/FAILED/DEFICIT) | Detectar sanity anômalo | ✅ T23 (G4) |
 | `RunBootSequenceUseCase` | `bootSequence.phase2.zombie: completed` | `runId`, `detected` (count), `mode` (FAIL_FAST/WARN_ONLY) | Detectar zombies em WARN_ONLY | ✅ T23 (G4) |
 | ~~`RunBootSequenceUseCase`~~ | ~~`bootSequence.phase2.ttl: completed`~~ | ~~`runId`, `expired`~~ | — | Obsoleto (fase removida na T31) |
 | `RunBootSequenceUseCase` | `bootSequence.phase1: completed exchanges={}` | `runId` | Correlacionar fases pelo mesmo boot | Já tinha `runId` (sem alteração) |

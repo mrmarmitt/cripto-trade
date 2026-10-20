@@ -1,8 +1,9 @@
 package com.marmitt.application.spring.config.core;
 
+import com.marmitt.application.spring.bootstrap.PortfolioSanityCheckProperties;
 import com.marmitt.core.application.usecase.boot.RunBootSequenceUseCase;
-import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
 import com.marmitt.core.application.usecase.boot.phase2.PortfolioZombieDetectionUseCase;
+import com.marmitt.core.application.usecase.exchange.ExchangeBalanceReconciliation;
 import com.marmitt.core.application.usecase.portfolio.AutomaticSafeModeTrigger;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.ports.inbound.boot.RunBootSequencePort;
@@ -17,12 +18,16 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class BootConfig {
 
+    /** Conferencia de saldo por exchange (T57): boot fase 2, estado operacional e avaliacao periodica. */
     @Bean
-    public PortfolioBootSanityUseCase portfolioBootSanityUseCase(
+    public ExchangeBalanceReconciliation exchangeBalanceReconciliation(
             GlobalBalanceRepositoryPort globalBalanceRepository,
-            ExchangeAdapterRepositoryPort exchangeAdapterRepository
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            ExchangeAdapterRepositoryPort exchangeAdapterRepository,
+            PortfolioSanityCheckProperties portfolioSanityCheckProperties
     ) {
-        return new PortfolioBootSanityUseCase(globalBalanceRepository, exchangeAdapterRepository);
+        return new ExchangeBalanceReconciliation(globalBalanceRepository, strategyRunnerRepository,
+                exchangeAdapterRepository, portfolioSanityCheckProperties.getThreshold());
     }
 
     @Bean
@@ -38,7 +43,7 @@ public class BootConfig {
             PortfolioRepositoryPort portfolioRepository,
             StrategyRunnerRepositoryPort strategyRunnerRepository,
             ExchangeAdapterRepositoryPort exchangeAdapterRepository,
-            PortfolioBootSanityUseCase portfolioBootSanityUseCase,
+            ExchangeBalanceReconciliation exchangeBalanceReconciliation,
             PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase,
             DeadLetterEntryRepositoryPort deadLetterEntryRepository,
             RunnerBootRecoveryUseCase runnerBootRecoveryUseCase,
@@ -48,7 +53,7 @@ public class BootConfig {
                 portfolioRepository,
                 strategyRunnerRepository,
                 exchangeAdapterRepository,
-                portfolioBootSanityUseCase,
+                exchangeBalanceReconciliation,
                 portfolioZombieDetectionUseCase,
                 deadLetterEntryRepository,
                 runnerBootRecoveryUseCase,

@@ -1,6 +1,6 @@
 package com.marmitt.core.application.usecase.boot;
 
-import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
+import com.marmitt.core.application.usecase.exchange.ExchangeBalanceReconciliation;
 import com.marmitt.core.application.usecase.boot.phase2.PortfolioZombieDetectionUseCase;
 import com.marmitt.core.application.usecase.portfolio.AutomaticSafeModeTrigger;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
@@ -10,12 +10,12 @@ import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.boot.BootExecutionCommand;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
-import com.marmitt.core.dto.portfolio.PortfolioBootSanityResult;
+import com.marmitt.core.dto.exchange.ExchangeBalanceReport;
 import com.marmitt.core.dto.portfolio.PortfolioZombieCandidate;
 import com.marmitt.core.dto.portfolio.PortfolioZombieDetectionResult;
 import com.marmitt.core.enums.BootAccountQueryPolicy;
 import com.marmitt.core.enums.BootFailureMode;
-import com.marmitt.core.enums.PortfolioSanityStatus;
+import com.marmitt.core.enums.ExchangeBalanceStatus;
 import com.marmitt.core.enums.PortfolioZombieDetectionStatus;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.enums.SafeModeTrigger;
@@ -41,7 +41,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
     private final PortfolioRepositoryPort portfolioRepository;
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
-    private final PortfolioBootSanityUseCase portfolioBootSanityUseCase;
+    private final ExchangeBalanceReconciliation exchangeBalanceReconciliation;
     private final PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase;
     private final DeadLetterEntryRepositoryPort deadLetterEntryRepository;
     private final RunnerBootRecoveryUseCase runnerBootRecoveryUseCase;
@@ -50,7 +50,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
     public RunBootSequenceUseCase(PortfolioRepositoryPort portfolioRepository,
                                   StrategyRunnerRepositoryPort strategyRunnerRepository,
                                   ExchangeAdapterRepositoryPort exchangeAdapterRepository,
-                                  PortfolioBootSanityUseCase portfolioBootSanityUseCase,
+                                  ExchangeBalanceReconciliation exchangeBalanceReconciliation,
                                   PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase,
                                   DeadLetterEntryRepositoryPort deadLetterEntryRepository,
                                   RunnerBootRecoveryUseCase runnerBootRecoveryUseCase,
@@ -58,7 +58,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
         this.portfolioRepository = portfolioRepository;
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.exchangeAdapterRepository = exchangeAdapterRepository;
-        this.portfolioBootSanityUseCase = portfolioBootSanityUseCase;
+        this.exchangeBalanceReconciliation = exchangeBalanceReconciliation;
         this.portfolioZombieDetectionUseCase = portfolioZombieDetectionUseCase;
         this.deadLetterEntryRepository = deadLetterEntryRepository;
         this.runnerBootRecoveryUseCase = runnerBootRecoveryUseCase;
@@ -85,7 +85,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
 
             boolean phase2Enabled = command.phase2Enabled();
             executePhase("phase2.sanity", phase2Enabled && command.sanityEnabled(),
-                    () -> runPhase2PortfolioSanity(runId, portfolios, eligibleRunners, command, observer),
+                    () -> runPhase2BalanceSanity(runId, command, observer),
                     observer);
             executePhase("phase2.zombie", phase2Enabled && command.zombieEnabled(),
                     () -> runPhase2ZombieDetection(runId, portfolios, eligibleRunners, command, observer),
@@ -140,94 +140,53 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
         log.info("bootSequence.phase1: completed runId={} exchanges={}", runId, exchanges.size());
     }
 
-    private void runPhase2PortfolioSanity(String runId,
-                                          List<Portfolio> portfolios,
-                                          List<StrategyRunner> eligibleRunners,
-                                          BootExecutionCommand command,
-                                          BootExecutionObserverPort observer) {
-        BootFailureMode mode = command.failureMode();
-        log.info("bootSequence.phase2.sanity: start portfolios={} mode={} accountQueryPolicy={} threshold={}",
-                portfolios.size(), mode, command.accountQueryPolicy(), command.sanityThreshold());
-
-        PortfolioSanityStatus aggregateResult = null;
-        for (Portfolio portfolio : portfolios) {
-            Set<String> exchanges = resolvePortfolioExchanges(portfolio, eligibleRunners);
-
-            if (exchanges.isEmpty()) {
-                log.debug("bootSequence.phase2.sanity: portfolio={} skipped - no eligible runner exchange",
-                        portfolio.getId());
-                continue;
-            }
-
-            for (String exchange : exchanges) {
-                long startedNs = System.nanoTime();
-                PortfolioBootSanityResult result =
-                        portfolioBootSanityUseCase.execute(portfolio.getId(), exchange, command.sanityThreshold());
-                long durationMs = (System.nanoTime() - startedNs) / 1_000_000L;
-                observer.onPortfolioPhaseEvaluated("phase2.sanity", result.status().name(), exchange, mode.name(), durationMs);
-                aggregateResult = mostSevereSanity(aggregateResult, result.status());
-
-                switch (result.status()) {
-                    case PASS, WARN_SURPLUS -> log.info(
-                            "bootSequence.phase2.sanity: portfolio={} exchange={} status={} code={} localTotal={} exchangeTotal={} signedDelta={} deviation={}",
-                            result.portfolioId(), result.exchangeId(), result.status(), result.code(),
-                            result.localTotal(), result.exchangeTotal(), result.signedDelta(), result.absoluteDeviation());
-                    case SKIPPED -> log.warn(
-                            "bootSequence.phase2.sanity: portfolio={} exchange={} status={} code={} message={}",
-                            result.portfolioId(), result.exchangeId(), result.status(), result.code(), result.message());
-                    case FAIL_DEFICIT -> {
-                        log.error(
-                                "bootSequence.phase2.sanity: portfolio={} exchange={} status={} code={} message={} localTotal={} exchangeTotal={} signedDelta={} deviation={}",
-                                result.portfolioId(), result.exchangeId(), result.status(), result.code(), result.message(),
-                                result.localTotal(), result.exchangeTotal(), result.signedDelta(), result.absoluteDeviation());
-                        // T25: saldo local maior que o da exchange - operar sobre capital inexistente. HALT antes
-                        // de qualquer BUY (persistido, vale tambem se o fail-fast abortar o boot a seguir).
-                        safeModeTrigger.activate(result.portfolioId(), SafeModeTrigger.BALANCE_DIVERGENCE,
-                                "exchange=" + result.exchangeId() + " localTotal=" + result.localTotal()
-                                        + " exchangeTotal=" + result.exchangeTotal() + " signedDelta=" + result.signedDelta());
-                    }
-                    case FAILED -> log.warn(
-                            "bootSequence.phase2.sanity: portfolio={} exchange={} status={} code={} message={}",
-                            result.portfolioId(), result.exchangeId(), result.status(), result.code(), result.message());
-                }
-
-                boolean skippedWithFailPolicy = result.status() == PortfolioSanityStatus.SKIPPED
-                        && command.accountQueryPolicy() == BootAccountQueryPolicy.FAIL;
-                boolean criticalFailure = result.status() == PortfolioSanityStatus.FAIL_DEFICIT
-                        || result.status() == PortfolioSanityStatus.FAILED;
-                if ((skippedWithFailPolicy || criticalFailure) && mode == BootFailureMode.FAIL_FAST) {
-                    throw triggerFailFast(runId, "phase2.sanity", result.code(),
-                            "Phase2 sanity failed portfolio=" + result.portfolioId()
-                                    + " exchange=" + result.exchangeId()
-                                    + " message=" + result.message(),
-                            observer);
-                }
-            }
-        }
-
-        log.info("bootSequence.phase2.sanity: completed runId={} result={} portfolios={}",
-                runId, aggregateResult != null ? aggregateResult.name() : "NONE", portfolios.size());
-    }
-
     /**
-     * Pior status de sanity observado na fase, para um campo {@code result} agregado no log
-     * de conclusao (T23 G4). Ordem de severidade: PASS &lt; WARN_SURPLUS &lt; SKIPPED &lt; FAILED &lt; FAIL_DEFICIT.
+     * Conferencia de saldo por exchange (T57): soma dos portfolios contra a conta. {@code DEFICIT} poe em
+     * HALT todos os portfolios da exchange (nao da para atribuir a falta a um so) antes de qualquer BUY;
+     * persistido, vale tambem se o fail-fast abortar o boot a seguir. {@code PENDING} (falta coberta por
+     * ordens em voo, que a fase 3 concilia) so registra.
      */
-    private static PortfolioSanityStatus mostSevereSanity(PortfolioSanityStatus current, PortfolioSanityStatus candidate) {
-        if (current == null) {
-            return candidate;
-        }
-        return sanitySeverity(candidate) > sanitySeverity(current) ? candidate : current;
-    }
+    private void runPhase2BalanceSanity(String runId,
+                                        BootExecutionCommand command,
+                                        BootExecutionObserverPort observer) {
+        BootFailureMode mode = command.failureMode();
+        log.info("bootSequence.phase2.sanity: start mode={} accountQueryPolicy={}", mode, command.accountQueryPolicy());
 
-    private static int sanitySeverity(PortfolioSanityStatus status) {
-        return switch (status) {
-            case PASS -> 0;
-            case WARN_SURPLUS -> 1;
-            case SKIPPED -> 2;
-            case FAILED -> 3;
-            case FAIL_DEFICIT -> 4;
-        };
+        ExchangeBalanceStatus aggregateResult = null;
+        long startedNs = System.nanoTime();
+        List<ExchangeBalanceReport> reports = exchangeBalanceReconciliation.reconcileAll();
+        long durationMs = (System.nanoTime() - startedNs) / 1_000_000L;
+        for (ExchangeBalanceReport report : reports) {
+            observer.onPortfolioPhaseEvaluated("phase2.sanity", report.status().name(), report.exchange(),
+                    mode.name(), durationMs);
+            aggregateResult = aggregateResult == null || report.status().compareTo(aggregateResult) > 0
+                    ? report.status() : aggregateResult;
+
+            switch (report.status()) {
+                case OK -> log.info("bootSequence.phase2.sanity: portfolios={} {}",
+                        report.portfolios().size(), report.details());
+                case PENDING, SKIPPED, FAILED -> log.warn("bootSequence.phase2.sanity: portfolios={} {}",
+                        report.portfolios().size(), report.details());
+                case DEFICIT -> {
+                    log.error("bootSequence.phase2.sanity: portfolios={} {}",
+                            report.portfolios().size(), report.details());
+                    report.portfolios().forEach(portfolioId -> safeModeTrigger.activate(portfolioId,
+                            SafeModeTrigger.BALANCE_DIVERGENCE, report.details()));
+                }
+            }
+
+            boolean skippedWithFailPolicy = report.status() == ExchangeBalanceStatus.SKIPPED
+                    && command.accountQueryPolicy() == BootAccountQueryPolicy.FAIL;
+            boolean criticalFailure = report.status() == ExchangeBalanceStatus.DEFICIT
+                    || report.status() == ExchangeBalanceStatus.FAILED;
+            if ((skippedWithFailPolicy || criticalFailure) && mode == BootFailureMode.FAIL_FAST) {
+                throw triggerFailFast(runId, "phase2.sanity", report.code(),
+                        "Phase2 sanity failed " + report.details(), observer);
+            }
+        }
+
+        log.info("bootSequence.phase2.sanity: completed runId={} result={} exchanges={}",
+                runId, aggregateResult != null ? aggregateResult.name() : "NONE", reports.size());
     }
 
     private void runPhase2ZombieDetection(String runId,

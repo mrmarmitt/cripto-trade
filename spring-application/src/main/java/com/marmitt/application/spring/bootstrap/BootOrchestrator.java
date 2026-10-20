@@ -44,7 +44,6 @@ public class BootOrchestrator {
                 phase2Properties.isEnabled(),
                 phase3Properties.isEnabled(),
                 portfolioSanityCheckProperties.isEnabled(),
-                portfolioSanityCheckProperties.getThreshold(),
                 portfolioZombieDetectionProperties.isEnabled(),
                 portfolioCutoffProperties.isEnabled(),
                 phase2Properties.getMode(),

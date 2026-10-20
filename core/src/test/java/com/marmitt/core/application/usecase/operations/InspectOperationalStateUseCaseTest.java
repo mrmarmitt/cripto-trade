@@ -1,6 +1,6 @@
 package com.marmitt.core.application.usecase.operations;
 
-import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
+import com.marmitt.core.application.usecase.exchange.ExchangeBalanceReconciliation;
 import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.Position;
@@ -10,7 +10,8 @@ import com.marmitt.core.dto.operations.ExchangeComparison;
 import com.marmitt.core.dto.operations.OperationalCheck;
 import com.marmitt.core.dto.operations.OperationalSeverity;
 import com.marmitt.core.dto.operations.OperationalStateReport;
-import com.marmitt.core.dto.portfolio.PortfolioBootSanityResult;
+import com.marmitt.core.dto.exchange.ExchangeBalanceReport;
+import com.marmitt.core.enums.ExchangeBalanceStatus;
 import com.marmitt.core.dto.reconciliation.ReconciliationReportDto;
 import com.marmitt.core.dto.reconciliation.ReconciliationRequest;
 import com.marmitt.core.dto.reconciliation.ReconciliationSummaryDto;
@@ -71,11 +72,11 @@ class InspectOperationalStateUseCaseTest {
     private final WebSocketConnectionRepositoryPort connections = mock(WebSocketConnectionRepositoryPort.class);
     private final ExchangeAdapterRepositoryPort adapters = mock(ExchangeAdapterRepositoryPort.class);
     private final InfrastructureSignalsPort infrastructure = mock(InfrastructureSignalsPort.class);
-    private final PortfolioBootSanityUseCase balanceSanity = mock(PortfolioBootSanityUseCase.class);
+    private final ExchangeBalanceReconciliation balanceSanity = mock(ExchangeBalanceReconciliation.class);
     private final ReconcileTradesPort tradeReconciliation = mock(ReconcileTradesPort.class);
     private final InspectOperationalStateUseCase.Thresholds thresholds = new InspectOperationalStateUseCase.Thresholds(
             Duration.ofSeconds(60), Duration.ofHours(24), Duration.ofSeconds(30), Duration.ofSeconds(60),
-            Duration.ofMinutes(10), new BigDecimal("0.00000001"));
+            Duration.ofMinutes(10));
     private final InspectOperationalStateUseCase useCase = new InspectOperationalStateUseCase(portfolios, balances,
             runners, deadLetters, strategies, catalog, prices, connections, adapters, infrastructure, balanceSanity,
             tradeReconciliation, thresholds, Clock.fixed(NOW, ZoneOffset.UTC));
@@ -246,30 +247,42 @@ class InspectOperationalStateUseCaseTest {
     }
 
     @Test
-    void localBalanceAboveTheExchangeIsCriticalAndBelowIsWarn() {
-        UUID portfolioId = portfolio.getId();
-        when(balanceSanity.execute(portfolioId, "MOCK", thresholds.balanceDeviation())).thenReturn(
-                PortfolioBootSanityResult.failDeficit(portfolioId, "MOCK", "USDT", new BigDecimal("1000"),
-                        new BigDecimal("900"), new BigDecimal("-100"), new BigDecimal("100")));
+    void deficitIsCriticalSurplusIsUnallocatedAndFailureIsWarn() {
         reconciled(0, 0, 0);
+        ExchangeBalanceReport deficitReport = balanceReport("1000", "900", ExchangeBalanceStatus.DEFICIT);
+        when(balanceSanity.reconcileAll()).thenReturn(List.of(deficitReport));
 
         OperationalCheck deficit = check(useCase.inspect(ExchangeComparison.over(Duration.ofHours(24))),
                 "EXCHANGE_BALANCE_DIVERGENCE");
         assertEquals(OperationalSeverity.CRITICAL, deficit.status());
         assertEquals("-100", deficit.subjects().getFirst().get("signedDelta"));
+        assertEquals("USDT", deficit.subjects().getFirst().get("asset"));
 
-        when(balanceSanity.execute(portfolioId, "MOCK", thresholds.balanceDeviation())).thenReturn(
-                PortfolioBootSanityResult.warnSurplus(portfolioId, "MOCK", "USDT", new BigDecimal("900"),
-                        new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("100")));
+        ExchangeBalanceReport surplusReport = balanceReport("900", "9900", ExchangeBalanceStatus.OK);
+        when(balanceSanity.reconcileAll()).thenReturn(List.of(surplusReport));
+        OperationalCheck surplus = check(useCase.inspect(ExchangeComparison.over(Duration.ofHours(24))),
+                "EXCHANGE_BALANCE_DIVERGENCE");
+        assertEquals(OperationalSeverity.OK, surplus.status(), "conta com mais que os portfolios e normal");
+        assertEquals("9000", surplus.subjects().getFirst().get("unallocated"));
+
+        UUID portfolioId = portfolio.getId();
+        when(balanceSanity.reconcileAll()).thenReturn(List.of(ExchangeBalanceReport.notChecked("MOCK",
+                ExchangeBalanceStatus.FAILED, "ACCOUNT_QUERY_FAILED", "timeout", List.of(portfolioId))));
         assertEquals(OperationalSeverity.WARN, check(useCase.inspect(ExchangeComparison.over(Duration.ofHours(24))),
                 "EXCHANGE_BALANCE_DIVERGENCE").status());
     }
 
+    private ExchangeBalanceReport balanceReport(String expected, String exchange, ExchangeBalanceStatus status) {
+        BigDecimal delta = new BigDecimal(exchange).subtract(new BigDecimal(expected));
+        return ExchangeBalanceReport.checked("MOCK", List.of(portfolio.getId()), List.of(
+                new ExchangeBalanceReport.AssetBalance("USDT", new BigDecimal(expected), new BigDecimal(exchange),
+                        delta, delta.max(BigDecimal.ZERO), BigDecimal.ZERO, status)));
+    }
+
     @Test
     void fillsMissingOnEitherSideAreCritical() {
-        UUID portfolioId = portfolio.getId();
-        when(balanceSanity.execute(any(), any(), any())).thenReturn(PortfolioBootSanityResult.pass(portfolioId,
-                "MOCK", "USDT", BigDecimal.TEN, BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.ZERO));
+        ExchangeBalanceReport okReport = balanceReport("10", "10", ExchangeBalanceStatus.OK);
+        when(balanceSanity.reconcileAll()).thenReturn(List.of(okReport));
         reconciled(5, 1, 0);
 
         OperationalStateReport report = useCase.inspect(ExchangeComparison.over(Duration.ofHours(6)));
@@ -286,8 +299,9 @@ class InspectOperationalStateUseCaseTest {
     @Test
     void exchangeWithoutTradeHistoryIsReportedAsNotChecked() {
         UUID portfolioId = portfolio.getId();
-        when(balanceSanity.execute(any(), any(), any())).thenReturn(PortfolioBootSanityResult.skipped(
-                portfolioId, "MOCK", "ACCOUNT_QUERY_NOT_AVAILABLE", "no account query"));
+        when(balanceSanity.reconcileAll()).thenReturn(List.of(ExchangeBalanceReport.notChecked("MOCK",
+                ExchangeBalanceStatus.SKIPPED, "ACCOUNT_QUERY_NOT_AVAILABLE", "no account query",
+                List.of(portfolioId))));
         when(tradeReconciliation.reconcile(any())).thenThrow(new IllegalArgumentException("not supported"));
 
         OperationalStateReport report = useCase.inspect(ExchangeComparison.over(Duration.ofHours(24)));
