@@ -9,7 +9,7 @@ public enum SafeModeTrigger {
     MAX_DRAWDOWN_EXCEEDED,
     /** Entradas não resolvidas na DLQ do portfolio no limite (T25). */
     DLQ_THRESHOLD,
-    /** Sanidade de saldo do boot com {@code FAIL_DEFICIT}: local maior que a exchange (T25). */
+    /** Soma dos portfolios acima do saldo da conta numa exchange, no boot ou na operacao (T25, T57). */
     BALANCE_DIVERGENCE,
     /** Mesma transação sem resolver em ciclos consecutivos do watchdog (T25). */
     WATCHDOG_STUCK

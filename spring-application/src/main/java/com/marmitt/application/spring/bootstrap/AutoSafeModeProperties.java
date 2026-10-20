@@ -23,7 +23,7 @@ public class AutoSafeModeProperties {
     private boolean enabled = true;
     private long evaluationIntervalMs = 30_000L;
     private Dlq dlq = new Dlq();
-    private Toggle balanceDivergence = new Toggle();
+    private BalanceDivergence balanceDivergence = new BalanceDivergence();
     private Watchdog watchdog = new Watchdog();
     private Rejections rejections = new Rejections();
 
@@ -51,6 +51,13 @@ public class AutoSafeModeProperties {
     @Setter
     public static class Toggle {
         private boolean enabled = true;
+    }
+
+    @Getter
+    @Setter
+    public static class BalanceDivergence extends Toggle {
+        /** Intervalo da conferencia de saldo por exchange durante a operação (T57): uma consulta de conta por exchange. */
+        private long evaluationIntervalMs = 300_000L;
     }
 
     @Getter

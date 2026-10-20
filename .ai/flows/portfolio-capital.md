@@ -85,7 +85,9 @@ origem `AUTOMATIC`, conta `circuit_breaker.activations.total{reason}` e notifica
 
 - `MAX_DRAWDOWN_EXCEEDED` — drawdown 24h (T43, chave propria).
 - `DLQ_THRESHOLD` — `EvaluateOperationalTriggersUseCase` (a cada 30s): >= 3 entradas nao resolvidas.
-- `BALANCE_DIVERGENCE` — sanidade de saldo do boot com `FAIL_DEFICIT` (`RunBootSequenceUseCase`).
+- `BALANCE_DIVERGENCE` — soma dos portfolios de uma exchange acima da conta (`DEFICIT` da
+  `ExchangeBalanceReconciliation`, T57): no boot (`RunBootSequenceUseCase`) e na avaliacao periodica
+  (`EvaluateExchangeBalanceUseCase`, 5 min, 2 leituras seguidas). HALT de todos os portfolios da exchange.
 - `WATCHDOG_STUCK` — mesma transacao `FAILED` em 3 ciclos seguidos do watchdog
   (`RecoverStaleTransactionsUseCase`, contagem em memoria).
 

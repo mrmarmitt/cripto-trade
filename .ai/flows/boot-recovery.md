@@ -31,7 +31,7 @@ seguras e expor observabilidade do processo.
 3. Carrega runners elegiveis, excluindo estados como `ARCHIVED` e
    `TERMINATING`.
 4. Executa Phase 1 de readiness por exchange.
-5. Executa Phase 2 de sanity check por portfolio.
+5. Executa Phase 2 de conferencia de saldo por exchange (T57).
 6. Executa Phase 2 de zombie detection.
 7. Executa Phase 3 de runner recovery.
 8. Notifica conclusao ou falha pelo observer.
@@ -43,20 +43,28 @@ necessarias estao prontas para operacao.
 
 Exchange nao pronta bloqueia o boot em modo fail-fast.
 
-## Phase 2: Portfolio Sanity
+## Phase 2: Conferencia de saldo por exchange (T57)
 
-`PortfolioBootSanityUseCase` compara o estado local do `GlobalBalance` com a
-conta externa quando o adapter oferece consulta de conta.
+`ExchangeBalanceReconciliation` (`core/.../usecase/exchange`) compara, por exchange, a **soma** dos
+portfolios que tem runner nao arquivado nela com a conta (`free + locked`), quando o adapter oferece
+consulta de conta. O portfolio e orcamento virtual sobre conta compartilhada:
 
-Resultados possiveis incluem:
+- moeda de cotacao: `available + reserved - custo dos lotes abertos` (o custo da BUY executada fica em
+  `reserved` ate a SELL casar, mas na conta ja virou o ativo);
+- ativo comprado: soma da quantidade dos lotes `OPEN`/`CLOSING`.
 
-- `PASS`
-- `WARN_SURPLUS`
-- `FAIL_DEFICIT`
-- `SKIPPED`
-- `FAILED`
+Status (`ExchangeBalanceStatus`, em ordem de severidade):
 
-Resultados criticos falham o boot em `FAIL_FAST`.
+- `OK` — conta cobre o esperado; o excedente e `unallocated`
+- `PENDING` — falta coberta pelas ordens em voo (fill durante a parada; a Phase 3 concilia)
+- `SKIPPED` — exchange sem consulta de conta
+- `FAILED` — consulta falhou ou saldo local ausente
+- `DEFICIT` — falta alem das ordens em voo: HALT automatico (`BALANCE_DIVERGENCE`) de **todos** os
+  portfolios da exchange
+
+`DEFICIT` e `FAILED` falham o boot em `FAIL_FAST`. A mesma unidade alimenta
+`EXCHANGE_BALANCE_DIVERGENCE` (somente leitura) e a avaliacao periodica
+(`EvaluateExchangeBalanceUseCase`, a cada 5 min, HALT na 2a leitura seguida em `DEFICIT`).
 
 ## Phase 2: Zombie Detection
 
@@ -105,8 +113,8 @@ porque eles sao usados para diagnostico operacional e testes.
 
 Logs sentinel relevantes (T23 G3/G4):
 
-- `bootSequence.phase2.sanity: completed runId={} result={} portfolios={}` — `result`
-  e o pior status agregado da fase (`PASS/WARN_SURPLUS/SKIPPED/FAILED/FAIL_DEFICIT` ou `NONE`).
+- `bootSequence.phase2.sanity: completed runId={} result={} exchanges={}` — `result`
+  e o pior status agregado da fase (`OK/PENDING/SKIPPED/FAILED/DEFICIT` ou `NONE`).
 - `bootSequence.phase2.zombie: completed runId={} detected={} mode={}` — `detected` e a
   contagem de zombies; `mode` distingue `WARN_ONLY` de `FAIL_FAST`.
 - `bootRecovery: runner halted runnerId={} reason=DLQ_PENDING portfolioId={}` — emitido

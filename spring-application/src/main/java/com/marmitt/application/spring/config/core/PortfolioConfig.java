@@ -4,13 +4,13 @@ import com.marmitt.application.spring.bootstrap.AutoSafeModeProperties;
 import com.marmitt.application.spring.bootstrap.CircuitBreakerProperties;
 import com.marmitt.application.spring.bootstrap.OperationalStateProperties;
 import com.marmitt.application.spring.service.TransactionalManageDeadLetterPort;
-import com.marmitt.application.spring.bootstrap.PortfolioSanityCheckProperties;
 import com.marmitt.application.spring.bootstrap.RunnerTransactionRecoveryProperties;
-import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
+import com.marmitt.core.application.usecase.exchange.ExchangeBalanceReconciliation;
 import com.marmitt.core.application.usecase.operations.InspectOperationalStateUseCase;
 import com.marmitt.core.application.usecase.portfolio.AutomaticSafeModeTrigger;
 import com.marmitt.core.application.usecase.portfolio.CreatePortfolioUseCase;
 import com.marmitt.core.application.usecase.portfolio.EvaluateDrawdownUseCase;
+import com.marmitt.core.application.usecase.portfolio.EvaluateExchangeBalanceUseCase;
 import com.marmitt.core.application.usecase.portfolio.EvaluateOperationalTriggersUseCase;
 import com.marmitt.core.application.usecase.portfolio.ManageDeadLetterUseCase;
 import com.marmitt.core.application.usecase.portfolio.ManageSafeModeUseCase;
@@ -20,6 +20,7 @@ import com.marmitt.core.ports.inbound.operations.InspectOperationalStatePort;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.reconciliation.ReconcileTradesPort;
 import com.marmitt.core.ports.inbound.portfolio.EvaluateDrawdownPort;
+import com.marmitt.core.ports.inbound.portfolio.EvaluateExchangeBalancePort;
 import com.marmitt.core.ports.inbound.portfolio.EvaluateOperationalTriggersPort;
 import com.marmitt.core.ports.inbound.portfolio.ManageDeadLetterPort;
 import com.marmitt.core.ports.inbound.portfolio.ManageSafeModePort;
@@ -114,6 +115,15 @@ public class PortfolioConfig {
                 errorNotification, Clock.systemUTC(), autoSafeModeProperties.enabledTriggers());
     }
 
+    /** Divergencia de saldo durante a operacao (T57): HALT na segunda leitura seguida em DEFICIT. */
+    @Bean
+    public EvaluateExchangeBalancePort evaluateExchangeBalance(
+            ExchangeBalanceReconciliation exchangeBalanceReconciliation,
+            AutomaticSafeModeTrigger automaticSafeModeTrigger
+    ) {
+        return new EvaluateExchangeBalanceUseCase(exchangeBalanceReconciliation, automaticSafeModeTrigger);
+    }
+
     @Bean
     public EvaluateOperationalTriggersPort evaluateOperationalTriggers(
             PortfolioRepositoryPort portfolioRepository,
@@ -150,25 +160,23 @@ public class PortfolioConfig {
             WebSocketConnectionRepositoryPort webSocketConnections,
             ExchangeAdapterRepositoryPort exchangeAdapters,
             InfrastructureSignalsPort infrastructureSignals,
-            PortfolioBootSanityUseCase portfolioBootSanityUseCase,
+            ExchangeBalanceReconciliation exchangeBalanceReconciliation,
             ObjectProvider<ReconcileTradesPort> reconcileTrades,
             OperationalStateProperties operationalStateProperties,
-            RunnerTransactionRecoveryProperties transactionRecoveryProperties,
-            PortfolioSanityCheckProperties portfolioSanityCheckProperties
+            RunnerTransactionRecoveryProperties transactionRecoveryProperties
     ) {
         // Reconciliacao de trades so existe com exchange de historico configurada (Binance): sem ela, a
         // comparacao de trades responde "nao conferido".
         return new InspectOperationalStateUseCase(portfolioRepository, globalBalanceRepository,
                 strategyRunnerRepository, deadLetterEntryRepository, strategyRepository, remoteStrategyCatalog,
                 latestPrices, webSocketConnections, exchangeAdapters, infrastructureSignals,
-                portfolioBootSanityUseCase, reconcileTrades.getIfAvailable(),
+                exchangeBalanceReconciliation, reconcileTrades.getIfAvailable(),
                 new InspectOperationalStateUseCase.Thresholds(
                         Duration.ofMillis(operationalStateProperties.getMarketDataStaleMs()),
                         Duration.ofMillis(operationalStateProperties.getReservationStaleMs()),
                         Duration.ofMillis(transactionRecoveryProperties.getStaleThresholdMs()),
                         Duration.ofMillis(transactionRecoveryProperties.getIntervalMs()),
-                        Duration.ofMillis(operationalStateProperties.getTerminationTimeoutMs()),
-                        portfolioSanityCheckProperties.getThreshold()),
+                        Duration.ofMillis(operationalStateProperties.getTerminationTimeoutMs())),
                 Clock.systemUTC());
     }
 

@@ -97,9 +97,9 @@ abre o market data e, se a exchange tiver, o stream de usuário.
 - **Ação (`FAILED`):** pela fase:
   - `phase1.infrastructure`: exchange inacessível ou credencial inválida — conferir conectividade e
     chaves; reiniciar o ctrade depois de corrigir.
-  - `phase2.sanity` com `FAIL_DEFICIT`: saldo local maior que o da exchange. O portfolio já foi para
-    HALT automático. **Escalar** com `GET /api/exchanges/<exchange>/balances` e
-    `GET /api/portfolios/<id>/balance`.
+  - `phase2.sanity` com `DEFICIT`: a soma dos portfolios de uma exchange passa do saldo da conta. Todos
+    os portfolios daquela exchange já foram para HALT automático. Diagnosticar como em
+    [exchange-balance-divergence](#exchange-balance-divergence) e **escalar**.
   - `phase2.zombie` / `phase3`: ver os logs da fase; reiniciar depois de corrigir a causa.
 - **Confirmar:** após restart, `GET /api/boot/status` → `SUCCESS` e a verificação em `OK`.
 
@@ -260,22 +260,28 @@ O coordenador (T56) reabre a conexão caída e reassina o símbolo sem tick a ca
 <a id="exchange-balance-divergence"></a>
 ### EXCHANGE_BALANCE_DIVERGENCE — saldo local diferente da exchange
 
-Só com `GET /api/admin/operational-state?includeExchange=true` (consome cota da API da exchange).
-Compara o total local de cada portfolio com o saldo da conta na moeda base, como a sanidade do boot.
+Só com `GET /api/admin/operational-state?includeExchange=true` (consome cota da API da exchange; somente
+leitura). Mesma conferência do boot e da avaliação periódica (T57): por exchange, a **soma** dos portfolios
+que têm runner nela contra a conta, por moeda/ativo. Portfolio é orçamento virtual sobre conta
+compartilhada; sobra na conta é normal.
 
-- **Limitação conhecida (T53, F3):** a comparação é por portfolio contra o saldo inteiro da conta. Com
-  vários portfolios na mesma conta, cada um tende a `WARN_SURPLUS` e a soma deles acima do saldo da conta
-  não é detectada. Até isso mudar, comparar à mão a soma de `GET /api/portfolios/<id>/balance` com
-  `GET /api/exchanges/<exchange>/balances`.
-- **Diagnóstico:** `subjects` traz `localTotal`, `exchangeTotal`, `signedDelta` e `result`:
-  - `FAIL_DEFICIT` (CRITICAL): o ctrade acha que tem mais do que a conta tem — opera sobre capital que não
-    existe;
-  - `WARN_SURPLUS` (WARN): a conta tem mais (depósito, ou venda que o ctrade não registrou);
+- **Diagnóstico:** um `subject` por exchange e ativo, com `localExpected`, `exchangeTotal`, `signedDelta`
+  (conta − esperado), `unallocated` (sobra fora dos portfolios), `inFlight` e `result`:
+  - moeda de cotação (ex.: USDT): esperado = `available + reserved − custo dos lotes abertos`;
+  - ativo comprado (ex.: BTC): esperado = soma da quantidade dos lotes abertos;
+  - `OK`: a conta cobre o esperado (o excedente vai em `unallocated`);
+  - `PENDING` (não alarma): falta, mas cabe nas ordens em voo — fill na exchange ainda não conciliado.
+    Repetir em alguns minutos; se persistir, ver [transaction-stuck](#transaction-stuck);
+  - `DEFICIT` (CRITICAL): o ctrade espera mais do que a conta tem (capital ou cripto que não existe);
   - `FAILED` (WARN): a consulta falhou; `SKIPPED`: a exchange não tem consulta de conta.
-  Cruzar com [exchange-trade-divergence](#exchange-trade-divergence) na mesma janela.
-- **Ação:** `FAIL_DEFICIT` → subir o portfolio para `HALT` (`PUT .../safe-mode`) e **escalar**; não há
-  comando para ajustar saldo à mão. `WARN_SURPLUS` → escalar com a explicação provável (depósito?).
-- **Confirmar:** nova consulta com `includeExchange=true` em `OK`.
+  Cruzar com [exchange-trade-divergence](#exchange-trade-divergence) e com
+  `GET /api/exchanges/<exchange>/balances`. Causas prováveis de `DEFICIT`: saque/movimentação na conta
+  fora do ctrade, fill que o ctrade não registrou, fee cobrada em terceiro ativo (BNB).
+- **Ação:** `DEFICIT` → a avaliação periódica (a cada 5 min, `safe-mode.auto.balance-divergence`) põe
+  em HALT todos os portfolios da exchange na segunda leitura seguida; se ainda não estiverem em `HALT`,
+  subir (`PUT .../safe-mode`) e **escalar**. Não há comando para ajustar saldo à mão; retomada só com o
+  mantenedor.
+- **Confirmar:** nova consulta com `includeExchange=true` sem `DEFICIT`.
 
 <a id="exchange-trade-divergence"></a>
 ### EXCHANGE_TRADE_DIVERGENCE — fills diferentes entre o ctrade e a exchange
@@ -365,7 +371,7 @@ Gauges `circuit_breaker.drawdown.current`, `.peak_24h`, `circuit_breaker.equity.
 | Motivo | Condição | Antes de retomar |
 |---|---|---|
 | `DLQ_THRESHOLD` | ≥ 3 entradas não resolvidas | [dlq-unresolved](#dlq-unresolved) |
-| `BALANCE_DIVERGENCE` | Sanidade do boot com saldo local > exchange (`FAIL_DEFICIT`) | [boot-not-ready](#boot-not-ready); escalar |
+| `BALANCE_DIVERGENCE` | Soma dos portfolios de uma exchange acima da conta (`DEFICIT`), no boot ou em 2 leituras seguidas da avaliação periódica (5 min); HALT de todos os portfolios da exchange | [exchange-balance-divergence](#exchange-balance-divergence); escalar |
 | `WATCHDOG_STUCK` | Mesma transação sem resolver em 3 ciclos | [transaction-stuck](#transaction-stuck) |
 
 Runner: 5 rejeições seguidas param só ele (`[RUNNER_AUTO_HALTED]`). Retomada sempre manual.

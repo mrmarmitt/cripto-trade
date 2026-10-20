@@ -135,6 +135,8 @@ safe-mode:
       threshold: 3
     balance-divergence:
       enabled: true
+      # T57: conferencia de saldo por exchange durante a operacao; HALT na 2a leitura seguida em DEFICIT.
+      evaluation-interval-ms: 300000
     watchdog:
       enabled: true
       max-stuck-cycles: 3

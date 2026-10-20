@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T25 (HALT automático `BALANCE_DIVERGENCE`), T55-C2 (comparação com a exchange), boot
 fase 2 (sanidade de saldo). Origem: achado F3 da rodada 1 da T53.
-**Status:** Pendente — decisões registradas; pronta para implementação.
+**Status:** Implementada (2026-10-20) — aguardando PR/merge e validação na rodada 3 da T53.
 
 ---
 
@@ -57,6 +57,29 @@ Por exchange (runners não arquivados de todos os portfolios naquela exchange):
    gatilho `BALANCE_DIVERGENCE` da T25; retomada sempre manual.
 2. Separação de fundos fica no ctrade (portfolio = orçamento virtual); subcontas na exchange fora do
    escopo.
+
+## Decisões de implementação (2026-10-20)
+
+1. **Unidade:** `ExchangeBalanceReconciliation` (`core/.../usecase/exchange`), resultado
+   `ExchangeBalanceReport` (`core/dto/exchange`) e status `ExchangeBalanceStatus`
+   (`OK < PENDING < SKIPPED < FAILED < DEFICIT`). Substitui `PortfolioBootSanityUseCase`,
+   `PortfolioBootSanityResult` e `PortfolioSanityStatus`, removidos (manual §1.3). O limiar sai do comando
+   do boot e dos limiares do estado operacional: a unidade recebe o mesmo
+   `runner.boot.phase2.portfolio.sanity-check.threshold` no construtor.
+2. **Ordens em voo (`PENDING`):** falta na conta que cabe nas ordens em voo dos runners da exchange
+   (reserva das BUYs na moeda de cotação; quantidade das SELLs no ativo) não é `DEFICIT`. Cobre o fill
+   na exchange ainda não conciliado: durante a parada (antes da fase 3 do boot) e no instante da leitura.
+   As ordens em voo são lidas antes do saldo local e da conta. `PENDING` só registra.
+3. **Avaliação periódica:** `EvaluateExchangeBalanceUseCase` (`EvaluateExchangeBalancePort`), agendada no
+   `OperationalTriggerScheduler` a cada `safe-mode.auto.balance-divergence.evaluation-interval-ms`
+   (300000). HALT só na **segunda leitura seguida** em `DEFICIT` da mesma exchange: a confirmação de
+   capital da SELL é assíncrona e, por um instante, o lote já fechou sem o saldo ter recebido a venda. No
+   boot basta uma leitura (nada opera antes da fase 3).
+4. **Estado operacional:** `EXCHANGE_BALANCE_DIVERGENCE` com um sujeito por exchange e ativo
+   (`localExpected`, `exchangeTotal`, `signedDelta`, `unallocated`, `inFlight`, `result`). `DEFICIT` é
+   CRITICAL, `FAILED` é WARN; `OK`, `PENDING` e `SKIPPED` não alarmam. Sobra na conta deixou de ser WARN.
+5. **Escopo:** portfolio com runners em mais de uma exchange entra com o saldo inteiro em cada uma
+   (conservador); não existe hoje, não ganhou ramo próprio.
 
 ## Solução proposta
 
