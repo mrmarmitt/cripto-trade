@@ -1,19 +1,26 @@
 package com.marmitt.core.application.usecase.operations;
 
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
 import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
+import com.marmitt.core.dto.operations.ExchangeComparison;
 import com.marmitt.core.dto.operations.OperationalCheck;
 import com.marmitt.core.dto.operations.OperationalSeverity;
 import com.marmitt.core.dto.operations.OperationalStateReport;
+import com.marmitt.core.dto.portfolio.PortfolioBootSanityResult;
+import com.marmitt.core.dto.reconciliation.ReconciliationReportDto;
+import com.marmitt.core.dto.reconciliation.ReconciliationRequest;
+import com.marmitt.core.dto.reconciliation.ReconciliationSummaryDto;
 import com.marmitt.core.enums.BootRunStatus;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.enums.SafeModeOrigin;
 import com.marmitt.core.enums.SafeModeStatus;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.enums.TransactionType;
+import com.marmitt.core.ports.inbound.reconciliation.ReconcileTradesPort;
 import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.marketdata.LatestPricePort;
 import com.marmitt.core.ports.outbound.operations.InfrastructureSignalsPort;
@@ -64,11 +71,14 @@ class InspectOperationalStateUseCaseTest {
     private final WebSocketConnectionRepositoryPort connections = mock(WebSocketConnectionRepositoryPort.class);
     private final ExchangeAdapterRepositoryPort adapters = mock(ExchangeAdapterRepositoryPort.class);
     private final InfrastructureSignalsPort infrastructure = mock(InfrastructureSignalsPort.class);
+    private final PortfolioBootSanityUseCase balanceSanity = mock(PortfolioBootSanityUseCase.class);
+    private final ReconcileTradesPort tradeReconciliation = mock(ReconcileTradesPort.class);
+    private final InspectOperationalStateUseCase.Thresholds thresholds = new InspectOperationalStateUseCase.Thresholds(
+            Duration.ofSeconds(60), Duration.ofHours(24), Duration.ofSeconds(30), Duration.ofSeconds(60),
+            Duration.ofMinutes(10), new BigDecimal("0.00000001"));
     private final InspectOperationalStateUseCase useCase = new InspectOperationalStateUseCase(portfolios, balances,
-            runners, deadLetters, strategies, catalog, prices, connections, adapters, infrastructure,
-            new InspectOperationalStateUseCase.Thresholds(Duration.ofSeconds(60), Duration.ofHours(24),
-                    Duration.ofSeconds(30), Duration.ofSeconds(60), Duration.ofMinutes(10)),
-            Clock.fixed(NOW, ZoneOffset.UTC));
+            runners, deadLetters, strategies, catalog, prices, connections, adapters, infrastructure, balanceSanity,
+            tradeReconciliation, thresholds, Clock.fixed(NOW, ZoneOffset.UTC));
 
     private Portfolio portfolio;
     private StrategyRunner runner;
@@ -215,7 +225,72 @@ class InspectOperationalStateUseCaseTest {
         assertEquals(OperationalSeverity.CRITICAL, check(report, "EXCHANGE_REST_CIRCUIT_OPEN").status());
     }
 
+    @Test
+    void exchangeComparisonOnlyRunsWhenRequested() {
+        assertTrue(useCase.inspect().checks().stream().noneMatch(c -> c.id().startsWith("EXCHANGE_")
+                && !c.id().equals("EXCHANGE_REST_CIRCUIT_OPEN")), "sem pedido, nada consulta a exchange");
+        org.mockito.Mockito.verifyNoInteractions(balanceSanity, tradeReconciliation);
+    }
+
+    @Test
+    void localBalanceAboveTheExchangeIsCriticalAndBelowIsWarn() {
+        UUID portfolioId = portfolio.getId();
+        when(balanceSanity.execute(portfolioId, "MOCK", thresholds.balanceDeviation())).thenReturn(
+                PortfolioBootSanityResult.failDeficit(portfolioId, "MOCK", "USDT", new BigDecimal("1000"),
+                        new BigDecimal("900"), new BigDecimal("-100"), new BigDecimal("100")));
+        reconciled(0, 0, 0);
+
+        OperationalCheck deficit = check(useCase.inspect(ExchangeComparison.over(Duration.ofHours(24))),
+                "EXCHANGE_BALANCE_DIVERGENCE");
+        assertEquals(OperationalSeverity.CRITICAL, deficit.status());
+        assertEquals("-100", deficit.subjects().getFirst().get("signedDelta"));
+
+        when(balanceSanity.execute(portfolioId, "MOCK", thresholds.balanceDeviation())).thenReturn(
+                PortfolioBootSanityResult.warnSurplus(portfolioId, "MOCK", "USDT", new BigDecimal("900"),
+                        new BigDecimal("1000"), new BigDecimal("100"), new BigDecimal("100")));
+        assertEquals(OperationalSeverity.WARN, check(useCase.inspect(ExchangeComparison.over(Duration.ofHours(24))),
+                "EXCHANGE_BALANCE_DIVERGENCE").status());
+    }
+
+    @Test
+    void fillsMissingOnEitherSideAreCritical() {
+        UUID portfolioId = portfolio.getId();
+        when(balanceSanity.execute(any(), any(), any())).thenReturn(PortfolioBootSanityResult.pass(portfolioId,
+                "MOCK", "USDT", BigDecimal.TEN, BigDecimal.TEN, BigDecimal.ZERO, BigDecimal.ZERO));
+        reconciled(5, 1, 0);
+
+        OperationalStateReport report = useCase.inspect(ExchangeComparison.over(Duration.ofHours(6)));
+        OperationalCheck trades = check(report, "EXCHANGE_TRADE_DIVERGENCE");
+        assertEquals(OperationalSeverity.CRITICAL, trades.status());
+        assertEquals(1, trades.subjects().getFirst().get("exchangeOnly"));
+        assertEquals(OperationalSeverity.OK, check(report, "EXCHANGE_BALANCE_DIVERGENCE").status());
+        org.mockito.ArgumentCaptor<ReconciliationRequest> request =
+                org.mockito.ArgumentCaptor.forClass(ReconciliationRequest.class);
+        org.mockito.Mockito.verify(tradeReconciliation).reconcile(request.capture());
+        assertEquals(NOW.minus(Duration.ofHours(6)), request.getValue().from());
+    }
+
+    @Test
+    void exchangeWithoutTradeHistoryIsReportedAsNotChecked() {
+        UUID portfolioId = portfolio.getId();
+        when(balanceSanity.execute(any(), any(), any())).thenReturn(PortfolioBootSanityResult.skipped(
+                portfolioId, "MOCK", "ACCOUNT_QUERY_NOT_AVAILABLE", "no account query"));
+        when(tradeReconciliation.reconcile(any())).thenThrow(new IllegalArgumentException("not supported"));
+
+        OperationalStateReport report = useCase.inspect(ExchangeComparison.over(Duration.ofHours(24)));
+        assertEquals(OperationalSeverity.OK, check(report, "EXCHANGE_BALANCE_DIVERGENCE").status());
+        OperationalCheck trades = check(report, "EXCHANGE_TRADE_DIVERGENCE");
+        assertEquals(OperationalSeverity.OK, trades.status());
+        assertEquals("NOT_CHECKED", trades.subjects().getFirst().get("result"));
+    }
+
     // ---------------------------------------------------------------- helpers
+
+    private void reconciled(int matched, int exchangeOnly, int localOnly) {
+        when(tradeReconciliation.reconcile(any())).thenReturn(new ReconciliationReportDto("BTCUSDT", NOW, NOW,
+                new ReconciliationSummaryDto(matched + exchangeOnly + localOnly, matched, 0, exchangeOnly, localOnly),
+                List.of()));
+    }
 
     private static OperationalCheck check(OperationalStateReport report, String id) {
         return report.checks().stream().filter(c -> c.id().equals(id)).findFirst().orElseThrow();

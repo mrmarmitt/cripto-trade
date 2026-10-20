@@ -255,6 +255,38 @@ O coordenador (T56) reabre a conexão caída e reassina o símbolo sem tick a ca
   manual (ver [Partida](#partida-depois-de-um-boot)).
 - **Confirmar:** status `CONNECTED` em `GET /api/websocket/all` e a verificação em `OK`.
 
+<a id="exchange-balance-divergence"></a>
+### EXCHANGE_BALANCE_DIVERGENCE — saldo local diferente da exchange
+
+Só com `GET /api/admin/operational-state?includeExchange=true` (consome cota da API da exchange).
+Compara o total local de cada portfolio com o saldo da conta na moeda base, como a sanidade do boot.
+
+- **Diagnóstico:** `subjects` traz `localTotal`, `exchangeTotal`, `signedDelta` e `result`:
+  - `FAIL_DEFICIT` (CRITICAL): o ctrade acha que tem mais do que a conta tem — opera sobre capital que não
+    existe;
+  - `WARN_SURPLUS` (WARN): a conta tem mais (depósito, ou venda que o ctrade não registrou);
+  - `FAILED` (WARN): a consulta falhou; `SKIPPED`: a exchange não tem consulta de conta.
+  Cruzar com [exchange-trade-divergence](#exchange-trade-divergence) na mesma janela.
+- **Ação:** `FAIL_DEFICIT` → subir o portfolio para `HALT` (`PUT .../safe-mode`) e **escalar**; não há
+  comando para ajustar saldo à mão. `WARN_SURPLUS` → escalar com a explicação provável (depósito?).
+- **Confirmar:** nova consulta com `includeExchange=true` em `OK`.
+
+<a id="exchange-trade-divergence"></a>
+### EXCHANGE_TRADE_DIVERGENCE — fills diferentes entre o ctrade e a exchange
+
+Só com `includeExchange=true`; janela `exchangeWindowHours` (padrão 24, máx. 168). Por símbolo/exchange
+dos runners não arquivados, compara os fills locais com o histórico de trades da exchange (T18).
+
+- **Diagnóstico:** `subjects` traz `matched`, `exchangeOnly` (fill que o ctrade não registrou),
+  `localOnly` (fill que a exchange não tem) e `divergent` (quantidade/preço diferentes). Detalhe por fill:
+  `GET /api/reconciliation?symbol=<s>&exchangeId=<ex>&from=<iso>&to=<iso>`.
+  `result=NOT_CHECKED`: a exchange não tem histórico de trades configurado (ex.: MOCK); `QUERY_FAILED`
+  (WARN): a consulta falhou.
+- **Ação:** qualquer divergência é CRITICAL: `halt` dos runners do símbolo e **escalar** com o relatório de
+  reconciliação. `exchangeOnly` costuma vir de evento perdido no stream de usuário; conferir também
+  [dlq-unresolved](#dlq-unresolved).
+- **Confirmar:** nova consulta em `OK`.
+
 <a id="exchange-rest-circuit-open"></a>
 ### EXCHANGE_REST_CIRCUIT_OPEN — consultas REST à exchange suspensas
 
