@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T40 (contrato), T41 (estratégia remota, catálogo estático), T49 (API admin de runners).
 Pré-requisito da T53 com várias estratégias remotas.
-**Status:** Pendente — decisões registradas; pronta para implementação.
+**Status:** Concluído (2026-10-20) — ver "Entrega" no fim.
 
 ---
 
@@ -130,3 +130,49 @@ disponível. A API precisa permitir que o agente entenda o estado, aja e confira
 - `docs/strategy-service/CONTRACT.md`, `docs/strategy-service/openapi.yaml`
 - `.ai/tasks/T41-remote-strategy-minimal-extraction.md`
 - `docs/OPERATIONS_RUNBOOK.md` (Estratégia remota)
+
+## Entrega
+
+### Decisões de implementação (2026-10-20)
+
+- **Core é dono do catálogo.** Agregado `RemoteStrategy` (`core/domain/strategy`), eventos
+  `RemoteStrategyEvent` e `RemoteStrategyCatalogUseCase`, que implementa `ManageRemoteStrategiesPort`
+  (operador) e `SyncRemoteStrategiesPort` (ciclo periódico). Endereço e token (`StrategyEndpoint`) são
+  dados do catálogo; o core só guarda e repassa, o transporte continua no adapter. `toString` do
+  endpoint mascara o token.
+- **Um caminho de conferência.** Cadastro, reabilitação, troca de endereço e o ciclo de 30s passam pelo
+  mesmo `sync`: garante a `RemoteTradingStrategy` no repositório e, se habilitada e ainda não conferida
+  neste processo, confere `/v1/meta`. Conferida, entra em uso; senão, os runners ficam em HOLD sem
+  chamar o serviço. No boot toda estratégia habilitada é conferida de novo.
+- **Endereço por chamada.** `StrategyEvaluationPort.evaluate/describe` recebem o `StrategyEndpoint`; o
+  `RemoteStrategyClient` não guarda lista de estratégias. Trocar endereço vale na chamada seguinte.
+- **Removidos (manual §1.3):** `RegisterRemoteStrategiesUseCase`/`Port`, `RemoteStrategyDefinition`,
+  `RemoteStrategyEndpoint`, o catálogo `ctrade.strategy.remote.catalog` e o token global
+  `CTRADE_STRATEGY_REMOTE_TOKEN`.
+- **Persistência:** `V17__create_remote_strategy_catalog.sql` (`remote_strategies`,
+  `remote_strategy_events` com `seq` para ordenar eventos do mesmo instante).
+- **Erros com código:** `StrategyCatalogException` com `Code` (`STRATEGY_NOT_FOUND`,
+  `STRATEGY_DEFINITION_CONFLICT`, `STRATEGY_REF_IN_USE`, `INVALID_STRATEGY_DEFINITION`,
+  `REASON_REQUIRED`). O `ApiError` ganhou `code` (omitido quando nulo); o 401 do `X-Admin-Key` passou a
+  trazer `ADMIN_KEY_INVALID`.
+- **Alerta:** desabilitar com runner `ACTIVE` gera `STRATEGY_DISABLED` no Discord.
+- **API documentada** com anotações springdoc (`/v3/api-docs`, tag *Strategy catalog*).
+
+### Validação
+
+- `RemoteStrategyCatalogUseCaseTest`: conferência no cadastro, serviço fora → `FAILED` e recuperação no
+  ciclo, identidade/contrato divergentes nunca em uso, idempotência e conflito, `strategyRef` de
+  estratégia interna, `reason` e códigos, desabilitar com alerta, reabilitar com nova conferência, troca
+  de endereço, token mascarado, boot só conferindo as habilitadas.
+- `RemoteStrategyClientTest` migrado para endereço por chamada.
+- `StrategyCatalogControllerTest`: estado sem token e códigos/status das recusas.
+- `RemoteStrategyE2ETest` (Postgres + MockWebServer): cadastro por API, decisão vira ordem, falhas viram
+  HOLD, desabilitar deixa o runner em HOLD sem chamar o serviço, reabilitar volta a operar, estado e
+  histórico persistidos.
+
+### Riscos residuais
+
+- Token em texto no banco (rever com a gestão de segredos antes de produção).
+- Entradas do catálogo sobrevivem entre classes de teste que compartilham o Postgres; o ciclo de outro
+  contexto pode conferir uma estratégia de teste já encerrada e registrar `VERIFICATION_FAILED` (só
+  ruído de log em teste).

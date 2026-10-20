@@ -6,24 +6,35 @@ import okhttp3.mockwebserver.MockWebServer;
 import okhttp3.mockwebserver.RecordedRequest;
 import org.jetbrains.annotations.NotNull;
 import org.junit.jupiter.api.AfterAll;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import com.marmitt.core.domain.strategy.RemoteStrategy;
+import com.marmitt.core.domain.strategy.RemoteStrategyEvent;
+import com.marmitt.core.domain.strategy.RemoteStrategyEventType;
+import com.marmitt.core.dto.strategy.request.RegisterRemoteStrategyRequest;
+import com.marmitt.core.dto.strategy.response.RemoteStrategyView;
 import com.marmitt.core.ports.inbound.runner.HaltRunnerPort;
+import com.marmitt.core.ports.inbound.strategy.ManageRemoteStrategiesPort;
+import com.marmitt.core.ports.outbound.repository.RemoteStrategyCatalogRepositoryPort;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 
 import java.io.IOException;
 import java.math.BigDecimal;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
  * T41 — runner operando com estrategia remota pelo pipeline real. O strategy service e um
- * MockWebServer registrado pelo catalogo (conferido via /v1/meta). Decisao valida vira ordem;
- * 5xx, timeout, decisao fora do contrato e decisao velha viram HOLD com STRATEGY_UNAVAILABLE.
+ * MockWebServer cadastrado no catalogo por API (T54, conferido via /v1/meta). Decisao valida vira
+ * ordem; 5xx, timeout, decisao fora do contrato e decisao velha viram HOLD com STRATEGY_UNAVAILABLE.
+ * Desabilitar no catalogo deixa o runner em HOLD; reabilitar confere de novo e o runner volta a operar.
  */
 class RemoteStrategyE2ETest extends ScenarioStrategyE2ETestSupport {
 
@@ -32,6 +43,12 @@ class RemoteStrategyE2ETest extends ScenarioStrategyE2ETestSupport {
 
     @Autowired
     private HaltRunnerPort haltRunner;
+
+    @Autowired
+    private ManageRemoteStrategiesPort catalog;
+
+    @Autowired
+    private RemoteStrategyCatalogRepositoryPort catalogRepository;
     private static volatile Mode mode = Mode.BUY;
 
     enum Mode { BUY, ERROR, SLOW, STALE, MALFORMED }
@@ -69,10 +86,18 @@ class RemoteStrategyE2ETest extends ScenarioStrategyE2ETestSupport {
     static void remoteCatalog(DynamicPropertyRegistry registry) {
         registry.add("ctrade.strategy.remote.timeout-ms", () -> "1500");
         registry.add("ctrade.strategy.remote.max-decision-age-ms", () -> "400");
-        registry.add("ctrade.strategy.remote.catalog[0].strategy-ref", REF::toString);
-        registry.add("ctrade.strategy.remote.catalog[0].base-url", () -> SERVICE.url("/v1").toString());
-        registry.add("ctrade.strategy.remote.catalog[0].name", () -> "RemoteE2E");
-        registry.add("ctrade.strategy.remote.catalog[0].version", () -> "1.0.0");
+    }
+
+    /**
+     * T54: a estrategia entra pelo catalogo administrado por API. Cadastro repetido e no-op, entao cada
+     * teste parte da estrategia cadastrada e habilitada.
+     */
+    @BeforeEach
+    void registerInTheCatalog() {
+        mode = Mode.BUY;
+        catalog.register(new RegisterRemoteStrategyRequest(REF, "RemoteE2E", "1.0.0",
+                SERVICE.url("/v1").toString(), "e2e-token", "e2e setup"));
+        catalog.enable(REF, "e2e setup");
     }
 
     @AfterAll
@@ -82,8 +107,7 @@ class RemoteStrategyE2ETest extends ScenarioStrategyE2ETestSupport {
 
     @Test
     void remoteDecisionBecomesAnOrderThroughTheNormalPipeline() {
-        mode = Mode.BUY;
-        awaitCondition(() -> strategyRepository.findById(REF).isPresent(), WAIT_TIMEOUT, "estrategia remota registrada");
+        assertTrue(catalog.get(REF).usable(), "cadastrada e conferida no ato");
         UUID runnerId = createAndActivateRunner(createPortfolio(), REF);
 
         driveTicks(6);
@@ -96,7 +120,6 @@ class RemoteStrategyE2ETest extends ScenarioStrategyE2ETestSupport {
 
     @Test
     void unusableRemoteAnswersBecomeHoldWithStrategyUnavailable() {
-        awaitCondition(() -> strategyRepository.findById(REF).isPresent(), WAIT_TIMEOUT, "estrategia remota registrada");
         for (Mode failure : new Mode[]{Mode.ERROR, Mode.SLOW, Mode.STALE, Mode.MALFORMED}) {
             mode = failure;
             double failuresBefore = remoteFailures(failure);
@@ -112,6 +135,43 @@ class RemoteStrategyE2ETest extends ScenarioStrategyE2ETestSupport {
             // Isola a proxima iteracao: runner parado nao e mais avaliado nos ticks seguintes.
             haltRunner.haltById(runnerId);
         }
+    }
+
+    @Test
+    void disablingLeavesTheRunnerOnHoldAndEnablingPutsItBackToWork() {
+        UUID runnerId = createAndActivateRunner(createPortfolio(), REF);
+        RemoteStrategyView disabled = catalog.disable(REF, "e2e: strategy under review");
+        assertFalse(disabled.usable());
+        assertTrue(disabled.runners().stream().anyMatch(runner -> runner.runnerId().equals(runnerId)),
+                "o catalogo mostra o runner afetado");
+
+        int callsBefore = SERVICE.getRequestCount();
+        driveTicks(4);
+        sleep(QUIET_WINDOW.toMillis());
+        assertEquals(0, transactionCount(runnerId), "estrategia desabilitada nao gera ordem");
+        assertEquals(callsBefore, SERVICE.getRequestCount(), "estrategia desabilitada nao e consultada");
+
+        RemoteStrategyView enabled = catalog.enable(REF, "e2e: review done");
+        assertTrue(enabled.usable(), "reabilitar confere de novo e volta ao uso");
+        driveTicks(6);
+        awaitCondition(() -> transactionsOfType(runnerId, "BUY").stream().anyMatch(tx -> "FILLED".equals(tx.status())),
+                WAIT_TIMEOUT, "runner volta a operar apos reabilitar", runnerId);
+    }
+
+    @Test
+    void catalogStateAndHistoryArePersistedWithoutTheToken() {
+        catalog.disable(REF, "e2e: persistence check");
+
+        RemoteStrategy stored = catalogRepository.findByRef(REF).orElseThrow();
+        assertEquals("e2e-token", stored.getEndpoint().token(), "o token fica no banco para as chamadas");
+        RemoteStrategyView view = catalog.get(REF);
+        assertTrue(view.tokenConfigured());
+        assertFalse(view.toString().contains("e2e-token"), "o token nunca aparece na visao do operador");
+        List<RemoteStrategyEventType> history = catalogRepository.findEvents(REF).stream()
+                .map(RemoteStrategyEvent::type).toList();
+        assertEquals(RemoteStrategyEventType.REGISTERED, history.getFirst());
+        assertEquals(RemoteStrategyEventType.DISABLED, history.getLast());
+        assertEquals("e2e: persistence check", catalogRepository.findEvents(REF).getLast().reason());
     }
 
     private String allRemoteFailures() {

@@ -22,7 +22,7 @@ registro das execuções. Código só entra se uma rodada revelar lacuna — cad
 |---|---|
 | Conectar na testnet | perfil `testnet` (`application-testnet.yml`), credenciais `binance.api-key/api-secret` (T2) |
 | Estratégias que exercitam cada ramo | estratégias de cenário com teto de ciclos, `CTRADE_SCENARIO_STRATEGIES_ENABLED=true` (T35) |
-| Estratégia fora do processo | `strategy-service-reference` + catálogo `ctrade.strategy.remote.catalog` (T41) |
+| Estratégia fora do processo | apps que implementam o contrato, cadastradas por `/api/admin/strategies` (T41, T54) |
 | Ciclo de vida do runner | `POST /api/admin/runners/{id}/start|resume|terminate`, `PATCH` de limites (T49) |
 | Conferência local × exchange | `GET /api/reconciliation?symbol=&from=&to=` → `binanceOnly`, `localOnly` (T18) |
 | Estado operacional | `/actuator/health` (`safeMode`), métricas da T51, Grafana + Loki + alertas Discord (T9/T17/T21) |
@@ -83,8 +83,7 @@ Cada fase só começa com a anterior aprovada. Uma rodada reprovada gera achado 
 - **Apps de estratégia para o soak:** o ctrade só define o contrato; as estratégias são apps
   independentes, em qualquer linguagem. Para as rodadas pesadas é preciso ter várias apps que
   implementem o contrato (o `strategy-service-reference` serve só a SMA com parâmetros fixos).
-- **Catálogo remoto estático:** cada estratégia nova exige editar `ctrade.strategy.remote.catalog` e
-  reiniciar o ctrade (T41) → **T54**.
+- ~~Catálogo remoto estático~~ resolvido pela **T54**: estratégias cadastradas por API, sem restart.
 - **Acesso do monitoramento por IA** aos endpoints, métricas e logs da VPS.
 
 ## Riscos e limitações conhecidas

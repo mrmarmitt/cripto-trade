@@ -8,6 +8,7 @@ import com.marmitt.core.exceptions.PortfolioNotFoundException;
 import com.marmitt.core.exceptions.RunnerNotFoundException;
 import com.marmitt.core.exceptions.RunnerOperationException;
 import com.marmitt.core.exceptions.SafeModeTransitionException;
+import com.marmitt.core.exceptions.StrategyCatalogException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
 import lombok.extern.slf4j.Slf4j;
@@ -32,6 +33,7 @@ import java.time.Instant;
  *   <tr><td>IllegalArgumentException / validação / parâmetro ausente ou inválido</td><td>400</td></tr>
  *   <tr><td>RunnerNotFoundException / DeadLetterNotFoundException</td><td>404</td></tr>
  *   <tr><td>DeadLetterConflictException</td><td>409</td></tr>
+ *   <tr><td>StrategyCatalogException (com {@code code})</td><td>404 / 409 / 400 conforme o código</td></tr>
  *   <tr><td>UnsupportedOperationException (capacidade não suportada pela exchange)</td><td>501</td></tr>
  *   <tr><td>ExchangeQueryException</td><td>502</td></tr>
  *   <tr><td>ErrorResponse (exceções MVC do Spring: 404/405/415...)</td><td>status original</td></tr>
@@ -82,6 +84,16 @@ public class GlobalExceptionHandler {
         return build(HttpStatus.CONFLICT, ex.getMessage(), request);
     }
 
+    @ExceptionHandler(StrategyCatalogException.class)
+    public ResponseEntity<ApiError> handleStrategyCatalog(StrategyCatalogException ex, HttpServletRequest request) {
+        HttpStatus status = switch (ex.code().kind()) {
+            case NOT_FOUND -> HttpStatus.NOT_FOUND;
+            case CONFLICT -> HttpStatus.CONFLICT;
+            case INVALID -> HttpStatus.BAD_REQUEST;
+        };
+        return build(status, ex.getMessage(), request, ex.code().name());
+    }
+
     @ExceptionHandler(UnsupportedOperationException.class)
     public ResponseEntity<ApiError> handleUnsupported(UnsupportedOperationException ex, HttpServletRequest request) {
         return build(HttpStatus.NOT_IMPLEMENTED, ex.getMessage(), request);
@@ -109,13 +121,19 @@ public class GlobalExceptionHandler {
     }
 
     private static ResponseEntity<ApiError> build(HttpStatusCode status, String message, HttpServletRequest request) {
+        return build(status, message, request, null);
+    }
+
+    private static ResponseEntity<ApiError> build(HttpStatusCode status, String message, HttpServletRequest request,
+                                                  String code) {
         String reason = (status instanceof HttpStatus httpStatus) ? httpStatus.getReasonPhrase() : "";
         ApiError body = new ApiError(
                 Instant.now(),
                 status.value(),
                 reason,
                 message,
-                request.getRequestURI());
+                request.getRequestURI(),
+                code);
         return ResponseEntity.status(status).body(body);
     }
 }

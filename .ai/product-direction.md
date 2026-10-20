@@ -40,8 +40,8 @@ estado, agir com seguranca e confirmar o efeito.
 | Visao | Estado |
 |---|---|
 | Cada estrategia num processo proprio | Minimo entregue (T40/T41): contrato, `RemoteTradingStrategy`, HOLD quando a estrategia falha. |
-| Estrategias cadastradas por API | T54 (catalogo dinamico). Hoje o catalogo e estatico no `application.yml`. |
-| Estrategia nova sem deploy nem restart do ctrade | T54. |
+| Estrategias cadastradas por API | Entregue (T54): catalogo persistido em `/api/admin/strategies`, token por estrategia, historico. |
+| Estrategia nova sem deploy nem restart do ctrade | Entregue (T54). |
 | IA regulando as estrategias ativas | Sem task. Depende de shadow, canario e promocao de versao (fora da T41). |
 | IA propondo estrategias novas | Sem task. Depende tambem de harness de backtest. |
 

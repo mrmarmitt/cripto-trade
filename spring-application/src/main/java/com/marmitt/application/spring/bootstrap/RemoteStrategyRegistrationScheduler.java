@@ -1,38 +1,32 @@
 package com.marmitt.application.spring.bootstrap;
 
-import com.marmitt.application.spring.config.strategy.RemoteStrategyConfiguration.RemoteStrategyCatalog;
-import com.marmitt.core.ports.inbound.strategy.RegisterRemoteStrategiesPort;
+import com.marmitt.core.ports.inbound.strategy.SyncRemoteStrategiesPort;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 /**
- * Registra as estratégias remotas do catálogo no boot e tenta de novo periodicamente as que ainda
- * não foram registradas (serviço que subiu depois do ctrade). Só agenda; a validação é do core.
+ * Alinha as estratégias em uso com o catálogo persistido no boot e periodicamente (T54): registra as
+ * entradas no repositório de estratégias e repete a conferência das habilitadas que ainda não passaram
+ * (serviço que subiu depois do ctrade). Só agenda; a regra é do core.
  */
 @Slf4j
 @Component
 public class RemoteStrategyRegistrationScheduler {
 
-    private final RegisterRemoteStrategiesPort registerRemoteStrategies;
-    private final RemoteStrategyCatalog catalog;
+    private final SyncRemoteStrategiesPort syncRemoteStrategies;
 
-    public RemoteStrategyRegistrationScheduler(RegisterRemoteStrategiesPort registerRemoteStrategies,
-                                               RemoteStrategyCatalog catalog) {
-        this.registerRemoteStrategies = registerRemoteStrategies;
-        this.catalog = catalog;
+    public RemoteStrategyRegistrationScheduler(SyncRemoteStrategiesPort syncRemoteStrategies) {
+        this.syncRemoteStrategies = syncRemoteStrategies;
     }
 
     @Scheduled(initialDelay = 0,
             fixedDelayString = "${ctrade.strategy.remote.registration-retry-interval-ms:30000}")
     public void registerPending() {
-        if (catalog.definitions().isEmpty()) {
-            return;
-        }
         try {
-            registerRemoteStrategies.registerPending(catalog.definitions());
+            syncRemoteStrategies.syncAll();
         } catch (RuntimeException e) {
-            log.error("remoteStrategy: registration cycle failed - {}", e.getMessage(), e);
+            log.error("remoteStrategy: sync cycle failed - {}", e.getMessage(), e);
         }
     }
 }

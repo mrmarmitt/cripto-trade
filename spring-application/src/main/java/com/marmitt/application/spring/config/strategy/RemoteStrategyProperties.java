@@ -5,12 +5,9 @@ import lombok.Setter;
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
-import java.util.ArrayList;
-import java.util.List;
-import java.util.UUID;
-
 /**
- * Catálogo estático e parâmetros do cliente de estratégias remotas (T41).
+ * Parâmetros do cliente de estratégias remotas (T41). O catálogo e o token de cada estratégia ficam no
+ * banco e são administrados por API (T54).
  */
 @Getter
 @Setter
@@ -22,19 +19,6 @@ public class RemoteStrategyProperties {
     private long timeoutMs = 250L;
     /** Idade máxima da decisão, contada desde o tick; mais velha vira HOLD. */
     private long maxDecisionAgeMs = 2_000L;
-    /** Intervalo para tentar de novo o registro de entradas ainda não registradas. */
+    /** Intervalo do ciclo que alinha as estratégias em uso com o catálogo e repete conferências pendentes. */
     private long registrationRetryIntervalMs = 30_000L;
-    /** Token de serviço enviado como {@code Authorization: Bearer}. */
-    private String token;
-    private List<Entry> catalog = new ArrayList<>();
-
-    @Getter
-    @Setter
-    public static class Entry {
-        private UUID strategyRef;
-        private String baseUrl;
-        private String name;
-        private String version;
-        private boolean enabled = true;
-    }
 }

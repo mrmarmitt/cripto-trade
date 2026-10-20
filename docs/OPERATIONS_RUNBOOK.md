@@ -164,19 +164,46 @@ Cada runner vende o lote a mercado, sem consultar a estratégia, quando a perda 
 - SELL LIMIT da estratégia descansando sobre o lote é cancelada primeiro; a venda protetiva sai no
   tick seguinte ao `CANCELED`.
 
-## Estratégia remota (T41)
+## Estratégia remota (T41) e catálogo de estratégias (T54)
 
-> Com a estratégia fora do ar, o runner não opera (HOLD implícito); a saída do lote em queda fica com
-> a proteção do lote (T44).
+> Com a estratégia fora do ar, desabilitada ou ainda não conferida, o runner não opera (HOLD
+> implícito); a saída do lote em queda fica com a proteção do lote (T44).
 
-1. Subir a app da estratégia (referência: `gradle :strategy-service-reference:run`, variáveis `PORT`,
-   `STRATEGY_REF`, `STRATEGY_TOKEN`).
-2. Adicionar a entrada em `ctrade.strategy.remote.catalog` (`strategy-ref`, `base-url` terminando em
-   `/v1`, `name`, `version`) e o token em `CTRADE_STRATEGY_REMOTE_TOKEN`.
-3. No boot, o log `remoteStrategy: registered strategyRef=...` confirma o registro (conferido via
-   `/v1/meta`). `NOT registered` traz o motivo (serviço fora, versão/contrato divergente) e o ctrade
-   tenta de novo a cada `registration-retry-interval-ms`.
-4. Criar o runner apontando para o `strategy-ref` e iniciá-lo (`POST /api/admin/runners/{id}/start`).
+A estratégia é uma app independente que implementa `docs/strategy-service/CONTRACT.md` (qualquer
+linguagem; referência: `gradle :strategy-service-reference:run` com `PORT`, `STRATEGY_REF`,
+`STRATEGY_TOKEN`). O catálogo fica no banco e é operado só por API, sem restart do ctrade. Todas as
+chamadas levam `X-Admin-Key`; toda mudança exige `reason`; recusas trazem `code` no `ApiError`.
+Contrato completo no OpenAPI (`/v3/api-docs`, tag *Strategy catalog*).
+
+**Cadastrar e colocar em uso**
+
+1. `POST /api/admin/strategies` com
+   `{"strategyRef","name","version","baseUrl":"http://host:porta/v1","token","reason"}`.
+   - Esperado: `200`, `status=ENABLED`, `verification=VERIFIED`, `usable=true`.
+   - `verification=FAILED`, `usable=false`: ler `lastError` (serviço fora, nome/versão divergente ou
+     contrato não suportado). O ctrade confere de novo a cada `registration-retry-interval-ms` (30s);
+     corrigir a causa e acompanhar pelo `GET` até `usable=true`.
+   - `409 STRATEGY_DEFINITION_CONFLICT`: o `strategyRef` já existe com outros dados. Versão nova da
+     estratégia = `strategyRef` novo; endereço novo = `PATCH`.
+   - Repetir o mesmo cadastro devolve o registro existente, sem efeito.
+2. Criar o runner apontando para o `strategyRef` e iniciá-lo (`POST /api/admin/runners/{id}/start`).
+
+**Verificar**
+
+- `GET /api/admin/strategies` (ou `/{strategyRef}`): `usable`, `verification`, `lastError`,
+  `lastVerificationAt` e `runners` (id, `shortCode`, símbolo, status) de cada estratégia.
+- `GET /api/admin/strategies/{strategyRef}/events`: histórico (`REGISTERED`, `ENABLED`, `DISABLED`,
+  `ENDPOINT_CHANGED` com `reason`; `VERIFIED`, `VERIFICATION_FAILED` com `detail`).
+
+**Mudar endereço ou token**: `PATCH /api/admin/strategies/{strategyRef}` com `baseUrl` e/ou `token`
+(nulo mantém; token vazio remove) e `reason`. A estratégia sai de uso e é conferida no endereço novo;
+esperado `usable=true` na resposta.
+
+**Tirar de uso**: `POST /api/admin/strategies/{strategyRef}/disable` com `{"reason"}`.
+- Esperado: `status=DISABLED`, `usable=false`; os runners listados ficam em HOLD (nada é parado).
+- Com runner `ACTIVE`, sai o alerta Discord `[STRATEGY_DISABLED]`. Para encerrar esses runners, usar
+  os comandos da T49.
+- Não há exclusão. Para voltar: `POST .../enable` com `{"reason"}`, que confere de novo antes do uso.
 
 Sinais: `signal.evaluated.total{decision=STRATEGY_UNAVAILABLE}` (estratégia não decidiu),
 `strategy.remote.failures{reason=UNREACHABLE|ERROR_RESPONSE|INVALID_RESPONSE|STALE_DECISION}` e

@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.cfg.CoercionAction;
 import com.fasterxml.jackson.databind.cfg.CoercionInputShape;
 import com.fasterxml.jackson.databind.type.LogicalType;
+import com.marmitt.core.domain.strategy.StrategyEndpoint;
 import com.marmitt.core.dto.strategy.StrategyContextDto;
 import com.marmitt.core.dto.strategy.StrategyInputDto;
 import com.marmitt.core.dto.strategy.StrategyOutputDto;
@@ -21,7 +22,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 import java.util.Arrays;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -29,7 +29,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
- * Cliente do contrato do strategy service (T41, contrato 1.1).
+ * Cliente do contrato do strategy service (T41, contrato 1.1). O endereco e o token chegam do catalogo a
+ * cada chamada (T54); o cliente nao guarda lista de estrategias.
  *
  * <ul>
  *   <li><b>Sem retry</b> (T40): qualquer falha vira {@link StrategyUnavailableException} e o tick é
@@ -48,25 +49,21 @@ public class RemoteStrategyClient implements StrategyEvaluationPort {
 
     private final StrategyServiceHttpPort http;
     private final ObjectMapper objectMapper;
-    private final Map<UUID, RemoteStrategyEndpoint> endpoints;
     private final Duration maxDecisionAge;
     private final Clock clock;
     private final Map<UUID, AtomicLong> sequenceByRunner = new ConcurrentHashMap<>();
 
-    public RemoteStrategyClient(StrategyServiceHttpPort http, ObjectMapper objectMapper,
-                                List<RemoteStrategyEndpoint> endpoints, Duration maxDecisionAge, Clock clock) {
+    public RemoteStrategyClient(StrategyServiceHttpPort http, ObjectMapper objectMapper, Duration maxDecisionAge,
+                                Clock clock) {
         this.http = http;
         this.objectMapper = strictTextual(objectMapper);
-        Map<UUID, RemoteStrategyEndpoint> byRef = new HashMap<>();
-        endpoints.forEach(endpoint -> byRef.put(endpoint.strategyRef(), endpoint));
-        this.endpoints = Map.copyOf(byRef);
         this.maxDecisionAge = maxDecisionAge;
         this.clock = clock;
     }
 
     @Override
-    public StrategyOutputDto evaluate(UUID strategyRef, StrategyInputDto input, StrategyContextDto context) {
-        RemoteStrategyEndpoint endpoint = endpoint(strategyRef);
+    public StrategyOutputDto evaluate(UUID strategyRef, StrategyEndpoint endpoint, StrategyInputDto input,
+                                      StrategyContextDto context) {
         long sequence = nextSequence(context.runnerId());
         String tickId = context.runnerId() + ":" + input.timestamp().toEpochMilli() + ":" + sequence;
         String body = write(StrategyContractMapper.toRequest(strategyRef, tickId, sequence, input, context));
@@ -120,8 +117,7 @@ public class RemoteStrategyClient implements StrategyEvaluationPort {
     }
 
     @Override
-    public RemoteStrategyIdentity describe(UUID strategyRef) {
-        RemoteStrategyEndpoint endpoint = endpoint(strategyRef);
+    public RemoteStrategyIdentity describe(UUID strategyRef, StrategyEndpoint endpoint) {
         StrategyServiceHttpPort.Response response = call(() -> http.get(
                 endpoint.baseUrl() + "/meta?strategyRef=" + strategyRef, headers(endpoint)), strategyRef);
         WireTypes.Meta[] served = read(response.body(), WireTypes.Meta[].class, strategyRef);
@@ -137,16 +133,8 @@ public class RemoteStrategyClient implements StrategyEvaluationPort {
                         "service at " + endpoint.baseUrl() + " does not serve " + strategyRef));
     }
 
-    private RemoteStrategyEndpoint endpoint(UUID strategyRef) {
-        RemoteStrategyEndpoint endpoint = endpoints.get(strategyRef);
-        if (endpoint == null) {
-            throw new StrategyUnavailableException(Reason.UNREACHABLE, "no endpoint configured for " + strategyRef);
-        }
-        return endpoint;
-    }
-
-    private static Map<String, String> headers(RemoteStrategyEndpoint endpoint) {
-        if (endpoint.token() == null || endpoint.token().isBlank()) {
+    private static Map<String, String> headers(StrategyEndpoint endpoint) {
+        if (!endpoint.hasToken()) {
             return Map.of();
         }
         return Map.of("Authorization", "Bearer " + endpoint.token());

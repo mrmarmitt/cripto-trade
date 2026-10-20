@@ -1,5 +1,7 @@
 package com.marmitt.application.spring.web;
 
+import com.fasterxml.jackson.annotation.JsonInclude;
+
 import java.time.Instant;
 
 /**
@@ -13,12 +15,16 @@ import java.time.Instant;
  * @param error     reason phrase (ex.: "Bad Request")
  * @param message   mensagem amigável
  * @param path      caminho da requisição que originou o erro
+ * @param code      código estável legível por máquina (ex.: {@code STRATEGY_NOT_FOUND}), para quem opera
+ *                  pela API — inclusive agentes — reagir sem interpretar a mensagem. Omitido nos erros
+ *                  que ainda não têm código.
  */
 public record ApiError(
         Instant timestamp,
         int status,
         String error,
         String message,
-        String path
+        String path,
+        @JsonInclude(JsonInclude.Include.NON_NULL) String code
 ) {
 }
