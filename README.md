@@ -7,6 +7,7 @@ As praticas de desenvolvimento e review do projeto estao centralizadas no direto
 Arquivos principais:
 
 - `/.ai/README.md`: guia principal e ordem de leitura
+- `/.ai/product-direction.md`: proposito do sistema (operado por IA) e direcao do produto
 - `/.ai/architecture.md`: fronteiras e responsabilidades por modulo
 - `/.ai/coding-standards.md`: padroes de implementacao
 - `/.ai/review.md`: heuristicas de review

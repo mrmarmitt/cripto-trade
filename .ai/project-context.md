@@ -11,6 +11,10 @@ exchanges, recebe market data, executa estrategias, materializa sinais em ordens
 concilia atualizacoes de execucao, controla capital/portfolio e recupera estado em
 boot.
 
+**Quem opera:** o ctrade e operado em producao por um agente de IA, nao por um humano; as
+estrategias sao apps externas que so implementam um contrato. Isso orienta API, logs, metricas e
+runbook. Leia `/.ai/product-direction.md` antes de especificar task ou desenhar API.
+
 O desenho esperado segue clean architecture e arquitetura hexagonal: regra de
 negocio no `core`, calculo de estrategia no `strategy`, provider schemas nos
 `adapter-*`, e composicao/infraestrutura no `spring-application`.
@@ -67,6 +71,7 @@ Invariantes de alto nivel:
 ## Fontes de Verdade
 
 - Regras para agentes: `/.ai/README.md`.
+- Proposito, operador (IA) e direcao do produto: `/.ai/product-direction.md`.
 - Fronteiras de modulo: `/.ai/architecture.md`.
 - Padroes de implementacao: `/.ai/coding-standards.md`.
 - Validacao minima: `/.ai/validation.md`.
