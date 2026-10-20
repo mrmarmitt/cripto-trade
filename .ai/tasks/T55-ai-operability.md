@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T54 (primeira API no padrão), T27 (envelope `ApiError`), T51 (estado operacional como
 métrica). Base do monitoramento periódico por IA da T53.
-**Status:** Em andamento — Partes A, B, C e D entregues (2026-10-20); C2 (divergência com a exchange) pendente.
+**Status:** Concluído (2026-10-20) — Partes A, B, C, C2 e D entregues.
 
 ---
 
@@ -236,4 +236,20 @@ que resolveu. As seções atuais viram a fonte; o formato muda.
   dos mecanismos (conteúdo anterior, condensado).
 - **Limites de autonomia** (o que o agente faz sozinho × o que pede ao mantenedor): proposta confirmada
   pelo mantenedor em 2026-10-20.
+
+### Parte C2 — Comparação com a exchange (2026-10-20)
+
+- `GET /api/admin/operational-state?includeExchange=true&exchangeWindowHours=24` acrescenta
+  `EXCHANGE_BALANCE_DIVERGENCE` e `EXCHANGE_TRADE_DIVERGENCE`. Sem o parâmetro (e no ciclo das métricas)
+  nada consulta a exchange.
+- **Sem reimplementar:** o saldo usa a mesma `PortfolioBootSanityUseCase` da sanidade do boot (mesmo
+  limiar `runner.boot.phase2.portfolio.sanity-check.threshold`); os trades usam o `ReconcileTradesPort`
+  da T18, que só existe com Binance configurada — sem ele, `NOT_CHECKED` (OK), não alarme.
+- Severidades: saldo local maior que a exchange CRITICAL, menor WARN, consulta que falhou WARN; fill só na
+  exchange, só local ou divergente CRITICAL; janela de 1 a 168h.
+- `InspectOperationalStatePort.inspect(ExchangeComparison)`; `inspect()` sem comparação continua como
+  atalho.
+- Validação: testes do core (só roda quando pedido; deficit × surplus; fill faltando; sem histórico de
+  trades) e `OperationalStateIntegrationTest` (17 verificações com o parâmetro; janela inválida
+  `INVALID_REQUEST`). Runbook: procedimentos `#exchange-balance-divergence` e `#exchange-trade-divergence`.
 

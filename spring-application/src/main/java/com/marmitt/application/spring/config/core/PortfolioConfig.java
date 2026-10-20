@@ -4,7 +4,9 @@ import com.marmitt.application.spring.bootstrap.AutoSafeModeProperties;
 import com.marmitt.application.spring.bootstrap.CircuitBreakerProperties;
 import com.marmitt.application.spring.bootstrap.OperationalStateProperties;
 import com.marmitt.application.spring.service.TransactionalManageDeadLetterPort;
+import com.marmitt.application.spring.bootstrap.PortfolioSanityCheckProperties;
 import com.marmitt.application.spring.bootstrap.RunnerTransactionRecoveryProperties;
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
 import com.marmitt.core.application.usecase.operations.InspectOperationalStateUseCase;
 import com.marmitt.core.application.usecase.portfolio.AutomaticSafeModeTrigger;
 import com.marmitt.core.application.usecase.portfolio.CreatePortfolioUseCase;
@@ -16,6 +18,7 @@ import com.marmitt.core.application.usecase.portfolio.QueryPortfolioUseCase;
 import com.marmitt.core.application.usecase.portfolio.ReportOperationalStateUseCase;
 import com.marmitt.core.ports.inbound.operations.InspectOperationalStatePort;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
+import com.marmitt.core.ports.inbound.reconciliation.ReconcileTradesPort;
 import com.marmitt.core.ports.inbound.portfolio.EvaluateDrawdownPort;
 import com.marmitt.core.ports.inbound.portfolio.EvaluateOperationalTriggersPort;
 import com.marmitt.core.ports.inbound.portfolio.ManageDeadLetterPort;
@@ -37,6 +40,7 @@ import com.marmitt.core.ports.outbound.repository.RemoteStrategyCatalogRepositor
 import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -146,18 +150,25 @@ public class PortfolioConfig {
             WebSocketConnectionRepositoryPort webSocketConnections,
             ExchangeAdapterRepositoryPort exchangeAdapters,
             InfrastructureSignalsPort infrastructureSignals,
+            PortfolioBootSanityUseCase portfolioBootSanityUseCase,
+            ObjectProvider<ReconcileTradesPort> reconcileTrades,
             OperationalStateProperties operationalStateProperties,
-            RunnerTransactionRecoveryProperties transactionRecoveryProperties
+            RunnerTransactionRecoveryProperties transactionRecoveryProperties,
+            PortfolioSanityCheckProperties portfolioSanityCheckProperties
     ) {
+        // Reconciliacao de trades so existe com exchange de historico configurada (Binance): sem ela, a
+        // comparacao de trades responde "nao conferido".
         return new InspectOperationalStateUseCase(portfolioRepository, globalBalanceRepository,
                 strategyRunnerRepository, deadLetterEntryRepository, strategyRepository, remoteStrategyCatalog,
                 latestPrices, webSocketConnections, exchangeAdapters, infrastructureSignals,
+                portfolioBootSanityUseCase, reconcileTrades.getIfAvailable(),
                 new InspectOperationalStateUseCase.Thresholds(
                         Duration.ofMillis(operationalStateProperties.getMarketDataStaleMs()),
                         Duration.ofMillis(operationalStateProperties.getReservationStaleMs()),
                         Duration.ofMillis(transactionRecoveryProperties.getStaleThresholdMs()),
                         Duration.ofMillis(transactionRecoveryProperties.getIntervalMs()),
-                        Duration.ofMillis(operationalStateProperties.getTerminationTimeoutMs())),
+                        Duration.ofMillis(operationalStateProperties.getTerminationTimeoutMs()),
+                        portfolioSanityCheckProperties.getThreshold()),
                 Clock.systemUTC());
     }
 

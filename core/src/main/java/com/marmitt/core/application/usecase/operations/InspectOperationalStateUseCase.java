@@ -1,5 +1,6 @@
 package com.marmitt.core.application.usecase.operations;
 
+import com.marmitt.core.application.usecase.boot.phase2.PortfolioBootSanityUseCase;
 import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.Position;
@@ -7,15 +8,21 @@ import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.domain.strategy.RemoteStrategy;
 import com.marmitt.core.dto.connection.ConnectionKey;
+import com.marmitt.core.dto.operations.ExchangeComparison;
 import com.marmitt.core.dto.operations.OperationalCheck;
 import com.marmitt.core.dto.operations.OperationalSeverity;
 import com.marmitt.core.dto.operations.OperationalStateReport;
+import com.marmitt.core.dto.portfolio.PortfolioBootSanityResult;
+import com.marmitt.core.dto.reconciliation.ReconciliationRequest;
+import com.marmitt.core.dto.reconciliation.ReconciliationSummaryDto;
 import com.marmitt.core.enums.ConnectionStatus;
+import com.marmitt.core.enums.PortfolioSanityStatus;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.enums.SafeModeStatus;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.enums.TransactionStatus;
 import com.marmitt.core.ports.inbound.operations.InspectOperationalStatePort;
+import com.marmitt.core.ports.inbound.reconciliation.ReconcileTradesPort;
 import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.marketdata.LatestPricePort;
 import com.marmitt.core.ports.outbound.operations.InfrastructureSignalsPort;
@@ -49,7 +56,9 @@ import java.util.stream.Collectors;
  * Estado operacional consolidado (T55): cada verificacao tem {@code id} estavel, severidade, sujeitos
  * afetados e a secao do runbook com a acao. Somente leitura; os limiares sao decisao de negocio da T55.
  *
- * <p>Fora daqui (Parte C2): divergencia de saldo e de trades com a exchange.
+ * <p>Comparacao com a exchange (Parte C2) so quando pedida ({@link ExchangeComparison}): reaproveita a
+ * conferencia de saldo do boot ({@link PortfolioBootSanityUseCase}) e a reconciliacao de trades
+ * ({@link ReconcileTradesPort}, ausente sem exchange com historico de trades configurada).
  */
 public class InspectOperationalStateUseCase implements InspectOperationalStatePort {
 
@@ -69,6 +78,8 @@ public class InspectOperationalStateUseCase implements InspectOperationalStatePo
     private final WebSocketConnectionRepositoryPort connections;
     private final ExchangeAdapterRepositoryPort exchangeAdapters;
     private final InfrastructureSignalsPort infrastructure;
+    private final PortfolioBootSanityUseCase balanceSanity;
+    private final ReconcileTradesPort tradeReconciliation;
     private final Thresholds thresholds;
     private final Clock clock;
 
@@ -82,6 +93,8 @@ public class InspectOperationalStateUseCase implements InspectOperationalStatePo
                                           WebSocketConnectionRepositoryPort connections,
                                           ExchangeAdapterRepositoryPort exchangeAdapters,
                                           InfrastructureSignalsPort infrastructure,
+                                          PortfolioBootSanityUseCase balanceSanity,
+                                          ReconcileTradesPort tradeReconciliation,
                                           Thresholds thresholds,
                                           Clock clock) {
         this.portfolioRepository = portfolioRepository;
@@ -94,12 +107,14 @@ public class InspectOperationalStateUseCase implements InspectOperationalStatePo
         this.connections = connections;
         this.exchangeAdapters = exchangeAdapters;
         this.infrastructure = infrastructure;
+        this.balanceSanity = balanceSanity;
+        this.tradeReconciliation = tradeReconciliation;
         this.thresholds = thresholds;
         this.clock = clock;
     }
 
     @Override
-    public OperationalStateReport inspect() {
+    public OperationalStateReport inspect(ExchangeComparison exchange) {
         Instant now = clock.instant();
         List<Portfolio> portfolios = portfolioRepository.findAll();
         List<StrategyRunner> runners = runnerRepository.findAll();
@@ -128,6 +143,10 @@ public class InspectOperationalStateUseCase implements InspectOperationalStatePo
         checks.add(marketDataStale(active, now));
         checks.add(streamDisconnected(active));
         checks.add(restCircuitOpen());
+        if (exchange.enabled()) {
+            checks.add(exchangeBalanceDivergence(portfolios, runners));
+            checks.add(exchangeTradeDivergence(runners, exchange.tradeWindow(), now));
+        }
         return OperationalStateReport.of(now, checks);
     }
 
@@ -416,6 +435,109 @@ public class InspectOperationalStateUseCase implements InspectOperationalStatePo
     }
 
     // ============================================================
+    // Comparacao com a exchange (C2)
+    // ============================================================
+
+    /**
+     * Total local de cada portfolio contra o saldo da conta na exchange, na moeda base: local maior que a
+     * exchange e CRITICAL (operando sobre capital que nao existe); exchange maior e WARN; consulta que
+     * falhou e WARN (nao conferido).
+     */
+    private OperationalCheck exchangeBalanceDivergence(List<Portfolio> portfolios, List<StrategyRunner> runners) {
+        List<Map<String, Object>> subjects = new ArrayList<>();
+        OperationalSeverity worst = OperationalSeverity.OK;
+        int notChecked = 0;
+        for (Portfolio portfolio : portfolios) {
+            for (String exchange : exchangesOf(portfolio.getId(), runners)) {
+                PortfolioBootSanityResult result =
+                        balanceSanity.execute(portfolio.getId(), exchange, thresholds.balanceDeviation());
+                OperationalSeverity severity = switch (result.status()) {
+                    case PASS, SKIPPED -> OperationalSeverity.OK;
+                    case WARN_SURPLUS, FAILED -> OperationalSeverity.WARN;
+                    case FAIL_DEFICIT -> OperationalSeverity.CRITICAL;
+                };
+                if (result.status() == PortfolioSanityStatus.SKIPPED) {
+                    notChecked++;
+                }
+                if (result.status() != PortfolioSanityStatus.PASS) {
+                    subjects.add(subject("portfolioId", portfolio.getId(), "exchange", exchange,
+                            "result", result.status(), "code", result.code(), "currency", result.baseCurrency(),
+                            "localTotal", plain(result.localTotal()), "exchangeTotal", plain(result.exchangeTotal()),
+                            "signedDelta", plain(result.signedDelta()), "message", result.message()));
+                }
+                worst = worst.compareTo(severity) >= 0 ? worst : severity;
+            }
+        }
+        if (worst == OperationalSeverity.OK) {
+            return check("EXCHANGE_BALANCE_DIVERGENCE", OperationalSeverity.OK,
+                    notChecked == 0 ? "local balances match the exchange"
+                            : "local balances match where checked; " + notChecked
+                            + " portfolio/exchange pair(s) without account query", subjects, null);
+        }
+        return check("EXCHANGE_BALANCE_DIVERGENCE", worst,
+                "local balance differs from the exchange or could not be checked", subjects, null);
+    }
+
+    /**
+     * Fills da janela no ctrade contra o historico de trades da exchange, por simbolo: fill so na exchange,
+     * so local ou divergente e CRITICAL (o registro local nao e a verdade da conta).
+     */
+    private OperationalCheck exchangeTradeDivergence(List<StrategyRunner> runners, Duration window, Instant now) {
+        Set<String> pairs = runners.stream()
+                .filter(r -> r.getStatus() != RunnerStatus.ARCHIVED)
+                .map(r -> r.getExchangeId().toUpperCase() + ":" + r.getSymbol())
+                .collect(Collectors.toCollection(TreeSet::new));
+        if (tradeReconciliation == null) {
+            return check("EXCHANGE_TRADE_DIVERGENCE", OperationalSeverity.OK,
+                    "not checked: no exchange with trade history configured",
+                    pairs.stream().map(p -> subject("pair", p, "result", "NOT_CHECKED")).toList(), null);
+        }
+        List<Map<String, Object>> subjects = new ArrayList<>();
+        OperationalSeverity worst = OperationalSeverity.OK;
+        for (String pair : pairs) {
+            String exchange = pair.substring(0, pair.indexOf(':'));
+            String symbol = pair.substring(pair.indexOf(':') + 1);
+            try {
+                ReconciliationSummaryDto summary = tradeReconciliation.reconcile(
+                        new ReconciliationRequest(symbol, exchange, now.minus(window), now, false)).summary();
+                int problems = summary.exchangeOnly() + summary.localOnly() + summary.divergent();
+                if (problems > 0) {
+                    worst = OperationalSeverity.CRITICAL;
+                    subjects.add(subject("exchange", exchange, "symbol", symbol, "matched", summary.matched(),
+                            "exchangeOnly", summary.exchangeOnly(), "localOnly", summary.localOnly(),
+                            "divergent", summary.divergent()));
+                }
+            } catch (IllegalArgumentException e) {
+                subjects.add(subject("exchange", exchange, "symbol", symbol, "result", "NOT_CHECKED",
+                        "message", e.getMessage()));
+            } catch (RuntimeException e) {
+                worst = worst == OperationalSeverity.CRITICAL ? worst : OperationalSeverity.WARN;
+                subjects.add(subject("exchange", exchange, "symbol", symbol, "result", "QUERY_FAILED",
+                        "message", e.getMessage()));
+            }
+        }
+        if (worst == OperationalSeverity.OK) {
+            return check("EXCHANGE_TRADE_DIVERGENCE", OperationalSeverity.OK,
+                    "every fill in the last " + window + " matches the exchange", subjects, null);
+        }
+        return check("EXCHANGE_TRADE_DIVERGENCE", worst,
+                worst == OperationalSeverity.CRITICAL ? "fills differ between ctrade and the exchange"
+                        : "trade history could not be checked", subjects, now.minus(window));
+    }
+
+    private static Set<String> exchangesOf(UUID portfolioId, List<StrategyRunner> runners) {
+        return runners.stream()
+                .filter(r -> r.getPortfolioId().equals(portfolioId))
+                .filter(r -> r.getStatus() != RunnerStatus.ARCHIVED)
+                .map(r -> r.getExchangeId().toUpperCase())
+                .collect(Collectors.toCollection(TreeSet::new));
+    }
+
+    private static String plain(BigDecimal value) {
+        return value == null ? null : value.toPlainString();
+    }
+
+    // ============================================================
     // Apoio
     // ============================================================
 
@@ -469,8 +591,9 @@ public class InspectOperationalStateUseCase implements InspectOperationalStatePo
      * @param watchdogStaleThreshold limiar do watchdog de transacoes
      * @param watchdogInterval       intervalo do watchdog (3 ciclos alem do limiar: CRITICAL)
      * @param terminationTimeout     runner em TERMINATING ha mais que isto (T51)
+     * @param balanceDeviation       diferenca de saldo tolerada contra a exchange (mesmo limiar do boot)
      */
     public record Thresholds(Duration marketDataStale, Duration reservationStale, Duration watchdogStaleThreshold,
-                             Duration watchdogInterval, Duration terminationTimeout) {
+                             Duration watchdogInterval, Duration terminationTimeout, BigDecimal balanceDeviation) {
     }
 }

@@ -1,5 +1,6 @@
 package com.marmitt.core.ports.inbound.operations;
 
+import com.marmitt.core.dto.operations.ExchangeComparison;
 import com.marmitt.core.dto.operations.OperationalStateReport;
 
 /**
@@ -8,5 +9,16 @@ import com.marmitt.core.dto.operations.OperationalStateReport;
  */
 public interface InspectOperationalStatePort {
 
-    OperationalStateReport inspect();
+    /**
+     * @param exchange com {@code enabled}, acrescenta a comparacao do registro local com a exchange (saldo
+     *                 e trades da janela) — consome cota da API da exchange
+     */
+    OperationalStateReport inspect(ExchangeComparison exchange);
+
+    /**
+     * Sem consultar a exchange.
+     */
+    default OperationalStateReport inspect() {
+        return inspect(ExchangeComparison.NONE);
+    }
 }

@@ -83,6 +83,22 @@ class OperationalStateIntegrationTest extends AbstractIntegrationTest {
     }
 
     @Test
+    void exchangeComparisonIsAddedOnlyOnRequest() throws Exception {
+        mockMvc.perform(get("/api/admin/operational-state").param("includeExchange", "true")
+                        .param("exchangeWindowHours", "6").header("X-Admin-Key", ADMIN_KEY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.checks.length()").value(17))
+                .andExpect(jsonPath("$.checks[?(@.id=='EXCHANGE_BALANCE_DIVERGENCE')].status").value("OK"))
+                // Sem Binance configurada nos testes nao ha historico de trades: nao conferido, nao alarme.
+                .andExpect(jsonPath("$.checks[?(@.id=='EXCHANGE_TRADE_DIVERGENCE')].status").value("OK"));
+
+        mockMvc.perform(get("/api/admin/operational-state").param("includeExchange", "true")
+                        .param("exchangeWindowHours", "0").header("X-Admin-Key", ADMIN_KEY))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
+    }
+
+    @Test
     void consolidatedStateIsExportedAsMetrics() {
         deadLetters(1);
 
