@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.bootstrap;
 
+import com.marmitt.application.spring.testsupport.DatabaseCleaner;
 import com.marmitt.core.dto.portfolio.request.ChangeSafeModeRequest;
 import com.marmitt.core.dto.portfolio.request.CreatePortfolioRequest;
 import com.marmitt.core.enums.SafeModeOrigin;
@@ -41,7 +42,7 @@ class AutoSafeModeIntegrationTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void setUp() {
-        jdbcTemplate.execute("TRUNCATE TABLE portfolios CASCADE");
+        DatabaseCleaner.reset(jdbcTemplate);
         portfolioId = createPortfolio.execute(CreatePortfolioRequest.builder()
                 .name("t25-" + UUID.randomUUID())
                 .initialCapitalAmount(new BigDecimal("1000"))

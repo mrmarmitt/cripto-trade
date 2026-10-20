@@ -1,6 +1,7 @@
 package com.marmitt.application.spring.bootstrap;
 
 import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
+import com.marmitt.application.spring.testsupport.DatabaseCleaner;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
@@ -87,8 +88,7 @@ abstract class MockOrderOverrideIntegrationTestSupport extends AbstractIntegrati
     @BeforeEach
     protected void cleanDatabase() {
         getMockExchangeAdapter().reset();
-        jdbcTemplate.execute("TRUNCATE TABLE portfolios CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE capital_event_ledger");
+        DatabaseCleaner.reset(jdbcTemplate);
     }
 
     protected MockExchangeAdapter getMockExchangeAdapter() {

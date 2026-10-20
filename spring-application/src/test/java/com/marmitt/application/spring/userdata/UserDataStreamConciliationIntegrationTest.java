@@ -2,6 +2,7 @@ package com.marmitt.application.spring.userdata;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.application.spring.CTradeApplication;
+import com.marmitt.application.spring.testsupport.DatabaseCleaner;
 import com.marmitt.binance.processor.receive.BinanceUserDataProcessor;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.StrategyRunner;
@@ -99,8 +100,7 @@ class UserDataStreamConciliationIntegrationTest {
 
     @BeforeEach
     void cleanDatabase() {
-        jdbcTemplate.execute("TRUNCATE TABLE portfolios CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE capital_event_ledger");
+        DatabaseCleaner.reset(jdbcTemplate);
     }
 
     // ─── cenários de aceitação ────────────────────────────────────────────

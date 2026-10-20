@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.bootstrap;
 
+import com.marmitt.application.spring.testsupport.DatabaseCleaner;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.StrategyRunner;
@@ -65,8 +66,7 @@ class ConcurrentSellLockIntegrationTest extends AbstractIntegrationTest {
 
     @BeforeEach
     void cleanDatabase() {
-        jdbcTemplate.execute("TRUNCATE TABLE portfolios CASCADE");
-        jdbcTemplate.execute("TRUNCATE TABLE capital_event_ledger");
+        DatabaseCleaner.reset(jdbcTemplate);
     }
 
     @Test

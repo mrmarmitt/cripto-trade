@@ -1,6 +1,7 @@
 package com.marmitt.application.spring.reconciliation;
 
 import com.marmitt.application.spring.CTradeApplication;
+import com.marmitt.application.spring.testsupport.DatabaseCleaner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import org.junit.jupiter.api.BeforeEach;
@@ -60,7 +61,7 @@ class ReconciliationIntegrationTest {
 
     @BeforeEach
     void cleanDatabase() {
-        jdbcTemplate.execute("TRUNCATE TABLE portfolios CASCADE");
+        DatabaseCleaner.reset(jdbcTemplate);
     }
 
     @Test
