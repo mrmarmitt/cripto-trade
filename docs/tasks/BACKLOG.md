@@ -57,6 +57,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T49 | Ciclo de vida do runner por API (start, resume, terminate)      | Alta  | Claude | Concluído |
 | T50 | Limites de risco pré-trade (posições, ordens, preço, utilização) | Média | Claude | Concluído |
 | T51 | Observabilidade de capital, Safe Mode e lifecycle                | Baixa | Claude | Concluído |
+| T52 | MOCK: cancelamento de ordem em preenchimento simulado            | Média | Claude | Pendente  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 
 ## Ordem de execução
@@ -253,6 +254,10 @@ T44  Proteção do lote (stop 5% MARKET; concluída)                   T24  Circ
 >   Actor/Mailbox do IG §12 não existe → T42.
 > - Warm-up do SMA é compartilhado entre runners e o contrato repete a chave só por `strategyRef` → T40.
 > - IG/Blueprint descrevem como decididas várias coisas que não estão no código (mesma classe da T36) → T39.
+>
+> **T52** (MOCK: cancelamento durante preenchimento simulado) saiu da T48: o MOCK publica fills depois
+> do `CANCELED` e debita o saldo da execução inteira. Não afeta exchange real; afeta E2E que cancelam
+> ordem marketable.
 >
 > Fora desta trilha, ainda sem task: perfil `application-prod.yml` e gestão de segredos
 > (`GO_LIVE_CHECKLIST` itens 8–9), harness de backtest/modo shadow e limpeza de documentação
