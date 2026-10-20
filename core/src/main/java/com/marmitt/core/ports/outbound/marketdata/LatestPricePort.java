@@ -1,6 +1,7 @@
 package com.marmitt.core.ports.outbound.marketdata;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.Optional;
 
 /**
@@ -16,4 +17,9 @@ public interface LatestPricePort {
     void record(String symbol, BigDecimal price);
 
     Optional<BigDecimal> find(String symbol);
+
+    /**
+     * Quando o ultimo preco do simbolo chegou (T55: verificacao de market data parado).
+     */
+    Optional<Instant> findUpdatedAt(String symbol);
 }

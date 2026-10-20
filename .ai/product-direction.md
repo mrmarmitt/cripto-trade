@@ -64,8 +64,9 @@ Valem para toda API, log, metrica e procedimento novo ou alterado:
 7. **Verificavel de fora.** Inconsistencias (capital, transacoes presas, DLQ, divergencia com a
    exchange) devem ser detectaveis por consulta, sem acesso ao banco nem leitura de codigo.
 
-Partes antigas do sistema ainda nao seguem todos os principios (ex.: `ApiError` sem codigo, sem visao
-consolidada de saude). Ao tocar nelas, alinhar; a lacuna geral deve virar task propria.
+Desde a T55: toda a API exige `X-Admin-Key`; todo comando exige `X-Reason` e fica em
+`/api/admin/operator-actions`; toda recusa traz `code`; e `GET /api/admin/operational-state` e a
+consulta unica de consistencia. Ao criar algo novo, seguir esse padrao.
 
 ## Sequencia de maturidade
 

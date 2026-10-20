@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T54 (primeira API no padrão), T27 (envelope `ApiError`), T51 (estado operacional como
 métrica). Base do monitoramento periódico por IA da T53.
-**Status:** Em andamento — Partes A e B entregues (2026-10-20); C e D pendentes.
+**Status:** Em andamento — Partes A, B e C entregues (2026-10-20); C2 (divergência com a exchange) e D pendentes.
 
 ---
 
@@ -201,4 +201,28 @@ que resolveu. As seções atuais viram a fonte; o formato muda.
 - Validação: testes do core para idempotência e códigos; `CapitalDeadLetterReplayIntegrationTest`
   prova `REASON_REQUIRED`, o registro de comando recusado e aceito (ator, motivo, operação, status,
   código); suíte completa verde.
+
+### Parte C — Estado consolidado (2026-10-20)
+
+- `GET /api/admin/operational-state` (`InspectOperationalStateUseCase`, core): 15 verificações, todas
+  listadas (inclusive `OK`), com `id`, severidade, `subjects`, `since` e `runbook`; status geral = pior
+  severidade. Exportado como `operational_state_status` e `operational_check_status{check}` pelo
+  `OperationalStateScheduler` (a cada 15s).
+- Sinais técnicos pelo port `InfrastructureSignalsPort` (boot e circuit breakers REST), implementado no
+  Spring; `LatestPricePort` ganhou `findUpdatedAt` para o tick por símbolo. Limiares em
+  `ctrade.observability` (`market-data-stale-ms` 60s, `reservation-stale-ms` 24h) e na configuração do
+  watchdog e do encerramento.
+- **Decisões de implementação:**
+  - `TRANSACTION_STUCK` só para `PENDING` (sem confirmação da exchange): ordem `SUBMITTED`/`PARTIAL`
+    descansando no livro é normal e geraria falso alarme. Ordem aberta há muito tempo aparece em
+    `CAPITAL_RESERVATION_STALE` (BUY, WARN após 24h).
+  - Market data é verificado pela idade do último tick; a conexão de usuário só é exigida quando a
+    exchange tem stream de usuário (`ExchangeAdapterDescriptor.hasUserStream`), para o MOCK não acusar.
+  - `CAPITAL_RESERVED_WITHOUT_ORDER` só dispara com `reserved > 0` e nenhuma BUY em voo no portfolio
+    (comparar valores exatos daria falso positivo com fills parciais).
+- **Parte C2 (pendente):** `EXCHANGE_BALANCE_DIVERGENCE` e `EXCHANGE_TRADE_DIVERGENCE`, sob demanda. A
+  comparação de saldo hoje só existe dentro do boot e a de trades só sobe com Binance configurada; ficam
+  para quando forem extraídas para reuso, sem reimplementar.
+- Validação: `InspectOperationalStateUseCaseTest` (caso que dispara e que não dispara por verificação),
+  `OperationalStateIntegrationTest` (Postgres: endpoint e métrica); suíte completa verde.
 

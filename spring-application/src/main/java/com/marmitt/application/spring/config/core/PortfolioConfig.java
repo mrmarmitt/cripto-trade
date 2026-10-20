@@ -4,6 +4,8 @@ import com.marmitt.application.spring.bootstrap.AutoSafeModeProperties;
 import com.marmitt.application.spring.bootstrap.CircuitBreakerProperties;
 import com.marmitt.application.spring.bootstrap.OperationalStateProperties;
 import com.marmitt.application.spring.service.TransactionalManageDeadLetterPort;
+import com.marmitt.application.spring.bootstrap.RunnerTransactionRecoveryProperties;
+import com.marmitt.core.application.usecase.operations.InspectOperationalStateUseCase;
 import com.marmitt.core.application.usecase.portfolio.AutomaticSafeModeTrigger;
 import com.marmitt.core.application.usecase.portfolio.CreatePortfolioUseCase;
 import com.marmitt.core.application.usecase.portfolio.EvaluateDrawdownUseCase;
@@ -12,6 +14,7 @@ import com.marmitt.core.application.usecase.portfolio.ManageDeadLetterUseCase;
 import com.marmitt.core.application.usecase.portfolio.ManageSafeModeUseCase;
 import com.marmitt.core.application.usecase.portfolio.QueryPortfolioUseCase;
 import com.marmitt.core.application.usecase.portfolio.ReportOperationalStateUseCase;
+import com.marmitt.core.ports.inbound.operations.InspectOperationalStatePort;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.portfolio.EvaluateDrawdownPort;
 import com.marmitt.core.ports.inbound.portfolio.EvaluateOperationalTriggersPort;
@@ -23,12 +26,17 @@ import com.marmitt.core.ports.outbound.marketdata.LatestPricePort;
 import com.marmitt.core.ports.outbound.metrics.CircuitBreakerMetricsPort;
 import com.marmitt.core.ports.outbound.metrics.OperationalMetricsPort;
 import com.marmitt.core.ports.outbound.notification.ErrorNotificationPort;
+import com.marmitt.core.ports.outbound.operations.InfrastructureSignalsPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterReprocessingPort;
 import com.marmitt.core.ports.outbound.repository.EquitySnapshotRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.RemoteStrategyCatalogRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.StrategyRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.WebSocketConnectionRepositoryPort;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -124,6 +132,33 @@ public class PortfolioConfig {
         return new ReportOperationalStateUseCase(portfolioRepository, globalBalanceRepository,
                 strategyRunnerRepository, operationalMetrics,
                 Duration.ofMillis(operationalStateProperties.getTerminationTimeoutMs()), Instant::now);
+    }
+
+    @Bean
+    public InspectOperationalStatePort inspectOperationalState(
+            PortfolioRepositoryPort portfolioRepository,
+            GlobalBalanceRepositoryPort globalBalanceRepository,
+            StrategyRunnerRepositoryPort strategyRunnerRepository,
+            DeadLetterEntryRepositoryPort deadLetterEntryRepository,
+            StrategyRepositoryPort strategyRepository,
+            RemoteStrategyCatalogRepositoryPort remoteStrategyCatalog,
+            LatestPricePort latestPrices,
+            WebSocketConnectionRepositoryPort webSocketConnections,
+            ExchangeAdapterRepositoryPort exchangeAdapters,
+            InfrastructureSignalsPort infrastructureSignals,
+            OperationalStateProperties operationalStateProperties,
+            RunnerTransactionRecoveryProperties transactionRecoveryProperties
+    ) {
+        return new InspectOperationalStateUseCase(portfolioRepository, globalBalanceRepository,
+                strategyRunnerRepository, deadLetterEntryRepository, strategyRepository, remoteStrategyCatalog,
+                latestPrices, webSocketConnections, exchangeAdapters, infrastructureSignals,
+                new InspectOperationalStateUseCase.Thresholds(
+                        Duration.ofMillis(operationalStateProperties.getMarketDataStaleMs()),
+                        Duration.ofMillis(operationalStateProperties.getReservationStaleMs()),
+                        Duration.ofMillis(transactionRecoveryProperties.getStaleThresholdMs()),
+                        Duration.ofMillis(transactionRecoveryProperties.getIntervalMs()),
+                        Duration.ofMillis(operationalStateProperties.getTerminationTimeoutMs())),
+                Clock.systemUTC());
     }
 
     @Bean
