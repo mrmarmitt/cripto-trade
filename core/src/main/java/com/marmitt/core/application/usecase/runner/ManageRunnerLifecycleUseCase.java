@@ -11,6 +11,7 @@ import com.marmitt.core.ports.inbound.runner.ManageRunnerLifecyclePort;
 import com.marmitt.core.ports.outbound.metrics.OperationalMetricsPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
+import com.marmitt.core.ports.outbound.runner.RunnerActivationObserverPort;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Duration;
@@ -37,15 +38,18 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
     private final RunnerBootRecoveryUseCase runnerRecovery;
     private final OperationalMetricsPort metrics;
+    private final RunnerActivationObserverPort activationObserver;
 
     public ManageRunnerLifecycleUseCase(StrategyRunnerRepositoryPort strategyRunnerRepository,
                                         ExchangeAdapterRepositoryPort exchangeAdapterRepository,
                                         RunnerBootRecoveryUseCase runnerRecovery,
-                                        OperationalMetricsPort metrics) {
+                                        OperationalMetricsPort metrics,
+                                        RunnerActivationObserverPort activationObserver) {
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.exchangeAdapterRepository = exchangeAdapterRepository;
         this.runnerRecovery = runnerRecovery;
         this.metrics = metrics;
+        this.activationObserver = activationObserver;
     }
 
     @Override
@@ -66,6 +70,7 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
         reconcile(runner, "start");
         StrategyRunner started = load(runnerId);
         log.info("runnerLifecycle: started runnerId={} {} -> {}", runnerId, previous, started.getStatus());
+        notifyActivated(started);
         return RunnerTransitionResult.of(started, previous);
     }
 
@@ -87,6 +92,7 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
         strategyRunnerRepository.save(reconciled);
         metrics.recordTransition(RunnerStatus.HALTED, RunnerStatus.ACTIVE);
         log.info("runnerLifecycle: resumed runnerId={} HALTED -> ACTIVE", runnerId);
+        notifyActivated(reconciled);
         return RunnerTransitionResult.of(reconciled, RunnerStatus.HALTED);
     }
 
@@ -140,6 +146,21 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
         if (!summary.completed()) {
             throw new RunnerOperationException("RUNNER_RECONCILIATION_INCOMPLETE", "Runner " + runner.getId() + " " + operation
                     + " refused: reconciliation not completed " + summary.notes());
+        }
+    }
+
+    /**
+     * Avisa quem observa (T56: o coordenador de market data abre o que o runner precisa sem esperar o
+     * ciclo). Falha do observador nao desfaz a transicao: o ciclo periodico cobre.
+     */
+    private void notifyActivated(StrategyRunner runner) {
+        if (runner.getStatus() != RunnerStatus.ACTIVE) {
+            return;
+        }
+        try {
+            activationObserver.onActivated(runner.getId());
+        } catch (RuntimeException e) {
+            log.warn("runnerLifecycle: activation observer failed runnerId={} - {}", runner.getId(), e.getMessage());
         }
     }
 

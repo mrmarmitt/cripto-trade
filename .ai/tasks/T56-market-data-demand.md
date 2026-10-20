@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T55 (estado consolidado: `MARKET_DATA_STALE`, `STREAM_DISCONNECTED`; runbook).
 Follow-up registrado na T55. Pré-requisito prático da T53 (soak de 24h).
-**Status:** Pendente — decisões registradas; pronta para implementação.
+**Status:** Concluído (2026-10-20) — ver "Entrega" no fim.
 
 ---
 
@@ -122,3 +122,37 @@ conhecer um ao outro — só o coordenador conhece os dois, pelos ports.
 - `.ai/tasks/T55-ai-operability.md` (follow-up registrado)
 - `docs/OPERATIONS_RUNBOOK.md` (Partida depois de um boot, `market-data-stale`, `stream-disconnected`)
 - `.ai/product-direction.md` (sistema operado por IA)
+
+## Entrega
+
+### Decisões de implementação (2026-10-20)
+
+- **`EnsureMarketDataFeedUseCase`** (core, `EnsureMarketDataFeedPort`): demanda dos runners `ACTIVE` e
+  `TERMINATING`; abre conexão ausente ou caída (`IDLE`, `DISCONNECTED`, `CLOSED`, `ERROR`) com todos os
+  símbolos da fonte; com a conexão `CONNECTED` há mais que o limiar, reassina símbolo sem tick há mais
+  que o limiar; deixa `CONNECTING`/`RECONNECTING` em paz. O limiar é o mesmo `market-data-stale-ms` do
+  estado consolidado (T55): o que a T55 acusa, a T56 corrige. Assinar de novo é inofensivo no MOCK
+  (`computeIfAbsent`) e na Binance (assinatura repetida não gera erro).
+- **Gatilho imediato sem acoplar:** `ManageRunnerLifecycleUseCase` avisa um `RunnerActivationObserverPort`
+  depois de `start`/`resume` que deixa o runner `ACTIVE`; a composição liga o coordenador nele. O ciclo
+  de vida não sabe que o feed existe; falha do observador não desfaz a transição.
+- **Spring:** `MarketDataFeedScheduler` (5s após subir, depois a cada 30s), `MarketDataFeedProperties`
+  (`ctrade.market-data.auto-feed.*`: `enabled`, `interval-ms`, `default-stream-type` = `TICKER`,
+  `stream-types` por exchange).
+- **Testes de integração:** o coordenador fica desligado por padrão nos testes
+  (`CTRADE_MARKET_DATA_AUTO_FEED_ENABLED=false` no `AbstractIntegrationTest`), porque o feed do MOCK
+  publica 1 tick/s e quebraria os E2E determinísticos. Desliga pela variável do placeholder para que um
+  teste possa religar pela chave direta — o `@DynamicPropertySource` da superclasse é aplicado depois e
+  venceria a mesma chave.
+
+### Validação
+
+- `EnsureMarketDataFeedUseCaseTest`: demanda (ACTIVE e TERMINATING, nunca HALTED), conexão ausente,
+  conectada com tick recente (nada a fazer), símbolo sem tick reassinado, conexão recém-aberta ganha
+  tempo, reconexão em andamento ignorada, conexão caída reaberta, exchange sem stream de usuário.
+- `ManageRunnerLifecycleUseCaseTest`: `start` avisa o observador.
+- `MarketDataAutoFeedIntegrationTest` (Postgres + MOCK): sem chamar `/api/websocket`, a conexão do MOCK
+  é aberta, o tick chega e o runner avalia.
+- Runbook: partida sem passos manuais; `market-data-stale` e `stream-disconnected` começam pelo
+  coordenador.
+

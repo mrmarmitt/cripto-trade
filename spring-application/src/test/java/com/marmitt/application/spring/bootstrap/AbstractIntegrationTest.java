@@ -34,5 +34,9 @@ abstract class AbstractIntegrationTest {
         registry.add("spring.flyway.enabled", () -> "true");
         registry.add("runner.boot.orchestrator-enabled", () -> "false");
         registry.add("admin.api.key", () -> ADMIN_KEY);
+        // T56: os E2E publicam ticks na mao; o feed automatico do MOCK (1 tick/s) quebraria o determinismo.
+        // Desliga pela variavel do placeholder (application.yml), para um teste poder religar pela chave
+        // direta: o @DynamicPropertySource da superclasse e aplicado depois e venceria a mesma chave.
+        registry.add("CTRADE_MARKET_DATA_AUTO_FEED_ENABLED", () -> "false");
     }
 }
