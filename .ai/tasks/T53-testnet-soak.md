@@ -179,7 +179,41 @@ explicação (erro comprovadamente da testnet é aceito se registrado).
 
 | # | Data | Fase | Duração | Estratégia / símbolo | Resultado | Achados → tasks |
 |---|---|---|---|---|---|---|
-| — | — | — | — | — | — | — |
+| 1 | 2026-10-20 | 1 (smoke) | ~15 min | 4 cenários / BTCUSDT, máquina local | Ramos OK; trades 100% iguais à exchange; DLQ vazia. Reprovada por F1 (bug) e por ruído de `ERROR` (F5). | F1–F6 abaixo |
+
+### Rodada 1 — detalhes (2026-10-20)
+
+- **Cenário 1 (resting BUY → cancel):** 4 BUYs, todas `CANCELED`; `reserved` voltou a 0.
+- **Cenário 2 (fill → resting SELL → cancel):** 1 BUY `FILLED`, 4 SELLs `CANCELED`; lote `OPEN` destravado
+  no fim (0.001 BTC deixado aberto — fechar posição à mão exige confirmação do mantenedor).
+- **Cenário 3 (round trip):** 65 BUY + 65 SELL `FILLED` em ~2 min; 65 lotes fechados; `reserved` 0; PnL
+  realizado +0.00335 USDT; `totalFeesPaid` 0.
+- **Cenário 4 (recusa por capital):** 25 `REJECTED_CAPITAL`, nenhuma ordem na exchange.
+- **Feed (T56):** market data e stream de usuário da Binance abertos sozinhos, sem chamada manual.
+- **Comparação com a exchange (T55-C2):** `EXCHANGE_TRADE_DIVERGENCE` OK (todos os fills das 2h batem).
+
+**Achados:**
+
+- **F1 — Bug (alto): `CANCELED` do stream da Binance não é conciliado.** `ExecutionReportProcessor` lê só
+  o campo `c`; no `executionReport` de cancelamento a Binance põe em `c` o id do pedido de cancelamento e
+  o id original em `C`. Todo cancelamento feito pelo ctrade (estratégia, Safe Mode, proteção do lote,
+  operador) só é conciliado ~60s depois, pelo watchdog. Nesse intervalo a reserva fica presa, o lote
+  travado, a estratégia reenvia o cancelamento a cada tick e a Binance responde `-2011 Unknown order`
+  (77 `ERROR` na rodada); o cancelamento do operador chegou a voltar `502 EXCHANGE_QUERY_FAILED`.
+- **F2 — Bug meu (T55-C): `CAPITAL_RESERVED_WITHOUT_ORDER` falso positivo.** O custo da BUY executada fica
+  em `reserved` até a SELL do lote casar (`GlobalBalance.confirmExecution`); a verificação ignora lotes
+  abertos e acusou CRITICAL no portfolio do cenário 2.
+- **F3 — Desenho: comparação de saldo por portfolio contra a conta inteira.** Com vários portfolios na
+  mesma conta, cada um dá `WARN_SURPLUS` (1000 local × 9917 na conta) e a soma dos portfolios acima do
+  saldo da conta não seria detectada. Vale para a sanidade do boot e para a T55-C2.
+- **F4 — Menor: `retrievedAt` do saldo da exchange com data de 13 dias atrás** (a confirmar se é o
+  `updateTime` da conta com nome enganoso ou cache).
+- **F5 — Ruído: `outboundAccountPosition` sem processador.** A Binance envia atualização de saldo da
+  conta após cada fill; o ctrade registra `ERROR` (147 na rodada).
+- **F6 — Operação: `halt` não cancela ordens que descansam no livro** (por desenho). Após o `halt`, a
+  ordem LIMIT continua com capital reservado até cancelar à mão; o runbook deve dizer isso.
+- A confirmar: comissão zero na testnet (`totalFeesPaid` 0 em 130 fills).
+
 
 ## Fontes
 
