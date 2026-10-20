@@ -15,10 +15,15 @@ import java.util.UUID;
  * {@code OptimisticLockingFailureException} em {@code saveAtomicTransactionAndPositionLock},
  * permitindo que o use case a trate sem depender de classes do Spring.
  */
-public class ConcurrentPositionLockException extends RuntimeException {
+public class ConcurrentPositionLockException extends RuntimeException implements CodedError {
 
     public ConcurrentPositionLockException(UUID positionId, UUID runnerId) {
         super("Concurrent SELL lock conflict: positionId=" + positionId + " runnerId=" + runnerId
                 + " — another thread already holds the lock");
+    }
+
+    @Override
+    public String code() {
+        return "POSITION_LOCKED";
     }
 }

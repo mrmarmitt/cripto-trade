@@ -94,13 +94,8 @@ class DeadLetterControllerTest {
                 .thenReturn(ResolveDeadLetterResponse.success(entry, "Dead letter entry resolved successfully"));
 
         mockMvc.perform(post("/api/dead-letters/{id}/resolve", deadLetterId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "resolvedBy": "operator@test",
-                                  "resolutionNote": "manual review"
-                                }
-                                """))
+                        .header("X-Operator", "operator@test")
+                        .header("X-Reason", "manual review"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.resolved").value(true))
                 .andExpect(jsonPath("$.deadLetterId").value(deadLetterId.toString()))
@@ -114,13 +109,8 @@ class DeadLetterControllerTest {
                 .thenThrow(new DeadLetterNotFoundException(deadLetterId));
 
         mockMvc.perform(post("/api/dead-letters/{id}/resolve", deadLetterId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "resolvedBy": "operator@test",
-                                  "resolutionNote": "manual review"
-                                }
-                                """))
+                        .header("X-Operator", "operator@test")
+                        .header("X-Reason", "manual review"))
                 .andExpect(status().isNotFound())
                 .andExpect(jsonPath("$.status").value(404))
                 .andExpect(jsonPath("$.error").value("Not Found"))
@@ -128,19 +118,14 @@ class DeadLetterControllerTest {
     }
 
     @Test
-    void resolveShouldReturnConflictWhenEntryIsAlreadyResolved() throws Exception {
+    void resolveShouldReturnConflictWhenTheUseCaseRefuses() throws Exception {
         UUID deadLetterId = UUID.randomUUID();
         when(manageDeadLetter.resolve(deadLetterId, "operator@test", "manual review"))
                 .thenThrow(new DeadLetterConflictException(deadLetterId, "Dead letter entry is already resolved"));
 
         mockMvc.perform(post("/api/dead-letters/{id}/resolve", deadLetterId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "resolvedBy": "operator@test",
-                                  "resolutionNote": "manual review"
-                                }
-                                """))
+                        .header("X-Operator", "operator@test")
+                        .header("X-Reason", "manual review"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.message").value("Dead letter entry is already resolved"));
@@ -149,20 +134,16 @@ class DeadLetterControllerTest {
     @Test
     void resolveShouldReturnBadRequestWhenUseCaseRejectsInput() throws Exception {
         UUID deadLetterId = UUID.randomUUID();
-        when(manageDeadLetter.resolve(deadLetterId, "", "manual review"))
+        when(manageDeadLetter.resolve(deadLetterId, "ops", "manual review"))
                 .thenThrow(new IllegalArgumentException("resolvedBy cannot be blank"));
 
         mockMvc.perform(post("/api/dead-letters/{id}/resolve", deadLetterId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "resolvedBy": "",
-                                  "resolutionNote": "manual review"
-                                }
-                                """))
+                        .header("X-Operator", "ops")
+                        .header("X-Reason", "manual review"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
-                .andExpect(jsonPath("$.message").value("resolvedBy cannot be blank"));
+                .andExpect(jsonPath("$.message").value("resolvedBy cannot be blank"))
+                .andExpect(jsonPath("$.code").value("INVALID_REQUEST"));
     }
 
     @Test
@@ -175,13 +156,8 @@ class DeadLetterControllerTest {
                 .thenReturn(ReprocessDeadLetterResponse.success(entry, "Dead letter entry reprocessed successfully"));
 
         mockMvc.perform(post("/api/dead-letters/{id}/reprocess", deadLetterId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "requestedBy": "operator@test",
-                                  "resolutionNote": "retry capital flow"
-                                }
-                                """))
+                        .header("X-Operator", "operator@test")
+                        .header("X-Reason", "retry capital flow"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reprocessed").value(true))
                 .andExpect(jsonPath("$.deadLetterId").value(deadLetterId.toString()))
@@ -196,13 +172,8 @@ class DeadLetterControllerTest {
                         deadLetterId, "Dead letter entry cannot be reprocessed automatically"));
 
         mockMvc.perform(post("/api/dead-letters/{id}/reprocess", deadLetterId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "requestedBy": "operator@test",
-                                  "resolutionNote": "retry capital flow"
-                                }
-                                """))
+                        .header("X-Operator", "operator@test")
+                        .header("X-Reason", "retry capital flow"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.message").value("Dead letter entry cannot be reprocessed automatically"));
@@ -211,17 +182,12 @@ class DeadLetterControllerTest {
     @Test
     void reprocessShouldReturnBadRequestWhenUseCaseRejectsInput() throws Exception {
         UUID deadLetterId = UUID.randomUUID();
-        when(manageDeadLetter.reprocess(deadLetterId, "", "retry capital flow"))
+        when(manageDeadLetter.reprocess(deadLetterId, "ops", "retry capital flow"))
                 .thenThrow(new IllegalArgumentException("requestedBy cannot be blank"));
 
         mockMvc.perform(post("/api/dead-letters/{id}/reprocess", deadLetterId)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("""
-                                {
-                                  "requestedBy": "",
-                                  "resolutionNote": "retry capital flow"
-                                }
-                                """))
+                        .header("X-Operator", "ops")
+                        .header("X-Reason", "retry capital flow"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.status").value(400))
                 .andExpect(jsonPath("$.message").value("requestedBy cannot be blank"));

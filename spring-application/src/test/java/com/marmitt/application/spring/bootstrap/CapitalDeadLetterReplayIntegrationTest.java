@@ -114,13 +114,8 @@ class CapitalDeadLetterReplayIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/api/dead-letters/{id}/reprocess", firstEntry.getId())
                         .header("X-Admin-Key", ADMIN_KEY)
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "requestedBy": "operator@test",
-                                  "resolutionNote": "replay execution confirmed"
-                                }
-                                """))
+                        .header("X-Operator", "operator@test")
+                        .header("X-Reason", "replay execution confirmed"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reprocessed").value(true))
                 .andExpect(jsonPath("$.entry.resolvedBy").value("operator@test"));
@@ -141,13 +136,8 @@ class CapitalDeadLetterReplayIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/api/dead-letters/{id}/reprocess", duplicateEntry.getId())
                         .header("X-Admin-Key", ADMIN_KEY)
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "requestedBy": "operator@test",
-                                  "resolutionNote": "replay execution confirmed duplicate"
-                                }
-                                """))
+                        .header("X-Operator", "operator@test")
+                        .header("X-Reason", "replay execution confirmed duplicate"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reprocessed").value(true))
                 .andExpect(jsonPath("$.entry.resolvedBy").value("operator@test"));
@@ -180,13 +170,8 @@ class CapitalDeadLetterReplayIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/api/dead-letters/{id}/reprocess", firstEntry.getId())
                         .header("X-Admin-Key", ADMIN_KEY)
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "requestedBy": "operator@test",
-                                  "resolutionNote": "replay margin release"
-                                }
-                                """))
+                        .header("X-Operator", "operator@test")
+                        .header("X-Reason", "replay margin release"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.reprocessed").value(true))
                 .andExpect(jsonPath("$.entry.resolvedBy").value("operator@test"));
@@ -207,13 +192,8 @@ class CapitalDeadLetterReplayIntegrationTest extends AbstractIntegrationTest {
 
         mockMvc.perform(post("/api/dead-letters/{id}/reprocess", duplicateEntry.getId())
                         .header("X-Admin-Key", ADMIN_KEY)
-                        .contentType("application/json")
-                        .content("""
-                                {
-                                  "requestedBy": "operator@test",
-                                  "resolutionNote": "replay margin release duplicate"
-                                }
-                                """))
+                        .header("X-Operator", "operator@test")
+                        .header("X-Reason", "replay margin release duplicate"))
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.status").value(409))
                 .andExpect(jsonPath("$.message").value(
@@ -379,10 +359,34 @@ class CapitalDeadLetterReplayIntegrationTest extends AbstractIntegrationTest {
     @Test
     void directOrderAndListenerClearEndpointsNoLongerExist() throws Exception {
         mockMvc.perform(post("/api/websocket/exchange/orders/create").header("X-Admin-Key", ADMIN_KEY)
-                        .contentType("application/json").content("{}"))
+                        .header("X-Reason", "t55").contentType("application/json").content("{}"))
                 .andExpect(status().isNotFound());
-        mockMvc.perform(delete("/api/listeners/clear").header("X-Admin-Key", ADMIN_KEY))
+        mockMvc.perform(delete("/api/listeners/clear").header("X-Admin-Key", ADMIN_KEY).header("X-Reason", "t55"))
                 .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void commandsRequireAReasonAndEveryCommandIsRecordedWithItsOutcome() throws Exception {
+        UUID unknown = UUID.randomUUID();
+        mockMvc.perform(post("/api/dead-letters/{id}/resolve", unknown).header("X-Admin-Key", ADMIN_KEY))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("REASON_REQUIRED"));
+        mockMvc.perform(post("/api/dead-letters/{id}/resolve", unknown).header("X-Admin-Key", ADMIN_KEY)
+                        .header("X-Operator", "ops-agent").header("X-Reason", "t55 audit check"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("DEAD_LETTER_NOT_FOUND"));
+
+        mockMvc.perform(get("/api/admin/operator-actions").param("pathContains", unknown.toString())
+                        .header("X-Admin-Key", ADMIN_KEY))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(2))
+                .andExpect(jsonPath("$[0].actor").value("ops-agent"))
+                .andExpect(jsonPath("$[0].reason").value("t55 audit check"))
+                .andExpect(jsonPath("$[0].operation").value("DeadLetterController.resolve"))
+                .andExpect(jsonPath("$[0].httpStatus").value(404))
+                .andExpect(jsonPath("$[0].errorCode").value("DEAD_LETTER_NOT_FOUND"))
+                .andExpect(jsonPath("$[1].errorCode").value("REASON_REQUIRED"))
+                .andExpect(jsonPath("$[1].actor").value("unknown"));
     }
 }
 

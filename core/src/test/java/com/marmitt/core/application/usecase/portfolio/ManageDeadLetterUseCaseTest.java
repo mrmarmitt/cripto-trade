@@ -21,6 +21,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -112,7 +113,7 @@ class ManageDeadLetterUseCaseTest {
     }
 
     @Test
-    void resolveShouldThrowConflictWhenEntryIsAlreadyResolved() {
+    void resolvingAnAlreadyResolvedEntryIsANoOp() {
         DeadLetterEntryRepositoryPort repository = mock(DeadLetterEntryRepositoryPort.class);
         DeadLetterReprocessingPort reprocessingPort = mock(DeadLetterReprocessingPort.class);
         DeadLetterEntry entry = newEntry(UUID.randomUUID(), UUID.randomUUID(), "client-3");
@@ -121,9 +122,11 @@ class ManageDeadLetterUseCaseTest {
 
         ManageDeadLetterUseCase useCase = new ManageDeadLetterUseCase(repository, reprocessingPort);
 
-        DeadLetterConflictException error = assertThrows(DeadLetterConflictException.class,
-                () -> useCase.resolve(entry.getId(), "another@test", "manual review"));
-        assertEquals("Dead letter entry is already resolved", error.getMessage());
+        var response = useCase.resolve(entry.getId(), "another@test", "manual review");
+
+        assertEquals("Dead letter entry was already resolved", response.message());
+        assertEquals("operator@test", entry.getResolvedBy(), "o primeiro resolvedor e preservado");
+        verify(repository, never()).save(any());
     }
 
     @Test
@@ -160,7 +163,7 @@ class ManageDeadLetterUseCaseTest {
     }
 
     @Test
-    void reprocessShouldThrowConflictWhenEntryIsAlreadyResolved() {
+    void reprocessingAnAlreadyResolvedEntryIsANoOp() {
         DeadLetterEntryRepositoryPort repository = mock(DeadLetterEntryRepositoryPort.class);
         DeadLetterReprocessingPort reprocessingPort = mock(DeadLetterReprocessingPort.class);
         DeadLetterEntry entry = newRetryExhaustedEntry(UUID.randomUUID(), UUID.randomUUID(), "client-5");
@@ -169,10 +172,11 @@ class ManageDeadLetterUseCaseTest {
 
         ManageDeadLetterUseCase useCase = new ManageDeadLetterUseCase(repository, reprocessingPort);
 
-        DeadLetterConflictException error = assertThrows(DeadLetterConflictException.class,
-                () -> useCase.reprocess(entry.getId(), "operator@test", "retry capital flow"));
-        assertEquals("Dead letter entry is already resolved", error.getMessage());
+        var response = useCase.reprocess(entry.getId(), "operator@test", "retry capital flow");
+
+        assertEquals("Dead letter entry was already resolved - nothing reprocessed", response.message());
         verify(reprocessingPort, never()).reprocess(entry);
+        verify(repository, never()).save(any());
     }
 
     @Test

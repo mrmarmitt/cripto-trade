@@ -19,12 +19,12 @@ public interface ManageRemoteStrategiesPort {
      * Cadastra e confere a estrategia na hora. Servico fora do ar nao impede o cadastro: fica
      * {@code FAILED} e a conferencia e repetida periodicamente.
      */
-    RemoteStrategyView register(RegisterRemoteStrategyRequest request);
+    RemoteStrategyView register(RegisterRemoteStrategyRequest request, String reason);
 
     /**
      * Troca endereco e/ou token e confere de novo.
      */
-    RemoteStrategyView update(UUID strategyRef, UpdateRemoteStrategyRequest request);
+    RemoteStrategyView update(UUID strategyRef, UpdateRemoteStrategyRequest request, String reason);
 
     RemoteStrategyView enable(UUID strategyRef, String reason);
 
