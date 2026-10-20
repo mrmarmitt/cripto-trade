@@ -105,8 +105,10 @@ roda na mesma máquina e alcança `localhost:8080`.
 
 - Chaves da Binance testnet (testnet.binance.vision) com permissão de trade; conferir que a conta tem
   saldo de USDT e BTC.
-- Docker rodando. Banco limpo (dado de testnet é descartável): se já houver dados de rodadas antigas,
-  `docker compose --profile base down -v` apaga o volume do Postgres.
+- Docker rodando. Banco limpo (dado de testnet é descartável): com a aplicação **parada** e o Postgres
+  no ar, `./scripts/reset-testnet-db.ps1` apaga todos os dados e mantém o schema (recusa rodar com a
+  aplicação em `localhost:8080`). Alternativa mais drástica: `docker compose --profile base down -v`
+  apaga o volume inteiro.
 
 ### 1. Subir infraestrutura e aplicação (mantenedor)
 
