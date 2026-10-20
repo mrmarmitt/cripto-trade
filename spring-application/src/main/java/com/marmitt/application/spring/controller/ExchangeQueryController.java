@@ -54,7 +54,8 @@ public class ExchangeQueryController {
 
         if (asset != null && !asset.isBlank()) {
             List<BalanceDto> filtered = snapshot.balanceOf(asset).map(List::of).orElse(List.of());
-            snapshot = new ExchangeBalanceSnapshot(snapshot.exchangeName(), filtered, snapshot.retrievedAt());
+            snapshot = new ExchangeBalanceSnapshot(snapshot.exchangeName(), filtered, snapshot.retrievedAt(),
+                    snapshot.accountUpdatedAt());
         }
         return ResponseEntity.ok(snapshot);
     }

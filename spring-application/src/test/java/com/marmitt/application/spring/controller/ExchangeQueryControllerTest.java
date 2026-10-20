@@ -158,7 +158,7 @@ class ExchangeQueryControllerTest {
     }
 
     private static ExchangeBalanceSnapshot snapshot(BalanceDto... balances) {
-        return new ExchangeBalanceSnapshot(EXCHANGE, List.of(balances), AS_OF);
+        return new ExchangeBalanceSnapshot(EXCHANGE, List.of(balances), AS_OF, AS_OF);
     }
 
     private static TradeExecutionDto fill() {

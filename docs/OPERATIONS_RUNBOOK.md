@@ -187,6 +187,8 @@ O lote nunca mais será vendido, nem pela proteção do lote.
   `newStatus=ACTIVE`; `409 RUNNER_RECONCILIATION_INCOMPLETE` = a reconciliação não fechou (ver logs e
   DLQ do runner).
 - **Confirmar:** o runner sai de `subjects`.
+- Parar um runner (`halt`) não tira do livro as ordens LIMIT dele; se a intenção é zerar exposição,
+  cancelá-las em seguida (`GET /api/runners/<id>/transactions` → em voo → `.../orders/<tx>/cancel`).
 
 <a id="runner-reconciling"></a>
 ### RUNNER_RECONCILING — runner reconciliando
@@ -261,6 +263,10 @@ O coordenador (T56) reabre a conexão caída e reassina o símbolo sem tick a ca
 Só com `GET /api/admin/operational-state?includeExchange=true` (consome cota da API da exchange).
 Compara o total local de cada portfolio com o saldo da conta na moeda base, como a sanidade do boot.
 
+- **Limitação conhecida (T53, F3):** a comparação é por portfolio contra o saldo inteiro da conta. Com
+  vários portfolios na mesma conta, cada um tende a `WARN_SURPLUS` e a soma deles acima do saldo da conta
+  não é detectada. Até isso mudar, comparar à mão a soma de `GET /api/portfolios/<id>/balance` com
+  `GET /api/exchanges/<exchange>/balances`.
 - **Diagnóstico:** `subjects` traz `localTotal`, `exchangeTotal`, `signedDelta` e `result`:
   - `FAIL_DEFICIT` (CRITICAL): o ctrade acha que tem mais do que a conta tem — opera sobre capital que não
     existe;
@@ -370,7 +376,7 @@ Runner: 5 rejeições seguidas param só ele (`[RUNNER_AUTO_HALTED]`). Retomada 
 | Ação | Endpoint (todos com `X-Reason`) |
 |---|---|
 | Iniciar | `POST /api/admin/runners/{id}/start` (reconcilia e ativa) |
-| Parar | `POST /api/admin/runners/{id}/halt` |
+| Parar | `POST /api/admin/runners/{id}/halt` — **não cancela** ordens LIMIT que descansam no livro: elas seguem com capital reservado; cancelar uma a uma (`.../orders/{transactionId}/cancel`) se o objetivo é zerar exposição |
 | Retomar | `POST /api/admin/runners/{id}/resume` |
 | Encerrar | `POST /api/admin/runners/{id}/terminate` (arquiva sozinho quando zerado) |
 | Limites, proteção, liquidação | `PATCH /api/admin/runners/{id}` (campo omitido mantém) |

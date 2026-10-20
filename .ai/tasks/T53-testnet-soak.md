@@ -212,6 +212,11 @@ explicação (erro comprovadamente da testnet é aceito se registrado).
   conta após cada fill; o ctrade registra `ERROR` (147 na rodada).
 - **F6 — Operação: `halt` não cancela ordens que descansam no livro** (por desenho). Após o `halt`, a
   ordem LIMIT continua com capital reservado até cancelar à mão; o runbook deve dizer isso.
+
+**Correções (bugfix pós-rodada 1, 2026-10-20):** F1 (`C` no `executionReport`), F2 (lote aberto justifica
+reserva), F4 (`retrievedAt` = instante da consulta; `accountUpdatedAt` à parte), F5 (eventos de conta
+ignorados sem erro) e F6 (runbook). **F3 continua aberto** e depende de decisão do mantenedor; até lá, o
+runbook descreve a limitação. Próximo passo: repetir a fase 1.
 - A confirmar: comissão zero na testnet (`totalFeesPaid` 0 em 130 fills).
 
 

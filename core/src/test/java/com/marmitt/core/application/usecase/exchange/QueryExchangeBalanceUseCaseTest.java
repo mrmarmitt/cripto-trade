@@ -58,7 +58,8 @@ class QueryExchangeBalanceUseCaseTest {
         ExchangeBalanceSnapshot snapshot = useCase.queryBalances(EXCHANGE);
 
         assertEquals(EXCHANGE, snapshot.exchangeName());
-        assertEquals(AS_OF, snapshot.retrievedAt());
+        assertEquals(AS_OF, snapshot.accountUpdatedAt(), "ultima alteracao da conta segundo a exchange");
+        assertTrue(snapshot.retrievedAt().isAfter(AS_OF), "retrievedAt e o instante da consulta");
         assertEquals(2, snapshot.balances().size());
 
         BalanceDto usdt = snapshot.balanceOf("usdt").orElseThrow();

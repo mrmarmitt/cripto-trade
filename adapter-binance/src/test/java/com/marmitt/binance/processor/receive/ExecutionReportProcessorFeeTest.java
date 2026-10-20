@@ -42,6 +42,28 @@ class ExecutionReportProcessorFeeTest {
         assertNull(dto.feeAsset());
     }
 
+    @Test
+    void cancellationIsRoutedByTheOriginalClientOrderId() throws Exception {
+        OrderDataDto dto = process("""
+                {"e":"executionReport","s":"BTCUSDT","c":"web_cancel_request_id","C":"v1r3895t1792527338568s001B_d7a68480e",
+                 "S":"BUY","o":"LIMIT","X":"CANCELED","i":5175888,"q":"0.00100000","z":"0","Z":"0",
+                 "p":"78519.54000000","n":"0","N":null,"T":1700000000000}
+                """);
+
+        assertEquals("v1r3895t1792527338568s001B_d7a68480e", dto.clientOrderId(),
+                "no cancelamento o id da ordem original vem em C; c e o id do pedido de cancelamento");
+    }
+
+    @Test
+    void ordinaryEventsKeepTheClientOrderIdFromC() throws Exception {
+        OrderDataDto dto = process("""
+                {"e":"executionReport","s":"BTCUSDT","c":"cid","C":"","S":"BUY","o":"LIMIT","X":"NEW",
+                 "i":1,"q":"0.00100000","z":"0","Z":"0","p":"66300.00000000","n":"0","N":null,"T":1700000000000}
+                """);
+
+        assertEquals("cid", dto.clientOrderId());
+    }
+
     private OrderDataDto process(String json) throws Exception {
         return (OrderDataDto) processor.process(objectMapper.readTree(json),
                         MessageContext.createUserData("BINANCE", UUID.randomUUID()))

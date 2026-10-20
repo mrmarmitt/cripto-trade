@@ -8,6 +8,7 @@ import com.marmitt.core.ports.outbound.exchange.ExchangeAdapterDescriptor;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeSet;
@@ -58,7 +59,9 @@ public class QueryExchangeBalanceUseCase implements QueryExchangeBalancePort {
                 .map(asset -> BalanceDto.of(asset, free.get(asset), locked.get(asset)))
                 .toList();
 
-        return new ExchangeBalanceSnapshot(exchangeName, balances, account.lastUpdateTime());
+        // retrievedAt e o instante da consulta; a ultima alteracao da conta vai a parte (T53, rodada 1: o
+        // updateTime da conta aparecia como retrievedAt e parecia um saldo de 13 dias atras).
+        return new ExchangeBalanceSnapshot(exchangeName, balances, Instant.now(), account.lastUpdateTime());
     }
 
     private ExchangeAdapterDescriptor resolveAdapter(String exchangeName) {
