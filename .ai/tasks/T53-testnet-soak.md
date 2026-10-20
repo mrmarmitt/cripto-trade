@@ -4,7 +4,7 @@
 **Responsável:** Claude (spec, procedimento, análise) + mantenedor (execução no ambiente)
 **Dependências:** T2 (perfil testnet), T18 (relatório de reconciliação), T21/T51 (alertas), T25/T43/T44/T45/T48
 (proteções), T41 (estratégia remota).
-**Status:** Rascunho — **decisões de negócio pendentes** (ver seção própria).
+**Status:** Pendente — decisões registradas; execução bloqueada pelos pré-requisitos abertos.
 
 ---
 
@@ -59,15 +59,32 @@ Cada fase só começa com a anterior aprovada. Uma rodada reprovada gera achado 
 8. **Saldo:** saldo local coerente com o da exchange (checagem de saldo do boot sem `FAIL_DEFICIT` no
    restart do fim da rodada).
 
-## Decisões pendentes
+## Decisões registradas (2026-10-20)
 
-1. **Duração** da janela do soak (fases 2 e 3) e quantas rodadas limpas seguidas aprovam a fase.
-2. **Onde roda:** máquina local (precisa ficar ligada a janela inteira) ou servidor/VPS.
-3. **Símbolo(s) e capital** do portfolio na testnet (o saldo da testnet é limitado e a Binance zera a
-   conta periodicamente).
-4. **Estratégia do soak:** SMA com que parâmetros, ou outra estratégia de referência.
-5. **Falhas controladas:** quais entram, e em que momento da rodada.
-6. **Critérios:** confirmar, retirar ou acrescentar itens da lista acima.
+1. **Duração:** smoke (fase 1) de 1–2h; soak (fases 2 e 3) em rodadas de **24h**, aprovadas com
+   **2 rodadas limpas seguidas**; uma rodada final de **72h** antes de encerrar a trilha testnet.
+2. **Onde roda:** rodadas acima de 12h numa **VPS** a contratar. O smoke pode rodar na máquina local.
+3. **Símbolo:** **BTCUSDT**. Capital do portfolio abaixo do saldo da conta testnet (conferido antes
+   de cada rodada; proposta inicial de 1.000 USDT).
+4. **Estratégias:** as rodadas mais pesadas usam **várias estratégias remotas ao mesmo tempo**, cada
+   uma num processo, para estressar o ctrade (mailbox por runner, chamadas remotas concorrentes,
+   capital disputado). Limiares da SMA apertados (≈ 0,2%) para gerar várias idas e voltas por hora.
+5. **Falhas controladas:** as cinco da fase 4, **uma por rodada**; o mantenedor executa a ação, o
+   roteiro e a análise ficam com o Claude.
+6. **Critérios:** os 8 critérios valem. `ERROR` causado comprovadamente pela testnet é aceito quando
+   registrado no histórico da rodada.
+7. **Monitoramento periódico por IA durante a rodada:** além da conferência no fim, o Claude verifica
+   inconsistências em várias partes do sistema ao longo das 24h, por um gatilho agendado com prompt
+   definido. O desenho (frequência, prompt, acesso à VPS) fica para quando a VPS existir.
+
+## Pré-requisitos ainda abertos
+
+- **VPS** contratada e com o ambiente do Docker Compose (bloqueia as fases 2 a 4).
+- **Várias estratégias remotas:** o `strategy-service-reference` só serve a SMA com parâmetros fixos
+  (média 10, ±2%, 10% de alocação); limiares e tipo de estratégia não são configuráveis por processo.
+- **Catálogo remoto estático:** cada estratégia nova exige editar `ctrade.strategy.remote.catalog` e
+  reiniciar o ctrade (T41).
+- **Acesso do monitoramento por IA** aos endpoints, métricas e logs da VPS.
 
 ## Riscos e limitações conhecidas
 
