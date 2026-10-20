@@ -58,6 +58,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T50 | Limites de risco pré-trade (posições, ordens, preço, utilização) | Média | Claude | Concluído |
 | T51 | Observabilidade de capital, Safe Mode e lifecycle                | Baixa | Claude | Concluído |
 | T52 | MOCK: cancelamento de ordem em preenchimento simulado            | Média | Claude | Pendente  |
+| T53 | Soak test em testnet (procedimento, critérios, execuções)        | Média | Claude | Rascunho  |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 
 ## Ordem de execução
