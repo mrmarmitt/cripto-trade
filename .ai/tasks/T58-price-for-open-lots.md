@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T56 (coordenador de demanda de market data), T43 (drawdown e mark-to-market), T55
 (estado consolidado). Origem: achado F8 da rodada 3 da T53.
-**Status:** Implementada (2026-10-21) — aguardando PR/merge.
+**Status:** Concluído (2026-10-21) — PR #163; validado na testnet.
 
 ---
 
@@ -138,3 +138,8 @@ preço envelhece sem que ninguém perceba.
 - `MarketDataAutoFeedIntegrationTest` (Postgres + MOCK): runner nunca ativado com lote aberto em
   `SOLUSDT` (símbolo que nenhum outro teste assina) recebe preço; nenhuma avaliação nem ordem nova.
 - Suítes: `:core:test` 294, `:spring-application:test` 234, verdes.
+- **Testnet (2026-10-21, restart com os 4 runners `HALTED` e 2 lotes abertos):** 6s após o boot o
+  coordenador abriu `BINANCE:MARKET` para `BTCUSDT` sem runner ativo e sem stream de usuário; antes do
+  primeiro tick o PnL trouxe `unpricedPositions: 1` e `MARKET_DATA_STALE` `WARN` com `demand=OPEN_LOT`;
+  depois, `unpricedPositions: 0`, `priceAsOf` preenchido, flutuante marcado e `MARKET_DATA_STALE` `OK`.
+  Nenhum `WARN drawdown: no market price` desde a subida (rodada 3: 3 em 20s).
