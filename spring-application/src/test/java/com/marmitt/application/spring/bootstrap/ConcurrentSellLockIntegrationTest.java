@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.bootstrap;
 
+import com.marmitt.core.domain.runner.RunnerStatusCause;
 import com.marmitt.application.spring.testsupport.DatabaseCleaner;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.Position;
@@ -230,8 +231,8 @@ class ConcurrentSellLockIntegrationTest extends AbstractIntegrationTest {
 
         StrategyRunner runner = strategyRunnerRepository.findById(response.runnerId())
                 .orElseThrow(() -> new IllegalStateException("Runner not found: " + response.runnerId()));
-        runner.startInitializing();
-        runner.activate();
+        runner.startInitializing(RunnerStatusCause.manual("test"));
+        runner.activate(RunnerStatusCause.manual("test"));
         strategyRunnerRepository.save(runner);
         return runner;
     }

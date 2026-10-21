@@ -1,5 +1,6 @@
 package com.marmitt.core.application.handler.connection;
 
+import com.marmitt.core.domain.runner.RunnerStatusCause;
 import com.marmitt.core.dto.events.WebSocketFailedEvent;
 import com.marmitt.core.ports.inbound.handler.CriticalConnectionFailedPort;
 import com.marmitt.core.ports.inbound.runner.HaltRunnerPort;
@@ -21,6 +22,7 @@ public class CriticalConnectionFailureHandler implements CriticalConnectionFaile
         }
         log.error("Critical connection failure — exchange={} channel={} after {} attempts. Halting all runners.",
                 event.exchange(), event.channel(), event.attemptCount());
-        haltRunnerPort.haltAll();
+        haltRunnerPort.haltAll(RunnerStatusCause.automatic("critical connection failure exchange="
+                + event.exchange() + " channel=" + event.channel() + " attempts=" + event.attemptCount()));
     }
 }

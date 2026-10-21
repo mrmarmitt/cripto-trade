@@ -1,5 +1,6 @@
 package com.marmitt.core.application.usecase.runner;
 
+import com.marmitt.core.domain.runner.RunnerStatusCause;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.runner.response.RunnerTransitionResult;
 import com.marmitt.core.enums.RunnerStatus;
@@ -25,7 +26,7 @@ public class HaltRunnerUseCase implements HaltRunnerPort {
     }
 
     @Override
-    public List<RunnerTransitionResult> haltAll() {
+    public List<RunnerTransitionResult> haltAll(RunnerStatusCause cause) {
         // Use canAcceptSignals() as eligibility: ACTIVE or TERMINATING outside reconciliation, so that
         // boot recovery in progress is not interrupted by a concurrent halt-all (T49: TERMINATING too).
         List<RunnerTransitionResult> affected = Stream.of(RunnerStatus.ACTIVE, RunnerStatus.TERMINATING)
@@ -33,7 +34,7 @@ public class HaltRunnerUseCase implements HaltRunnerPort {
                 .filter(StrategyRunner::canAcceptSignals)
                 .map(runner -> {
                     RunnerStatus previous = runner.getStatus();
-                    runner.halt();
+                    runner.halt(cause);
                     runnerRepository.save(runner);
                     metrics.recordTransition(previous, RunnerStatus.HALTED);
                     log.info("kill-switch: runner halted - id={} strategy={} symbol={} previous={}",
@@ -46,14 +47,14 @@ public class HaltRunnerUseCase implements HaltRunnerPort {
     }
 
     @Override
-    public RunnerTransitionResult haltById(UUID id) {
+    public RunnerTransitionResult haltById(UUID id, RunnerStatusCause cause) {
         var runner = runnerRepository.findById(id)
                 .orElseThrow(() -> new RunnerNotFoundException(id));
 
         RunnerStatus previous = runner.getStatus();
         // Mesma elegibilidade do halt-all: ACTIVE ou TERMINATING fora de reconciliacao (T49).
         if (runner.canAcceptSignals()) {
-            runner.halt();
+            runner.halt(cause);
             runnerRepository.save(runner);
             metrics.recordTransition(previous, RunnerStatus.HALTED);
             log.info("kill-switch: runner halted - id={} strategy={} symbol={}",

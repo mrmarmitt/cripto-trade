@@ -1,5 +1,6 @@
 package com.marmitt.core.application.usecase.runner;
 
+import com.marmitt.core.domain.runner.RunnerStatusCause;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.dto.runner.RecoveryContext;
@@ -98,8 +99,12 @@ public class RunnerBootRecoveryUseCase {
         this.exchangeQueryExecutor = exchangeQueryExecutor;
     }
 
-    public RecoverySummary recoverRunner(StrategyRunner runner) {
-        RecoveryContext recovery = new RecoveryContext(runner);
+    /**
+     * @param cause quem pede a reconciliacao: o boot ou o operador (start/resume). Vira a causa das
+     *              transicoes que ela fizer (T59)
+     */
+    public RecoverySummary recoverRunner(StrategyRunner runner, RunnerStatusCause cause) {
+        RecoveryContext recovery = new RecoveryContext(runner, cause);
 
         log.info("bootRecovery: start runnerId={} exchange={} status={} reconciling={}",
                 recovery.runnerId(), recovery.exchangeId(), recovery.runner().getStatus(), recovery.runner().isReconciling());
@@ -422,13 +427,13 @@ public class RunnerBootRecoveryUseCase {
         if (!recovery.hasErrors()) {
             RunnerStatus currentStatus = latestRunner.getStatus();
             if (currentStatus == RunnerStatus.CREATED) {
-                latestRunner.startInitializing();
-                latestRunner.activate();
+                latestRunner.startInitializing(recovery.cause());
+                latestRunner.activate(recovery.cause());
                 metrics.recordTransition(RunnerStatus.CREATED, RunnerStatus.INITIALIZING);
                 metrics.recordTransition(RunnerStatus.INITIALIZING, RunnerStatus.ACTIVE);
                 recovery.note("Step 6: runner activated CREATED->ACTIVE.");
             } else if (currentStatus == RunnerStatus.INITIALIZING) {
-                latestRunner.activate();
+                latestRunner.activate(recovery.cause());
                 metrics.recordTransition(RunnerStatus.INITIALIZING, RunnerStatus.ACTIVE);
                 recovery.note("Step 6: runner activated INITIALIZING->ACTIVE.");
             } else {
@@ -440,7 +445,8 @@ public class RunnerBootRecoveryUseCase {
         }
 
         if (latestRunner.getStatus() == RunnerStatus.ACTIVE) {
-            latestRunner.halt();
+            latestRunner.halt(new RunnerStatusCause(recovery.cause().origin(),
+                    "reconciliation failed: " + recovery.firstError()));
             strategyRunnerRepository.save(latestRunner);
             metrics.recordTransition(RunnerStatus.ACTIVE, RunnerStatus.HALTED);
             recovery.note("Step 6: runner moved ACTIVE->HALTED due to reconciliation errors.");

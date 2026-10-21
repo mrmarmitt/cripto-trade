@@ -7,6 +7,7 @@ import com.marmitt.core.application.usecase.exchange.ExchangeBalanceReconciliati
 import com.marmitt.core.application.usecase.portfolio.AutomaticSafeModeTrigger;
 import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.ports.inbound.boot.RunBootSequencePort;
+import com.marmitt.core.ports.outbound.repository.BootRunRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.GlobalBalanceRepositoryPort;
@@ -47,7 +48,8 @@ public class BootConfig {
             PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase,
             DeadLetterEntryRepositoryPort deadLetterEntryRepository,
             RunnerBootRecoveryUseCase runnerBootRecoveryUseCase,
-            AutomaticSafeModeTrigger automaticSafeModeTrigger
+            AutomaticSafeModeTrigger automaticSafeModeTrigger,
+            BootRunRepositoryPort bootRunRepository
     ) {
         return new RunBootSequenceUseCase(
                 portfolioRepository,
@@ -57,7 +59,8 @@ public class BootConfig {
                 portfolioZombieDetectionUseCase,
                 deadLetterEntryRepository,
                 runnerBootRecoveryUseCase,
-                automaticSafeModeTrigger
+                automaticSafeModeTrigger,
+                bootRunRepository
         );
     }
 }

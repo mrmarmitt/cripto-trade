@@ -33,6 +33,9 @@ curl -s -X POST -H "X-Admin-Key: $KEY" -H "X-Reason: <motivo>" -H "X-Operator: <
 - Todo comando, aceito ou recusado, fica em `GET /api/admin/operator-actions` (`since`, `pathContains`,
   `limit`). Antes de agir sobre algo, consultar o que já foi feito nele:
   `GET /api/admin/operator-actions?pathContains=<id>`.
+- O que o **sistema** fez sozinho (Safe Mode automático, halt de runner por rejeições, saída protetiva,
+  DLQ, boot) e o que o operador fez estão juntos, em ordem, em `GET /api/admin/events` (`since`, `until`,
+  `portfolioId`, `limit`; T59). Para "o que aconteceu desde X", começar por ela.
 - Não existe endpoint de ordem direta na exchange: toda ordem nasce de um runner.
 
 <a id="ciclo-de-verificacao"></a>
@@ -182,8 +185,11 @@ O lote nunca mais será vendido, nem pela proteção do lote.
 <a id="runner-halted"></a>
 ### RUNNER_HALTED — runner parado
 
-- **Diagnóstico:** `GET /api/admin/operator-actions?pathContains=<runnerId>` (halt manual?) e alertas
-  `[RUNNER_AUTO_HALTED]` (5 rejeições seguidas: saldo, filtros, credencial).
+- **Diagnóstico:** `GET /api/admin/events?portfolioId=<portfolioId>`: o último `RUNNER_STATUS_CHANGED`
+  do runner diz quem parou (`origin`: `MANUAL`, `AUTOMATIC`, `BOOT`) e por quê (`reason`). `AUTOMATIC`
+  com "consecutive order rejections" = 5 rejeições seguidas (saldo, filtros, credencial; alerta
+  `[RUNNER_AUTO_HALTED]`); `BOOT` com "reconciliation failed" = a reconciliação do boot achou erro (DLQ
+  pendente, ordem sem resposta).
 - **Ação (causa resolvida):** `POST /api/admin/runners/<id>/resume` + `X-Reason`. Esperado `200` com
   `newStatus=ACTIVE`; `409 RUNNER_RECONCILIATION_INCOMPLETE` = a reconciliação não fechou (ver logs e
   DLQ do runner).
@@ -399,6 +405,10 @@ Runner: 5 rejeições seguidas param só ele (`[RUNNER_AUTO_HALTED]`). Retomada 
 | Limites, proteção, liquidação | `PATCH /api/admin/runners/{id}` (campo omitido mantém) |
 | Cancelar ordem | `POST /api/admin/runners/{id}/orders/{transactionId}/cancel` (`202`) |
 | Fechar posição | `POST /api/admin/runners/{id}/positions/{positionId}/close` (`202`, SELL MARKET do lote) |
+
+O `X-Reason` de `start`, `halt`, `resume` e `terminate` vira o motivo da transição no histórico do runner
+(`RUNNER_STATUS_CHANGED` em `GET /api/admin/events`, origem `MANUAL`). Transições do sistema ficam com
+origem `AUTOMATIC` (rejeições seguidas, falha crítica de conexão, arquivamento do runner zerado) ou `BOOT`.
 
 Códigos de recusa: `RUNNER_INVALID_STATE`, `RUNNER_RECONCILIATION_INCOMPLETE`, `EXCHANGE_UNAVAILABLE`,
 `ORDER_NOT_FOUND`, `POSITION_NOT_FOUND`, `POSITION_LOCKED` (cancelar a SELL LIMIT antes),

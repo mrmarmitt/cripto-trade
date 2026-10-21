@@ -9,6 +9,8 @@ TRUNCATE TABLE
     remote_strategy_events,
     remote_strategies,
     safe_mode_changes,
+    runner_status_changes,
+    boot_runs,
     equity_snapshots,
     capital_event_ledger,
     dead_letter_entries,

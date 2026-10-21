@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.bootstrap;
 
+import com.marmitt.core.domain.runner.RunnerStatusCause;
 import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.dto.runner.request.CreateRunnerRequest;
 import com.marmitt.core.dto.runner.response.CreateRunnerResponse;
@@ -49,16 +50,16 @@ class RunnerLifecycleE2ETest extends ScenarioStrategyE2ETestSupport {
         UUID runnerId = createRunner(new RestingBuyCancelStrategy(ScenarioStrategyConfig.boundedConfig(1)));
         assertEquals(RunnerStatus.CREATED, status(runnerId));
 
-        assertEquals(RunnerStatus.ACTIVE, runnerLifecycle.start(runnerId).newStatus());
+        assertEquals(RunnerStatus.ACTIVE, runnerLifecycle.start(runnerId, "test").newStatus());
         tickUntil(() -> !transactionsOfType(runnerId, "BUY").isEmpty(), "primeira BUY apos o start", runnerId);
 
-        haltRunner.haltById(runnerId);
+        haltRunner.haltById(runnerId, RunnerStatusCause.manual("test"));
         assertEquals(RunnerStatus.HALTED, status(runnerId));
         double evaluatedWhileHalted = totalEvaluations(runnerId);
         driveTicks(3);
         assertEquals(evaluatedWhileHalted, totalEvaluations(runnerId), "Runner halted nao avalia sinais");
 
-        assertEquals(RunnerStatus.ACTIVE, runnerLifecycle.resume(runnerId).newStatus());
+        assertEquals(RunnerStatus.ACTIVE, runnerLifecycle.resume(runnerId, "test").newStatus());
         driveTicks(3);
         assertTrue(totalEvaluations(runnerId) > evaluatedWhileHalted, "Retomado, o runner volta a avaliar sinais");
     }
@@ -71,7 +72,7 @@ class RunnerLifecycleE2ETest extends ScenarioStrategyE2ETestSupport {
                 "BUY descansando", runnerId);
         UUID buyId = transactionsOfType(runnerId, "BUY").getFirst().id();
 
-        haltRunner.haltById(runnerId);   // operador para o runner e puxa a ordem
+        haltRunner.haltById(runnerId, RunnerStatusCause.manual("test"));   // operador para o runner e puxa a ordem
         runnerOrderCommands.cancelOrder(runnerId, buyId);
 
         awaitCondition(() -> "CANCELED".equals(transactionsOfType(runnerId, "BUY").getFirst().status()),
@@ -91,7 +92,7 @@ class RunnerLifecycleE2ETest extends ScenarioStrategyE2ETestSupport {
         tickUntil(() -> positionCount(runnerId, "OPEN") == 1 && transactionsOfType(runnerId, "SELL").isEmpty()
                 && !hasInFlight(runnerId), "lote aberto sem SELL", runnerId);
 
-        assertEquals(RunnerStatus.TERMINATING, runnerLifecycle.terminate(runnerId).newStatus());
+        assertEquals(RunnerStatus.TERMINATING, runnerLifecycle.terminate(runnerId, "test").newStatus());
         Position lot = strategyRunnerRepository.findOpenPositionsByRunnerId(runnerId).getFirst();
         latestPrices.record(SYMBOL, MARKET_PRICE);
         runnerOrderCommands.closePosition(runnerId, lot.getId());

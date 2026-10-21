@@ -5,6 +5,7 @@ import com.marmitt.core.enums.SafeModeStatus;
 import org.springframework.web.bind.annotation.RequestHeader;
 
 import com.marmitt.binance.filters.SymbolFilterCache;
+import com.marmitt.core.domain.runner.RunnerStatusCause;
 import com.marmitt.core.dto.portfolio.request.ChangeSafeModeRequest;
 import com.marmitt.core.dto.portfolio.response.SafeModeStatusDto;
 import com.marmitt.core.dto.runner.response.RunnerDto;
@@ -61,13 +62,15 @@ public class AdminController {
     }
 
     @PostMapping("/runners/halt")
-    public ResponseEntity<List<RunnerTransitionResult>> haltAll() {
-        return ResponseEntity.ok(haltRunner.haltAll());
+    public ResponseEntity<List<RunnerTransitionResult>> haltAll(
+            @RequestHeader(OperatorCommandInterceptor.REASON) String reason) {
+        return ResponseEntity.ok(haltRunner.haltAll(RunnerStatusCause.manual(reason)));
     }
 
     @PostMapping("/runners/{id}/halt")
-    public ResponseEntity<RunnerTransitionResult> haltById(@PathVariable UUID id) {
-        return ResponseEntity.ok(haltRunner.haltById(id));
+    public ResponseEntity<RunnerTransitionResult> haltById(@PathVariable UUID id,
+                                                           @RequestHeader(OperatorCommandInterceptor.REASON) String reason) {
+        return ResponseEntity.ok(haltRunner.haltById(id, RunnerStatusCause.manual(reason)));
     }
 
     @GetMapping("/runners/status")
@@ -76,18 +79,21 @@ public class AdminController {
     }
 
     @PostMapping("/runners/{id}/start")
-    public ResponseEntity<RunnerTransitionResult> start(@PathVariable UUID id) {
-        return ResponseEntity.ok(runnerLifecycle.start(id));
+    public ResponseEntity<RunnerTransitionResult> start(@PathVariable UUID id,
+                                                        @RequestHeader(OperatorCommandInterceptor.REASON) String reason) {
+        return ResponseEntity.ok(runnerLifecycle.start(id, reason));
     }
 
     @PostMapping("/runners/{id}/resume")
-    public ResponseEntity<RunnerTransitionResult> resume(@PathVariable UUID id) {
-        return ResponseEntity.ok(runnerLifecycle.resume(id));
+    public ResponseEntity<RunnerTransitionResult> resume(@PathVariable UUID id,
+                                                         @RequestHeader(OperatorCommandInterceptor.REASON) String reason) {
+        return ResponseEntity.ok(runnerLifecycle.resume(id, reason));
     }
 
     @PostMapping("/runners/{id}/terminate")
-    public ResponseEntity<RunnerTransitionResult> terminate(@PathVariable UUID id) {
-        return ResponseEntity.ok(runnerLifecycle.terminate(id));
+    public ResponseEntity<RunnerTransitionResult> terminate(@PathVariable UUID id,
+                                                            @RequestHeader(OperatorCommandInterceptor.REASON) String reason) {
+        return ResponseEntity.ok(runnerLifecycle.terminate(id, reason));
     }
 
     @PatchMapping("/runners/{id}")

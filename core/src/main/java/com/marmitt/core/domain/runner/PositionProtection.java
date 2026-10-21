@@ -20,6 +20,12 @@ import java.util.Optional;
  */
 public record PositionProtection(BigDecimal maxLossPercentPerLot, Duration maxHoldingDuration) {
 
+    /**
+     * Inicio do {@code reasoning} da venda protetiva. A linha do tempo de eventos (T59) reconhece a saida
+     * protetiva por ele.
+     */
+    public static final String EXIT_REASONING_PREFIX = "protective exit ";
+
     /** Decisão de negócio da T44: 5% por lote, abaixo do disjuntor de drawdown de 10% do portfólio. */
     public static final BigDecimal DEFAULT_MAX_LOSS_PERCENT_PER_LOT = new BigDecimal("0.05");
 

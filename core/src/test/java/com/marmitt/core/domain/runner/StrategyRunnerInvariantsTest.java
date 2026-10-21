@@ -4,11 +4,13 @@ import com.marmitt.core.enums.AccountingPolicyType;
 import com.marmitt.core.enums.ExecutionPolicy;
 import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.RunnerStatus;
+import com.marmitt.core.enums.RunnerStatusOrigin;
 import com.marmitt.core.exceptions.RunnerOperationException;
 import org.junit.jupiter.api.Test;
 
 import java.math.BigDecimal;
 import java.time.Duration;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 
@@ -23,39 +25,70 @@ class StrategyRunnerInvariantsTest {
     void lifecycleTransitionsFollowExpectedOrder() {
         StrategyRunner runner = newRunner();
 
-        runner.startInitializing();
+        runner.startInitializing(RunnerStatusCause.manual("test"));
         assertEquals(RunnerStatus.INITIALIZING, runner.getStatus());
 
-        runner.activate();
+        runner.activate(RunnerStatusCause.manual("test"));
         assertEquals(RunnerStatus.ACTIVE, runner.getStatus());
 
-        runner.halt();
+        runner.halt(RunnerStatusCause.manual("test"));
         assertEquals(RunnerStatus.HALTED, runner.getStatus());
 
-        runner.resume();
+        runner.resume(RunnerStatusCause.manual("test"));
         assertEquals(RunnerStatus.ACTIVE, runner.getStatus());
 
-        runner.startTerminating();
+        runner.startTerminating(RunnerStatusCause.manual("test"));
         assertEquals(RunnerStatus.TERMINATING, runner.getStatus());
 
-        runner.archive();
+        runner.archive(RunnerStatusCause.manual("test"));
         assertEquals(RunnerStatus.ARCHIVED, runner.getStatus());
+    }
+
+    @Test
+    void everyTransitionIsRecordedWithItsCauseUntilTheRepositoryDrainsIt() {
+        StrategyRunner runner = newRunner();
+
+        runner.startInitializing(RunnerStatusCause.manual("operator start"));
+        runner.startInitializing(RunnerStatusCause.manual("retry start"));   // ja INITIALIZING: sem transicao
+        runner.activate(RunnerStatusCause.manual("operator start"));
+        runner.halt(RunnerStatusCause.automatic("consecutive order rejections"));
+
+        List<RunnerStatusChange> changes = runner.drainStatusChanges();
+        assertEquals(List.of("CREATED>INITIALIZING:MANUAL:operator start", "INITIALIZING>ACTIVE:MANUAL:operator start",
+                        "ACTIVE>HALTED:AUTOMATIC:consecutive order rejections"),
+                changes.stream().map(c -> c.from() + ">" + c.to() + ":" + c.origin() + ":" + c.reason()).toList());
+        assertTrue(changes.stream().allMatch(c -> c.runnerId().equals(runner.getId())));
+        assertEquals(runner.getStatusChangedAt(), changes.getLast().changedAt());
+        assertTrue(runner.drainStatusChanges().isEmpty(), "gravado uma vez so");
+
+        runner.resume(RunnerStatusCause.boot("boot runner recovery"));
+        assertEquals(RunnerStatusOrigin.BOOT, runner.drainStatusChanges().getFirst().origin());
+    }
+
+    @Test
+    void refusedTransitionRecordsNothingAndCauseIsMandatory() {
+        StrategyRunner runner = newRunner();
+
+        assertThrows(RunnerOperationException.class, () -> runner.halt(RunnerStatusCause.manual("test")));
+        assertThrows(NullPointerException.class, () -> runner.startInitializing(null));
+        assertThrows(IllegalArgumentException.class, () -> RunnerStatusCause.manual(" "));
+        assertTrue(runner.drainStatusChanges().isEmpty());
     }
 
     @Test
     void beginReconciliationRejectsTerminatingAndArchived() {
         StrategyRunner terminatingRunner = newRunner();
-        terminatingRunner.startInitializing();
-        terminatingRunner.activate();
-        terminatingRunner.startTerminating();
+        terminatingRunner.startInitializing(RunnerStatusCause.manual("test"));
+        terminatingRunner.activate(RunnerStatusCause.manual("test"));
+        terminatingRunner.startTerminating(RunnerStatusCause.manual("test"));
 
         assertThrows(IllegalStateException.class, terminatingRunner::beginReconciliation);
 
         StrategyRunner archivedRunner = newRunner();
-        archivedRunner.startInitializing();
-        archivedRunner.activate();
-        archivedRunner.startTerminating();
-        archivedRunner.archive();
+        archivedRunner.startInitializing(RunnerStatusCause.manual("test"));
+        archivedRunner.activate(RunnerStatusCause.manual("test"));
+        archivedRunner.startTerminating(RunnerStatusCause.manual("test"));
+        archivedRunner.archive(RunnerStatusCause.manual("test"));
 
         assertThrows(IllegalStateException.class, archivedRunner::beginReconciliation);
     }
@@ -65,10 +98,10 @@ class StrategyRunnerInvariantsTest {
         StrategyRunner runner = newRunner();
         assertFalse(runner.canAcceptSignals());
 
-        runner.startInitializing();
+        runner.startInitializing(RunnerStatusCause.manual("test"));
         assertFalse(runner.canAcceptSignals());
 
-        runner.activate();
+        runner.activate(RunnerStatusCause.manual("test"));
         assertTrue(runner.canAcceptSignals());
 
         runner.beginReconciliation();
@@ -106,7 +139,7 @@ class StrategyRunnerInvariantsTest {
         StrategyRunner runner = activeRunner();
         assertTrue(runner.canOpenPositions());
 
-        runner.startTerminating();
+        runner.startTerminating(RunnerStatusCause.manual("test"));
 
         assertTrue(runner.canAcceptSignals());
         assertFalse(runner.canOpenPositions());
@@ -115,9 +148,9 @@ class StrategyRunnerInvariantsTest {
     @Test
     void killSwitchAlsoHaltsATerminatingRunner() {
         StrategyRunner runner = activeRunner();
-        runner.startTerminating();
+        runner.startTerminating(RunnerStatusCause.manual("test"));
 
-        runner.halt();
+        runner.halt(RunnerStatusCause.manual("test"));
 
         assertEquals(RunnerStatus.HALTED, runner.getStatus());
         assertFalse(runner.canAcceptSignals());
@@ -127,17 +160,17 @@ class StrategyRunnerInvariantsTest {
     void invalidTransitionsRaiseRunnerOperationException() {
         StrategyRunner created = newRunner();
 
-        assertThrows(RunnerOperationException.class, created::resume);
-        assertThrows(RunnerOperationException.class, created::halt);
-        assertThrows(RunnerOperationException.class, created::startTerminating);
+        assertThrows(RunnerOperationException.class, () -> created.resume(RunnerStatusCause.manual("test")));
+        assertThrows(RunnerOperationException.class, () -> created.halt(RunnerStatusCause.manual("test")));
+        assertThrows(RunnerOperationException.class, () -> created.startTerminating(RunnerStatusCause.manual("test")));
     }
 
     @Test
     void startInitializingIsRetriableWhileInitializing() {
         StrategyRunner runner = newRunner();
-        runner.startInitializing();
+        runner.startInitializing(RunnerStatusCause.manual("test"));
 
-        runner.startInitializing();
+        runner.startInitializing(RunnerStatusCause.manual("test"));
 
         assertEquals(RunnerStatus.INITIALIZING, runner.getStatus());
     }
@@ -222,8 +255,8 @@ class StrategyRunnerInvariantsTest {
 
     private static StrategyRunner activeRunner() {
         StrategyRunner runner = newRunner();
-        runner.startInitializing();
-        runner.activate();
+        runner.startInitializing(RunnerStatusCause.manual("test"));
+        runner.activate(RunnerStatusCause.manual("test"));
         return runner;
     }
 

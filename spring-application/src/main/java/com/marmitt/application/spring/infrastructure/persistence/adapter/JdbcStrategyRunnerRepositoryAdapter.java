@@ -7,6 +7,7 @@ import com.marmitt.application.spring.infrastructure.persistence.repository.Runn
 import com.marmitt.application.spring.infrastructure.persistence.repository.RunnerTransactionMatchJdbcRepository;
 import com.marmitt.application.spring.infrastructure.persistence.repository.StrategyRunnerJdbcRepository;
 import com.marmitt.core.domain.runner.Position;
+import com.marmitt.core.domain.runner.RunnerStatusChange;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
 import com.marmitt.core.domain.runner.TransactionMatch;
@@ -20,12 +21,15 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.dao.OptimisticLockingFailureException;
 import org.springframework.data.relational.core.conversion.DbActionExecutionException;
+import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
+import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.DefaultTransactionDefinition;
 
+import java.sql.Timestamp;
 import java.util.Collection;
 import java.time.Instant;
 import java.util.List;
@@ -48,6 +52,7 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     private final RunnerTransactionJdbcRepository transactionRepo;
     private final RunnerTransactionMatchJdbcRepository matchRepo;
     private final PlatformTransactionManager txManager;
+    private final NamedParameterJdbcTemplate jdbcTemplate;
 
     // ── StrategyRunner ──────────────────────────────────────────────────────
 
@@ -56,7 +61,26 @@ public class JdbcStrategyRunnerRepositoryAdapter implements StrategyRunnerReposi
     public void save(StrategyRunner runner) {
         long start = System.nanoTime();
         runnerRepo.save(StrategyRunnerEntityMapper.toEntity(runner));
-        log.trace("[REPO] runner.save({}) - {}ms", runner.getId(), RepoTiming.elapsedMs(start));
+        // T59: transicoes de estado gravadas com o runner, na mesma transacao.
+        List<RunnerStatusChange> changes = runner.drainStatusChanges();
+        changes.forEach(this::insertStatusChange);
+        log.trace("[REPO] runner.save({}) statusChanges={} - {}ms", runner.getId(), changes.size(),
+                RepoTiming.elapsedMs(start));
+    }
+
+    private void insertStatusChange(RunnerStatusChange change) {
+        jdbcTemplate.update("""
+                INSERT INTO runner_status_changes(id, runner_id, from_status, to_status, origin, reason, changed_at)
+                VALUES (:id, :runnerId, :from, :to, :origin, :reason, :changedAt)
+                """,
+                new MapSqlParameterSource()
+                        .addValue("id", change.id())
+                        .addValue("runnerId", change.runnerId())
+                        .addValue("from", change.from().name())
+                        .addValue("to", change.to().name())
+                        .addValue("origin", change.origin().name())
+                        .addValue("reason", change.reason())
+                        .addValue("changedAt", Timestamp.from(change.changedAt())));
     }
 
     @Override

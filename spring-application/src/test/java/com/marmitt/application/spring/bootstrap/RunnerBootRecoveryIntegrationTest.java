@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.bootstrap;
 
+import com.marmitt.core.domain.runner.RunnerStatusCause;
 import com.marmitt.application.spring.config.exchange.MockExchangeAdapter;
 import com.marmitt.application.spring.testsupport.DatabaseCleaner;
 import com.marmitt.core.domain.Symbol;
@@ -114,7 +115,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
                 pendingBuy.getId()
         );
 
-        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner, RunnerStatusCause.boot("test"));
 
         // PENDING (sem exchangeOrderId) agora e consultado na exchange (nao encontrado) e
         // expirado pelo mesmo caminho do limbo — sem expiracao local cega.
@@ -174,7 +175,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
                 null
         ));
 
-        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner, RunnerStatusCause.boot("test"));
 
         // Query-before-expire: ordem viva e reconciliada (PENDING->SUBMITTED); capital NAO liberado.
         Transaction submitted = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.SUBMITTED, WAIT_TIMEOUT);
@@ -204,7 +205,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         strategyRunnerRepository.saveTransaction(youngPending);
         assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
 
-        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner, RunnerStatusCause.boot("test"));
 
         // Deferido: continua PENDING, fora do limbo; capital reservado preservado; runner ativa.
         Transaction stillPending = strategyRunnerRepository.findTransactionById(youngPending.getId())
@@ -242,12 +243,12 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
                 pendingBuy.getId()
         );
 
-        RunnerBootRecoveryUseCase.RecoverySummary first = runnerBootRecoveryUseCase.recoverRunner(runner);
+        RunnerBootRecoveryUseCase.RecoverySummary first = runnerBootRecoveryUseCase.recoverRunner(runner, RunnerStatusCause.boot("test"));
         Transaction expired = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.EXPIRED, WAIT_TIMEOUT);
         assertNotNull(expired);
         awaitBalance(portfolioId, INITIAL_CAPITAL, BigDecimal.ZERO, WAIT_TIMEOUT);
 
-        RunnerBootRecoveryUseCase.RecoverySummary second = runnerBootRecoveryUseCase.recoverRunner(runner);
+        RunnerBootRecoveryUseCase.RecoverySummary second = runnerBootRecoveryUseCase.recoverRunner(runner, RunnerStatusCause.boot("test"));
 
         Transaction expiredAgain = awaitTransactionStatus(pendingBuy.getId(), TransactionStatus.EXPIRED, WAIT_TIMEOUT);
         assertNotNull(expiredAgain);
@@ -280,7 +281,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         strategyRunnerRepository.saveTransaction(submittedBuy);
         assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
 
-        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner, RunnerStatusCause.boot("test"));
 
         Transaction expired = awaitTransactionStatus(submittedBuy.getId(), TransactionStatus.EXPIRED, WAIT_TIMEOUT);
         assertNotNull(expired);
@@ -289,7 +290,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
 
         awaitBalance(portfolioId, INITIAL_CAPITAL, BigDecimal.ZERO, WAIT_TIMEOUT);
 
-        RunnerBootRecoveryUseCase.RecoverySummary second = runnerBootRecoveryUseCase.recoverRunner(runner);
+        RunnerBootRecoveryUseCase.RecoverySummary second = runnerBootRecoveryUseCase.recoverRunner(runner, RunnerStatusCause.boot("test"));
 
         assertEquals(0, second.inFlightCount());
         assertEquals(0, second.limboCount());
@@ -332,7 +333,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         balanceAfterPartial.confirmExecution(partialExecutedCost, BigDecimal.ZERO, BigDecimal.ZERO);
         globalBalanceRepository.save(balanceAfterPartial);
 
-        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner, RunnerStatusCause.boot("test"));
 
         Transaction canceled = awaitTransactionStatus(partialBuy.getId(), TransactionStatus.CANCELED, WAIT_TIMEOUT);
         assertNotNull(canceled);
@@ -347,7 +348,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
 
         awaitBalance(portfolioId, INITIAL_CAPITAL, BigDecimal.ZERO, WAIT_TIMEOUT);
 
-        RunnerBootRecoveryUseCase.RecoverySummary second = runnerBootRecoveryUseCase.recoverRunner(runner);
+        RunnerBootRecoveryUseCase.RecoverySummary second = runnerBootRecoveryUseCase.recoverRunner(runner, RunnerStatusCause.boot("test"));
 
         assertEquals(0, second.inFlightCount());
         assertEquals(0, second.limboCount());
@@ -389,7 +390,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         strategyRunnerRepository.saveTransaction(submittedBuy);
         assertTrue(globalBalanceRepository.reserveAtomic(portfolioId, reservedAmount));
 
-        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner, RunnerStatusCause.boot("test"));
 
         Transaction stillSubmitted = awaitTransactionStatus(submittedBuy.getId(), TransactionStatus.SUBMITTED, WAIT_TIMEOUT);
         assertNotNull(stillSubmitted);
@@ -447,7 +448,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
                 "Planned transient query failure"
         );
 
-        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner, RunnerStatusCause.boot("test"));
 
         Transaction filled = awaitTransactionStatus(submittedBuy.getId(), TransactionStatus.FILLED, WAIT_TIMEOUT);
         assertNotNull(filled);
@@ -506,7 +507,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
                 "Planned transient query failure exhausted"
         );
 
-        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner, RunnerStatusCause.boot("test"));
 
         Transaction stillSubmitted = awaitTransactionStatus(submittedBuy.getId(), TransactionStatus.SUBMITTED, WAIT_TIMEOUT);
         assertNotNull(stillSubmitted);
@@ -560,7 +561,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
                 BigDecimal.ZERO
         ));
 
-        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner, RunnerStatusCause.boot("test"));
 
         Transaction filled = awaitTransactionStatus(submittedBuy.getId(), TransactionStatus.FILLED, WAIT_TIMEOUT);
         assertNotNull(filled);
@@ -621,7 +622,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
                 BigDecimal.ZERO
         ));
 
-        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner, RunnerStatusCause.boot("test"));
 
         Transaction filled = awaitTransactionStatus(partialBuy.getId(), TransactionStatus.FILLED, WAIT_TIMEOUT);
         assertNotNull(filled);
@@ -643,7 +644,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
                 WAIT_TIMEOUT
         );
 
-        RunnerBootRecoveryUseCase.RecoverySummary second = runnerBootRecoveryUseCase.recoverRunner(runner);
+        RunnerBootRecoveryUseCase.RecoverySummary second = runnerBootRecoveryUseCase.recoverRunner(runner, RunnerStatusCause.boot("test"));
 
         assertEquals(0, second.inFlightCount());
         assertEquals(0, second.limboCount());
@@ -679,7 +680,7 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
         );
         assertTrue(deadLetterEntryRepository.existsUnresolvedByRunnerId(runner.getId()));
 
-        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner, RunnerStatusCause.boot("test"));
 
         assertEquals(0, summary.inFlightCount());
         assertEquals(0, summary.limboCount());
@@ -717,8 +718,8 @@ class RunnerBootRecoveryIntegrationTest extends AbstractIntegrationTest {
 
         StrategyRunner runner = strategyRunnerRepository.findById(response.runnerId())
                 .orElseThrow(() -> new IllegalStateException("Runner not found: " + response.runnerId()));
-        runner.startInitializing();
-        runner.activate();
+        runner.startInitializing(RunnerStatusCause.manual("test"));
+        runner.activate(RunnerStatusCause.manual("test"));
         strategyRunnerRepository.save(runner);
         return strategyRunnerRepository.findById(response.runnerId())
                 .orElseThrow(() -> new IllegalStateException("Runner not found after activation"));

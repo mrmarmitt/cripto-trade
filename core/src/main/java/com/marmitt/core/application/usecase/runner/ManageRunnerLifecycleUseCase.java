@@ -1,5 +1,6 @@
 package com.marmitt.core.application.usecase.runner;
 
+import com.marmitt.core.domain.runner.RunnerStatusCause;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.runner.request.UpdateRunnerLimitsRequest;
 import com.marmitt.core.dto.runner.response.RunnerTransitionResult;
@@ -34,6 +35,10 @@ import java.util.UUID;
 @Slf4j
 public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
 
+    /** Causa do arquivamento: consequencia do terminate, feita pelo sistema quando o runner zera (T59). */
+    private static final RunnerStatusCause ARCHIVE_WHEN_FLAT =
+            RunnerStatusCause.automatic("terminated runner has no position and no order in flight");
+
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
     private final ExchangeAdapterRepositoryPort exchangeAdapterRepository;
     private final RunnerBootRecoveryUseCase runnerRecovery;
@@ -53,7 +58,8 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
     }
 
     @Override
-    public RunnerTransitionResult start(UUID runnerId) {
+    public RunnerTransitionResult start(UUID runnerId, String reason) {
+        RunnerStatusCause cause = RunnerStatusCause.manual(reason);
         StrategyRunner runner = load(runnerId);
         RunnerStatus previous = runner.getStatus();
         if (previous == RunnerStatus.ACTIVE) {
@@ -61,13 +67,13 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
             return RunnerTransitionResult.of(runner, previous);
         }
         requireExchangeAvailable(runner);
-        runner.startInitializing();
+        runner.startInitializing(cause);
         strategyRunnerRepository.save(runner);
         if (previous != RunnerStatus.INITIALIZING) {
             metrics.recordTransition(previous, RunnerStatus.INITIALIZING);
         }
 
-        reconcile(runner, "start");
+        reconcile(runner, "start", cause);
         StrategyRunner started = load(runnerId);
         log.info("runnerLifecycle: started runnerId={} {} -> {}", runnerId, previous, started.getStatus());
         notifyActivated(started);
@@ -75,7 +81,8 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
     }
 
     @Override
-    public RunnerTransitionResult resume(UUID runnerId) {
+    public RunnerTransitionResult resume(UUID runnerId, String reason) {
+        RunnerStatusCause cause = RunnerStatusCause.manual(reason);
         StrategyRunner runner = load(runnerId);
         if (runner.getStatus() == RunnerStatus.ACTIVE) {
             return RunnerTransitionResult.of(runner, RunnerStatus.ACTIVE);
@@ -86,9 +93,9 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
         }
         requireExchangeAvailable(runner);
 
-        reconcile(runner, "resume");
+        reconcile(runner, "resume", cause);
         StrategyRunner reconciled = load(runnerId);
-        reconciled.resume();
+        reconciled.resume(cause);
         strategyRunnerRepository.save(reconciled);
         metrics.recordTransition(RunnerStatus.HALTED, RunnerStatus.ACTIVE);
         log.info("runnerLifecycle: resumed runnerId={} HALTED -> ACTIVE", runnerId);
@@ -97,13 +104,13 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
     }
 
     @Override
-    public RunnerTransitionResult terminate(UUID runnerId) {
+    public RunnerTransitionResult terminate(UUID runnerId, String reason) {
         StrategyRunner runner = load(runnerId);
         RunnerStatus previous = runner.getStatus();
         if (previous == RunnerStatus.TERMINATING || previous == RunnerStatus.ARCHIVED) {
             return RunnerTransitionResult.of(runner, previous);
         }
-        runner.startTerminating();
+        runner.startTerminating(RunnerStatusCause.manual(reason));
         strategyRunnerRepository.save(runner);
         metrics.recordTransition(previous, RunnerStatus.TERMINATING);
         log.info("runnerLifecycle: terminating runnerId={} {} -> TERMINATING", runnerId, previous);
@@ -141,8 +148,8 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
      * Reconciliacao do runner (mesmo caminho do boot). Sem conclusao limpa a operacao e recusada; o
      * runner fica como a reconciliacao o deixou e o motivo vai na resposta.
      */
-    private void reconcile(StrategyRunner runner, String operation) {
-        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerRecovery.recoverRunner(runner);
+    private void reconcile(StrategyRunner runner, String operation, RunnerStatusCause cause) {
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerRecovery.recoverRunner(runner, cause);
         if (!summary.completed()) {
             throw new RunnerOperationException("RUNNER_RECONCILIATION_INCOMPLETE", "Runner " + runner.getId() + " " + operation
                     + " refused: reconciliation not completed " + summary.notes());
@@ -188,7 +195,7 @@ public class ManageRunnerLifecycleUseCase implements ManageRunnerLifecyclePort {
             return;
         }
         Instant terminatingSince = runner.getStatusChangedAt();
-        runner.archive();
+        runner.archive(ARCHIVE_WHEN_FLAT);
         strategyRunnerRepository.save(runner);
         metrics.recordTransition(RunnerStatus.TERMINATING, RunnerStatus.ARCHIVED);
         metrics.recordTerminatingDuration(Duration.between(terminatingSince, runner.getStatusChangedAt()));

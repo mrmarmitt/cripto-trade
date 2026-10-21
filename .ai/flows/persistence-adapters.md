@@ -134,6 +134,10 @@ Pontos criticos:
   limite transacional.
 - `transaction_matches` sao registros de execucao; nao trate como estado
   mutavel de lifecycle.
+- `runner_status_changes` (V19, T59): toda transicao de estado do runner exige uma
+  `RunnerStatusCause` (origem `MANUAL`/`AUTOMATIC`/`BOOT` + motivo); a entidade guarda as transicoes
+  ainda nao gravadas e `save(runner)` as insere na mesma transacao do runner
+  (`drainStatusChanges`). Um caminho so: nenhum chamador grava historico a parte.
 
 ### DeadLetter
 
@@ -172,6 +176,19 @@ Ponto critico:
 - retorno `false` significa evento duplicado e deve impedir novo efeito
   financeiro.
 
+### Historico do boot e linha do tempo (T59)
+
+Contratos: `BootRunRepositoryPort` e `EventTimelineRepositoryPort`.
+
+Implementacao:
+
+- `JdbcBootRunRepositoryAdapter`: tabela `boot_runs` (V19), uma linha por boot terminado, gravada
+  pelo `RunBootSequenceUseCase`; falha ao gravar so loga (o boot segue).
+- `JdbcEventTimelineRepositoryAdapter`: somente leitura; `UNION ALL` ordenado de `safe_mode_changes`,
+  `runner_status_changes`, transacoes SELL com `reasoning` iniciando em
+  `PositionProtection.EXIT_REASONING_PREFIX`, `dead_letter_entries`, `operator_actions`,
+  `remote_strategy_events` e `boot_runs`. Nao copia dado: cada evento e lido da tabela de origem.
+
 ## Repositorios Em Memoria
 
 Nem todo `RepositoryPort` e persistencia duravel.
@@ -199,6 +216,8 @@ Migrations relevantes:
   DLQ e indices para pendencias;
 - `V9__add_updated_at_to_transactions.sql`: suporte a consultas por
   `updated_at` em recovery/watchdog.
+- `V19__create_runner_status_changes_and_boot_runs.sql` (T59): historico de transicoes do runner,
+  historico do boot e indices por instante nas tabelas lidas pela linha do tempo.
 
 ## Invariantes
 

@@ -44,8 +44,8 @@ Além disso, não há consulta única: reconstruir a rodada exige juntar cinco e
 
 ### Parte A — Persistir o que se perde
 
-1. **`runner_status_changes`**: `runner_id`, `from_status`, `to_status`, `origin` (`OPERATOR`,
-   `AUTOMATIC`, `BOOT`), `reason`, `changed_at`. Mesmo formato de `safe_mode_changes`. Gravada no mesmo
+1. **`runner_status_changes`**: `runner_id`, `from_status`, `to_status`, `origin` (`MANUAL`,
+   `AUTOMATIC`, `BOOT`; mesmos nomes do Safe Mode), `reason`, `changed_at`. Mesmo formato de `safe_mode_changes`. Gravada no mesmo
    ponto e na mesma transação em que o runner muda de estado. O halt automático por rejeições
    (`ConsecutiveRejectionGuard`) grava o motivo com a contagem e o último código de rejeição.
 2. **`boot_runs`**: `run_id`, `mode`, `status` (`SUCCESS`/`FAILED`), `started_at`, `finished_at`,
@@ -128,6 +128,32 @@ a entrada do "Registro de execuções":
   ordem, filtros, paginação).
 - Integração com Postgres: o cenário do critério 3; boot gravado.
 - Testnet: próxima rodada local com o relatório da Parte C.
+
+## Entrega (2026-10-21)
+
+- **Domínio:** toda transição do `StrategyRunner` exige `RunnerStatusCause` (origem + motivo) e gera um
+  `RunnerStatusChange`; a entidade guarda as transições ainda não gravadas e
+  `StrategyRunnerRepositoryPort.save` as grava com o runner, na mesma transação (`drainStatusChanges`).
+  Um caminho só: nenhum chamador grava histórico à parte.
+- **Causas:** comandos do operador (`start`, `halt`, `resume`, `terminate`) usam o `X-Reason` como motivo
+  (`MANUAL`); rejeições seguidas e falha crítica de conexão são `AUTOMATIC` com contagem/canal no motivo;
+  arquivamento do runner zerado é `AUTOMATIC`; a reconciliação usa a causa de quem a pediu (`BOOT` no
+  boot, `MANUAL` no start/resume), e o halt por erro de reconciliação leva o primeiro erro no motivo.
+- **Boot:** `RunBootSequenceUseCase` grava `BootRun` em `boot_runs` ao terminar (sucesso ou falha, com a
+  fase que falhou); falha ao gravar só loga.
+- **Linha do tempo:** `GET /api/admin/events` → `QueryEventTimelinePort` (core: intervalo padrão de 24h,
+  `limit` padrão 200 e máximo 1000, `truncated`/`nextSince`) → `JdbcEventTimelineRepositoryAdapter`
+  (`UNION ALL` das sete fontes). A saída protetiva é reconhecida por
+  `PositionProtection.EXIT_REASONING_PREFIX`, o mesmo prefixo que a proteção grava.
+- **Migration V19:** `runner_status_changes`, `boot_runs` e índices por instante em `safe_mode_changes`,
+  `dead_letter_entries` e `remote_strategy_events`. `reset_testnet_database.sql` limpa as tabelas novas.
+- **Parte C:** `docs/monitoring/round-report.md`; o fechamento da T53 aponta para ele.
+- **Testes:** `StrategyRunnerInvariantsTest` (+2: registro com causa e esvaziamento; transição recusada
+  não registra), `QueryEventTimelineUseCaseTest` (3), `ConsecutiveRejectionGuardTest` e
+  `CriticalConnectionFailureHandlerTest` (causa `AUTOMATIC`), `BootOrchestratorBootMinimumTest` (boot
+  gravado no sucesso e na falha), `EventTimelineIntegrationTest` (Postgres: start, halt automático, HALT
+  automático e retomada manual do Safe Mode, resume, saída protetiva e DLQ em ordem; filtro de portfolio;
+  paginação; boot).
 
 ## Fontes
 

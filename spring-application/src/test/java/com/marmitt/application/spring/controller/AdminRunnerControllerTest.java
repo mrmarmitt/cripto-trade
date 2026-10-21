@@ -51,10 +51,10 @@ class AdminRunnerControllerTest {
 
     @Test
     void resumeReturnsTheTransition() throws Exception {
-        when(lifecycle.resume(runnerId)).thenReturn(
+        when(lifecycle.resume(runnerId, "test")).thenReturn(
                 new RunnerTransitionResult(runnerId, "s", "BTCUSDT", RunnerStatus.HALTED, RunnerStatus.ACTIVE));
 
-        mockMvc.perform(post("/api/admin/runners/{id}/resume", runnerId))
+        mockMvc.perform(post("/api/admin/runners/{id}/resume", runnerId).header("X-Reason", "test"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.previousStatus").value("HALTED"))
                 .andExpect(jsonPath("$.newStatus").value("ACTIVE"));
@@ -62,12 +62,12 @@ class AdminRunnerControllerTest {
 
     @Test
     void refusedOperationIsConflictAndUnknownRunnerIsNotFound() throws Exception {
-        when(lifecycle.start(runnerId)).thenThrow(new RunnerOperationException("reconciliation not completed"));
+        when(lifecycle.start(runnerId, "test")).thenThrow(new RunnerOperationException("reconciliation not completed"));
         UUID unknown = UUID.randomUUID();
-        when(lifecycle.terminate(unknown)).thenThrow(new RunnerNotFoundException(unknown));
+        when(lifecycle.terminate(unknown, "test")).thenThrow(new RunnerNotFoundException(unknown));
 
-        mockMvc.perform(post("/api/admin/runners/{id}/start", runnerId)).andExpect(status().isConflict());
-        mockMvc.perform(post("/api/admin/runners/{id}/terminate", unknown)).andExpect(status().isNotFound());
+        mockMvc.perform(post("/api/admin/runners/{id}/start", runnerId).header("X-Reason", "test")).andExpect(status().isConflict());
+        mockMvc.perform(post("/api/admin/runners/{id}/terminate", unknown).header("X-Reason", "test")).andExpect(status().isNotFound());
     }
 
     @Test

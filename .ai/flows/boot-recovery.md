@@ -111,6 +111,13 @@ resume so reativa com reconciliacao limpa.
 e conclusao do run. Mudancas no boot devem preservar esses pontos de observacao,
 porque eles sao usados para diagnostico operacional e testes.
 
+Historico (T59): ao terminar, com sucesso ou falha, o `RunBootSequenceUseCase` grava o boot em
+`boot_runs` (`BootRunRepositoryPort`: modo, inicio, fim, fase e mensagem da falha). `/api/boot/status`
+continua mostrando so o boot corrente, em memoria; o historico aparece em `GET /api/admin/events`
+(`BOOT_COMPLETED`/`BOOT_FAILED`). Falha ao gravar so loga: boot sem banco nao tem onde registrar.
+As transicoes que a reconciliacao faz no runner levam a causa de quem a pediu: `BOOT` no boot,
+`MANUAL` (com o `X-Reason`) no start/resume do operador.
+
 Logs sentinel relevantes (T23 G3/G4):
 
 - `bootSequence.phase2.sanity: completed runId={} result={} exchanges={}` — `result`

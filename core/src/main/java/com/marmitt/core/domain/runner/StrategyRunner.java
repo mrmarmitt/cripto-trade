@@ -5,12 +5,15 @@ import com.marmitt.core.enums.ExecutionPolicy;
 import com.marmitt.core.enums.OrderType;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.exceptions.RunnerOperationException;
+import lombok.AccessLevel;
 import lombok.Getter;
 
 import java.math.BigDecimal;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.Collections;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -90,6 +93,13 @@ public class StrategyRunner {
     private Instant archivedAt;
 
     private Long version;
+
+    /**
+     * Transicoes ainda nao gravadas (T59). Toda transicao de estado entra aqui com a causa; o
+     * repositorio grava o runner e o historico juntos e esvazia a lista ({@link #drainStatusChanges()}).
+     */
+    @Getter(AccessLevel.NONE)
+    private final List<RunnerStatusChange> pendingStatusChanges = new ArrayList<>();
 
     /**
      * Construtor principal para criação de um novo Runner.
@@ -200,14 +210,13 @@ public class StrategyRunner {
      * Inicia o processo de inicialização (Boot Sequence).
      * CREATED → INITIALIZING
      */
-    public void startInitializing() {
+    public void startInitializing(RunnerStatusCause cause) {
         if (this.status == RunnerStatus.INITIALIZING) {
             // Start anterior parou na reconciliacao: o novo start retoma dali (T49).
             return;
         }
         requireStatus(RunnerStatus.CREATED);
-        this.status = RunnerStatus.INITIALIZING;
-        this.statusChangedAt = Instant.now();
+        transitionTo(RunnerStatus.INITIALIZING, cause);
         this.isReconciling = true;
     }
 
@@ -215,10 +224,9 @@ public class StrategyRunner {
      * Marca o Runner como ativo após Boot Sequence bem-sucedida.
      * INITIALIZING → ACTIVE
      */
-    public void activate() {
+    public void activate(RunnerStatusCause cause) {
         requireStatus(RunnerStatus.INITIALIZING);
-        this.status = RunnerStatus.ACTIVE;
-        this.statusChangedAt = Instant.now();
+        transitionTo(RunnerStatus.ACTIVE, cause);
         this.isReconciling = false;
         this.lastReconciliationAt = Instant.now();
     }
@@ -228,45 +236,41 @@ public class StrategyRunner {
      * ACTIVE ou TERMINATING → HALTED. Um runner em encerramento também para por completo; ao
      * retomar ele volta a ACTIVE e o encerramento precisa ser pedido de novo (T49).
      */
-    public void halt() {
+    public void halt(RunnerStatusCause cause) {
         if (this.status != RunnerStatus.ACTIVE && this.status != RunnerStatus.TERMINATING) {
             throw new RunnerOperationException("Cannot halt runner in status " + this.status);
         }
-        this.status = RunnerStatus.HALTED;
-        this.statusChangedAt = Instant.now();
+        transitionTo(RunnerStatus.HALTED, cause);
     }
 
     /**
      * Retoma operação após HALTED.
      * HALTED → ACTIVE
      */
-    public void resume() {
+    public void resume(RunnerStatusCause cause) {
         requireStatus(RunnerStatus.HALTED);
-        this.status = RunnerStatus.ACTIVE;
-        this.statusChangedAt = Instant.now();
+        transitionTo(RunnerStatus.ACTIVE, cause);
     }
 
     /**
      * Inicia processo de encerramento (aguarda ordens em voo).
      * ACTIVE ou HALTED → TERMINATING
      */
-    public void startTerminating() {
+    public void startTerminating(RunnerStatusCause cause) {
         if (this.status != RunnerStatus.ACTIVE && this.status != RunnerStatus.HALTED) {
             throw new RunnerOperationException("Cannot start terminating from status: " + this.status);
         }
-        this.status = RunnerStatus.TERMINATING;
-        this.statusChangedAt = Instant.now();
+        transitionTo(RunnerStatus.TERMINATING, cause);
     }
 
     /**
      * Arquiva o Runner após encerramento completo (soft delete).
      * TERMINATING → ARCHIVED
      */
-    public void archive() {
+    public void archive(RunnerStatusCause cause) {
         requireStatus(RunnerStatus.TERMINATING);
-        this.status = RunnerStatus.ARCHIVED;
-        this.statusChangedAt = Instant.now();
-        this.archivedAt = Instant.now();
+        transitionTo(RunnerStatus.ARCHIVED, cause);
+        this.archivedAt = this.statusChangedAt;
     }
 
     // ============================================================
@@ -384,6 +388,25 @@ public class StrategyRunner {
                     "shortCode must be 2-4 characters, got: " + shortCode);
         }
         return shortCode.toLowerCase();
+    }
+
+    /**
+     * Transicoes registradas desde a ultima gravacao, em ordem, e a lista esvaziada. Chamado pelo
+     * repositorio ao gravar o runner (T59).
+     */
+    public List<RunnerStatusChange> drainStatusChanges() {
+        List<RunnerStatusChange> drained = List.copyOf(pendingStatusChanges);
+        pendingStatusChanges.clear();
+        return drained;
+    }
+
+    private void transitionTo(RunnerStatus target, RunnerStatusCause cause) {
+        Objects.requireNonNull(cause, "cause cannot be null");
+        RunnerStatus previous = this.status;
+        this.status = target;
+        this.statusChangedAt = Instant.now();
+        pendingStatusChanges.add(new RunnerStatusChange(UUID.randomUUID(), id, previous, target, cause.origin(),
+                cause.reason(), statusChangedAt));
     }
 
     private void requireStatus(RunnerStatus expected) {
