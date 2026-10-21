@@ -4,7 +4,7 @@
 **Responsável:** Claude (num repositório próprio, fora do ctrade)
 **Dependências:** T41/T40 (contrato 1.1, `docs/strategy-service/CONTRACT.md`), T54 (catálogo por API). Desbloqueia
 a fase 3 da T53; serve de portfólio inicial para o M3 do roadmap (`.ai/agentic-strategy-roadmap.md`).
-**Status:** Pendente — decisões registradas em 2026-10-21; aguardando o repositório novo.
+**Status:** Pendente — decisões registradas em 2026-10-21; repositório definido (`ctrade-dev/ctrade-strategies`), aguardando a criação no GitHub.
 
 ---
 
@@ -113,7 +113,7 @@ e pelo cadastro na T54 (o ctrade confere `/v1/meta` antes de usar a estratégia)
 
 ## Decisões registradas (2026-10-21)
 
-1. **Repositório separado**, criado pelo mantenedor (ex.: `ctrade-strategies`): prova o "qualquer
+1. **Repositório separado**, criado pelo mantenedor: `https://github.com/ctrade-dev/ctrade-strategies`. Prova o "qualquer
    linguagem" do contrato, mantém o ctrade sem código de estratégia e fora da CI dele.
 2. **Python** para as cinco, para testar decimal como string e o contrato fora do JVM.
 3. **Um processo por estratégia** (decisão 4 da T53), mesmo com código compartilhado.
