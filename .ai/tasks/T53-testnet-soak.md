@@ -84,7 +84,8 @@ Cada fase só começa com a anterior aprovada. Uma rodada reprovada gera achado 
 - **Apps de estratégia para o soak:** o ctrade só define o contrato; as estratégias são apps
   independentes, em qualquer linguagem. Para as rodadas pesadas é preciso ter várias apps que
   implementem o contrato (o `strategy-service-reference` serve só a SMA com parâmetros fixos). Spec na
-  **T60** (cinco perfis: tendência, reversão, livro, rompimento e caos).
+  **T60** (cinco perfis: tendência, reversão, livro, rompimento e caos). Tendência e caos prontos
+  em `ctrade-dev/ctrade-strategies` (roteiro abaixo); os outros três em andamento.
 - ~~Catálogo remoto estático~~ resolvido pela **T54**: estratégias cadastradas por API, sem restart.
 - **Acesso do Claude** aos endpoints, métricas e logs da VPS para o relatório de fim de rodada.
 
@@ -179,6 +180,49 @@ O alerta *Cancel rate > 10/min* dos cenários 1 e 2 é esperado nesta fase.
 Os 4 ramos se comportaram como na tabela; nenhuma divergência de trades com a exchange; nenhum saldo
 local acima do da exchange; DLQ vazia; `reserved = 0` em todos os portfolios no fim; nenhum `ERROR` sem
 explicação (erro comprovadamente da testnet é aceito se registrado).
+
+## Roteiro — Apps de estratégia da T60 (fase 3)
+
+As apps vivem em `ctrade-dev/ctrade-strategies` (README de lá: parâmetros, falhas do caos, `GET /stats`).
+Disponíveis: **tendência** e **caos**; livro, reversão e rompimento entram depois.
+
+### 1. Subir as apps (mantenedor)
+
+```powershell
+cd ..\ctrade-strategies
+docker compose up -d --build     # trend em 127.0.0.1:8091, chaos em 127.0.0.1:8095
+```
+
+Na VPS: os serviços entram na rede do Compose do ctrade, sem `ports`, e o `baseUrl` passa a ser
+`http://<serviço>:8080/v1`. Token por estratégia em `TREND_TOKEN`/`CHAOS_TOKEN` (o mesmo vai no cadastro).
+
+### 2. Cadastrar (agente)
+
+`POST /api/admin/strategies` com `X-Reason`, uma vez por app (cadastro repetido com a mesma definição
+é idempotente):
+
+| App | `strategyRef` | `name` | `version` | `baseUrl` local |
+|---|---|---|---|---|
+| tendência | `c7a1b2d3-0001-4000-8000-000000000001` | `SoakTrend` | `1.0.0` | `http://localhost:8091/v1` |
+| caos | `c7a1b2d3-0005-4000-8000-000000000005` | `SoakChaos` | `1.0.0` | `http://localhost:8095/v1` |
+
+Esperado `verification=VERIFIED` e `usable=true`.
+
+### 3. Portfolio e runners (agente; limites combinados com o mantenedor no início da rodada)
+
+- Um portfolio de soak (`initialCapitalAmount` 1000 USDT, decisão 3) com um runner por app em BTCUSDT.
+- `maxAllocationPercent` dos runners somando mais que 100% de propósito, para haver disputa de capital
+  (`PATCH /api/admin/runners/{id}`).
+- O runner do caos com capital pequeno. A guarda de rejeições consecutivas (5) pode parar esse runner;
+  o halt aparece na linha do tempo como `AUTOMATIC` e não reprova a rodada se vier do caos.
+- `POST /api/admin/runners/{id}/start` em cada um.
+
+### 4. No fim da rodada (agente)
+
+- `GET http://localhost:8095/stats` (e o do trend): contagem por decisão e por falha (`FAULT_<tipo>`).
+  Entra no relatório da rodada para separar as falhas de propósito das inesperadas.
+- Derrubar uma app (`docker compose stop chaos`) deve deixar só o runner dela em HOLD
+  (`STRATEGY_UNAVAILABLE`); os demais seguem operando.
 
 ## Registro de execuções
 

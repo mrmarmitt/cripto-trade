@@ -4,7 +4,7 @@
 **Responsável:** Claude (num repositório próprio, fora do ctrade)
 **Dependências:** T41/T40 (contrato 1.1, `docs/strategy-service/CONTRACT.md`), T54 (catálogo por API). Desbloqueia
 a fase 3 da T53; serve de portfólio inicial para o M3 do roadmap (`.ai/agentic-strategy-roadmap.md`).
-**Status:** Pendente — decisões registradas em 2026-10-21; repositório definido (`ctrade-dev/ctrade-strategies`), aguardando a criação no GitHub.
+**Status:** Em andamento — tendência e caos em `ctrade-dev/ctrade-strategies` (PR #1); faltam a validação contra o ctrade rodando e os perfis livro, reversão e rompimento.
 
 ---
 
@@ -118,6 +118,21 @@ e pelo cadastro na T54 (o ctrade confere `/v1/meta` antes de usar a estratégia)
 2. **Python** para as cinco, para testar decimal como string e o contrato fora do JVM.
 3. **Um processo por estratégia** (decisão 4 da T53), mesmo com código compartilhado.
 4. **Ordem de entrega:** tendência e caos primeiro; depois livro, reversão e rompimento.
+
+## Entrega 1 — tendência e caos (2026-10-21)
+
+- Repositório `ctrade-dev/ctrade-strategies` (privado), PR #1 para `develop`. Python 3.13 sem
+  dependências de runtime; uma imagem Docker, a estratégia é o argumento (`trend`, `chaos`).
+- Regras do contrato num servidor comum (cache por `tickId`, `sequence`, readiness por runner, token,
+  erro interno vira HOLD). Cada estratégia só decide.
+- Conformidade: os testes validam requisição e resposta contra uma cópia do `openapi.yaml`
+  (`contract/SOURCE` guarda o commit de origem; `scripts/sync_contract.py` atualiza).
+- Caos: as oito falhas com taxa por tipo (padrão 1%) e o modo "segura a posição".
+- **Decisão:** "resposta acima de `max-decision-age`" não é provocável pela app. A idade conta desde o
+  tick, e uma resposta lenta a esse ponto já passou do timeout de 250 ms. Para esse caminho, baixar
+  `ctrade.strategy.remote.max-decision-age-ms`.
+- Fora do contrato, `GET /stats` conta decisões e falhas para o relatório da rodada.
+- Passo a passo de subir e cadastrar: T53, "Roteiro — Apps de estratégia da T60".
 
 ## Fora do escopo
 
