@@ -26,6 +26,8 @@ tarefa ou no PR.
 - `/.ai/product-direction.md`: proposito do sistema (operado por IA), divisao de responsabilidades,
   estrategias so por contrato, principios de operabilidade e sequencia de maturidade; atualizar
   quando o mantenedor mudar a direcao do produto
+- `/.ai/agentic-strategy-roadmap.md`: roadmap da gestao agentica de estrategias (blocos, marcos,
+  decisoes pendentes); atualizar quando um marco virar task ou o mantenedor decidir algo dele
 - `/.ai/development-manual.md`: manual operacional (dono de cada responsabilidade, padroes por
   modulo, anti-padroes rejeitados, processo e checklist); atualizar quando um padrao novo for
   adotado ou um anti-padrao for corrigido

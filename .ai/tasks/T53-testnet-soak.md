@@ -73,9 +73,10 @@ Cada fase só começa com a anterior aprovada. Uma rodada reprovada gera achado 
    roteiro e a análise ficam com o Claude.
 6. **Critérios:** os 8 critérios valem. `ERROR` causado comprovadamente pela testnet é aceito quando
    registrado no histórico da rodada.
-7. **Monitoramento periódico por IA durante a rodada:** além da conferência no fim, o Claude verifica
-   inconsistências em várias partes do sistema ao longo das 24h, por um gatilho agendado com prompt
-   definido. Desenho na **T59** (procedimento, linha do tempo de eventos, onde o agente roda).
+7. **Validação no fim da rodada (revista em 2026-10-21):** sem verificação periódica durante a rodada;
+   os automatismos do ctrade reagem sozinhos. No fim, o Claude reconstrói a rodada pela linha do tempo
+   de eventos e produz o relatório. Desenho na **T59** (eventos persistidos, `GET /api/admin/events`,
+   procedimento do relatório).
 
 ## Pré-requisitos ainda abertos
 
@@ -84,7 +85,7 @@ Cada fase só começa com a anterior aprovada. Uma rodada reprovada gera achado 
   independentes, em qualquer linguagem. Para as rodadas pesadas é preciso ter várias apps que
   implementem o contrato (o `strategy-service-reference` serve só a SMA com parâmetros fixos).
 - ~~Catálogo remoto estático~~ resolvido pela **T54**: estratégias cadastradas por API, sem restart.
-- **Acesso do monitoramento por IA** aos endpoints, métricas e logs da VPS.
+- **Acesso do Claude** aos endpoints, métricas e logs da VPS para o relatório de fim de rodada.
 
 ## Riscos e limitações conhecidas
 

@@ -42,8 +42,8 @@ estado, agir com seguranca e confirmar o efeito.
 | Cada estrategia num processo proprio | Minimo entregue (T40/T41): contrato, `RemoteTradingStrategy`, HOLD quando a estrategia falha. |
 | Estrategias cadastradas por API | Entregue (T54): catalogo persistido em `/api/admin/strategies`, token por estrategia, historico. |
 | Estrategia nova sem deploy nem restart do ctrade | Entregue (T54). |
-| IA regulando as estrategias ativas | Sem task. Depende de shadow, canario e promocao de versao (fora da T41). |
-| IA propondo estrategias novas | Sem task. Depende tambem de harness de backtest. |
+| IA regulando as estrategias ativas | Sem task. Roadmap em `agentic-strategy-roadmap.md` (marcos M0-M3). |
+| IA propondo estrategias novas | Sem task. Roadmap em `agentic-strategy-roadmap.md` (marcos M4-M6). |
 
 ## Principios de operabilidade por IA
 
@@ -71,7 +71,7 @@ consulta unica de consistencia. Ao criar algo novo, seguir esse padrao.
 ## Sequencia de maturidade
 
 1. **Testnet primeiro e por muito tempo.** Soak, falhas controladas e estrategias remotas na Binance
-   testnet (T53), com verificacao periodica por IA durante as rodadas.
+   testnet (T53), validadas no fim de cada rodada pela linha do tempo de eventos (T59).
 2. **Producao so depois.** Perfil de producao (`application-prod.yml`) e gestao de segredos entram
    apenas depois de estabilidade comprovada em testnet. Nao priorizar antes.
 3. Dados de testnet sao descartaveis: inconsistencia historica de testnet nao e remediada; limpa-se e
