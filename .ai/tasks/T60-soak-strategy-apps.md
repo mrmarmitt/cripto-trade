@@ -1,0 +1,159 @@
+# T60 — Apps de Estratégia para o Soak
+
+**Complexidade:** Média
+**Responsável:** Claude (num repositório próprio, fora do ctrade)
+**Dependências:** T41/T40 (contrato 1.1, `docs/strategy-service/CONTRACT.md`), T54 (catálogo por API). Desbloqueia
+a fase 3 da T53; serve de portfólio inicial para o M3 do roadmap (`.ai/agentic-strategy-roadmap.md`).
+**Status:** Pendente — decisões do mantenedor abertas (ver "Decisões pendentes").
+
+---
+
+## Descrição
+
+A fase 3 da T53 (decisão 4) pede **várias estratégias remotas ao mesmo tempo, cada uma num processo**,
+para estressar o ctrade: mailbox por runner, chamadas remotas concorrentes, capital disputado entre
+runners e muitas idas e voltas por hora. Hoje só existe o `strategy-service-reference`, que serve o SMA
+de parâmetros fixos e é exemplo de conformidade, não estratégia de soak.
+
+Esta task define **que estratégias o soak precisa e o que cada uma deve provocar no ctrade**. Não
+padroniza como uma app de estratégia é construída (`product-direction.md`, "Estratégias externas: só
+contrato"): as apps vivem fora do ctrade, falam só o contrato e respondem só `SHOULD_BUY`, `SHOULD_SELL`,
+`SHOULD_CANCEL` ou `SHOULD_HOLD`. O ctrade não muda.
+
+## O que o soak precisa provocar
+
+| Caminho do ctrade | Quem provoca |
+|---|---|
+| BUY e SELL a mercado, várias por hora | tendência e reversão |
+| LIMIT que descansa no livro, cancelamento da estratégia, reserva devolvida | estratégia de livro |
+| SELL de lote específico (`targetLotId`) e FIFO | reversão (lote) e tendência (FIFO) |
+| Vários runners disputando o capital do mesmo portfolio | todas juntas no mesmo portfolio |
+| Recusas do ctrade sem efeito colateral (desvio de preço, quantidade acima do lote, cancelamento de ordem inexistente) | estratégia de caos |
+| Estratégia lenta, fora do ar, com `5xx` ou resposta inválida → HOLD implícito | estratégia de caos |
+| Proteção do lote (T44) com a estratégia muda | caos em modo "segura a posição" |
+
+## As estratégias
+
+Cinco perfis, cada um num processo, cada um com `strategyRef` próprio no catálogo. Os parâmetros ficam
+em configuração de cada processo (ex.: variáveis de ambiente), para ajustar a frequência sem mudar código.
+
+### 1. Tendência rápida (cruzamento de médias)
+
+- Compra quando a média curta cruza acima da longa por mais de um limiar; vende o lote (FIFO) no
+  cruzamento para baixo.
+- Limiar apertado (≈ 0,2%, decisão 4 da T53) para várias idas e voltas por hora.
+- Ordens a mercado (`limitPrice` nulo).
+- **Exercita:** ciclo básico, warm-up por runner, FIFO.
+
+### 2. Reversão à média
+
+- Compra quando o preço cai X% abaixo da média da janela; vende **o lote específico** (`targetLotId`)
+  quando o preço volta à média ou sobe Y% sobre a entrada daquele lote.
+- Até N lotes abertos (respeita `maxOpenPositions` do contexto).
+- **Exercita:** vários lotes por runner, SELL por lote, PnL por lote no contexto (`openLots[]`).
+
+### 3. Livro (ordens LIMIT que descansam)
+
+- Coloca BUY LIMIT abaixo do mercado (ex.: −0,1%); cancela (`SHOULD_CANCEL`) a ordem que não preencher
+  em K ticks e recoloca no novo preço.
+- Com lote aberto, coloca SELL LIMIT acima da entrada; cancela e recoloca se o mercado se afastar.
+- **Exercita:** ordens em voo (`pendingOrders`), reserva e devolução de capital, cancelamento x fill na
+  Binance real, lote travado por SELL em voo.
+
+### 4. Rompimento
+
+- Compra quando o preço supera a máxima da janela; vende quando cai Z% da máxima desde a entrada
+  (trailing).
+- Menos frequente que as outras: entra em movimentos maiores.
+- **Exercita:** posição mais longa, convivência com a proteção do lote por tempo máximo.
+
+### 5. Caos
+
+Uma estratégia que se comporta mal de propósito, com taxas configuráveis por tipo de falha:
+
+| Falha | Efeito esperado no ctrade |
+|---|---|
+| Latência acima do timeout (250 ms) | HOLD implícito, métrica de timeout |
+| Resposta acima de `max-decision-age` | Decisão descartada como velha |
+| `5xx` / conexão recusada | HOLD implícito (`STRATEGY_UNAVAILABLE`) |
+| JSON malformado ou decisão incoerente (BUY sem `quantity`) | Recusada na fronteira, HOLD |
+| `limitPrice` a mais de 10% do tick | `REJECTED_PRICE_DEVIATION` (T50) |
+| SELL acima do disponível do lote | Recusa sem ordem |
+| CANCEL de transação inexistente | Recusa sem efeito |
+| Modo "segura a posição": compra e nunca vende | A proteção do lote (T44) fecha por perda ou tempo |
+
+Fora das falhas, ela responde HOLD. Ela também serve à fase 4 da T53 ("estratégia remota fora do ar"):
+basta derrubar o processo ou ligar 100% de `5xx`.
+
+## Requisitos comuns (o contrato, não a implementação)
+
+Todas as apps cumprem o contrato 1.1 — é o mesmo que o ctrade já confere:
+
+- `/v1/evaluate`, `/v1/health`, `/v1/health/{strategyRef}`, `/v1/meta`; `contractVersion` `1.1.0`.
+- Decimal sempre como string; datas ISO-8601 UTC.
+- Warm-up por `(strategyRef, runnerId)`; `tickId` repetida devolve a decisão em cache; `sequence` menor
+  ou igual não mexe no warm-up.
+- Quantidade calculada a partir do contexto (`maxOperationAmount`, `availableCapital`), acima do mínimo
+  da exchange (`minOperationAmount`).
+- Token (`Authorization: Bearer`) quando cadastrado no catálogo.
+- `reasoning` explicando a decisão (aparece nas transações e no relatório da rodada).
+
+A conformidade é provada **contra o `openapi.yaml`** do ctrade, num teste do próprio repositório das apps,
+e pelo cadastro na T54 (o ctrade confere `/v1/meta` antes de usar a estratégia).
+
+## Como entra no soak
+
+1. As apps sobem como containers ao lado do ctrade no Compose da VPS (rede interna, sem porta exposta).
+2. Cadastro de cada uma por `POST /api/admin/strategies` (URL interna e token).
+3. Um portfolio de soak com um runner por estratégia em BTCUSDT; `maxAllocationPercent` somando mais que
+   100% de propósito, para haver disputa de capital (o ctrade recusa o que passar do disponível).
+4. A estratégia de caos fica num runner próprio, com capital pequeno.
+5. O relatório da rodada (T59) separa os eventos por runner; a linha do tempo mostra os halts por
+   rejeição e as recusas.
+
+## Decisões pendentes (mantenedor)
+
+1. **Onde ficam as apps.** Recomendação: **repositório separado** (ex.: `ctrade-strategies`). Prova o
+   "qualquer linguagem" do contrato, mantém o ctrade sem código de estratégia e não entra na CI dele.
+   Alternativa: pasta neste repositório, fora do build do ctrade.
+2. **Linguagem.** Recomendação: **Python** para as cinco — diferente do ctrade, o que testa de verdade
+   decimal como string e o contrato fora do JVM. Alternativa: uma em Python e outra em Node para provar
+   duas linguagens.
+3. **Um processo por estratégia.** Recomendação: sim (decisão 4 da T53), mesmo que o código seja um só
+   e cada processo sirva uma estratégia por configuração.
+4. **Ordem de entrega.** Recomendação: tendência e caos primeiro (cobrem o ciclo básico e as falhas),
+   depois livro, reversão e rompimento.
+
+## Fora do escopo
+
+- Estratégias para ganhar dinheiro: o objetivo é exercitar o ctrade; o resultado financeiro do soak não
+  é critério.
+- Mudança no contrato ou no ctrade. Se uma estratégia precisar de algo que o contrato não dá, vira
+  revisão do contrato em task própria.
+- Classificação por regime e regulação pelo agente (M2/M3 do roadmap). Os cinco perfis são, porém, um
+  bom portfólio inicial para isso: tendência, reversão e rompimento respondem a regimes diferentes.
+
+## Riscos
+
+- **Testnet rasa:** LIMIT pode não preencher ou preencher em saltos; a estratégia de livro precisa
+  tolerar ordem que fica parada (cancela e recoloca).
+- **Saldo da conta testnet:** muitas idas e voltas consomem taxas; conferir saldo antes de cada rodada
+  (decisão 3 da T53).
+- **Caos demais esconde bug real:** taxas de falha baixas por padrão (ex.: 2–5% por tipo), registradas no
+  relatório da rodada para separar o esperado do inesperado.
+
+## Critérios de aceitação
+
+1. Cada app passa no teste de conformidade contra o `openapi.yaml` e é aceita no cadastro da T54
+   (`verification=VERIFIED`).
+2. Numa rodada local curta (fase 1 da T53) com as cinco no mesmo portfolio: cada uma gera ao menos uma
+   ida e volta completa (ou, a de caos, cada tipo de falha configurado), sem `ERROR` do ctrade além dos
+   esperados pela estratégia de caos.
+3. Derrubar uma app deixa só o runner dela em HOLD; os demais seguem operando.
+4. Instruções para subir e cadastrar as apps no runbook da T53 (passo a passo do soak).
+
+## Fontes
+
+- `docs/strategy-service/CONTRACT.md`, `docs/strategy-service/openapi.yaml`
+- `.ai/tasks/T53-testnet-soak.md` (decisão 4, fases 3 e 4), `.ai/tasks/T54-dynamic-strategy-catalog.md`
+- `.ai/product-direction.md` (estratégias: só contrato), `.ai/agentic-strategy-roadmap.md` (M3)
