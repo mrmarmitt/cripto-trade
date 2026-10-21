@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T56 (coordenador de demanda de market data), T43 (drawdown e mark-to-market), T55
 (estado consolidado). Origem: achado F8 da rodada 3 da T53.
-**Status:** Pendente — decisões do mantenedor abertas (ver "Decisões pendentes").
+**Status:** Pendente — decisões registradas; pronta para implementação.
 
 ---
 
@@ -40,8 +40,7 @@ preço envelhece sem que ninguém perceba.
 - `StrategyRunnerRepositoryPort.findActivePositionsByPortfolioId` (OPEN + CLOSING) e
   `findOpenPositionsByRunnerId`.
 - Runner parado **não** processa tick (`RunnerSignalPolicy.canProcessRunner`): proteção do lote (T44) e
-  liquidação do Safe Mode não rodam para ele, com ou sem preço. Esta task não muda isso (ver decisão
-  pendente 2).
+  liquidação do Safe Mode não rodam para ele, com ou sem preço. Fica assim (decisão 2).
 
 ## Solução proposta
 
@@ -55,8 +54,8 @@ preço envelhece sem que ninguém perceba.
    aditivo: quem lê hoje não quebra. Com `unpricedPositions > 0`, `unrealizedPnL` é parcial e o
    OpenAPI diz isso.
 3. **Estado consolidado.** `MARKET_DATA_STALE` passa a cobrir também os símbolos com lote aberto, com
-   motivo por símbolo (`demand: ACTIVE_RUNNER` ou `OPEN_LOT`) e severidade por motivo (ver decisão
-   pendente 1).
+   motivo por símbolo (`demand: ACTIVE_RUNNER` ou `OPEN_LOT`): `OPEN_LOT` é `WARN`, `ACTIVE_RUNNER`
+   segue `CRITICAL` (decisão 1).
 4. **Drawdown:** sem mudança de regra (equity incompleto continua pulado; decisão da T43). Com o item 1,
    a janela cega cai para o primeiro ciclo do coordenador (5s após subir). O `WARN` repetido a cada 10s
    vira um `WARN` na primeira vez e `DEBUG` enquanto o mesmo lote seguir sem preço, para não inundar o
@@ -64,20 +63,18 @@ preço envelhece sem que ninguém perceba.
 5. **Runbook:** `#market-data-stale` cobre o motivo `OPEN_LOT`; a consulta de PnL explica
    `unpricedPositions`.
 
-## Decisões pendentes (mantenedor)
+## Decisões registradas (2026-10-21)
 
-1. **Severidade de preço parado para lote de runner parado.** Proposta: `WARN` (ninguém opera, mas o
+1. **Preço parado para lote de runner parado é `WARN`** em `MARKET_DATA_STALE` (ninguém opera, mas o
    drawdown e o PnL ficam cegos). Runner `ACTIVE` continua `CRITICAL`.
-2. **Proteção do lote com runner parado (fora desta task).** Hoje `halt` também desliga o stop do lote
-   (T44) e a liquidação do `PANIC_SELL` para aquele runner. É o comportamento esperado ("halt = não
-   negocia nada") ou o stop deveria continuar valendo? Se deveria, vira task própria — muda regra de
-   risco.
+2. **`halt` não negocia nada:** runner parado não roda stop do lote (T44) nem liquidação do
+   `PANIC_SELL`. É o comportamento atual e fica; esta task só traz o preço para valorar o lote.
 
 ## Fora do escopo
 
 - Cancelar assinaturas sem demanda (decisão da T56).
 - Mudar a regra do drawdown com equity incompleto.
-- Proteção/liquidação para runner parado (decisão pendente 2).
+- Proteção/liquidação para runner parado (`halt` não negocia nada, decisão 2).
 
 ## Riscos
 
@@ -94,8 +91,7 @@ preço envelhece sem que ninguém perceba.
    ciclo e o drawdown do portfolio volta a ser avaliado sem nenhum runner ativo.
 2. `GET /api/portfolios/{id}/pnl` com lote sem preço informa `unpricedPositions > 0`; com preço, `0` e
    `priceAsOf` preenchido.
-3. `MARKET_DATA_STALE` acusa símbolo com lote aberto sem tick, com motivo `OPEN_LOT` e a severidade
-   decidida.
+3. `MARKET_DATA_STALE` acusa símbolo com lote aberto sem tick com motivo `OPEN_LOT` em `WARN`.
 4. Runner parado continua sem processar tick (nenhuma ordem nova, nenhuma proteção disparada).
 5. O aviso de drawdown sem preço não se repete a cada ciclo para o mesmo lote.
 
