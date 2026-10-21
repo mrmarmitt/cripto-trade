@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T55 (auditoria, estado consolidado, runbook), T53 (registro das rodadas), T25/T43/T44
 (eventos automáticos), T57/T58 (conferências usadas no relatório).
-**Status:** Pendente — escopo revisto em 2026-10-21 (ver "Histórico do escopo").
+**Status:** Pendente — escopo revisto e decisões registradas em 2026-10-21.
 
 ---
 
@@ -89,14 +89,13 @@ a entrada do "Registro de execuções":
 5. Conferência dos 8 critérios da T53, com evidência de cada um.
 6. Resumo: aprovada ou não, achados novos (com F-número), ações tomadas.
 
-## Decisões pendentes (mantenedor)
+## Decisões registradas (2026-10-21)
 
-1. **Duas tabelas específicas ou uma `system_events` genérica.** Recomendação: **duas específicas**,
-   como `safe_mode_changes`: campos tipados, constraints de domínio, sem coluna `payload` livre. A
-   linha do tempo já unifica a leitura.
-2. **Retenção.** Recomendação: sem expurgo por enquanto (volume de dezenas de linhas por dia).
-3. **Parte C antes ou depois da VPS.** Recomendação: escrever junto com A e B e exercitar na próxima
-   rodada local (fase 1 da T53).
+1. **Duas tabelas específicas** (`runner_status_changes`, `boot_runs`), como `safe_mode_changes`:
+   campos tipados, constraints de domínio, sem coluna `payload` livre. A linha do tempo unifica a
+   leitura.
+2. **Sem expurgo** por enquanto (dezenas de linhas por dia).
+3. **Parte C junto com A e B**, exercitada na próxima rodada local (fase 1 da T53).
 
 ## Fora do escopo
 

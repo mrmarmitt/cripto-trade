@@ -81,4 +81,5 @@ consulta unica de consistencia. Ao criar algo novo, seguir esse padrao.
 
 - **MOCK como app externo**, no mesmo papel do app de estrategia. Adiado para depois do soak: os E2E
   controlam o MOCK dentro do processo e um container a mais na CI traz instabilidade. Ver
-  `docs/tasks/BACKLOG.md`.
+  `docs/tasks/BACKLOG.md`. Absorvida pela exchange de replay (bloco 14 de
+  `agentic-strategy-roadmap.md`).
