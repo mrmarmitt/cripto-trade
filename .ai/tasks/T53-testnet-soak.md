@@ -283,7 +283,7 @@ Sem limpar o banco (estado da rodada 2: 4 portfolios, lote aberto de 0.001 BTC n
   data (T56), o drawdown do portfolio com lote aberto é pulado (`WARN drawdown: no market price`, 3 vezes
   em 20s). Por desenho (equity incompleto gravaria pico/vale falso), mas com todos os runners parados e
   lote aberto o portfolio fica sem drawdown até alguém ativar um runner do símbolo. Avaliar se o
-  coordenador de demanda (T56) deve assinar símbolos com lote aberto. Sem task por ora.
+  coordenador de demanda (T56) deve assinar símbolos com lote aberto. → T58.
 
 ## Fontes
 
