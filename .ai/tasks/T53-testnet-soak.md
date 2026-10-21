@@ -75,7 +75,7 @@ Cada fase só começa com a anterior aprovada. Uma rodada reprovada gera achado 
    registrado no histórico da rodada.
 7. **Monitoramento periódico por IA durante a rodada:** além da conferência no fim, o Claude verifica
    inconsistências em várias partes do sistema ao longo das 24h, por um gatilho agendado com prompt
-   definido. O desenho (frequência, prompt, acesso à VPS) fica para quando a VPS existir.
+   definido. Desenho na **T59** (procedimento, linha do tempo de eventos, onde o agente roda).
 
 ## Pré-requisitos ainda abertos
 
