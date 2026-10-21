@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T55 (auditoria, estado consolidado, runbook), T53 (registro das rodadas), T25/T43/T44
 (eventos automáticos), T57/T58 (conferências usadas no relatório).
-**Status:** Concluído (PR #164, 2026-10-21). Validação na testnet pendente.
+**Status:** Concluído (PR #164) e validado na testnet em 2026-10-21.
 
 ---
 
@@ -154,6 +154,18 @@ a entrada do "Registro de execuções":
   gravado no sucesso e na falha), `EventTimelineIntegrationTest` (Postgres: start, halt automático, HALT
   automático e retomada manual do Safe Mode, resume, saída protetiva e DLQ em ordem; filtro de portfolio;
   paginação; boot).
+
+## Validação na testnet (2026-10-21)
+
+Aplicação reiniciada com a V19 sobre o banco das rodadas anteriores:
+
+- `GET /api/admin/events` respondeu com o histórico já existente (`OPERATOR_ACTION` das rodadas 2 e 3)
+  e com o boot novo: `BOOT_COMPLETED` (`mode=WARN_ONLY durationMs=3595`), igual ao `/api/boot/status`.
+- `resume` e `halt` do runner do cenário 1 (sem lote): dois `RUNNER_STATUS_CHANGED` (`HALTED>ACTIVE`,
+  `ACTIVE>HALTED`), origem `MANUAL`, motivo = `X-Reason`, cada um seguido do `OPERATOR_ACTION` do
+  comando. O runner terminou `HALTED`, como estava.
+- Com `portfolioId`: só as duas transições do runner; os comandos do operador (sem portfolio) ficam de
+  fora, como especificado.
 
 ## Fontes
 
