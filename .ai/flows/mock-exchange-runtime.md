@@ -70,10 +70,13 @@ executado para `MOCK`.
 1. Chamadas sincronas REST-like usam `MockExchangeAdapter.submitOrder`.
 2. O adapter delega para `MockExchangeRuntime.submitOrderRest`.
 3. O runtime gera `orderId` e salva o mapeamento por `clientOrderId`.
-4. `MockOrderExecutionSimulator.simulateAccepted` cria snapshot `NEW`.
-5. O runtime agenda simulacao assincrona de eventos.
-6. `MockOrderExecutionSimulator.buildScenarioSchedule` gera sequencia de updates.
-7. Cada `MockScheduledOrderEvent` e publicado via `MockRawMessagePublisher`.
+4. `MockOrderExecutionSimulator.buildScenarioSchedule` valida a ordem, reserva o saldo e gera a
+   sequencia de updates (`MockOrderSchedule`) **sincronamente**, antes do ACK REST (T52).
+5. `MockOrderExecutionSimulator.simulateAccepted` cria snapshot `NEW`.
+6. O runtime publica o cronograma de forma assincrona, um evento por vez, sob o lock da ordem
+   (ver "Cancelamento Durante O Preenchimento Simulado").
+7. Cada `MockScheduledOrderEvent` liquida o proprio efeito de saldo (`settlement`) e e publicado via
+   `MockRawMessagePublisher`.
 8. `MockReceivedMessageProcessor` desserializa o raw em `OrderDataDto`.
 9. `ProcessMessageHandler` notifica `OrderUpdateListener`.
 10. `PortfolioStrategyRunnerOrderUpdateListener` chama conciliacao.
@@ -152,6 +155,30 @@ cruzamento: checar e depois gravar em passos separados permitiria rebaixar o sna
 
 O override e consumido uma vez quando a ordem correspondente e submetida.
 
+## Cancelamento Durante O Preenchimento Simulado
+
+Ordem que executa pelo cronograma (MARKET ou LIMIT marketable) tem o mesmo arbitro das ordens que
+descansam: **quem fecha a ordem primeiro vence, e nada e publicado depois de um cancelamento** (T52).
+
+- **Saldo liquidado na publicacao.** O cronograma so reserva; o debito/credito de cada fill e a
+  devolucao da reserva numa falha simulada vem no `settlement` do evento e rodam quando ele e
+  publicado. Copias duplicadas nao carregam `settlement`, entao duplicatas nao liquidam duas vezes.
+- **Lock por ordem.** `SimulatedOrder` guarda a requisicao, se a reserva foi feita e o maior
+  `executedQuantity` publicado. Cada evento do cronograma e checado e publicado sob esse lock; o
+  cancelamento tambem roda sob ele.
+- **Cancelamento.** Se o snapshot ja e terminal (`FILLED` ou falha simulada), o cancelamento nao
+  publica nada e devolve o terminal. Senao marca a ordem como cancelada (o cronograma para antes do
+  proximo evento), devolve a reserva da parte nao executada
+  (`MockOrderExecutionSimulator.releaseUnexecutedReservation`, BUY ao preco da ordem) e publica um
+  unico `CANCELED` com o executado ate ali.
+- **Snapshot monotonico.** `publishMockOrderResponse` nunca troca um snapshot terminal: duplicatas e
+  eventos fora de ordem continuam sendo entregues ao core, mas a consulta REST segue respondendo o
+  terminal. Para provar que um evento atrasado foi entregue, os testes leem o historico publicado
+  (`MockExchangeAdapter.publishedOrderEvents`), nao a consulta.
+
+Overrides (`MockOrderScenarioOverride`) seguem o plano como antes, inclusive duplicatas e ordem
+reversa; so o cancelamento externo interrompe o cronograma.
+
 ## Consultas E Boot Recovery
 
 O runtime mantem:
@@ -214,6 +241,9 @@ exchange real.
 - Override tem precedencia sobre a decisao de resting: ordem com override segue o schedule planejado.
 - Sem preco de referencia, o mock nao muda de comportamento em relacao ao always-fill historico.
 - Ordem que descansa retem a reserva ate cruzar ou ser cancelada; cancelar devolve o capital.
+- Nada e publicado para uma ordem depois de um `CANCELED` pedido pelo core; o saldo do mock reflete
+  so o que foi publicado (T52).
+- O snapshot da consulta REST nunca sai de um terminal.
 - Snapshots seedados para query nao devem publicar callbacks automaticamente.
 - `LocalEventWebSocketAdapter` nao deve abrir rede real.
 - O mock nao deve introduzir regra de dominio; ele simula exchange e traduz para

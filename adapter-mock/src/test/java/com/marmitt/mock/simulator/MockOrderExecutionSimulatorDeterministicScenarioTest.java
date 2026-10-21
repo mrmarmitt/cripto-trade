@@ -67,7 +67,7 @@ class MockOrderExecutionSimulatorDeterministicScenarioTest {
                 new Random(42L),
                 balanceStore,
                 override
-        );
+        ).events();
 
         assertEquals(4, schedule.size());
 
@@ -135,7 +135,7 @@ class MockOrderExecutionSimulatorDeterministicScenarioTest {
                 new Random(42L),
                 balanceStore,
                 override
-        );
+        ).events();
 
         assertEquals(3, schedule.size());
         assertEquals(OrderDataDto.OrderStatus.NEW, schedule.get(0).orderData().status());
@@ -192,11 +192,15 @@ class MockOrderExecutionSimulatorDeterministicScenarioTest {
                 new Random(42L),
                 balanceStore,
                 override
-        );
+        ).events();
 
         assertEquals(3, schedule.size());
         assertEquals(OrderDataDto.OrderStatus.FILLED, schedule.get(2).orderData().status());
         assertEquals(0, schedule.get(2).orderData().executedQuantity().compareTo(new BigDecimal("1.00000000")));
+        assertEquals(0, balanceStore.getReserved("USDT").compareTo(new BigDecimal("100.00000000")),
+                "T52: montar o cronograma so reserva; o saldo e liquidado na publicacao");
+
+        schedule.forEach(event -> event.settlement().run());
         assertEquals(0, balanceStore.getReserved("USDT").compareTo(BigDecimal.ZERO));
     }
 

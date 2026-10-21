@@ -190,6 +190,14 @@ public class MockExchangeAdapter implements ExchangeStreamingPort,
     }
 
     /**
+     * Order events already delivered for the order, in publication order. The REST query never leaves
+     * a terminal (T52); tests that prove a late event was delivered read it here.
+     */
+    public List<OrderDataDto> publishedOrderEvents(String clientOrderId) {
+        return runtime.publishedOrderEvents(clientOrderId);
+    }
+
+    /**
      * Registers a deterministic fail-N-times plan for query-by-clientOrderId.
      * Intended for boot recovery retry/backoff integration tests.
      */

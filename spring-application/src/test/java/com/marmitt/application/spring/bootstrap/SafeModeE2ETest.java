@@ -143,7 +143,8 @@ class SafeModeE2ETest extends ScenarioStrategyE2ETestSupport {
         UUID runnerId = activateScenario(
                 new FilledBuyRestingSellCancelStrategy(ScenarioStrategyConfig.boundedConfig(1)));
         UUID portfolioId = portfolioIdOf(runnerId);
-        // O MOCK preenche a LIMIT marketable em parciais ao longo de ~1s: prazo largo para nao escalar.
+        // O MOCK preenche a LIMIT marketable em parciais ao longo de ~1s: prazo largo para provar o
+        // caminho em que a LIMIT preenche inteira. A escalada no meio do preenchimento e o teste abaixo.
         useLimitLiquidation(runnerId, 30);
         tickUntil(() -> transactionsOfType(runnerId, "SELL").stream().anyMatch(tx -> "SUBMITTED".equals(tx.status())),
                 "SELL LIMIT descansando sobre o lote", runnerId);
@@ -161,6 +162,37 @@ class SafeModeE2ETest extends ScenarioStrategyE2ETestSupport {
         BigDecimal liquidationPrice = sellPrices(runnerId).getLast();
         assertEquals(0, new BigDecimal("64350").compareTo(liquidationPrice),
                 "SELL LIMIT a 1% abaixo do tick: " + liquidationPrice);
+    }
+
+    /**
+     * T52: com o prazo padrao de 3 ticks a escalada costuma cancelar a LIMIT no meio dos parciais do
+     * MOCK. O MOCK agora para de publicar depois do CANCELED e so debita o executado, entao a MARKET
+     * vende o restante sem ser recusada. Se a LIMIT terminar antes do prazo, o desfecho valido e ela
+     * preenchida; os dois caminhos fecham o lote inteiro.
+     */
+    @Test
+    void panicSellWithLimitPolicyEscalatingMidFillSellsOnlyTheRestAtMarket() {
+        UUID runnerId = activateScenario(
+                new FilledBuyRestingSellCancelStrategy(ScenarioStrategyConfig.boundedConfig(1)));
+        UUID portfolioId = portfolioIdOf(runnerId);
+        useLimitLiquidation(runnerId, 3);
+        tickUntil(() -> transactionsOfType(runnerId, "SELL").stream().anyMatch(tx -> "SUBMITTED".equals(tx.status())),
+                "SELL LIMIT descansando sobre o lote", runnerId);
+
+        change(portfolioId, SafeModeStatus.PANIC_SELL, true);
+
+        driveTicks(10);
+        awaitCondition(() -> positionCount(runnerId, "CLOSED") == 1 && positionCount(runnerId, "OPEN") == 0,
+                WAIT_TIMEOUT, "lote liquidado", runnerId);
+        awaitStable(runnerId, QUIET_WINDOW);
+
+        List<String> sells = sellsWithOrderType(runnerId);
+        assertTrue(sells.equals(List.of("LIMIT:CANCELED", "LIMIT:CANCELED", "MARKET:FILLED"))
+                        || sells.equals(List.of("LIMIT:CANCELED", "LIMIT:FILLED")),
+                "Escalada (LIMIT cancelada + MARKET do restante) ou LIMIT preenchida, nunca recusada: " + sells);
+        assertEquals(0, sellExecutedQuantity(runnerId).compareTo(totalMatchedQuantity(runnerId)),
+                "O executado das vendas soma exatamente o casado com o lote");
+        assertEquals(0, balance(portfolioId).reserved().signum());
     }
 
     @Test
@@ -235,6 +267,12 @@ class SafeModeE2ETest extends ScenarioStrategyE2ETestSupport {
     private BigDecimal marketSellExecutedQuantity(UUID runnerId) {
         return jdbcTemplate.queryForObject(
                 "SELECT executed_quantity FROM transactions WHERE runner_id = ? AND type = 'SELL' AND order_type = 'MARKET'",
+                BigDecimal.class, runnerId);
+    }
+
+    private BigDecimal sellExecutedQuantity(UUID runnerId) {
+        return jdbcTemplate.queryForObject(
+                "SELECT COALESCE(SUM(executed_quantity), 0) FROM transactions WHERE runner_id = ? AND type = 'SELL'",
                 BigDecimal.class, runnerId);
     }
 
