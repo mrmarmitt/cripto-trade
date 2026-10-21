@@ -40,7 +40,9 @@ import java.util.function.Function;
  *
  * <p><b>Demanda</b> (regra de negocio): runners {@code ACTIVE} e {@code TERMINATING} (ainda vendem)
  * precisam de tick do seu simbolo em cada fonte de {@code allowedMarketDataSources}, e do stream de
- * usuario da sua exchange quando o adapter tem um.
+ * usuario da sua exchange quando o adapter tem um. Runner parado com lote aberto tambem precisa do
+ * tick, so para marcar o lote a mercado (drawdown, PnL; T58): o roteamento do tick continua filtrando por
+ * status, entao ele nao negocia. Stream de usuario, nao: lote parado nao gera ordem.
  *
  * <p><b>Evidencia, nao registro:</b> o estado das assinaturas nao e guardado e uma reconexao pode
  * perde-lo, entao a decisao olha o que de fato acontece:
@@ -70,6 +72,7 @@ public class EnsureMarketDataFeedUseCase implements EnsureMarketDataFeedPort {
     private final Function<String, StreamType> streamTypeByExchange;
     private final Duration staleThreshold;
     private final Clock clock;
+    private final OpenLotDemand openLotDemand;
 
     public EnsureMarketDataFeedUseCase(StrategyRunnerRepositoryPort runnerRepository,
                                        ExchangeAdapterRepositoryPort exchangeAdapters,
@@ -91,25 +94,32 @@ public class EnsureMarketDataFeedUseCase implements EnsureMarketDataFeedPort {
         this.streamTypeByExchange = streamTypeByExchange;
         this.staleThreshold = staleThreshold;
         this.clock = clock;
+        this.openLotDemand = new OpenLotDemand(runnerRepository);
     }
 
     @Override
     public synchronized void ensure() {
         Map<String, Set<String>> symbolsBySource = new TreeMap<>();
         Set<String> userStreamExchanges = new TreeSet<>();
-        for (StrategyRunner runner : runnerRepository.findAll()) {
+        List<StrategyRunner> runners = runnerRepository.findAll();
+        for (StrategyRunner runner : runners) {
             if (runner.getStatus() != RunnerStatus.ACTIVE && runner.getStatus() != RunnerStatus.TERMINATING) {
                 continue;
             }
-            for (String source : runner.getAllowedMarketDataSources()) {
-                symbolsBySource.computeIfAbsent(source.toUpperCase(), s -> new TreeSet<>()).add(runner.getSymbol());
-            }
+            demandSymbol(symbolsBySource, runner);
             userStreamExchanges.add(runner.getExchangeId());
         }
+        openLotDemand.runnersWithOpenLots(runners).forEach(runner -> demandSymbol(symbolsBySource, runner));
 
         Instant now = clock.instant();
         symbolsBySource.forEach((source, symbols) -> ensureMarket(source, symbols, now));
         userStreamExchanges.forEach(this::ensureUserStream);
+    }
+
+    private static void demandSymbol(Map<String, Set<String>> symbolsBySource, StrategyRunner runner) {
+        for (String source : runner.getAllowedMarketDataSources()) {
+            symbolsBySource.computeIfAbsent(source.toUpperCase(), s -> new TreeSet<>()).add(runner.getSymbol());
+        }
     }
 
     private void ensureMarket(String source, Set<String> symbols, Instant now) {

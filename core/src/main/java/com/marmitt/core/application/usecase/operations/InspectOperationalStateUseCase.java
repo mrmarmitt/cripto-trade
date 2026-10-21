@@ -1,6 +1,7 @@
 package com.marmitt.core.application.usecase.operations;
 
 import com.marmitt.core.application.usecase.exchange.ExchangeBalanceReconciliation;
+import com.marmitt.core.application.usecase.websocket.OpenLotDemand;
 import com.marmitt.core.domain.portfolio.GlobalBalance;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.Position;
@@ -47,6 +48,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
+import java.util.TreeMap;
 import java.util.TreeSet;
 import java.util.UUID;
 import java.util.stream.Collectors;
@@ -81,6 +83,7 @@ public class InspectOperationalStateUseCase implements InspectOperationalStatePo
     private final ReconcileTradesPort tradeReconciliation;
     private final Thresholds thresholds;
     private final Clock clock;
+    private final OpenLotDemand openLotDemand;
 
     public InspectOperationalStateUseCase(PortfolioRepositoryPort portfolioRepository,
                                           GlobalBalanceRepositoryPort balanceRepository,
@@ -110,6 +113,7 @@ public class InspectOperationalStateUseCase implements InspectOperationalStatePo
         this.tradeReconciliation = tradeReconciliation;
         this.thresholds = thresholds;
         this.clock = clock;
+        this.openLotDemand = new OpenLotDemand(runnerRepository);
     }
 
     @Override
@@ -139,7 +143,7 @@ public class InspectOperationalStateUseCase implements InspectOperationalStatePo
         checks.add(runnerStuckTerminating(runners, now));
         checks.add(runnerOnHoldStrategyUnusable(active));
         checks.add(strategyVerificationFailed());
-        checks.add(marketDataStale(active, now));
+        checks.add(marketDataStale(active, runners, now));
         checks.add(streamDisconnected(active));
         checks.add(restCircuitOpen());
         if (exchange.enabled()) {
@@ -367,23 +371,33 @@ public class InspectOperationalStateUseCase implements InspectOperationalStatePo
                 oldest(failing.stream().map(RemoteStrategy::getLastVerificationAt)));
     }
 
-    private OperationalCheck marketDataStale(List<StrategyRunner> active, Instant now) {
-        Set<String> symbols = active.stream().map(StrategyRunner::getSymbol).collect(Collectors.toCollection(TreeSet::new));
+    /**
+     * Simbolo sem tick alem do limiar. Com runner {@code ACTIVE} e CRITICAL (opera sem preco); so com lote
+     * aberto de runner parado e WARN (ninguem opera, mas drawdown e PnL ficam sem preco; T58, decisao
+     * 2026-10-21). {@code demand} diz qual dos dois.
+     */
+    private OperationalCheck marketDataStale(List<StrategyRunner> active, List<StrategyRunner> runners, Instant now) {
+        Map<String, String> demandBySymbol = new TreeMap<>();
+        openLotDemand.runnersWithOpenLots(runners).forEach(r -> demandBySymbol.put(r.getSymbol(), "OPEN_LOT"));
+        active.forEach(r -> demandBySymbol.put(r.getSymbol(), "ACTIVE_RUNNER"));
         List<Map<String, Object>> subjects = new ArrayList<>();
         List<Instant> since = new ArrayList<>();
-        for (String symbol : symbols) {
-            Optional<Instant> updatedAt = latestPrices.findUpdatedAt(symbol);
+        boolean activeStale = false;
+        for (Map.Entry<String, String> entry : demandBySymbol.entrySet()) {
+            Optional<Instant> updatedAt = latestPrices.findUpdatedAt(entry.getKey());
             if (updatedAt.isEmpty() || olderThan(updatedAt.get(), thresholds.marketDataStale(), now)) {
-                subjects.add(subject("symbol", symbol, "lastTickAt", updatedAt.orElse(null)));
+                subjects.add(subject("symbol", entry.getKey(), "demand", entry.getValue(),
+                        "lastTickAt", updatedAt.orElse(null)));
                 updatedAt.ifPresent(since::add);
+                activeStale |= entry.getValue().equals("ACTIVE_RUNNER");
             }
         }
         if (subjects.isEmpty()) {
-            return ok("MARKET_DATA_STALE", "every symbol with an ACTIVE runner ticked in the last "
+            return ok("MARKET_DATA_STALE", "every symbol with an ACTIVE runner or an open lot ticked in the last "
                     + thresholds.marketDataStale());
         }
-        return check("MARKET_DATA_STALE", OperationalSeverity.CRITICAL,
-                subjects.size() + " symbol(s) with ACTIVE runners and no tick in the last "
+        return check("MARKET_DATA_STALE", activeStale ? OperationalSeverity.CRITICAL : OperationalSeverity.WARN,
+                subjects.size() + " symbol(s) with ACTIVE runners or open lots and no tick in the last "
                         + thresholds.marketDataStale(), subjects, oldest(since.stream()));
     }
 

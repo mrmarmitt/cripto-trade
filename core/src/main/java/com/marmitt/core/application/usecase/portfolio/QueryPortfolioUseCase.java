@@ -116,14 +116,17 @@ public class QueryPortfolioUseCase implements QueryPortfolioPort {
         }
 
         BigDecimal realized = balanceOpt.get().getRealizedBalance();
-        // Flutuante ao ultimo preco (T43); posicao ainda sem preco conhecido nao entra na soma.
-        BigDecimal unrealized = markToMarket.value(portfolioId).unrealizedPnl();
+        // Flutuante ao ultimo preco (T43); posicao ainda sem preco nao entra na soma e e contada (T58).
+        PortfolioMarkToMarket.Valuation valuation = markToMarket.value(portfolioId);
+        BigDecimal unrealized = valuation.unrealizedPnl();
 
         return Optional.of(PortfolioPnlDto.builder()
                 .portfolioId(portfolioId)
                 .realizedPnL(realized)
                 .unrealizedPnL(unrealized)
                 .totalPnL(realized.add(unrealized))
+                .unpricedPositions(valuation.unpriced().size())
+                .priceAsOf(valuation.oldestPriceAt())
                 .build());
     }
 }

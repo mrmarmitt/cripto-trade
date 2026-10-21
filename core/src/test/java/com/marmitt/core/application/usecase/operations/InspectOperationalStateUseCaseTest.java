@@ -209,6 +209,31 @@ class InspectOperationalStateUseCaseTest {
     }
 
     @Test
+    void openLotOfAStoppedRunnerWithoutTickIsWarnNotCritical() {
+        // T58 (decisao 2026-10-21): ninguem opera, mas drawdown e PnL ficam sem preco.
+        when(runner.getStatus()).thenReturn(RunnerStatus.HALTED);
+        UUID runnerId = runner.getId();
+        UUID portfolioId = portfolio.getId();
+        Position lot = mock(Position.class);
+        when(lot.getRunnerId()).thenReturn(runnerId);
+        when(runners.findActivePositionsByPortfolioId(portfolioId)).thenReturn(List.of(lot));
+        when(prices.findUpdatedAt("BTCUSDT")).thenReturn(Optional.empty());
+
+        OperationalCheck stale = check(useCase.inspect(), "MARKET_DATA_STALE");
+
+        assertEquals(OperationalSeverity.WARN, stale.status());
+        assertEquals("OPEN_LOT", stale.subjects().getFirst().get("demand"));
+    }
+
+    @Test
+    void stoppedRunnerWithoutLotNeedsNoTick() {
+        when(runner.getStatus()).thenReturn(RunnerStatus.HALTED);
+        when(prices.findUpdatedAt("BTCUSDT")).thenReturn(Optional.empty());
+
+        assertEquals(OperationalSeverity.OK, check(useCase.inspect(), "MARKET_DATA_STALE").status());
+    }
+
+    @Test
     void userStreamIsRequiredOnlyForExchangesThatHaveOne() {
         assertEquals(OperationalSeverity.OK, check(useCase.inspect(), "STREAM_DISCONNECTED").status(),
                 "exchange sem stream de usuario (MOCK) nao exige conexao");

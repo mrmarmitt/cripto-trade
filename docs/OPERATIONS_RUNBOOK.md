@@ -72,7 +72,8 @@ sem explicação (PnL, saldo, divergência com a exchange).
 
 O coordenador de market data (T56) abre sozinho as conexões e assinaturas que os runners operacionais
 precisam: market data de cada fonte em `allowedMarketDataSources` e o stream de usuário da exchange que
-tem um. Roda 5s depois do boot, a cada 30s (`ctrade.market-data.auto-feed.*`) e logo após `start`/`resume`.
+tem um. Runner parado com lote aberto também tem o símbolo assinado (T58), só para o lote ter preço
+(drawdown, PnL); ele continua sem negociar. Roda 5s depois do boot, a cada 30s (`ctrade.market-data.auto-feed.*`) e logo após `start`/`resume`.
 
 1. `GET /api/boot/status` → esperado `status=SUCCESS`. Senão, ver [boot-not-ready](#boot-not-ready).
 2. Aguardar até 1 minuto e conferir `GET /api/admin/operational-state`: `MARKET_DATA_STALE` e
@@ -235,7 +236,11 @@ O runner está em HOLD: não compra nem vende pela estratégia (a proteção do 
 <a id="market-data-stale"></a>
 ### MARKET_DATA_STALE — sem tick há mais de 60s
 
-Sem tick, nenhuma decisão, proteção do lote nem liquidação acontece.
+Cada `subject` traz `demand`:
+
+- `ACTIVE_RUNNER` (CRITICAL): sem tick, nenhuma decisão, proteção do lote nem liquidação acontece.
+- `OPEN_LOT` (WARN, T58): só lote aberto de runner parado. Ninguém negocia (`halt` não negocia nada),
+  mas o drawdown pula o portfolio e o PnL flutuante sai parcial (`unpricedPositions`).
 
 O coordenador (T56) reabre a conexão caída e reassina o símbolo sem tick a cada 30s.
 
@@ -362,6 +367,12 @@ chega com fee em BNB: o sistema segue, mas a fee fica fora do PnL, com log `ERRO
 
 A cada 10s, equity = `available + reserved + PnL flutuante`. Queda acima de 10% do pico de 24h → HALT
 automático (`MAX_DRAWDOWN_EXCEEDED`). Sem retomada automática; o pico é recalculado após o reset.
+Lote sem preço: o portfolio é pulado (`WARN drawdown: no market price` uma vez por lote; ver
+[market-data-stale](#market-data-stale), `demand=OPEN_LOT`).
+
+`GET /api/portfolios/<id>/pnl`: `unrealizedPnL` soma só os lotes com preço; `unpricedPositions > 0` quer
+dizer que o flutuante é parcial (lote sem tick ainda, ex.: logo após restart) e `priceAsOf` é o preço mais
+antigo usado. Não ler `unrealizedPnL = 0` como "lote no zero a zero" sem olhar `unpricedPositions`.
 Gauges `circuit_breaker.drawdown.current`, `.peak_24h`, `circuit_breaker.equity.current`.
 `portfolio.circuit-breaker.enabled=false` desliga.
 

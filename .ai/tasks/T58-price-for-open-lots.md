@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T56 (coordenador de demanda de market data), T43 (drawdown e mark-to-market), T55
 (estado consolidado). Origem: achado F8 da rodada 3 da T53.
-**Status:** Pendente — decisões registradas; pronta para implementação.
+**Status:** Implementada (2026-10-21) — aguardando PR/merge.
 
 ---
 
@@ -111,3 +111,30 @@ preço envelhece sem que ninguém perceba.
 - `.ai/tasks/T56-market-data-demand.md`, `.ai/tasks/T43-drawdown-daily-loss-breaker.md`,
   `.ai/tasks/T44-strategy-independent-position-protection.md`
 - `.ai/product-direction.md` (estado autoexplicativo)
+
+## Entrega
+
+### Decisões de implementação (2026-10-21)
+
+- **`OpenLotDemand`** (`core/.../usecase/websocket`): runners não arquivados com lote `OPEN`/`CLOSING`,
+  uma consulta por portfolio (`findActivePositionsByPortfolioId`). Usado pelo `EnsureMarketDataFeedUseCase`
+  (demanda de market data, sem stream de usuário) e pelo `InspectOperationalStateUseCase`
+  (`MARKET_DATA_STALE`), para os dois enxergarem a mesma demanda (manual §1.3). Instanciado por cada use
+  case; sem bean nem port novo.
+- **`MARKET_DATA_STALE`:** sujeito com `demand` (`ACTIVE_RUNNER` ou `OPEN_LOT`); `ACTIVE_RUNNER` vence
+  quando o símbolo tem os dois. CRITICAL só com `ACTIVE_RUNNER` parado; só `OPEN_LOT`, WARN.
+- **PnL:** `PortfolioPnlDto` com `unpricedPositions` e `priceAsOf` (de `PortfolioMarkToMarket.Valuation`,
+  que passou a guardar o instante do preço mais antigo usado). Campos aditivos.
+- **Drawdown:** `WARN` uma vez por lote sem preço por portfolio; `DEBUG` enquanto o mesmo lote seguir sem
+  preço; limpa quando o portfolio volta a ter preço.
+
+### Validação
+
+- `EnsureMarketDataFeedUseCaseTest`: lote de runner `HALTED` gera demanda do símbolo e nenhum stream de
+  usuário; runner arquivado não; runner parado sem lote não demanda nada.
+- `InspectOperationalStateUseCaseTest`: lote aberto de runner parado sem tick é `WARN` com
+  `demand=OPEN_LOT`; runner parado sem lote não precisa de tick.
+- `QueryPortfolioPnlTest`: lote sem preço contado em `unpricedPositions`; com preço, `priceAsOf`.
+- `MarketDataAutoFeedIntegrationTest` (Postgres + MOCK): runner nunca ativado com lote aberto em
+  `SOLUSDT` (símbolo que nenhum outro teste assina) recebe preço; nenhuma avaliação nem ordem nova.
+- Suítes: `:core:test` 294, `:spring-application:test` 234, verdes.
