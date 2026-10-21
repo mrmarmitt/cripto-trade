@@ -4,7 +4,7 @@
 **Responsável:** Claude (num repositório próprio, fora do ctrade)
 **Dependências:** T41/T40 (contrato 1.1, `docs/strategy-service/CONTRACT.md`), T54 (catálogo por API). Desbloqueia
 a fase 3 da T53; serve de portfólio inicial para o M3 do roadmap (`.ai/agentic-strategy-roadmap.md`).
-**Status:** Pendente — decisões do mantenedor abertas (ver "Decisões pendentes").
+**Status:** Pendente — decisões registradas em 2026-10-21; aguardando o repositório novo.
 
 ---
 
@@ -111,18 +111,13 @@ e pelo cadastro na T54 (o ctrade confere `/v1/meta` antes de usar a estratégia)
 5. O relatório da rodada (T59) separa os eventos por runner; a linha do tempo mostra os halts por
    rejeição e as recusas.
 
-## Decisões pendentes (mantenedor)
+## Decisões registradas (2026-10-21)
 
-1. **Onde ficam as apps.** Recomendação: **repositório separado** (ex.: `ctrade-strategies`). Prova o
-   "qualquer linguagem" do contrato, mantém o ctrade sem código de estratégia e não entra na CI dele.
-   Alternativa: pasta neste repositório, fora do build do ctrade.
-2. **Linguagem.** Recomendação: **Python** para as cinco — diferente do ctrade, o que testa de verdade
-   decimal como string e o contrato fora do JVM. Alternativa: uma em Python e outra em Node para provar
-   duas linguagens.
-3. **Um processo por estratégia.** Recomendação: sim (decisão 4 da T53), mesmo que o código seja um só
-   e cada processo sirva uma estratégia por configuração.
-4. **Ordem de entrega.** Recomendação: tendência e caos primeiro (cobrem o ciclo básico e as falhas),
-   depois livro, reversão e rompimento.
+1. **Repositório separado**, criado pelo mantenedor (ex.: `ctrade-strategies`): prova o "qualquer
+   linguagem" do contrato, mantém o ctrade sem código de estratégia e fora da CI dele.
+2. **Python** para as cinco, para testar decimal como string e o contrato fora do JVM.
+3. **Um processo por estratégia** (decisão 4 da T53), mesmo com código compartilhado.
+4. **Ordem de entrega:** tendência e caos primeiro; depois livro, reversão e rompimento.
 
 ## Fora do escopo
 
