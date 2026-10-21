@@ -7,36 +7,45 @@ import com.marmitt.core.application.usecase.runner.RunnerBootRecoveryUseCase;
 import com.marmitt.core.domain.portfolio.DeadLetterEntry;
 import com.marmitt.core.domain.portfolio.Portfolio;
 import com.marmitt.core.domain.runner.ClientOrderId;
+import com.marmitt.core.domain.runner.RunnerStatusCause;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.boot.BootExecutionCommand;
+import com.marmitt.core.dto.boot.BootRun;
 import com.marmitt.core.dto.exchange.boot.ExchangeBootReadiness;
 import com.marmitt.core.dto.exchange.ExchangeBalanceReport;
 import com.marmitt.core.dto.portfolio.PortfolioZombieCandidate;
 import com.marmitt.core.dto.portfolio.PortfolioZombieDetectionResult;
 import com.marmitt.core.enums.BootAccountQueryPolicy;
 import com.marmitt.core.enums.BootFailureMode;
+import com.marmitt.core.enums.BootRunStatus;
 import com.marmitt.core.enums.ExchangeBalanceStatus;
 import com.marmitt.core.enums.PortfolioZombieDetectionStatus;
 import com.marmitt.core.enums.RunnerStatus;
 import com.marmitt.core.enums.SafeModeTrigger;
 import com.marmitt.core.ports.inbound.boot.RunBootSequencePort;
 import com.marmitt.core.ports.outbound.boot.BootExecutionObserverPort;
+import com.marmitt.core.ports.outbound.repository.BootRunRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.PortfolioRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.StrategyRunnerRepositoryPort;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 import java.util.Set;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 @Slf4j
 public class RunBootSequenceUseCase implements RunBootSequencePort {
+
+    /** Causa das transicoes que a reconciliacao do boot faz no runner (T59). */
+    private static final RunnerStatusCause BOOT_RECOVERY = RunnerStatusCause.boot("boot runner recovery");
 
     private final PortfolioRepositoryPort portfolioRepository;
     private final StrategyRunnerRepositoryPort strategyRunnerRepository;
@@ -46,6 +55,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
     private final DeadLetterEntryRepositoryPort deadLetterEntryRepository;
     private final RunnerBootRecoveryUseCase runnerBootRecoveryUseCase;
     private final AutomaticSafeModeTrigger safeModeTrigger;
+    private final BootRunRepositoryPort bootRunRepository;
 
     public RunBootSequenceUseCase(PortfolioRepositoryPort portfolioRepository,
                                   StrategyRunnerRepositoryPort strategyRunnerRepository,
@@ -54,7 +64,8 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
                                   PortfolioZombieDetectionUseCase portfolioZombieDetectionUseCase,
                                   DeadLetterEntryRepositoryPort deadLetterEntryRepository,
                                   RunnerBootRecoveryUseCase runnerBootRecoveryUseCase,
-                                  AutomaticSafeModeTrigger safeModeTrigger) {
+                                  AutomaticSafeModeTrigger safeModeTrigger,
+                                  BootRunRepositoryPort bootRunRepository) {
         this.portfolioRepository = portfolioRepository;
         this.strategyRunnerRepository = strategyRunnerRepository;
         this.exchangeAdapterRepository = exchangeAdapterRepository;
@@ -63,12 +74,16 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
         this.deadLetterEntryRepository = deadLetterEntryRepository;
         this.runnerBootRecoveryUseCase = runnerBootRecoveryUseCase;
         this.safeModeTrigger = safeModeTrigger;
+        this.bootRunRepository = bootRunRepository;
     }
 
     @Override
     public void execute(BootExecutionCommand command, BootExecutionObserverPort observer) {
         String runId = UUID.randomUUID().toString();
-        observer.onRunStarted(runId, command.failureMode().name());
+        String mode = command.failureMode().name();
+        Instant startedAt = Instant.now();
+        AtomicReference<String> failedPhase = new AtomicReference<>();
+        observer.onRunStarted(runId, mode);
         log.info("bootSequence: start runId={} mode={} phase1Enabled={} phase2Enabled={} phase3Enabled={}",
                 runId, command.failureMode(), command.phase1Enabled(), command.phase2Enabled(), command.phase3Enabled());
 
@@ -81,27 +96,43 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
 
             executePhase("phase1.infrastructure", command.phase1Enabled(),
                     () -> runPhase1InfrastructureReadiness(runId, eligibleRunners, observer),
-                    observer);
+                    observer, failedPhase);
 
             boolean phase2Enabled = command.phase2Enabled();
             executePhase("phase2.sanity", phase2Enabled && command.sanityEnabled(),
                     () -> runPhase2BalanceSanity(runId, command, observer),
-                    observer);
+                    observer, failedPhase);
             executePhase("phase2.zombie", phase2Enabled && command.zombieEnabled(),
                     () -> runPhase2ZombieDetection(runId, portfolios, eligibleRunners, command, observer),
-                    observer);
+                    observer, failedPhase);
 
             List<RunnerBootRecoveryUseCase.RecoverySummary> summaries = new ArrayList<>();
             executePhase("phase3.runner_recovery", command.phase3Enabled(),
                     () -> summaries.addAll(eligibleRunners.stream().map(this::recoverRunner).toList()),
-                    observer);
+                    observer, failedPhase);
 
+            recordRun(new BootRun(runId, mode, BootRunStatus.SUCCESS, startedAt, Instant.now(), null, null));
             observer.onRunCompleted(runId);
             log.info("bootSequence: completed runId={} portfolios={} runners={}",
                     runId, portfolios.size(), summaries.size());
         } catch (RuntimeException e) {
+            recordRun(new BootRun(runId, mode, BootRunStatus.FAILED, startedAt, Instant.now(), failedPhase.get(),
+                    e.getMessage()));
             observer.onRunFailed(runId, null, e.getMessage());
             throw e;
+        }
+    }
+
+    /**
+     * Historico do boot (T59). Falha ao gravar nao derruba o boot: um boot que falhou por falta de
+     * banco nao tem onde registrar, e o log continua sendo a fonte nesse caso.
+     */
+    private void recordRun(BootRun run) {
+        try {
+            bootRunRepository.save(run);
+        } catch (RuntimeException e) {
+            log.warn("bootSequence: boot run not recorded runId={} status={} - {}", run.runId(), run.status(),
+                    e.getMessage());
         }
     }
 
@@ -256,7 +287,8 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
                 runId, zombiesTotal, mode.name());
     }
 
-    private void executePhase(String phase, boolean enabled, Runnable action, BootExecutionObserverPort observer) {
+    private void executePhase(String phase, boolean enabled, Runnable action, BootExecutionObserverPort observer,
+                              AtomicReference<String> failedPhase) {
         if (!enabled) {
             observer.onPhaseSkipped(phase);
             return;
@@ -271,6 +303,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
         } catch (RuntimeException e) {
             long durationMs = (System.nanoTime() - startedNs) / 1_000_000L;
             observer.onPhaseFailed(phase, durationMs, e.getMessage());
+            failedPhase.set(phase);
             throw e;
         }
     }
@@ -363,7 +396,7 @@ public class RunBootSequenceUseCase implements RunBootSequencePort {
     }
 
     private RunnerBootRecoveryUseCase.RecoverySummary recoverRunner(StrategyRunner runner) {
-        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner);
+        RunnerBootRecoveryUseCase.RecoverySummary summary = runnerBootRecoveryUseCase.recoverRunner(runner, BOOT_RECOVERY);
 
         log.info("bootSequence: runner={} inFlight={} limbo={}",
                 summary.runnerId(), summary.inFlightCount(), summary.limboCount());

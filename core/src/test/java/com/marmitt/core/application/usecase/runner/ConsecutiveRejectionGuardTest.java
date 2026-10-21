@@ -7,6 +7,7 @@ import com.marmitt.core.dto.notification.ErrorNotificationType;
 import com.marmitt.core.dto.runner.response.RunnerTransitionResult;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
 import com.marmitt.core.enums.RunnerStatus;
+import com.marmitt.core.enums.RunnerStatusOrigin;
 import com.marmitt.core.enums.TransactionType;
 import com.marmitt.core.ports.inbound.runner.HaltRunnerPort;
 import com.marmitt.core.ports.outbound.notification.ErrorNotificationPort;
@@ -22,6 +23,7 @@ import java.util.UUID;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.argThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
@@ -46,7 +48,7 @@ class ConsecutiveRejectionGuardTest {
         Transaction transaction = mock(Transaction.class);
         when(transaction.getRunnerId()).thenReturn(RUNNER);
         when(repository.findTransactionByClientOrderId(anyString())).thenReturn(Optional.of(transaction));
-        when(haltRunner.haltById(RUNNER))
+        when(haltRunner.haltById(eq(RUNNER), any()))
                 .thenReturn(new RunnerTransitionResult(RUNNER, "s", "BTCUSDT", RunnerStatus.ACTIVE, RunnerStatus.HALTED));
     }
 
@@ -55,11 +57,12 @@ class ConsecutiveRejectionGuardTest {
         for (int i = 0; i < 4; i++) {
             guard.onOrderUpdate(order(OrderDataDto.OrderStatus.REJECTED));
         }
-        verify(haltRunner, never()).haltById(any());
+        verify(haltRunner, never()).haltById(any(), any());
 
         guard.onOrderUpdate(order(OrderDataDto.OrderStatus.REJECTED));
 
-        verify(haltRunner).haltById(RUNNER);
+        verify(haltRunner).haltById(eq(RUNNER), argThat(cause -> cause.origin() == RunnerStatusOrigin.AUTOMATIC
+                && cause.reason().contains("consecutiveRejections=5")));
         verify(notification).notifyError(argThat(event -> event.type() == ErrorNotificationType.RUNNER_AUTO_HALTED
                 && RUNNER.equals(event.runnerId())));
     }
@@ -74,7 +77,7 @@ class ConsecutiveRejectionGuardTest {
             guard.onOrderUpdate(order(OrderDataDto.OrderStatus.REJECTED));
         }
 
-        verify(haltRunner, never()).haltById(any());
+        verify(haltRunner, never()).haltById(any(), any());
     }
 
     @Test
@@ -84,18 +87,18 @@ class ConsecutiveRejectionGuardTest {
             guard.onOrderUpdate(same);
         }
 
-        verify(haltRunner, never()).haltById(any());
+        verify(haltRunner, never()).haltById(any(), any());
     }
 
     @Test
     void runnerAlreadyHaltedIsNotAlertedAgain() {
-        when(haltRunner.haltById(RUNNER))
+        when(haltRunner.haltById(eq(RUNNER), any()))
                 .thenReturn(new RunnerTransitionResult(RUNNER, "s", "BTCUSDT", RunnerStatus.HALTED, RunnerStatus.HALTED));
         for (int i = 0; i < 5; i++) {
             guard.onOrderUpdate(order(OrderDataDto.OrderStatus.REJECTED));
         }
 
-        verify(haltRunner, times(1)).haltById(RUNNER);
+        verify(haltRunner, times(1)).haltById(eq(RUNNER), any());
         verify(notification, never()).notifyError(any());
     }
 

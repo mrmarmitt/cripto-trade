@@ -7,6 +7,7 @@ import com.marmitt.application.spring.service.TransactionalManageDeadLetterPort;
 import com.marmitt.application.spring.bootstrap.RunnerTransactionRecoveryProperties;
 import com.marmitt.core.application.usecase.exchange.ExchangeBalanceReconciliation;
 import com.marmitt.core.application.usecase.operations.InspectOperationalStateUseCase;
+import com.marmitt.core.application.usecase.operations.QueryEventTimelineUseCase;
 import com.marmitt.core.application.usecase.portfolio.AutomaticSafeModeTrigger;
 import com.marmitt.core.application.usecase.portfolio.CreatePortfolioUseCase;
 import com.marmitt.core.application.usecase.portfolio.EvaluateDrawdownUseCase;
@@ -17,6 +18,7 @@ import com.marmitt.core.application.usecase.portfolio.ManageSafeModeUseCase;
 import com.marmitt.core.application.usecase.portfolio.QueryPortfolioUseCase;
 import com.marmitt.core.application.usecase.portfolio.ReportOperationalStateUseCase;
 import com.marmitt.core.ports.inbound.operations.InspectOperationalStatePort;
+import com.marmitt.core.ports.inbound.operations.QueryEventTimelinePort;
 import com.marmitt.core.ports.inbound.portfolio.CreatePortfolioPort;
 import com.marmitt.core.ports.inbound.reconciliation.ReconcileTradesPort;
 import com.marmitt.core.ports.inbound.portfolio.EvaluateDrawdownPort;
@@ -32,6 +34,7 @@ import com.marmitt.core.ports.outbound.metrics.OperationalMetricsPort;
 import com.marmitt.core.ports.outbound.notification.ErrorNotificationPort;
 import com.marmitt.core.ports.outbound.operations.InfrastructureSignalsPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterEntryRepositoryPort;
+import com.marmitt.core.ports.outbound.repository.EventTimelineRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.DeadLetterReprocessingPort;
 import com.marmitt.core.ports.outbound.repository.EquitySnapshotRepositoryPort;
 import com.marmitt.core.ports.outbound.repository.ExchangeAdapterRepositoryPort;
@@ -178,6 +181,11 @@ public class PortfolioConfig {
                         Duration.ofMillis(transactionRecoveryProperties.getIntervalMs()),
                         Duration.ofMillis(operationalStateProperties.getTerminationTimeoutMs())),
                 Clock.systemUTC());
+    }
+
+    @Bean
+    public QueryEventTimelinePort queryEventTimeline(EventTimelineRepositoryPort eventTimelineRepository) {
+        return new QueryEventTimelineUseCase(eventTimelineRepository, Clock.systemUTC());
     }
 
     @Bean

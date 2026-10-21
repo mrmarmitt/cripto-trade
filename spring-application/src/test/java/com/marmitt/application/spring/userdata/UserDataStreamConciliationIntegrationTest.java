@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.userdata;
 
+import com.marmitt.core.domain.runner.RunnerStatusCause;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.marmitt.application.spring.CTradeApplication;
 import com.marmitt.application.spring.testsupport.DatabaseCleaner;
@@ -311,8 +312,8 @@ class UserDataStreamConciliationIntegrationTest {
                         .build());
         assertNotNull(r.runnerId(), "runner creation failed: " + r.message());
         StrategyRunner runner = strategyRunnerRepository.findById(r.runnerId()).orElseThrow();
-        runner.startInitializing();
-        runner.activate();
+        runner.startInitializing(RunnerStatusCause.manual("test"));
+        runner.activate(RunnerStatusCause.manual("test"));
         strategyRunnerRepository.save(runner);
         return runner;
     }

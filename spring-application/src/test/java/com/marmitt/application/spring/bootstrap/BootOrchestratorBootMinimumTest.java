@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.bootstrap;
 
+import com.marmitt.core.ports.outbound.repository.BootRunRepositoryPort;
 import com.marmitt.core.application.usecase.portfolio.AutomaticSafeModeTrigger;
 import com.marmitt.core.application.usecase.boot.RunBootSequenceUseCase;
 import com.marmitt.core.application.usecase.exchange.ExchangeBalanceReconciliation;
@@ -36,6 +37,7 @@ import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
+import static org.mockito.ArgumentMatchers.argThat;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -43,6 +45,8 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 class BootOrchestratorBootMinimumTest {
+
+    private final BootRunRepositoryPort bootRuns = mock(BootRunRepositoryPort.class);
 
     @Test
     void warnOnlyZombieDetectionDoesNotPersistDlqAndRunCompletes() {
@@ -70,6 +74,9 @@ class BootOrchestratorBootMinimumTest {
         BootRunSnapshot snapshot = tracker.snapshot();
         assertEquals(BootRunStatus.SUCCESS, snapshot.status());
         assertNull(snapshot.failurePhase());
+        // T59: o boot fica no historico, que sobrevive ao restart.
+        verify(bootRuns).save(argThat(run -> run.status() == BootRunStatus.SUCCESS && run.failurePhase() == null
+                && run.runId().equals(snapshot.runId()) && !run.finishedAt().isBefore(run.startedAt())));
         verifyNoInteractions(deadLetterRepository);
         verify(eventPublisher, never()).publishEvent(any(BootFailFastEvent.class));
     }
@@ -108,6 +115,8 @@ class BootOrchestratorBootMinimumTest {
         BootRunSnapshot snapshot = tracker.snapshot();
         assertEquals(BootRunStatus.FAILED, snapshot.status());
         assertEquals("phase2.zombie", snapshot.failurePhase());
+        verify(bootRuns).save(argThat(run -> run.status() == BootRunStatus.FAILED
+                && "phase2.zombie".equals(run.failurePhase()) && run.failureMessage() != null));
         verify(deadLetterRepository, times(1)).save(any());
         verify(eventPublisher).publishEvent(any(BootFailFastEvent.class));
     }
@@ -145,7 +154,7 @@ class BootOrchestratorBootMinimumTest {
         verify(eventPublisher).publishEvent(any(BootFailFastEvent.class));
     }
 
-    private static BootOrchestrator newOrchestrator(BootFailureMode mode,
+    private BootOrchestrator newOrchestrator(BootFailureMode mode,
                                                     Portfolio portfolio,
                                                     StrategyRunner runner,
                                                     PortfolioZombieDetectionResult zombieResult,
@@ -191,7 +200,8 @@ class BootOrchestratorBootMinimumTest {
                 portfolioZombieDetectionUseCase,
                 deadLetterRepository,
                 runnerBootRecoveryUseCase,
-                mock(AutomaticSafeModeTrigger.class)
+                mock(AutomaticSafeModeTrigger.class),
+                bootRuns
         );
 
         return new BootOrchestrator(

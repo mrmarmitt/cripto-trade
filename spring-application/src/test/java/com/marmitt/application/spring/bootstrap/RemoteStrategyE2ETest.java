@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.bootstrap;
 
+import com.marmitt.core.domain.runner.RunnerStatusCause;
 import okhttp3.mockwebserver.Dispatcher;
 import okhttp3.mockwebserver.MockResponse;
 import okhttp3.mockwebserver.MockWebServer;
@@ -133,7 +134,7 @@ class RemoteStrategyE2ETest extends ScenarioStrategyE2ETestSupport {
             assertTrue(remoteFailures(failure) > failuresBefore,
                     failure + " deve contar em strategy.remote.failures; contadores=" + allRemoteFailures());
             // Isola a proxima iteracao: runner parado nao e mais avaliado nos ticks seguintes.
-            haltRunner.haltById(runnerId);
+            haltRunner.haltById(runnerId, RunnerStatusCause.manual("test"));
         }
     }
 

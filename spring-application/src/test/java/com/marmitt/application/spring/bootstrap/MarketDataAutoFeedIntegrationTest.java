@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.bootstrap;
 
+import com.marmitt.core.domain.runner.RunnerStatusCause;
 import com.marmitt.core.domain.runner.ClientOrderId;
 import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.StrategyRunner;
@@ -105,8 +106,8 @@ class MarketDataAutoFeedIntegrationTest extends ScenarioStrategyE2ETestSupport {
     private UUID createActiveRunnerOnMockMarketData() {
         UUID runnerId = createRunnerOnMockMarketData(SYMBOL);
         StrategyRunner runner = strategyRunnerRepository.findById(runnerId).orElseThrow();
-        runner.startInitializing();
-        runner.activate();
+        runner.startInitializing(RunnerStatusCause.manual("test"));
+        runner.activate(RunnerStatusCause.manual("test"));
         strategyRunnerRepository.save(runner);
         return runnerId;
     }

@@ -1,5 +1,6 @@
 package com.marmitt.application.spring.bootstrap;
 
+import com.marmitt.core.ports.outbound.repository.BootRunRepositoryPort;
 import com.marmitt.core.application.usecase.portfolio.AutomaticSafeModeTrigger;
 import com.marmitt.core.application.usecase.boot.RunBootSequenceUseCase;
 import com.marmitt.core.application.usecase.exchange.ExchangeBalanceReconciliation;
@@ -206,7 +207,8 @@ class BootOrchestratorObservabilityTest {
                 portfolioZombieDetectionUseCase,
                 deadLetterRepository,
                 runnerBootRecoveryUseCase,
-                mock(AutomaticSafeModeTrigger.class)
+                mock(AutomaticSafeModeTrigger.class),
+                mock(BootRunRepositoryPort.class)
         );
 
         return new BootOrchestrator(

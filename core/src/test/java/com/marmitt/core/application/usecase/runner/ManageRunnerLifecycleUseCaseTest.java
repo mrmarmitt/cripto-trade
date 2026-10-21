@@ -1,5 +1,6 @@
 package com.marmitt.core.application.usecase.runner;
 
+import com.marmitt.core.domain.runner.RunnerStatusCause;
 import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.domain.runner.Transaction;
@@ -60,12 +61,12 @@ class ManageRunnerLifecycleUseCaseTest {
 
     @Test
     void startReconcilesAndActivatesACreatedRunner() {
-        when(recovery.recoverRunner(runner)).thenAnswer(invocation -> {
-            runner.activate();   // passo 6 da reconciliacao: INITIALIZING -> ACTIVE
+        when(recovery.recoverRunner(runner, RunnerStatusCause.manual("test"))).thenAnswer(invocation -> {
+            runner.activate(RunnerStatusCause.manual("test"));   // passo 6 da reconciliacao: INITIALIZING -> ACTIVE
             return summary(true);
         });
 
-        RunnerTransitionResult result = useCase.start(runner.getId());
+        RunnerTransitionResult result = useCase.start(runner.getId(), "test");
 
         assertEquals(RunnerStatus.CREATED, result.previousStatus());
         assertEquals(RunnerStatus.ACTIVE, result.newStatus());
@@ -74,9 +75,9 @@ class ManageRunnerLifecycleUseCaseTest {
 
     @Test
     void startRefusedWhenReconciliationDoesNotComplete() {
-        when(recovery.recoverRunner(runner)).thenReturn(summary(false));
+        when(recovery.recoverRunner(runner, RunnerStatusCause.manual("test"))).thenReturn(summary(false));
 
-        assertThrows(RunnerOperationException.class, () -> useCase.start(runner.getId()));
+        assertThrows(RunnerOperationException.class, () -> useCase.start(runner.getId(), "test"));
         assertEquals(RunnerStatus.INITIALIZING, runner.getStatus(), "Fica para um novo start retomar");
     }
 
@@ -84,17 +85,17 @@ class ManageRunnerLifecycleUseCaseTest {
     void startRefusedWhenExchangeIsBlocked() {
         when(adapters.isDispatchBlocked("MOCK")).thenReturn(true);
 
-        assertThrows(RunnerOperationException.class, () -> useCase.start(runner.getId()));
-        verify(recovery, never()).recoverRunner(any());
+        assertThrows(RunnerOperationException.class, () -> useCase.start(runner.getId(), "test"));
+        verify(recovery, never()).recoverRunner(any(), any());
     }
 
     @Test
     void resumeReactivatesAHaltedRunnerAfterCleanReconciliation() {
         activate(runner);
-        runner.halt();
-        when(recovery.recoverRunner(runner)).thenReturn(summary(true));
+        runner.halt(RunnerStatusCause.manual("test"));
+        when(recovery.recoverRunner(runner, RunnerStatusCause.manual("test"))).thenReturn(summary(true));
 
-        RunnerTransitionResult result = useCase.resume(runner.getId());
+        RunnerTransitionResult result = useCase.resume(runner.getId(), "test");
 
         assertEquals(RunnerStatus.HALTED, result.previousStatus());
         assertEquals(RunnerStatus.ACTIVE, result.newStatus());
@@ -103,36 +104,36 @@ class ManageRunnerLifecycleUseCaseTest {
     @Test
     void resumeKeepsTheRunnerHaltedWhenReconciliationFails() {
         activate(runner);
-        runner.halt();
-        when(recovery.recoverRunner(runner)).thenReturn(summary(false));
+        runner.halt(RunnerStatusCause.manual("test"));
+        when(recovery.recoverRunner(runner, RunnerStatusCause.manual("test"))).thenReturn(summary(false));
 
-        assertThrows(RunnerOperationException.class, () -> useCase.resume(runner.getId()));
+        assertThrows(RunnerOperationException.class, () -> useCase.resume(runner.getId(), "test"));
         assertEquals(RunnerStatus.HALTED, runner.getStatus());
     }
 
     @Test
     void resumeOnlyAcceptsHaltedRunners() {
         RunnerOperationException refused = assertThrows(RunnerOperationException.class,
-                () -> useCase.resume(runner.getId()));
+                () -> useCase.resume(runner.getId(), "test"));
         assertEquals(RunnerOperationException.INVALID_STATE, refused.code());
-        verify(recovery, never()).recoverRunner(any());
+        verify(recovery, never()).recoverRunner(any(), any());
     }
 
     @Test
     void repeatingACommandAlreadyAppliedReturnsTheCurrentStateWithoutEffect() {
         activate(runner);
 
-        RunnerTransitionResult start = useCase.start(runner.getId());
-        RunnerTransitionResult resume = useCase.resume(runner.getId());
+        RunnerTransitionResult start = useCase.start(runner.getId(), "test");
+        RunnerTransitionResult resume = useCase.resume(runner.getId(), "test");
 
         assertEquals(RunnerStatus.ACTIVE, start.previousStatus());
         assertEquals(RunnerStatus.ACTIVE, start.newStatus());
         assertEquals(RunnerStatus.ACTIVE, resume.newStatus());
-        verify(recovery, never()).recoverRunner(any());
+        verify(recovery, never()).recoverRunner(any(), any());
         verify(repository, never()).save(any());
 
-        runner.startTerminating();
-        RunnerTransitionResult terminate = useCase.terminate(runner.getId());
+        runner.startTerminating(RunnerStatusCause.manual("test"));
+        RunnerTransitionResult terminate = useCase.terminate(runner.getId(), "test");
         assertEquals(RunnerStatus.TERMINATING, terminate.previousStatus());
         assertEquals(RunnerStatus.TERMINATING, terminate.newStatus());
         verify(repository, never()).save(any());
@@ -140,20 +141,20 @@ class ManageRunnerLifecycleUseCaseTest {
 
     @Test
     void refusalsCarryAStableCode() {
-        when(recovery.recoverRunner(runner)).thenReturn(summary(false));
+        when(recovery.recoverRunner(runner, RunnerStatusCause.manual("test"))).thenReturn(summary(false));
         assertEquals("RUNNER_RECONCILIATION_INCOMPLETE",
-                assertThrows(RunnerOperationException.class, () -> useCase.start(runner.getId())).code());
+                assertThrows(RunnerOperationException.class, () -> useCase.start(runner.getId(), "test")).code());
 
         when(adapters.isDispatchBlocked("MOCK")).thenReturn(true);
         assertEquals("EXCHANGE_UNAVAILABLE",
-                assertThrows(RunnerOperationException.class, () -> useCase.start(runner.getId())).code());
+                assertThrows(RunnerOperationException.class, () -> useCase.start(runner.getId(), "test")).code());
     }
 
     @Test
     void terminateArchivesAtOnceWhenTheRunnerIsFlat() {
         activate(runner);
 
-        RunnerTransitionResult result = useCase.terminate(runner.getId());
+        RunnerTransitionResult result = useCase.terminate(runner.getId(), "test");
 
         assertEquals(RunnerStatus.ACTIVE, result.previousStatus());
         assertEquals(RunnerStatus.ARCHIVED, runner.getStatus());
@@ -169,7 +170,7 @@ class ManageRunnerLifecycleUseCaseTest {
         Position lot = mock(Position.class);
         when(repository.findActivePositionByRunnerIdAndSymbol(runner.getId(), "BTCUSDT")).thenReturn(Optional.of(lot));
 
-        useCase.terminate(runner.getId());
+        useCase.terminate(runner.getId(), "test");
         assertEquals(RunnerStatus.TERMINATING, runner.getStatus());
 
         // A estrategia vendeu o lote, mas ainda ha ordem em voo.
@@ -201,7 +202,7 @@ class ManageRunnerLifecycleUseCaseTest {
 
     @Test
     void unknownRunnerIsNotFound() {
-        assertThrows(RunnerNotFoundException.class, () -> useCase.start(UUID.randomUUID()));
+        assertThrows(RunnerNotFoundException.class, () -> useCase.start(UUID.randomUUID(), "test"));
     }
 
     private RunnerBootRecoveryUseCase.RecoverySummary summary(boolean completed) {
@@ -209,8 +210,8 @@ class ManageRunnerLifecycleUseCaseTest {
     }
 
     private static void activate(StrategyRunner runner) {
-        runner.startInitializing();
-        runner.activate();
+        runner.startInitializing(RunnerStatusCause.manual("test"));
+        runner.activate(RunnerStatusCause.manual("test"));
     }
 
     private static StrategyRunner newRunner() {

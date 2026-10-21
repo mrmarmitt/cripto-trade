@@ -1,7 +1,9 @@
 package com.marmitt.core.application.handler.connection;
 
+import com.marmitt.core.domain.runner.RunnerStatusCause;
 import com.marmitt.core.dto.events.WebSocketFailedEvent;
 import com.marmitt.core.dto.runner.response.RunnerTransitionResult;
+import com.marmitt.core.enums.RunnerStatusOrigin;
 import com.marmitt.core.enums.StreamChannel;
 import com.marmitt.core.ports.inbound.runner.HaltRunnerPort;
 import org.junit.jupiter.api.Test;
@@ -26,6 +28,8 @@ class CriticalConnectionFailureHandlerTest {
         handler.execute(critical);
 
         assertTrue(haltPort.haltAllCalled, "haltAll must be called on critical failure");
+        assertEquals(RunnerStatusOrigin.AUTOMATIC, haltPort.cause.origin());
+        assertTrue(haltPort.cause.reason().contains("exchange=BINANCE"), haltPort.cause.reason());
     }
 
     @Test
@@ -44,15 +48,17 @@ class CriticalConnectionFailureHandlerTest {
 
     static class RecordingHaltRunnerPort implements HaltRunnerPort {
         boolean haltAllCalled = false;
+        RunnerStatusCause cause;
 
         @Override
-        public List<RunnerTransitionResult> haltAll() {
+        public List<RunnerTransitionResult> haltAll(RunnerStatusCause cause) {
             haltAllCalled = true;
+            this.cause = cause;
             return new ArrayList<>();
         }
 
         @Override
-        public RunnerTransitionResult haltById(UUID id) {
+        public RunnerTransitionResult haltById(UUID id, RunnerStatusCause cause) {
             return null;
         }
     }

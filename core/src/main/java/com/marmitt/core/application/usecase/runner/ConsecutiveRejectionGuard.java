@@ -1,6 +1,7 @@
 package com.marmitt.core.application.usecase.runner;
 
 import com.marmitt.core.domain.runner.ClientOrderId;
+import com.marmitt.core.domain.runner.RunnerStatusCause;
 import com.marmitt.core.dto.notification.ErrorNotificationEvent;
 import com.marmitt.core.dto.runner.response.RunnerTransitionResult;
 import com.marmitt.core.dto.websocket.data.OrderDataDto;
@@ -76,11 +77,12 @@ public class ConsecutiveRejectionGuard {
     }
 
     private void halt(UUID runnerId, int rejected, String lastReason) {
-        RunnerTransitionResult result = haltRunner.haltById(runnerId);
+        String details = "consecutiveRejections=" + rejected + " lastReason=" + lastReason;
+        RunnerTransitionResult result = haltRunner.haltById(runnerId,
+                RunnerStatusCause.automatic("consecutive order rejections: " + details));
         if (result.newStatus() != RunnerStatus.HALTED || result.previousStatus() == RunnerStatus.HALTED) {
             return;
         }
-        String details = "consecutiveRejections=" + rejected + " lastReason=" + lastReason;
         log.error("rejectionGuard: runner halted runnerId={} {}", runnerId, details);
         notification.notifyError(ErrorNotificationEvent.runnerAutoHalted(
                 "Runner halted after " + rejected + " consecutive rejections", details, runnerId, clock.instant()));

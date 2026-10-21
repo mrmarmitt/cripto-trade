@@ -169,7 +169,8 @@ O alerta *Cancel rate > 10/min* dos cenários 1 e 2 é esperado nesta fase.
 1. Todos os runners em `HALTED`, sem ordem em voo.
 2. `GET /api/admin/operational-state?includeExchange=true&exchangeWindowHours=3`:
    `EXCHANGE_TRADE_DIVERGENCE` e `EXCHANGE_BALANCE_DIVERGENCE` sem `CRITICAL`.
-3. `GET /api/admin/operator-actions` (o que foi feito), `GET /api/dead-letters` (vazio), logs `ERROR`.
+3. Relatório da rodada pelo procedimento `docs/monitoring/round-report.md` (T59): linha do tempo de
+   eventos, estado no fim, logs, estabilidade e os 8 critérios.
 4. Registrar a execução na tabela abaixo; cada achado vira task.
 
 ### Aprovação da fase 1

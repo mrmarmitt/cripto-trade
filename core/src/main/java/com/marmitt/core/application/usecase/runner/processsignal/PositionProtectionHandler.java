@@ -52,7 +52,7 @@ class PositionProtectionHandler {
     /** Sinal de venda MARKET do lote inteiro que violou o limite. */
     StrategyOutputDto exitSignal(Trigger trigger) {
         return intentFactory.liquidationSignal(STRATEGY_NAME, trigger.lot(),
-                "protective exit " + trigger.violation().reason() + ": " + trigger.violation().detail());
+                PositionProtection.EXIT_REASONING_PREFIX + trigger.violation().reason() + ": " + trigger.violation().detail());
     }
 
     /**
@@ -64,7 +64,7 @@ class PositionProtectionHandler {
     boolean releaseLot(StrategyRunner runner, Trigger trigger) {
         return strategyRunnerRepository.findTransactionById(trigger.lot().getLockedByTransactionId())
                 .map(lockingSell -> cancelSignalHandler.cancelResting(runner, lockingSell,
-                        "protective exit " + trigger.violation().reason()))
+                        PositionProtection.EXIT_REASONING_PREFIX + trigger.violation().reason()))
                 .orElse(false);
     }
 
