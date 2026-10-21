@@ -4,7 +4,7 @@
 **Responsável:** Claude
 **Dependências:** T55 (auditoria, estado consolidado, runbook), T53 (registro das rodadas), T25/T43/T44
 (eventos automáticos), T57/T58 (conferências usadas no relatório).
-**Status:** Pendente — escopo revisto e decisões registradas em 2026-10-21.
+**Status:** Concluído (PR #164, 2026-10-21). Validação na testnet pendente.
 
 ---
 

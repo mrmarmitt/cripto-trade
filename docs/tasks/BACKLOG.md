@@ -64,7 +64,7 @@ Trilha de tarefas para habilitar operação com a API da Binance (testnet), pré
 | T56 | Demanda de market data: conexões e assinaturas automáticas      | Média | Claude | Concluído |
 | T57 | Conferência de saldo por exchange (soma dos portfolios × conta)  | Média | Claude | Concluído |
 | T58 | Preço para lotes abertos sem runner operando                    | Baixa | Claude | Concluído |
-| T59 | Linha do tempo de eventos e relatório de rodada                 | Média | Claude | Pendente  |
+| T59 | Linha do tempo de eventos e relatório de rodada                 | Média | Claude | Concluído |
 | TD1 | Telemetria do canal USER_DATA (débito técnico)                  | Baixa | —      | Concluído |
 
 ## Ordem de execução
