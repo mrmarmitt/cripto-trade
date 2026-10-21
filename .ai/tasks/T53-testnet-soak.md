@@ -251,6 +251,13 @@ Banco limpo com `scripts/reset-testnet-db.ps1`; boot `SUCCESS`; `operational-sta
 - **Fim:** 4 runners `HALTED`, nenhuma ordem em voo, DLQ vazia, 21 ações de operador auditadas com
   `X-Reason`.
 
+**Achado:**
+
+- **F7 — Operação (baixo): janela de comparação de trades atravessa o reset do banco.** Depois de limpar
+  o banco, `includeExchange` com janela que alcança antes do reset acusa `CRITICAL` pelos fills apagados.
+  Só acontece em testnet (dado descartável); procedimento: usar janela que comece depois do reset ou
+  conferir os horários dos "só na exchange". Sem task por ora.
+
 ### Rodada 3 — detalhes (2026-10-21, após a T57)
 
 Sem limpar o banco (estado da rodada 2: 4 portfolios, lote aberto de 0.001 BTC no cenário 2). Boot
@@ -270,19 +277,13 @@ Sem limpar o banco (estado da rodada 2: 4 portfolios, lote aberto de 0.001 BTC n
 - **Ainda não exercitado em testnet:** o caminho de `DEFICIT` (HALT no boot e na avaliação periódica) e o
   `PENDING`; cobertos por testes unitários e de integração da T57.
 
-**Achados:**
+**Achado:**
 
 - **F8 — Observabilidade (baixo): sem preço logo após o restart.** Até um runner ativar o feed de market
   data (T56), o drawdown do portfolio com lote aberto é pulado (`WARN drawdown: no market price`, 3 vezes
   em 20s). Por desenho (equity incompleto gravaria pico/vale falso), mas com todos os runners parados e
   lote aberto o portfolio fica sem drawdown até alguém ativar um runner do símbolo. Avaliar se o
   coordenador de demanda (T56) deve assinar símbolos com lote aberto. Sem task por ora.
-
-- **F7 — Operação (baixo): janela de comparação de trades atravessa o reset do banco.** Depois de limpar
-  o banco, `includeExchange` com janela que alcança antes do reset acusa `CRITICAL` pelos fills apagados.
-  Só acontece em testnet (dado descartável); procedimento: usar janela que comece depois do reset ou
-  conferir os horários dos "só na exchange". Sem task por ora.
-
 
 ## Fontes
 
