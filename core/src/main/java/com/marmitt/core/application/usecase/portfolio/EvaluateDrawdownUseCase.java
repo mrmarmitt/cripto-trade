@@ -19,7 +19,10 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Circuit breaker de capital por drawdown (T43, Blueprint 11.1.A gatilho 1, IG 11.1.2).
@@ -53,6 +56,8 @@ public class EvaluateDrawdownUseCase implements EvaluateDrawdownPort {
     private final CircuitBreakerMetricsPort metrics;
     private final BigDecimal maxDrawdownPercent;
     private final Clock clock;
+    /** Lote sem preco ja avisado por portfolio: o aviso sai uma vez, nao a cada ciclo (T58). */
+    private final Map<UUID, UUID> unpricedWarned = new ConcurrentHashMap<>();
 
     public EvaluateDrawdownUseCase(PortfolioRepositoryPort portfolioRepository,
                                    GlobalBalanceRepositoryPort globalBalanceRepository,
@@ -129,10 +134,16 @@ public class EvaluateDrawdownUseCase implements EvaluateDrawdownPort {
         PortfolioMarkToMarket.Valuation valuation = markToMarket.value(portfolio.getId());
         if (!valuation.complete()) {
             Position first = valuation.unpriced().getFirst();
-            log.warn("drawdown: no market price for symbol={} positionId={} - portfolioId={} skipped",
-                    first.getSymbol(), first.getId(), portfolio.getId());
+            if (first.getId().equals(unpricedWarned.put(portfolio.getId(), first.getId()))) {
+                log.debug("drawdown: still no market price for symbol={} positionId={} - portfolioId={} skipped",
+                        first.getSymbol(), first.getId(), portfolio.getId());
+            } else {
+                log.warn("drawdown: no market price for symbol={} positionId={} - portfolioId={} skipped",
+                        first.getSymbol(), first.getId(), portfolio.getId());
+            }
             return Optional.empty();
         }
+        unpricedWarned.remove(portfolio.getId());
         return Optional.of(balance.getAvailableBalance().add(balance.getReservedBalance())
                 .add(valuation.unrealizedPnl()));
     }

@@ -1,5 +1,6 @@
 package com.marmitt.core.application.usecase.websocket;
 
+import com.marmitt.core.domain.runner.Position;
 import com.marmitt.core.domain.runner.StrategyRunner;
 import com.marmitt.core.dto.connection.ConnectionKey;
 import com.marmitt.core.dto.connection.ConnectionResultDto;
@@ -153,7 +154,52 @@ class EnsureMarketDataFeedUseCaseTest {
         verify(connectUser, never()).execute(anyString());
     }
 
+    @Test
+    void openLotOfAStoppedRunnerDemandsItsSymbolButNoUserStream() {
+        // T58: lote aberto precisa de preco para drawdown e PnL, mesmo com o runner parado.
+        UUID portfolioId = UUID.randomUUID();
+        StrategyRunner halted = owned(runner(RunnerStatus.HALTED, "SOLUSDT"), portfolioId);
+        StrategyRunner archived = owned(runner(RunnerStatus.ARCHIVED, "XRPUSDT"), portfolioId);
+        Position solLot = lot(halted);
+        Position xrpLot = lot(archived);
+        when(runners.findAll()).thenReturn(List.of(halted, archived));
+        when(runners.findActivePositionsByPortfolioId(portfolioId)).thenReturn(List.of(solLot, xrpLot));
+
+        useCase.ensure();
+
+        ArgumentCaptor<StreamSubscriptionRequest> request = ArgumentCaptor.forClass(StreamSubscriptionRequest.class);
+        verify(connectMarket).execute(org.mockito.ArgumentMatchers.eq("BINANCE"), request.capture());
+        assertEquals(List.of("SOL/USDT/TICKER"), pairs(request.getValue()), "runner arquivado nao gera demanda");
+        verify(connectUser, never()).execute(anyString());
+    }
+
+    @Test
+    void stoppedRunnerWithoutLotDemandsNothing() {
+        UUID portfolioId = UUID.randomUUID();
+        StrategyRunner halted = owned(runner(RunnerStatus.HALTED, "SOLUSDT"), portfolioId);
+        when(runners.findAll()).thenReturn(List.of(halted));
+        when(runners.findActivePositionsByPortfolioId(portfolioId)).thenReturn(List.of());
+
+        useCase.ensure();
+
+        verify(connectMarket, never()).execute(anyString(), any());
+        verify(connectUser, never()).execute(anyString());
+    }
+
     // ---------------------------------------------------------------- helpers
+
+    private static StrategyRunner owned(StrategyRunner runner, UUID portfolioId) {
+        when(runner.getId()).thenReturn(UUID.randomUUID());
+        when(runner.getPortfolioId()).thenReturn(portfolioId);
+        return runner;
+    }
+
+    private static Position lot(StrategyRunner owner) {
+        UUID runnerId = owner.getId();
+        Position lot = mock(Position.class);
+        when(lot.getRunnerId()).thenReturn(runnerId);
+        return lot;
+    }
 
     private void connected(ConnectionKey key, Instant since) {
         withStatus(key, ConnectionStatus.CONNECTED, since);
