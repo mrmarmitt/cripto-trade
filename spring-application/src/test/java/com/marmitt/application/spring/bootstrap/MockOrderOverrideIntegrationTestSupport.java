@@ -150,16 +150,22 @@ abstract class MockOrderOverrideIntegrationTestSupport extends AbstractIntegrati
         ));
     }
 
+    /**
+     * Waits until the mock has delivered an event with {@code expectedStatus} for the order. Reads the
+     * published history, not the REST snapshot: the snapshot never leaves a terminal (T52), so a late
+     * PARTIAL or CANCELED after FILLED only shows up as a delivered event.
+     */
     protected OrderDataDto awaitMockOrderStatus(String clientOrderId,
                                               OrderDataDto.OrderStatus expectedStatus,
                                               Duration timeout) {
         return awaitCondition(
                 timeout,
                 DEFAULT_POLL_INTERVAL_MS,
-                () -> getMockExchangeAdapter()
-                        .queryOrderByClientOrderId(SYMBOL, clientOrderId)
+                () -> getMockExchangeAdapter().publishedOrderEvents(clientOrderId).stream()
+                        .filter(order -> order.status() == expectedStatus)
+                        .findFirst()
                         .orElse(null),
-                order -> order != null && order.status() == expectedStatus,
+                order -> order != null,
                 "Timeout waiting mock emitted order status " + expectedStatus
                         + " for clientOrderId=" + clientOrderId
         );

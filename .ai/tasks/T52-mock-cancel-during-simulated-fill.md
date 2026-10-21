@@ -3,7 +3,7 @@
 **Complexidade:** Média
 **Responsável:** Claude
 **Dependências:** T38 (ordens que descansam no MOCK). Achado durante a T48.
-**Status:** Pendente
+**Status:** Concluído (2026-10-21)
 
 ---
 
@@ -91,6 +91,35 @@ nada é publicado depois de um terminal**.
   `FILLED`; saldo e reserva em cada caso.
 - `./scripts/gradle-run.ps1 :adapter-mock:test` e os E2E de cenário (`SafeModeE2ETest`,
   `PositionProtectionE2ETest`, `Scenario*E2ETest`).
+
+## Entrega (2026-10-21)
+
+- **Saldo na publicação:** `MockScheduledOrderEvent` ganhou `settlement` (débito/crédito do fill ou
+  devolução da reserva numa falha simulada), executado quando o evento é publicado. Cópias duplicadas
+  não liquidam (`duplicate`). `buildScenarioSchedule` devolve `MockOrderSchedule` (eventos + se a
+  reserva foi feita) e é chamado **na submissão**, antes do ACK REST, como a ordem que descansa: um
+  cancelamento logo depois do ACK sempre encontra a reserva feita.
+- **Árbitro por ordem:** `SimulatedOrder` no runtime; cada evento do cronograma é checado e publicado
+  sob o lock da ordem, e o cancelamento roda sob o mesmo lock. Terminal publicado vence o
+  cancelamento (devolve o terminal); senão a ordem é marcada cancelada, o cronograma para, a reserva
+  da parte não executada volta (`releaseUnexecutedReservation`, que substitui
+  `releaseReservationForOpenOrder` também no caminho resting) e sai um único `CANCELED` com o
+  executado.
+- **Snapshot monotônico:** `publishMockOrderResponse` não troca snapshot terminal; duplicatas e
+  eventos fora de ordem continuam sendo publicados. Os testes de override que provavam a entrega do
+  evento atrasado pela consulta REST passaram a ler o histórico publicado
+  (`MockExchangeAdapter.publishedOrderEvents`, via `awaitMockOrderStatus`).
+- **Overrides:** o plano segue igual (duplicatas, ordem reversa); só o cancelamento externo o
+  interrompe. Decisão: o árbitro vale para todo cronograma, não só o padrão, porque o cancelamento
+  externo de uma ordem com override também não pode deixar fills depois do `CANCELED`.
+- **Testes:** `MockExchangeRuntimeSimulatedCancelTest` (5: cancelamento antes do primeiro fill, entre
+  parciais, depois do `FILLED`; reverso mantém o terminal na consulta; duplicatas liquidam uma vez);
+  testes do simulador ajustados ao saldo na publicação; `SafeModeE2ETest` ganhou a liquidação LIMIT com
+  prazo padrão de 3 ticks (cancelada no meio dos parciais, MARKET do restante, sem recusa, executado =
+  casado). O teste de 30 ticks continua provando o caminho em que a LIMIT preenche inteira.
+- **Limite conhecido:** a reserva devolvida de uma BUY parcial é calculada ao preço da ordem; com
+  slippage no fill o débito real difere um pouco e o `MockBalanceStore` limita a devolução ao
+  reservado. Já era assim no fill completo.
 
 ## Fontes
 

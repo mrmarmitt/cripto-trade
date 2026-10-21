@@ -17,6 +17,7 @@ import com.marmitt.mock.config.MockScenarioConfig;
 import com.marmitt.mock.processor.MockRawMessagePublisher;
 import com.marmitt.mock.simulator.MockMarketDataFeedEngine;
 import com.marmitt.mock.simulator.MockOrderExecutionSimulator;
+import com.marmitt.mock.simulator.MockOrderSchedule;
 import com.marmitt.mock.simulator.MockReferencePriceStore;
 import com.marmitt.mock.simulator.MockScheduledOrderEvent;
 import lombok.extern.slf4j.Slf4j;
@@ -30,6 +31,7 @@ import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -58,6 +60,17 @@ public class MockExchangeRuntime {
      * apart from "rested, but a crossing tick already claimed it".
      */
     private final Set<String> restingManagedOrderIds = ConcurrentHashMap.newKeySet();
+    /**
+     * Orders executing through the simulated schedule (MARKET or marketable LIMIT). Each one is the
+     * arbiter between its own schedule and a cancel: whoever closes the order first wins, and nothing
+     * is published after a cancel (T52).
+     */
+    private final Map<String, SimulatedOrder> simulatedOrderById = new ConcurrentHashMap<>();
+    /**
+     * Every order event delivered to the core, in publication order. The REST snapshot never leaves a
+     * terminal, so tests that prove a late duplicate or out-of-order event was delivered read it here.
+     */
+    private final Map<String, List<OrderDataDto>> publishedEventsByOrderId = new ConcurrentHashMap<>();
     private final MockReferencePriceStore referencePriceStore = new MockReferencePriceStore();
     private Random random;
     private MockBalanceStore balanceStore;
@@ -112,10 +125,18 @@ public class MockExchangeRuntime {
             return placeRestingOrder(orderRequest, orderId);
         }
 
+        // Built (and the balance reserved) before the REST acknowledgment, like a resting order, so a
+        // cancel arriving right after it always finds the reservation in place.
+        MockOrderScenarioOverride override = orderScenarioOverrideByClientOrderId.remove(orderRequest.getClientOrderId());
+        MockOrderSchedule schedule = simulator.buildScenarioSchedule(
+                orderRequest, orderId, config, this.random, this.balanceStore, override);
+        SimulatedOrder simulated = new SimulatedOrder(orderRequest, schedule.reservationHeld(), this.balanceStore);
+        simulatedOrderById.put(orderId, simulated);
+
         OrderDataDto accepted = simulator.simulateAccepted(orderRequest, orderId);
         latestEventByOrderId.put(orderId, accepted);
 
-        CompletableFuture.runAsync(() -> simulateOrderExecutionAsync(orderRequest, orderId))
+        CompletableFuture.runAsync(() -> simulateOrderExecutionAsync(simulated, schedule, orderId))
                 .exceptionally(throwable -> {
                     log.error("Error in async order simulation - ClientOrderId: {}, Error: {}",
                             orderRequest.getClientOrderId(), throwable.getMessage(), throwable);
@@ -149,19 +170,58 @@ public class MockExchangeRuntime {
                         request.getClientOrderId(), exchangeOrderId);
                 return latestEventByOrderId.getOrDefault(exchangeOrderId, current);
             }
-            simulator.releaseReservationForOpenOrder(claimed.request(), this.balanceStore, config);
+            simulator.releaseUnexecutedReservation(claimed.request(), BigDecimal.ZERO, this.balanceStore);
             log.info("Mock resting order canceled, reservation released - ClientOrderId: {}, OrderId: {}",
                     request.getClientOrderId(), exchangeOrderId);
         }
 
-        OrderDataDto canceled = new OrderDataDto(
+        SimulatedOrder simulated = simulatedOrderById.get(exchangeOrderId);
+        if (simulated != null) {
+            return cancelSimulatedOrder(simulated, exchangeOrderId);
+        }
+
+        OrderDataDto canceled = canceledSnapshot(current, current.executedQuantity());
+        publishMockOrderResponse(canceled);
+        return canceled;
+    }
+
+    /**
+     * Cancels an order whose simulated schedule may still be publishing (T52). Under the order's
+     * lock: if the schedule already closed it (FILLED, or a simulated failure), that terminal wins
+     * and nothing is published; otherwise the order is marked canceled, so the schedule stops before
+     * its next event, the reservation of the unexecuted part goes back and a single CANCELED is
+     * published with the quantity already executed.
+     */
+    private OrderDataDto cancelSimulatedOrder(SimulatedOrder simulated, String orderId) {
+        synchronized (simulated) {
+            OrderDataDto current = latestEventByOrderId.get(orderId);
+            if (isTerminal(current.status())) {
+                log.info("Mock cancel ignored, simulated order already closed - OrderId: {}, Status: {}",
+                        orderId, current.status());
+                return current;
+            }
+            simulated.cancel();
+            if (simulated.reservationHeld()) {
+                simulator.releaseUnexecutedReservation(simulated.request(), simulated.executedQuantity(),
+                        simulated.balanceStore());
+            }
+            OrderDataDto canceled = canceledSnapshot(current, simulated.executedQuantity());
+            publishMockOrderResponse(canceled);
+            log.info("Mock simulated order canceled - OrderId: {}, ExecutedQuantity: {}",
+                    orderId, simulated.executedQuantity());
+            return canceled;
+        }
+    }
+
+    private static OrderDataDto canceledSnapshot(OrderDataDto current, BigDecimal executedQuantity) {
+        return new OrderDataDto(
                 current.orderId(),
                 current.clientOrderId(),
                 current.symbol(),
                 current.side(),
                 current.type(),
                 current.quantity(),
-                current.executedQuantity(),
+                executedQuantity,
                 current.price(),
                 current.executedPrice(),
                 current.fee(),
@@ -170,9 +230,6 @@ public class MockExchangeRuntime {
                 java.time.Instant.now(),
                 current.feeAsset()
         );
-
-        publishMockOrderResponse(canceled);
-        return canceled;
     }
 
     public Optional<OrderDataDto> queryOrderByClientOrderId(String symbol, String clientOrderId) {
@@ -195,6 +252,15 @@ public class MockExchangeRuntime {
             return Optional.empty();
         }
         return Optional.of(order);
+    }
+
+    /** Order events already delivered to the core for the order, in publication order (test support). */
+    public List<OrderDataDto> publishedOrderEvents(String clientOrderId) {
+        String orderId = orderIdByClientOrderId.get(clientOrderId);
+        if (orderId == null) {
+            return List.of();
+        }
+        return List.copyOf(publishedEventsByOrderId.getOrDefault(orderId, List.of()));
     }
 
     public List<OrderDataDto> listOpenOrdersBySymbol(String symbol) {
@@ -382,9 +448,7 @@ public class MockExchangeRuntime {
         try {
             List<MockScheduledOrderEvent> events = simulator.buildRestingFillSchedule(
                     resting.request(), resting.orderId(), config, this.balanceStore);
-            for (MockScheduledOrderEvent event : events) {
-                publishMockOrderResponse(event.orderData());
-            }
+            events.forEach(this::publishScheduled);
             log.info("Mock resting order crossed and filled - ClientOrderId: {}, OrderId: {}",
                     resting.request().getClientOrderId(), resting.orderId());
         } catch (Exception e) {
@@ -393,30 +457,37 @@ public class MockExchangeRuntime {
         }
     }
 
-    private void simulateOrderExecutionAsync(SendOrderRequest orderRequest, String orderId) {
+    /**
+     * Publishes the planned events of a simulated order, each after its delay. Every event is
+     * checked and published under the order's lock, so a cancel either lands before it (and the
+     * schedule stops) or after it (and sees what it published) — never in between (T52).
+     */
+    private void simulateOrderExecutionAsync(SimulatedOrder simulated, MockOrderSchedule schedule, String orderId) {
+        String clientOrderId = simulated.request().getClientOrderId();
         try {
-            Random localRandom = this.random;
-            MockBalanceStore localBalanceStore = this.balanceStore;
-            MockOrderScenarioOverride override = orderScenarioOverrideByClientOrderId.remove(orderRequest.getClientOrderId());
-            List<MockScheduledOrderEvent> scheduledEvents = simulator.buildScenarioSchedule(
-                    orderRequest, orderId, config, localRandom, localBalanceStore, override);
-
-            for (MockScheduledOrderEvent scheduledEvent : scheduledEvents) {
+            OrderDataDto last = null;
+            for (MockScheduledOrderEvent scheduledEvent : schedule.events()) {
                 sleepForEvent(scheduledEvent);
-                publishMockOrderResponse(scheduledEvent.orderData());
+                synchronized (simulated) {
+                    if (simulated.isCanceled()) {
+                        log.info("Mock order simulation stopped, order canceled - ClientOrderId: {}, OrderId: {}",
+                                clientOrderId, orderId);
+                        return;
+                    }
+                    simulated.recordExecuted(scheduledEvent.orderData().executedQuantity());
+                    publishScheduled(scheduledEvent);
+                }
+                last = scheduledEvent.orderData();
             }
-
-            OrderDataDto last = scheduledEvents.isEmpty() ? null : scheduledEvents.get(scheduledEvents.size() - 1).orderData();
             log.info("Mock order simulation completed - ClientOrderId: {}, OrderId: {}, Status: {}",
-                    orderRequest.getClientOrderId(), orderId, last != null ? last.status() : "NONE");
+                    clientOrderId, orderId, last != null ? last.status() : "NONE");
 
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
-            log.error("Mock order simulation interrupted - ClientOrderId: {}",
-                    orderRequest.getClientOrderId());
+            log.error("Mock order simulation interrupted - ClientOrderId: {}", clientOrderId);
         } catch (Exception e) {
             log.error("Error simulating order execution - ClientOrderId: {}, Error: {}",
-                    orderRequest.getClientOrderId(), e.getMessage(), e);
+                    clientOrderId, e.getMessage(), e);
         }
     }
 
@@ -486,6 +557,7 @@ public class MockExchangeRuntime {
                     log.debug("Mock resting ACK dropped, order already left the book - OrderId: {}", orderId);
                     return;
                 }
+                recordPublished(event);
                 rawMessagePublisher.publish(event);
                 log.debug("Mock order response event published - OrderId: {}, ClientOrderId: {}",
                         event.orderId(), event.clientOrderId());
@@ -538,9 +610,22 @@ public class MockExchangeRuntime {
         Thread.sleep(delay);
     }
 
+    /** Settles the balance effect of a planned event and publishes it (T52: settle on publication). */
+    private void publishScheduled(MockScheduledOrderEvent scheduledEvent) {
+        scheduledEvent.settlement().run();
+        publishMockOrderResponse(scheduledEvent.orderData());
+    }
+
+    /**
+     * Publishes an order event. The stored snapshot never moves back from a terminal: a duplicate or
+     * out-of-order event is still delivered (the core must stay idempotent), but the REST query keeps
+     * answering the terminal status (T52).
+     */
     private void publishMockOrderResponse(OrderDataDto orderResponse) {
         try {
-            latestEventByOrderId.put(orderResponse.orderId(), orderResponse);
+            latestEventByOrderId.merge(orderResponse.orderId(), orderResponse,
+                    (current, incoming) -> isTerminal(current.status()) ? current : incoming);
+            recordPublished(orderResponse);
             rawMessagePublisher.publish(orderResponse);
             log.debug("Mock order response event published - OrderId: {}, ClientOrderId: {}",
                     orderResponse.orderId(), orderResponse.clientOrderId());
@@ -549,6 +634,10 @@ public class MockExchangeRuntime {
             log.error("Failed to publish mock order response - OrderId: {}, Error: {}",
                     orderResponse.orderId(), e.getMessage(), e);
         }
+    }
+
+    private void recordPublished(OrderDataDto event) {
+        publishedEventsByOrderId.computeIfAbsent(event.orderId(), id -> new CopyOnWriteArrayList<>()).add(event);
     }
 
     private void resetInternal() {
@@ -561,6 +650,8 @@ public class MockExchangeRuntime {
         this.queryFailurePlanByClientOrderId.clear();
         this.restingOrderByOrderId.clear();
         this.restingManagedOrderIds.clear();
+        this.simulatedOrderById.clear();
+        this.publishedEventsByOrderId.clear();
         this.referencePriceStore.clear();
     }
 
@@ -666,5 +757,56 @@ public class MockExchangeRuntime {
      * The original request is retained because settling needs its quantity, side and limit price.
      */
     private record RestingOrder(SendOrderRequest request, String orderId) {
+    }
+
+    /**
+     * State shared between a simulated order's schedule and a cancel (T52); always used under its own
+     * monitor. {@code balanceStore} is the store the order reserved in, kept so a cancel after a
+     * reset does not touch the new store.
+     */
+    private static final class SimulatedOrder {
+
+        private final SendOrderRequest request;
+        private final boolean reservationHeld;
+        private final MockBalanceStore balanceStore;
+        private BigDecimal executedQuantity = BigDecimal.ZERO;
+        private boolean canceled;
+
+        private SimulatedOrder(SendOrderRequest request, boolean reservationHeld, MockBalanceStore balanceStore) {
+            this.request = request;
+            this.reservationHeld = reservationHeld;
+            this.balanceStore = balanceStore;
+        }
+
+        SendOrderRequest request() {
+            return request;
+        }
+
+        boolean reservationHeld() {
+            return reservationHeld;
+        }
+
+        MockBalanceStore balanceStore() {
+            return balanceStore;
+        }
+
+        BigDecimal executedQuantity() {
+            return executedQuantity;
+        }
+
+        boolean isCanceled() {
+            return canceled;
+        }
+
+        void cancel() {
+            canceled = true;
+        }
+
+        /** Highest executed quantity published so far; out-of-order events never lower it. */
+        void recordExecuted(BigDecimal executed) {
+            if (executed != null && executed.compareTo(executedQuantity) > 0) {
+                executedQuantity = executed;
+            }
+        }
     }
 }

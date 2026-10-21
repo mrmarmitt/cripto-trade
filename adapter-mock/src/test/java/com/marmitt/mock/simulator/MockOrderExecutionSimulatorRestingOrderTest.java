@@ -124,6 +124,7 @@ class MockOrderExecutionSimulatorRestingOrderTest {
                 simulator.buildRestingFillSchedule(request, "MOCK_REST_3", config, balanceStore);
 
         assertEquals(1, fill.size());
+        fill.getFirst().settlement().run();   // T52: o saldo e liquidado quando o evento e publicado
         OrderDataDto filled = fill.getFirst().orderData();
         assertEquals(OrderDataDto.OrderStatus.FILLED, filled.status());
         assertEquals(0, filled.executedPrice().compareTo(new BigDecimal("99.00000000")),
@@ -135,7 +136,7 @@ class MockOrderExecutionSimulatorRestingOrderTest {
     }
 
     @Test
-    void releaseReservationForOpenOrderShouldGiveCapitalBack() {
+    void releaseUnexecutedReservationShouldGiveCapitalBack() {
         MockOrderExecutionSimulator simulator = new MockOrderExecutionSimulator();
         MockScenarioConfig config = scenarioConfig();
         MockBalanceStore balanceStore = new MockBalanceStore(Map.of(
@@ -145,7 +146,7 @@ class MockOrderExecutionSimulatorRestingOrderTest {
         SendOrderRequest request = limitOrder(OrderSide.BUY, new BigDecimal("99.00000000"));
         simulator.buildRestingSchedule(request, "MOCK_REST_4", config, balanceStore);
 
-        simulator.releaseReservationForOpenOrder(request, balanceStore, config);
+        simulator.releaseUnexecutedReservation(request, BigDecimal.ZERO, balanceStore);
 
         assertEquals(0, balanceStore.getReserved("USDT").compareTo(BigDecimal.ZERO));
         assertEquals(0, balanceStore.getAvailable("USDT").compareTo(new BigDecimal("1000.00000000")),

@@ -35,44 +35,50 @@ public class MockOrderExecutionSimulator {
     }
 
     /**
-     * Simula execução de uma ordem com comportamento configurado.
+     * Builds the events of an order that executes right away (MARKET or marketable LIMIT).
      *
-     * Configuração atual (simplificada):
-     * - Taxa de sucesso: 100% (sempre FILLED)
-     * - Latência: 200ms (fixa)
-     * - Taxa de execução: 0% (sem fees)
-     * - Slippage: 0 (executa no preço exato solicitado)
+     * <p>Validation (and the balance reservation) happens here, synchronously. The balance effect of
+     * each fill or failure is attached to its event as a settlement and only runs when the runtime
+     * publishes that event, so a cancel in the middle of the schedule leaves the balance debited only
+     * by what was published (T52). With an override the plan is deterministic; otherwise the
+     * configured random flow (partials, failures, duplicates, out-of-order) is used.
      */
-
-    public List<OrderDataDto> buildScenarioEvents(SendOrderRequest request,
-                                                  String orderId,
-                                                  MockScenarioConfig config,
-                                                  Random random,
-                                                  MockBalanceStore balanceStore) {
+    public MockOrderSchedule buildScenarioSchedule(SendOrderRequest request,
+                                                   String orderId,
+                                                   MockScenarioConfig config,
+                                                   Random random,
+                                                   MockBalanceStore balanceStore,
+                                                   MockOrderScenarioOverride override) {
         OrderValidationResult validation = orderValidator.validate(request, config, balanceStore);
         if (!validation.accepted()) {
-            return applyOrderingAndDuplicates(
-                    List.of(simulateRejected(request, orderId, validation.rejectReason())),
-                    config,
-                    random
-            );
+            OrderDataDto rejected = simulateRejected(request, orderId, validation.rejectReason());
+            List<MockScheduledOrderEvent> events = override == null
+                    ? applyOrderingAndDuplicates(List.of(new MockScheduledOrderEvent(rejected, -1L)), config, random)
+                    : List.of(new MockScheduledOrderEvent(rejected, 0L));
+            return new MockOrderSchedule(events, false);
         }
+        List<MockScheduledOrderEvent> events = override == null
+                ? buildRandomEvents(request, orderId, config, random, balanceStore)
+                : buildOverrideEvents(request, orderId, config, balanceStore, override);
+        return new MockOrderSchedule(events, true);
+    }
 
-        List<OrderDataDto> events = new ArrayList<>();
-
-        OrderDataDto accepted = simulateAccepted(request, orderId);
-        events.add(accepted);
+    private List<MockScheduledOrderEvent> buildRandomEvents(SendOrderRequest request,
+                                                            String orderId,
+                                                            MockScenarioConfig config,
+                                                            Random random,
+                                                            MockBalanceStore balanceStore) {
+        List<MockScheduledOrderEvent> events = new ArrayList<>();
+        events.add(new MockScheduledOrderEvent(simulateAccepted(request, orderId), -1L));
 
         BigDecimal baseExecutedPrice = slippageModel.calculateBaseExecutedPrice(request, config, random);
 
         OrderDataDto.OrderStatus failureStatus = pickFailureStatus(config, random);
         if (failureStatus != null) {
-            releaseReservation(request, balanceStore);
-            if (failureStatus == OrderDataDto.OrderStatus.CANCELED) {
-                events.add(simulateCanceled(request, orderId, baseExecutedPrice));
-            } else {
-                events.add(simulateExpired(request, orderId, baseExecutedPrice));
-            }
+            OrderDataDto failure = failureStatus == OrderDataDto.OrderStatus.CANCELED
+                    ? simulateCanceled(request, orderId, baseExecutedPrice)
+                    : simulateExpired(request, orderId, baseExecutedPrice);
+            events.add(new MockScheduledOrderEvent(failure, -1L, () -> releaseReservation(request, balanceStore)));
             return applyOrderingAndDuplicates(events, config, random);
         }
 
@@ -80,8 +86,8 @@ public class MockOrderExecutionSimulator {
         if (partialCount == 0) {
             BigDecimal fee = feeModel.calculateFee(request.getQuantity(), baseExecutedPrice, request.getOrderSide(), config);
             String feeAsset = feeAssetOf(request, config, fee);
-            events.add(simulateFilled(request, orderId, baseExecutedPrice, fee, feeAsset));
-            applyBalanceForFill(request, balanceStore, baseExecutedPrice, request.getQuantity(), fee, feeAsset);
+            events.add(fillEvent(simulateFilled(request, orderId, baseExecutedPrice, fee, feeAsset), -1L,
+                    request, balanceStore, baseExecutedPrice, request.getQuantity(), fee, feeAsset));
             return applyOrderingAndDuplicates(events, config, random);
         }
 
@@ -97,8 +103,8 @@ public class MockOrderExecutionSimulator {
             BigDecimal eventPrice = slippageModel.calculateEventExecutedPrice(request, baseExecutedPrice, config, random);
             BigDecimal fee = feeModel.calculateFee(increment, eventPrice, request.getOrderSide(), config);
             String feeAsset = feeAssetOf(request, config, fee);
-            events.add(simulatePartial(request, orderId, executedQty, eventPrice, fee, feeAsset));
-            applyBalanceForFill(request, balanceStore, eventPrice, increment, fee, feeAsset);
+            events.add(fillEvent(simulatePartial(request, orderId, executedQty, eventPrice, fee, feeAsset), -1L,
+                    request, balanceStore, eventPrice, increment, fee, feeAsset));
         }
 
         BigDecimal finalIncrement = request.getQuantity().subtract(previousExecuted);
@@ -108,34 +114,16 @@ public class MockOrderExecutionSimulator {
         BigDecimal finalPrice = slippageModel.calculateEventExecutedPrice(request, baseExecutedPrice, config, random);
         BigDecimal finalFee = feeModel.calculateFee(finalIncrement, finalPrice, request.getOrderSide(), config);
         String finalFeeAsset = feeAssetOf(request, config, finalFee);
-        events.add(simulateFilled(request, orderId, finalPrice, finalFee, finalFeeAsset));
-        applyBalanceForFill(request, balanceStore, finalPrice, finalIncrement, finalFee, finalFeeAsset);
+        events.add(fillEvent(simulateFilled(request, orderId, finalPrice, finalFee, finalFeeAsset), -1L,
+                request, balanceStore, finalPrice, finalIncrement, finalFee, finalFeeAsset));
         return applyOrderingAndDuplicates(events, config, random);
     }
 
-    /**
-     * Builds a deterministic schedule when an order-level override is provided.
-     * Falls back to current random scenario behavior otherwise.
-     */
-    public List<MockScheduledOrderEvent> buildScenarioSchedule(SendOrderRequest request,
-                                                               String orderId,
-                                                               MockScenarioConfig config,
-                                                               Random random,
-                                                               MockBalanceStore balanceStore,
-                                                               MockOrderScenarioOverride override) {
-        if (override == null) {
-            return buildScenarioEvents(request, orderId, config, random, balanceStore)
-                    .stream()
-                    .map(event -> new MockScheduledOrderEvent(event, -1L))
-                    .toList();
-        }
-
-        OrderValidationResult validation = orderValidator.validate(request, config, balanceStore);
-        if (!validation.accepted()) {
-            OrderDataDto rejected = simulateRejected(request, orderId, validation.rejectReason());
-            return List.of(new MockScheduledOrderEvent(rejected, 0L));
-        }
-
+    private List<MockScheduledOrderEvent> buildOverrideEvents(SendOrderRequest request,
+                                                              String orderId,
+                                                              MockScenarioConfig config,
+                                                              MockBalanceStore balanceStore,
+                                                              MockOrderScenarioOverride override) {
         List<MockScheduledOrderEvent> scheduled = new ArrayList<>();
         scheduled.add(new MockScheduledOrderEvent(simulateAccepted(request, orderId), 0L));
 
@@ -151,21 +139,23 @@ public class MockOrderExecutionSimulator {
             );
             previousExecuted = computed.executedQuantity();
 
+            MockScheduledOrderEvent event;
             if (computed.increment().compareTo(BigDecimal.ZERO) > 0
                     && (computed.event().status() == OrderDataDto.OrderStatus.PARTIALLY_FILLED
                     || computed.event().status() == OrderDataDto.OrderStatus.FILLED)) {
-                applyBalanceForFill(request, balanceStore, computed.executedPrice(), computed.increment(), computed.fee(),
-                        computed.event().feeAsset());
-            }
-
-            if (!reservationReleased && isFailedTerminal(computed.event().status())) {
-                releaseReservation(request, balanceStore);
+                event = fillEvent(computed.event(), planned.delayBeforeMs(), request, balanceStore,
+                        computed.executedPrice(), computed.increment(), computed.fee(), computed.event().feeAsset());
+            } else if (!reservationReleased && isFailedTerminal(computed.event().status())) {
+                event = new MockScheduledOrderEvent(computed.event(), planned.delayBeforeMs(),
+                        () -> releaseReservation(request, balanceStore));
                 reservationReleased = true;
+            } else {
+                event = new MockScheduledOrderEvent(computed.event(), planned.delayBeforeMs());
             }
 
-            scheduled.add(new MockScheduledOrderEvent(computed.event(), planned.delayBeforeMs()));
+            scheduled.add(event);
             for (int i = 0; i < planned.duplicates(); i++) {
-                scheduled.add(new MockScheduledOrderEvent(computed.event(), 0L));
+                scheduled.add(event.duplicate(0L));
             }
         }
 
@@ -178,6 +168,18 @@ public class MockOrderExecutionSimulator {
             scheduled.addAll(lifecycle);
         }
         return scheduled;
+    }
+
+    private MockScheduledOrderEvent fillEvent(OrderDataDto event,
+                                              long delayBeforeMs,
+                                              SendOrderRequest request,
+                                              MockBalanceStore balanceStore,
+                                              BigDecimal executedPrice,
+                                              BigDecimal increment,
+                                              BigDecimal fee,
+                                              String feeAsset) {
+        return new MockScheduledOrderEvent(event, delayBeforeMs,
+                () -> applyBalanceForFill(request, balanceStore, executedPrice, increment, fee, feeAsset));
     }
 
     /**
@@ -236,21 +238,33 @@ public class MockOrderExecutionSimulator {
         BigDecimal executedPrice = request.getPrice();
         BigDecimal fee = feeModel.calculateFee(request.getQuantity(), executedPrice, request.getOrderSide(), config);
         String feeAsset = feeAssetOf(request, config, fee);
-        applyBalanceForFill(request, balanceStore, executedPrice, request.getQuantity(), fee, feeAsset);
-        return List.of(new MockScheduledOrderEvent(
-                simulateFilled(request, orderId, executedPrice, fee, feeAsset), -1L));
+        return List.of(fillEvent(simulateFilled(request, orderId, executedPrice, fee, feeAsset), -1L,
+                request, balanceStore, executedPrice, request.getQuantity(), fee, feeAsset));
     }
 
     /**
-     * Releases the balance reserved for an order that never executed.
+     * Gives back the balance still reserved for the part of an order that did not execute.
      *
-     * <p>Exposed for the runtime, which owns the lifecycle of resting orders and needs to give
-     * the reservation back when one is canceled from outside the simulation schedule.
+     * <p>Exposed for the runtime, which cancels orders from outside the simulation schedule: a
+     * resting order (nothing executed) or a simulated order canceled between fills (T52). The BUY
+     * remainder is priced at the order price, the same basis used to reserve it.
      */
-    public void releaseReservationForOpenOrder(SendOrderRequest request,
-                                               MockBalanceStore balanceStore,
-                                               MockScenarioConfig config) {
-        releaseReservation(request, balanceStore);
+    public void releaseUnexecutedReservation(SendOrderRequest request,
+                                             BigDecimal executedQuantity,
+                                             MockBalanceStore balanceStore) {
+        BigDecimal executed = executedQuantity != null ? executedQuantity : BigDecimal.ZERO;
+        BigDecimal remaining = request.getQuantity().subtract(executed);
+        if (remaining.signum() <= 0) {
+            return;
+        }
+        Symbol symbol = Symbol.of(request.getSymbol());
+        if (request.getOrderSide() == com.marmitt.core.enums.OrderSide.BUY) {
+            if (request.getPrice() != null) {
+                balanceStore.release(symbol.getQuoteAsset(), OrderValidator.buyReservation(remaining, request.getPrice()));
+            }
+            return;
+        }
+        balanceStore.release(symbol.getBaseAsset(), remaining);
     }
 
     public OrderDataDto simulateAccepted(SendOrderRequest request, String orderId) {
@@ -510,17 +524,17 @@ public class MockOrderExecutionSimulator {
                 || status == OrderDataDto.OrderStatus.REJECTED;
     }
 
-    private List<OrderDataDto> applyOrderingAndDuplicates(List<OrderDataDto> baseEvents,
-                                                          MockScenarioConfig config,
-                                                          Random random) {
-        List<OrderDataDto> events = new ArrayList<>();
+    private List<MockScheduledOrderEvent> applyOrderingAndDuplicates(List<MockScheduledOrderEvent> baseEvents,
+                                                                     MockScenarioConfig config,
+                                                                     Random random) {
+        List<MockScheduledOrderEvent> events = new ArrayList<>();
         int maxDup = config.duplicates().maxDuplicatesPerEvent();
-        for (OrderDataDto event : baseEvents) {
+        for (MockScheduledOrderEvent event : baseEvents) {
             events.add(event);
             if (maxDup > 0 && random.nextDouble() < config.duplicates().ratio()) {
                 int dupCount = 1 + random.nextInt(maxDup);
                 for (int i = 0; i < dupCount; i++) {
-                    events.add(event);
+                    events.add(event.duplicate(event.delayBeforeMs()));
                 }
             }
         }
