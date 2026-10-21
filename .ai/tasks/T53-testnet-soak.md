@@ -183,6 +183,7 @@ explicação (erro comprovadamente da testnet é aceito se registrado).
 |---|---|---|---|---|---|---|
 | 1 | 2026-10-20 | 1 (smoke) | ~15 min | 4 cenários / BTCUSDT, máquina local | Ramos OK; trades 100% iguais à exchange; DLQ vazia. Reprovada por F1 (bug) e por ruído de `ERROR` (F5). | F1–F6 abaixo |
 | 2 | 2026-10-20 | 1 (smoke) | ~17 min | 4 cenários / BTCUSDT, máquina local | **Aprovada.** F1, F2, F4 e F5 confirmados corrigidos; 271 fills 100% iguais à exchange; DLQ vazia; zero `ERROR`. | F3 (T57), F7 abaixo |
+| 3 | 2026-10-21 | 1 (smoke) | ~8 min | cenários 1, 2 e 3 / BTCUSDT, máquina local, banco da rodada 2 | **Aprovada.** T57 validada: `EXCHANGE_BALANCE_DIVERGENCE` `OK` em 64 leituras durante a operação, com lotes abertos e ordens no livro; trades 100% iguais; DLQ vazia; zero `ERROR`. | F8 abaixo |
 
 ### Rodada 1 — detalhes (2026-10-20)
 
@@ -250,7 +251,32 @@ Banco limpo com `scripts/reset-testnet-db.ps1`; boot `SUCCESS`; `operational-sta
 - **Fim:** 4 runners `HALTED`, nenhuma ordem em voo, DLQ vazia, 21 ações de operador auditadas com
   `X-Reason`.
 
-**Achado:**
+### Rodada 3 — detalhes (2026-10-21, após a T57)
+
+Sem limpar o banco (estado da rodada 2: 4 portfolios, lote aberto de 0.001 BTC no cenário 2). Boot
+`SUCCESS`; `EXCHANGE_BALANCE_DIVERGENCE` `OK` já na subida, com o lote aberto (critério 4 da T57).
+
+- **Conferência por exchange (T57):** `GET /api/admin/operational-state?includeExchange=true` a cada ~5s,
+  64 leituras, todas `OK`:
+  - cenário 3 (75 idas e voltas em ~2,5 min): sem falta passageira; os fills fecham em menos de 1s e
+    nenhuma leitura pegou ordem em voo (`PENDING` não apareceu);
+  - cenários 1 e 2 juntos (BUY e SELL descansando no livro): `inFlight` ≈79 USDT e 0.001 BTC, cobertos
+    pelo `locked` da conta.
+  - fim: USDT esperado 3833.70832 (4 portfolios − custo de 2 lotes abertos) × conta 9751.12366; BTC 0.002
+    × 1.003; `unallocated` 5917.41534 USDT e 1.001 BTC (critério 1 da T57).
+- **Cenários:** 1 → 106 BUYs `CANCELED` no total; 2 → 99 SELLs `CANCELED`; 3 → 217 BUY / 216 SELL
+  `FILLED` (o `halt` caiu entre a BUY e a SELL: segundo lote de 0.001 BTC aberto, por desenho). Ordens
+  que descansavam após o `halt` canceladas pelo operador (F6).
+- **Ainda não exercitado em testnet:** o caminho de `DEFICIT` (HALT no boot e na avaliação periódica) e o
+  `PENDING`; cobertos por testes unitários e de integração da T57.
+
+**Achados:**
+
+- **F8 — Observabilidade (baixo): sem preço logo após o restart.** Até um runner ativar o feed de market
+  data (T56), o drawdown do portfolio com lote aberto é pulado (`WARN drawdown: no market price`, 3 vezes
+  em 20s). Por desenho (equity incompleto gravaria pico/vale falso), mas com todos os runners parados e
+  lote aberto o portfolio fica sem drawdown até alguém ativar um runner do símbolo. Avaliar se o
+  coordenador de demanda (T56) deve assinar símbolos com lote aberto. Sem task por ora.
 
 - **F7 — Operação (baixo): janela de comparação de trades atravessa o reset do banco.** Depois de limpar
   o banco, `includeExchange` com janela que alcança antes do reset acusa `CRITICAL` pelos fills apagados.
