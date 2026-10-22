@@ -68,7 +68,8 @@ Cada fase só começa com a anterior aprovada. Uma rodada reprovada gera achado 
    de cada rodada; proposta inicial de 1.000 USDT).
 4. **Estratégias:** as rodadas mais pesadas usam **várias estratégias remotas ao mesmo tempo**, cada
    uma num processo, para estressar o ctrade (mailbox por runner, chamadas remotas concorrentes,
-   capital disputado). Limiares da SMA apertados (≈ 0,2%) para gerar várias idas e voltas por hora.
+   capital disputado). Limiares da SMA apertados (≈ 0,2%) para gerar várias idas e voltas por hora. Na testnet, com tick a cada ~1,5 s e janela de 20 ticks, o limiar
+   que deu várias idas e voltas por hora foi **0,02%** (T60, rodada curta de 2026-10-22).
 5. **Falhas controladas:** as cinco da fase 4, **uma por rodada**; o mantenedor executa a ação, o
    roteiro e a análise ficam com o Claude.
 6. **Critérios:** os 8 critérios valem. `ERROR` causado comprovadamente pela testnet é aceito quando

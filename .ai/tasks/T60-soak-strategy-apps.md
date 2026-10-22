@@ -4,7 +4,7 @@
 **Responsável:** Claude (num repositório próprio, fora do ctrade)
 **Dependências:** T41/T40 (contrato 1.1, `docs/strategy-service/CONTRACT.md`), T54 (catálogo por API). Desbloqueia
 a fase 3 da T53; serve de portfólio inicial para o M3 do roadmap (`.ai/agentic-strategy-roadmap.md`).
-**Status:** Em andamento — tendência e caos em `ctrade-dev/ctrade-strategies` (PR #1); faltam a validação contra o ctrade rodando e os perfis livro, reversão e rompimento.
+**Status:** Em andamento — tendência e caos entregues e validados na testnet (`ctrade-dev/ctrade-strategies`, PR #1); faltam livro, reversão e rompimento.
 
 ---
 
@@ -133,6 +133,29 @@ e pelo cadastro na T54 (o ctrade confere `/v1/meta` antes de usar a estratégia)
   `ctrade.strategy.remote.max-decision-age-ms`.
 - Fora do contrato, `GET /stats` conta decisões e falhas para o relatório da rodada.
 - Passo a passo de subir e cadastrar: T53, "Roteiro — Apps de estratégia da T60".
+
+### Rodada curta na testnet (2026-10-21/22)
+
+Portfolio `soak-t60` (1.000 USDT), runners `SoakTrend` (`maxAllocationPercent` 0.8) e `SoakChaos` (0.4)
+em BTCUSDT. Duas janelas: 2026-10-21 23:04–23:40Z (até o ctrade cair) e 2026-10-22 11:45–12:13Z
+(retomada pelo boot recovery, runners voltaram `ACTIVE` sozinhos).
+
+- **Cadastro (critério 1):** as duas apps `VERIFIED`, `usable=true`, contrato `1.1.0`.
+- **Tendência:** com o limiar de 0,2% não houve sinal em 10 minutos (janela longa de ~30 s, BTC na
+  testnet variando ~0,07%/min). Com **0,02%**, 5 idas e voltas completas e uma compra aberta no fim,
+  todas `FILLED`. O padrão da app passou para 0,02%.
+- **Caos (critério 2):** cada falha apareceu e teve o efeito previsto: `INVALID_RESPONSE` (malformado e
+  incoerente), `ERROR_RESPONSE` (500), `UNREACHABLE` (timeout e desconexão), `REJECTED_PRICE_DEVIATION`,
+  SELL descartada sem posição, CANCEL de transação inexistente ignorado. Nenhuma virou ordem; o runner
+  do caos não tem transação. A guarda de rejeições consecutivas não disparou (as recusas são antes da
+  exchange).
+- **App fora do ar (critério 3):** caos parado por 3 min. Só o runner dele somou `STRATEGY_UNAVAILABLE`
+  (+115); a tendência seguiu avaliando e comprou nesse intervalo.
+- **ctrade:** nenhum `ERROR` no Loki; todos os `WARN` vêm do caos. Sem halt automático nem Safe Mode;
+  sem divergência de trades ou saldo com a exchange; `reserved` = custo do lote aberto da tendência.
+- **Lacuna:** o SELL acima do disponível **de um lote** não foi exercitado, porque o caos sem
+  `CHAOS_HOLD_POSITION` nunca tem lote (a recusa vista foi "sem posição"). Ligar o modo na próxima
+  rodada.
 
 ## Fora do escopo
 
